@@ -12,6 +12,8 @@ use App\Models\ProgramFunding;
 use App\Models\ProjectAllocation;
 use App\Models\ActivityAllocation;
 use App\Models\SubActivityAllocation;
+use App\Models\AuMemberState;
+use App\Models\AuRegionalBlock;
 use Illuminate\Database\Seeder;
 
 class ProcurementStructureSeeder extends Seeder
@@ -174,11 +176,15 @@ class ProcurementStructureSeeder extends Seeder
             return;
         }
 
+        $memberStateIds = AuMemberState::pluck('id')->take(15)->toArray();
+        $regionalBlockIds = AuRegionalBlock::pluck('id')->take(15)->toArray();
+
         $programIndex = 0;
+        $fundingCounter = 0;
         foreach ($funders as $funder) {
             for ($i = 0; $i < 5; $i++) {
                 $program = $programs[$programIndex % $programs->count()];
-                ProgramFunding::updateOrCreate(
+                $funding = ProgramFunding::updateOrCreate(
                     [
                         'funder_id' => $funder->id,
                         'program_id' => $program->id,
@@ -195,6 +201,14 @@ class ProcurementStructureSeeder extends Seeder
                         'created_by' => 1,
                     ]
                 );
+
+                if ($fundingCounter % 2 === 0) {
+                    $funding->memberStates()->syncWithoutDetaching($memberStateIds);
+                } else {
+                    $funding->regionalBlocks()->syncWithoutDetaching($regionalBlockIds);
+                }
+
+                $fundingCounter++;
                 $programIndex++;
             }
         }

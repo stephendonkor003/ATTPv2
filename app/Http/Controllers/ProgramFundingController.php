@@ -324,7 +324,6 @@ class ProgramFundingController extends Controller
  * ===================================================== */
 public function edit(ProgramFunding $programFunding)
 {
-    abort_if($programFunding->status !== 'draft', 403);
     $this->assertFundingInScope($programFunding);
 
     // Load AU relationships for pre-selection
@@ -353,7 +352,6 @@ public function edit(ProgramFunding $programFunding)
  * ===================================================== */
 public function update(Request $request, ProgramFunding $programFunding)
 {
-    abort_if($programFunding->status !== 'draft', 403);
     $this->assertFundingInScope($programFunding);
 
     $validated = $request->validate([

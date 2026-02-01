@@ -11,7 +11,7 @@
             <div>
                 <h4 class="fw-bold mb-1">Edit Program Funding</h4>
                 <p class="text-muted mb-0">
-                    Only draft funding records can be modified
+                    All approved and draft records can be adjusted; approvals remain intact unless reset.
                 </p>
             </div>
             <a href="{{ route('finance.program-funding.show', $programFunding) }}" class="btn btn-light">

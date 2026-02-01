@@ -9,7 +9,8 @@
 
     <meta name="description"
         content="Explore ATTP's impact across Africa with our interactive map showing funding partners and projects by country and region." />
-    <meta name="keywords" content="ATTP impact, Africa projects, funding map, regional development, think tank projects" />
+    <meta name="keywords"
+        content="ATTP impact, Africa projects, funding map, regional development, think tank projects" />
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="{{ asset('assets/style.css') }}" />
@@ -30,7 +31,7 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
 
-    @if(app()->getLocale() === 'ar')
+    @if (app()->getLocale() === 'ar')
         <link rel="stylesheet" href="{{ asset('assets/css/rtl.css') }}">
     @endif
 
@@ -79,8 +80,15 @@
         }
 
         @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
         }
 
         .impact-hero .content {
@@ -748,8 +756,15 @@
         }
 
         @keyframes slideUp {
-            from { transform: translateY(30px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+            from {
+                transform: translateY(30px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
         }
 
         .modal-close {
@@ -763,9 +778,23 @@
             cursor: pointer;
         }
 
-        .modal-icon { font-size: 4rem; margin-bottom: 1rem; }
-        .modal-title { color: var(--wine); font-size: 1.8rem; margin-bottom: 1rem; }
-        .modal-message { color: #555; line-height: 1.6; margin-bottom: 2rem; }
+        .modal-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .modal-title {
+            color: var(--wine);
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .modal-message {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+
         .modal-button {
             background: linear-gradient(135deg, var(--magenta) 0%, var(--wine) 100%);
             color: #fff;
@@ -798,7 +827,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* Responsive */
@@ -848,7 +879,7 @@
     <!-- Navbar -->
     <header class="navbar">
         <div class="logo">
-            <img src="{{ asset('assets/images/ATTP.white.bg.africa.png') }}" class="logo logo-sm" alt="ATTP">
+            <img src="{{ asset('assets/images/au.png') }}" class="logo logo-sm" alt="ATTP">
         </div>
 
         <nav class="nav-links">
@@ -945,7 +976,8 @@
                         </label>
                     </div>
                 </div>
-                <div class="scope-summary" style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(167, 13, 83, 0.05); border-radius: 5px; font-size: 0.8rem;">
+                <div class="scope-summary"
+                    style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(167, 13, 83, 0.05); border-radius: 5px; font-size: 0.8rem;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
                         <span>Continental:</span>
                         <strong>{{ $summary['continental_programs'] }} programs</strong>
@@ -968,9 +1000,10 @@
                     <button class="filter-action-btn" onclick="deselectAll('funder')">None</button>
                 </div>
                 <div class="filter-options">
-                    @foreach($filterOptions['funders'] as $funder)
+                    @foreach ($filterOptions['funders'] as $funder)
                         <div class="filter-checkbox">
-                            <input type="checkbox" id="funder-{{ $funder->id }}" value="{{ $funder->id }}" class="filter-funder" checked>
+                            <input type="checkbox" id="funder-{{ $funder->id }}" value="{{ $funder->id }}"
+                                class="filter-funder" checked>
                             <label for="funder-{{ $funder->id }}">{{ $funder->name }}</label>
                         </div>
                     @endforeach
@@ -988,10 +1021,12 @@
                     <button class="filter-action-btn" onclick="deselectAll('region')">None</button>
                 </div>
                 <div class="filter-options">
-                    @foreach($filterOptions['regions'] as $region)
+                    @foreach ($filterOptions['regions'] as $region)
                         <div class="filter-checkbox">
-                            <input type="checkbox" id="region-{{ $region->id }}" value="{{ $region->id }}" class="filter-region" checked>
-                            <label for="region-{{ $region->id }}">{{ $region->abbreviation }} - {{ $region->name }}</label>
+                            <input type="checkbox" id="region-{{ $region->id }}" value="{{ $region->id }}"
+                                class="filter-region" checked>
+                            <label for="region-{{ $region->id }}">{{ $region->abbreviation }} -
+                                {{ $region->name }}</label>
                         </div>
                     @endforeach
                 </div>
@@ -1008,10 +1043,12 @@
                     <button class="filter-action-btn" onclick="deselectAll('aspiration')">None</button>
                 </div>
                 <div class="filter-options">
-                    @foreach($filterOptions['aspirations'] as $aspiration)
+                    @foreach ($filterOptions['aspirations'] as $aspiration)
                         <div class="filter-checkbox">
-                            <input type="checkbox" id="aspiration-{{ $aspiration->id }}" value="{{ $aspiration->id }}" class="filter-aspiration" checked>
-                            <label for="aspiration-{{ $aspiration->id }}">Asp. {{ $aspiration->number }}: {{ Str::limit($aspiration->title, 30) }}</label>
+                            <input type="checkbox" id="aspiration-{{ $aspiration->id }}"
+                                value="{{ $aspiration->id }}" class="filter-aspiration" checked>
+                            <label for="aspiration-{{ $aspiration->id }}">Asp. {{ $aspiration->number }}:
+                                {{ Str::limit($aspiration->title, 30) }}</label>
                         </div>
                     @endforeach
                 </div>
@@ -1048,50 +1085,53 @@
                     <h2 style="color: var(--wine); margin-bottom: 1rem;">Africa Impact Map</h2>
                     <p style="margin-bottom: 1.5rem; color: #666;">
                         Hover over countries to view funding details. Countries with programs are highlighted.
-                        @if($summary['continental_programs'] > 0)
-                            <span class="continental-badge">{{ $summary['continental_programs'] }} Continental Initiative(s)</span>
+                        @if ($summary['continental_programs'] > 0)
+                            <span class="continental-badge">{{ $summary['continental_programs'] }} Continental
+                                Initiative(s)</span>
                         @endif
                     </p>
                     <div id="africa-map"></div>
 
                     <!-- Top Countries Table with DataTable -->
-                    @if(count($fundingByCountry) > 0)
-                    <h3 style="color: var(--wine); margin: 2rem 0 1rem;">Top Beneficiary Countries</h3>
-                    <div class="table-responsive" style="background: #fff; border-radius: 12px; padding: 1rem;">
-                        <table id="countriesTable" class="table table-striped table-hover" style="width: 100%;">
-                            <thead style="background: var(--wine); color: #fff;">
-                                <tr>
-                                    <th>Country</th>
-                                    <th>Direct Funding (USD)</th>
-                                    <th>Continental Share (USD)</th>
-                                    <th>Programs</th>
-                                    <th>Regions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($fundingByCountry as $country)
-                                <tr>
-                                    <td>
-                                        <strong>{{ $country['name'] }}</strong>
-                                        <span style="color: #999; font-size: 0.8rem;">({{ $country['code'] }})</span>
-                                    </td>
-                                    <td class="amount" data-order="{{ $country['direct_funding'] }}">
-                                        {{ number_format($country['direct_funding'], 0) }}
-                                    </td>
-                                    <td style="color: #666;" data-order="{{ $country['continental_funding'] }}">
-                                        {{ number_format($country['continental_funding'], 0) }}
-                                    </td>
-                                    <td>{{ $country['total_programs'] }}</td>
-                                    <td>
-                                        @foreach($country['regions'] as $region)
-                                            <span class="country-tag">{{ $region }}</span>
-                                        @endforeach
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
+                    @if (count($fundingByCountry) > 0)
+                        <h3 style="color: var(--wine); margin: 2rem 0 1rem;">Top Beneficiary Countries</h3>
+                        <div class="table-responsive" style="background: #fff; border-radius: 12px; padding: 1rem;">
+                            <table id="countriesTable" class="table table-striped table-hover" style="width: 100%;">
+                                <thead style="background: var(--wine); color: #fff;">
+                                    <tr>
+                                        <th>Country</th>
+                                        <th>Direct Funding (USD)</th>
+                                        <th>Continental Share (USD)</th>
+                                        <th>Programs</th>
+                                        <th>Regions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($fundingByCountry as $country)
+                                        <tr>
+                                            <td>
+                                                <strong>{{ $country['name'] }}</strong>
+                                                <span
+                                                    style="color: #999; font-size: 0.8rem;">({{ $country['code'] }})</span>
+                                            </td>
+                                            <td class="amount" data-order="{{ $country['direct_funding'] }}">
+                                                {{ number_format($country['direct_funding'], 0) }}
+                                            </td>
+                                            <td style="color: #666;"
+                                                data-order="{{ $country['continental_funding'] }}">
+                                                {{ number_format($country['continental_funding'], 0) }}
+                                            </td>
+                                            <td>{{ $country['total_programs'] }}</td>
+                                            <td>
+                                                @foreach ($country['regions'] as $region)
+                                                    <span class="country-tag">{{ $region }}</span>
+                                                @endforeach
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
                     @endif
                 </div>
 
@@ -1099,40 +1139,42 @@
                 <div class="tab-content" id="partners-tab">
                     <h2 style="color: var(--wine); margin-bottom: 1.5rem;">Funding Partners Overview</h2>
 
-                    @if(count($fundingByPartner) > 0)
-                    <div class="partner-grid">
-                        @foreach($fundingByPartner as $partner)
-                        <div class="partner-card">
-                            <h4>{{ $partner['name'] }}</h4>
-                            <div class="partner-stat">
-                                <span>Total Funding:</span>
-                                <span>USD {{ number_format($partner['total_funding'], 0) }}</span>
-                            </div>
-                            <div class="partner-stat">
-                                <span>Programs:</span>
-                                <span>{{ $partner['program_count'] }}</span>
-                            </div>
-                            <div class="partner-stat">
-                                <span>Countries:</span>
-                                <span>{{ $partner['country_count'] }}{{ $partner['has_continental'] ? ' (Continental)' : '' }}</span>
-                            </div>
-                            <div class="partner-stat">
-                                <span>Regions:</span>
-                                <span>{{ implode(', ', $partner['regions']) ?: 'N/A' }}</span>
-                            </div>
-                            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.2);">
-                                <span style="font-size: 0.85rem; opacity: 0.9;">Aspirations Addressed:</span>
-                                <div style="margin-top: 0.5rem;">
-                                    @foreach($partner['aspirations'] as $asp)
-                                        <span class="goal-pill">Asp. {{ $asp }}</span>
-                                    @endforeach
+                    @if (count($fundingByPartner) > 0)
+                        <div class="partner-grid">
+                            @foreach ($fundingByPartner as $partner)
+                                <div class="partner-card">
+                                    <h4>{{ $partner['name'] }}</h4>
+                                    <div class="partner-stat">
+                                        <span>Total Funding:</span>
+                                        <span>USD {{ number_format($partner['total_funding'], 0) }}</span>
+                                    </div>
+                                    <div class="partner-stat">
+                                        <span>Programs:</span>
+                                        <span>{{ $partner['program_count'] }}</span>
+                                    </div>
+                                    <div class="partner-stat">
+                                        <span>Countries:</span>
+                                        <span>{{ $partner['country_count'] }}{{ $partner['has_continental'] ? ' (Continental)' : '' }}</span>
+                                    </div>
+                                    <div class="partner-stat">
+                                        <span>Regions:</span>
+                                        <span>{{ implode(', ', $partner['regions']) ?: 'N/A' }}</span>
+                                    </div>
+                                    <div
+                                        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.2);">
+                                        <span style="font-size: 0.85rem; opacity: 0.9;">Aspirations Addressed:</span>
+                                        <div style="margin-top: 0.5rem;">
+                                            @foreach ($partner['aspirations'] as $asp)
+                                                <span class="goal-pill">Asp. {{ $asp }}</span>
+                                            @endforeach
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            @endforeach
                         </div>
-                        @endforeach
-                    </div>
                     @else
-                    <p style="text-align: center; color: #999; padding: 3rem;">No funding partner data available.</p>
+                        <p style="text-align: center; color: #999; padding: 3rem;">No funding partner data available.
+                        </p>
                     @endif
                 </div>
 
@@ -1140,41 +1182,43 @@
                 <div class="tab-content" id="regions-tab">
                     <h2 style="color: var(--wine); margin-bottom: 1.5rem;">Regional Economic Communities</h2>
 
-                    @if(count($fundingByRegion) > 0)
-                    <div class="partner-grid">
-                        @foreach($fundingByRegion as $region)
-                        <div class="region-card">
-                            <h4>{{ $region['name'] }}</h4>
-                            <div class="abbr">{{ $region['abbreviation'] }}</div>
-                            <div class="partner-stat">
-                                <span>Total Funding:</span>
-                                <span class="amount">USD {{ number_format($region['total_funding'], 0) }}</span>
-                            </div>
-                            <div class="partner-stat">
-                                <span>Programs:</span>
-                                <span>{{ $region['program_count'] }}</span>
-                            </div>
-                            <div class="partner-stat">
-                                <span>Partners:</span>
-                                <span>{{ $region['partner_count'] }}</span>
-                            </div>
-                            <div class="partner-stat">
-                                <span>Member States:</span>
-                                <span>{{ $region['country_count'] }}</span>
-                            </div>
-                            <div style="margin-top: 1rem;">
-                                @foreach(array_slice($region['countries'], 0, 5) as $country)
-                                    <span class="country-tag">{{ $country }}</span>
-                                @endforeach
-                                @if(count($region['countries']) > 5)
-                                    <span class="country-tag">+{{ count($region['countries']) - 5 }} more</span>
-                                @endif
-                            </div>
+                    @if (count($fundingByRegion) > 0)
+                        <div class="partner-grid">
+                            @foreach ($fundingByRegion as $region)
+                                <div class="region-card">
+                                    <h4>{{ $region['name'] }}</h4>
+                                    <div class="abbr">{{ $region['abbreviation'] }}</div>
+                                    <div class="partner-stat">
+                                        <span>Total Funding:</span>
+                                        <span class="amount">USD
+                                            {{ number_format($region['total_funding'], 0) }}</span>
+                                    </div>
+                                    <div class="partner-stat">
+                                        <span>Programs:</span>
+                                        <span>{{ $region['program_count'] }}</span>
+                                    </div>
+                                    <div class="partner-stat">
+                                        <span>Partners:</span>
+                                        <span>{{ $region['partner_count'] }}</span>
+                                    </div>
+                                    <div class="partner-stat">
+                                        <span>Member States:</span>
+                                        <span>{{ $region['country_count'] }}</span>
+                                    </div>
+                                    <div style="margin-top: 1rem;">
+                                        @foreach (array_slice($region['countries'], 0, 5) as $country)
+                                            <span class="country-tag">{{ $country }}</span>
+                                        @endforeach
+                                        @if (count($region['countries']) > 5)
+                                            <span class="country-tag">+{{ count($region['countries']) - 5 }}
+                                                more</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
-                        @endforeach
-                    </div>
                     @else
-                    <p style="text-align: center; color: #999; padding: 3rem;">No regional data available.</p>
+                        <p style="text-align: center; color: #999; padding: 3rem;">No regional data available.</p>
                     @endif
                 </div>
 
@@ -1182,60 +1226,63 @@
                 <div class="tab-content" id="agenda-tab">
                     <h2 style="color: var(--wine); margin-bottom: 1.5rem;">Agenda 2063 Alignment</h2>
 
-                    @if(count($fundingByAspiration) > 0)
-                    <div class="partner-grid">
-                        @foreach($fundingByAspiration as $aspiration)
-                        <div class="aspiration-card">
-                            <div class="aspiration-number">{{ $aspiration['number'] }}</div>
-                            <h4 style="color: #fff; font-size: 1rem; margin-bottom: 0.5rem;">{{ $aspiration['title'] }}</h4>
-                            <div class="partner-stat" style="color: rgba(255,255,255,0.9);">
-                                <span>Total Funding:</span>
-                                <span style="color: var(--gold);">USD {{ number_format($aspiration['total_funding'], 0) }}</span>
-                            </div>
-                            <div class="partner-stat" style="color: rgba(255,255,255,0.9);">
-                                <span>Programs:</span>
-                                <span>{{ $aspiration['program_count'] }}</span>
-                            </div>
-                            <div class="partner-stat" style="color: rgba(255,255,255,0.9);">
-                                <span>Goals Addressed:</span>
-                                <span>{{ $aspiration['goal_count'] }}</span>
-                            </div>
-                            <div style="margin-top: 1rem;">
-                                @foreach($aspiration['goals'] as $goal)
-                                    <span class="goal-pill">Goal {{ $goal }}</span>
-                                @endforeach
-                            </div>
-                        </div>
-                        @endforeach
-                    </div>
-
-                    @if(count($fundingByGoal) > 0)
-                    <h3 style="color: var(--wine); margin: 2rem 0 1rem;">Goals Breakdown</h3>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Goal</th>
-                                <th>Aspiration</th>
-                                <th>Title</th>
-                                <th>Funding</th>
-                                <th>Programs</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach(array_slice($fundingByGoal, 0, 15) as $goal)
-                            <tr>
-                                <td><span class="goal-pill">Goal {{ $goal['number'] }}</span></td>
-                                <td>Asp. {{ $goal['aspiration_number'] }}</td>
-                                <td>{{ Str::limit($goal['title'], 50) }}</td>
-                                <td class="amount">USD {{ number_format($goal['total_funding'], 0) }}</td>
-                                <td>{{ $goal['program_count'] }}</td>
-                            </tr>
+                    @if (count($fundingByAspiration) > 0)
+                        <div class="partner-grid">
+                            @foreach ($fundingByAspiration as $aspiration)
+                                <div class="aspiration-card">
+                                    <div class="aspiration-number">{{ $aspiration['number'] }}</div>
+                                    <h4 style="color: #fff; font-size: 1rem; margin-bottom: 0.5rem;">
+                                        {{ $aspiration['title'] }}</h4>
+                                    <div class="partner-stat" style="color: rgba(255,255,255,0.9);">
+                                        <span>Total Funding:</span>
+                                        <span style="color: var(--gold);">USD
+                                            {{ number_format($aspiration['total_funding'], 0) }}</span>
+                                    </div>
+                                    <div class="partner-stat" style="color: rgba(255,255,255,0.9);">
+                                        <span>Programs:</span>
+                                        <span>{{ $aspiration['program_count'] }}</span>
+                                    </div>
+                                    <div class="partner-stat" style="color: rgba(255,255,255,0.9);">
+                                        <span>Goals Addressed:</span>
+                                        <span>{{ $aspiration['goal_count'] }}</span>
+                                    </div>
+                                    <div style="margin-top: 1rem;">
+                                        @foreach ($aspiration['goals'] as $goal)
+                                            <span class="goal-pill">Goal {{ $goal }}</span>
+                                        @endforeach
+                                    </div>
+                                </div>
                             @endforeach
-                        </tbody>
-                    </table>
-                    @endif
+                        </div>
+
+                        @if (count($fundingByGoal) > 0)
+                            <h3 style="color: var(--wine); margin: 2rem 0 1rem;">Goals Breakdown</h3>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Goal</th>
+                                        <th>Aspiration</th>
+                                        <th>Title</th>
+                                        <th>Funding</th>
+                                        <th>Programs</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (array_slice($fundingByGoal, 0, 15) as $goal)
+                                        <tr>
+                                            <td><span class="goal-pill">Goal {{ $goal['number'] }}</span></td>
+                                            <td>Asp. {{ $goal['aspiration_number'] }}</td>
+                                            <td>{{ Str::limit($goal['title'], 50) }}</td>
+                                            <td class="amount">USD {{ number_format($goal['total_funding'], 0) }}</td>
+                                            <td>{{ $goal['program_count'] }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        @endif
                     @else
-                    <p style="text-align: center; color: #999; padding: 3rem;">No Agenda 2063 alignment data available.</p>
+                        <p style="text-align: center; color: #999; padding: 3rem;">No Agenda 2063 alignment data
+                            available.</p>
                     @endif
                 </div>
 
@@ -1270,7 +1317,8 @@
                     </div>
 
                     <!-- Program Type Stats -->
-                    <div style="margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div
+                        style="margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
                         <div class="summary-card">
                             <div class="value">{{ $summary['continental_programs'] }}</div>
                             <div class="label">Continental Initiatives</div>
@@ -1280,7 +1328,8 @@
                             <div class="label">Targeted Programs</div>
                         </div>
                         <div class="summary-card">
-                            <div class="value">USD {{ number_format($summary['average_funding'] / 1000000, 2) }}M</div>
+                            <div class="value">USD {{ number_format($summary['average_funding'] / 1000000, 2) }}M
+                            </div>
                             <div class="label">Avg. Funding per Program</div>
                         </div>
                     </div>
@@ -1291,7 +1340,8 @@
                     <div class="request-form-section">
                         <h2 style="color: var(--wine); margin-bottom: 1.5rem;">Request for Information</h2>
                         <p style="margin-bottom: 2rem; color: #666;">
-                            Whether you're a researcher, academic, citizen, or organization, we're here to provide you with the information you need about ATTP's impact across Africa.
+                            Whether you're a researcher, academic, citizen, or organization, we're here to provide you
+                            with the information you need about ATTP's impact across Africa.
                         </p>
 
                         <form id="request-form" onsubmit="submitRequest(event)">
@@ -1312,22 +1362,26 @@
 
                                 <div class="form-group">
                                     <label for="full_name">Full Name *</label>
-                                    <input type="text" id="full_name" name="full_name" required placeholder="Enter your full name">
+                                    <input type="text" id="full_name" name="full_name" required
+                                        placeholder="Enter your full name">
                                 </div>
 
                                 <div class="form-group">
                                     <label for="email">Email Address *</label>
-                                    <input type="email" id="email" name="email" required placeholder="your.email@example.com">
+                                    <input type="email" id="email" name="email" required
+                                        placeholder="your.email@example.com">
                                 </div>
 
                                 <div class="form-group">
                                     <label for="country">Country *</label>
-                                    <input type="text" id="country" name="country" required placeholder="Your country">
+                                    <input type="text" id="country" name="country" required
+                                        placeholder="Your country">
                                 </div>
 
                                 <div class="form-group full-width">
                                     <label for="organization">Organization/Institution (Optional)</label>
-                                    <input type="text" id="organization" name="organization" placeholder="Enter organization name">
+                                    <input type="text" id="organization" name="organization"
+                                        placeholder="Enter organization name">
                                 </div>
 
                                 <div class="form-group full-width">
@@ -1345,7 +1399,8 @@
 
                                 <div class="form-group full-width">
                                     <label for="message">Detailed Request/Message *</label>
-                                    <textarea id="message" name="message" rows="5" required placeholder="Please provide details about your information request..."></textarea>
+                                    <textarea id="message" name="message" rows="5" required
+                                        placeholder="Please provide details about your information request..."></textarea>
                                 </div>
 
                                 <div class="form-group full-width" style="text-align: center;">
@@ -1477,22 +1532,62 @@
         function addGeoJSONToMap(africaGeoJSON) {
             // Country code mapping for matching
             const codeMapping = {
-                'Algeria': 'DZ', 'Angola': 'AO', 'Benin': 'BJ', 'Botswana': 'BW',
-                'Burkina Faso': 'BF', 'Burundi': 'BI', 'Cameroon': 'CM',
-                'Cape Verde': 'CV', 'Cabo Verde': 'CV', 'Central African Republic': 'CF',
-                'Chad': 'TD', 'Comoros': 'KM', 'Democratic Republic of the Congo': 'CD',
-                'Republic of the Congo': 'CG', 'Djibouti': 'DJ', 'Egypt': 'EG',
-                'Equatorial Guinea': 'GQ', 'Eritrea': 'ER', 'Ethiopia': 'ET',
-                'Gabon': 'GA', 'Gambia': 'GM', 'Ghana': 'GH', 'Guinea': 'GN',
-                'Guinea-Bissau': 'GW', 'Ivory Coast': 'CI', "Côte d'Ivoire": 'CI',
-                'Kenya': 'KE', 'Lesotho': 'LS', 'Liberia': 'LR', 'Libya': 'LY',
-                'Madagascar': 'MG', 'Malawi': 'MW', 'Mali': 'ML', 'Mauritania': 'MR',
-                'Mauritius': 'MU', 'Morocco': 'MA', 'Mozambique': 'MZ', 'Namibia': 'NA',
-                'Niger': 'NE', 'Nigeria': 'NG', 'Rwanda': 'RW', 'Sao Tome and Principe': 'ST',
-                'Senegal': 'SN', 'Seychelles': 'SC', 'Sierra Leone': 'SL', 'Somalia': 'SO',
-                'South Africa': 'ZA', 'South Sudan': 'SS', 'Sudan': 'SD', 'Eswatini': 'SZ',
-                'Tanzania': 'TZ', 'Togo': 'TG', 'Tunisia': 'TN', 'Uganda': 'UG',
-                'Zambia': 'ZM', 'Zimbabwe': 'ZW'
+                'Algeria': 'DZ',
+                'Angola': 'AO',
+                'Benin': 'BJ',
+                'Botswana': 'BW',
+                'Burkina Faso': 'BF',
+                'Burundi': 'BI',
+                'Cameroon': 'CM',
+                'Cape Verde': 'CV',
+                'Cabo Verde': 'CV',
+                'Central African Republic': 'CF',
+                'Chad': 'TD',
+                'Comoros': 'KM',
+                'Democratic Republic of the Congo': 'CD',
+                'Republic of the Congo': 'CG',
+                'Djibouti': 'DJ',
+                'Egypt': 'EG',
+                'Equatorial Guinea': 'GQ',
+                'Eritrea': 'ER',
+                'Ethiopia': 'ET',
+                'Gabon': 'GA',
+                'Gambia': 'GM',
+                'Ghana': 'GH',
+                'Guinea': 'GN',
+                'Guinea-Bissau': 'GW',
+                'Ivory Coast': 'CI',
+                "Côte d'Ivoire": 'CI',
+                'Kenya': 'KE',
+                'Lesotho': 'LS',
+                'Liberia': 'LR',
+                'Libya': 'LY',
+                'Madagascar': 'MG',
+                'Malawi': 'MW',
+                'Mali': 'ML',
+                'Mauritania': 'MR',
+                'Mauritius': 'MU',
+                'Morocco': 'MA',
+                'Mozambique': 'MZ',
+                'Namibia': 'NA',
+                'Niger': 'NE',
+                'Nigeria': 'NG',
+                'Rwanda': 'RW',
+                'Sao Tome and Principe': 'ST',
+                'Senegal': 'SN',
+                'Seychelles': 'SC',
+                'Sierra Leone': 'SL',
+                'Somalia': 'SO',
+                'South Africa': 'ZA',
+                'South Sudan': 'SS',
+                'Sudan': 'SD',
+                'Eswatini': 'SZ',
+                'Tanzania': 'TZ',
+                'Togo': 'TG',
+                'Tunisia': 'TN',
+                'Uganda': 'UG',
+                'Zambia': 'ZM',
+                'Zimbabwe': 'ZW'
             };
 
             function getCountryData(countryName) {
@@ -1579,7 +1674,10 @@
                 }
             }).addTo(map);
 
-            map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30], maxZoom: 4 });
+            map.fitBounds(geojsonLayer.getBounds(), {
+                padding: [30, 30],
+                maxZoom: 4
+            });
         }
 
         // Filter functions
@@ -1594,7 +1692,8 @@
         }
 
         function resetFilters() {
-            document.querySelectorAll('.filter-funder, .filter-region, .filter-aspiration, .filter-scope').forEach(cb => cb.checked = true);
+            document.querySelectorAll('.filter-funder, .filter-region, .filter-aspiration, .filter-scope').forEach(cb => cb
+                .checked = true);
             applyFilters();
         }
 
@@ -1606,15 +1705,17 @@
 
             // Update filter count badge
             const totalFilters = funders.length + regions.length + aspirations.length + scopes.length;
-            const totalAvailable = document.querySelectorAll('.filter-funder, .filter-region, .filter-aspiration, .filter-scope').length;
-            document.getElementById('active-filters').textContent = totalFilters === totalAvailable ? 'All' : `${totalFilters}`;
+            const totalAvailable = document.querySelectorAll(
+                '.filter-funder, .filter-region, .filter-aspiration, .filter-scope').length;
+            document.getElementById('active-filters').textContent = totalFilters === totalAvailable ? 'All' :
+                `${totalFilters}`;
 
             // Update download links with filters
             updateDownloadLinks(funders, regions, aspirations, scopes);
         }
 
         function updateDownloadLinks(funders, regions, aspirations, scopes) {
-            const baseUrl = '{{ url("/impact-map/download") }}';
+            const baseUrl = '{{ url('/impact-map/download') }}';
             const params = new URLSearchParams();
 
             if (funders.length > 0) params.append('funders', funders.join(','));
@@ -1645,24 +1746,37 @@
                 }));
 
                 new ApexCharts(document.getElementById('funding-type-chart'), {
-                    chart: { type: 'donut', height: 300 },
+                    chart: {
+                        type: 'donut',
+                        height: 300
+                    },
                     series: typeData.map(d => d.y),
                     labels: typeData.map(d => d.x),
                     colors: ['#522b39', '#a70d53', '#fbbc05', '#10b981'],
-                    legend: { position: 'bottom' }
+                    legend: {
+                        position: 'bottom'
+                    }
                 }).render();
             }
 
             // Year-over-Year Trend
             if (trendData.length > 0) {
                 new ApexCharts(document.getElementById('trend-chart'), {
-                    chart: { type: 'area', height: 300 },
+                    chart: {
+                        type: 'area',
+                        height: 300
+                    },
                     series: [{
                         name: 'Funding (USD)',
-                        data: trendData.map(t => ({ x: t.year.toString(), y: t.funding }))
+                        data: trendData.map(t => ({
+                            x: t.year.toString(),
+                            y: t.funding
+                        }))
                     }],
                     colors: ['#a70d53'],
-                    xaxis: { type: 'category' },
+                    xaxis: {
+                        type: 'category'
+                    },
                     yaxis: {
                         labels: {
                             formatter: val => '$' + (val / 1000000).toFixed(1) + 'M'
@@ -1675,13 +1789,17 @@
             if (fundingByPartner.length > 0) {
                 const partnerData = fundingByPartner.slice(0, 8);
                 new ApexCharts(document.getElementById('partner-chart'), {
-                    chart: { type: 'bar', height: 300 },
+                    chart: {
+                        type: 'bar',
+                        height: 300
+                    },
                     series: [{
                         name: 'Funding',
                         data: partnerData.map(p => p.total_funding)
                     }],
                     xaxis: {
-                        categories: partnerData.map(p => p.name.length > 15 ? p.name.substring(0, 15) + '...' : p.name)
+                        categories: partnerData.map(p => p.name.length > 15 ? p.name.substring(0, 15) + '...' : p
+                            .name)
                     },
                     colors: ['#522b39'],
                     yaxis: {
@@ -1695,11 +1813,18 @@
             // Regional Distribution
             if (fundingByRegion.length > 0) {
                 new ApexCharts(document.getElementById('region-chart'), {
-                    chart: { type: 'pie', height: 300 },
+                    chart: {
+                        type: 'pie',
+                        height: 300
+                    },
                     series: fundingByRegion.map(r => r.total_funding),
                     labels: fundingByRegion.map(r => r.abbreviation),
-                    colors: ['#522b39', '#a70d53', '#e16435', '#fbbc05', '#10b981', '#3b82f6', '#8b5cf6', '#f97316'],
-                    legend: { position: 'bottom' }
+                    colors: ['#522b39', '#a70d53', '#e16435', '#fbbc05', '#10b981', '#3b82f6', '#8b5cf6',
+                        '#f97316'
+                    ],
+                    legend: {
+                        position: 'bottom'
+                    }
                 }).render();
             }
         }
@@ -1711,27 +1836,27 @@
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData);
 
-            fetch('{{ route("impact.request") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                },
-                body: JSON.stringify(data)
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    e.target.reset();
-                    document.getElementById('success-modal').classList.add('show');
-                } else {
+            fetch('{{ route('impact.request') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify(data)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        e.target.reset();
+                        document.getElementById('success-modal').classList.add('show');
+                    } else {
+                        alert('Error submitting request. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
                     alert('Error submitting request. Please try again.');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Error submitting request. Please try again.');
-            });
+                });
         }
 
         function closeModal() {
@@ -1752,8 +1877,13 @@
                 $('#countriesTable').DataTable({
                     responsive: true,
                     pageLength: 10,
-                    lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
-                    order: [[1, 'desc']], // Sort by Direct Funding descending
+                    lengthMenu: [
+                        [10, 25, 50, -1],
+                        [10, 25, 50, "All"]
+                    ],
+                    order: [
+                        [1, 'desc']
+                    ], // Sort by Direct Funding descending
                     language: {
                         search: "Search Countries:",
                         lengthMenu: "Show _MENU_ countries",
@@ -1765,9 +1895,14 @@
                             previous: "Previous"
                         }
                     },
-                    columnDefs: [
-                        { targets: [1, 2], className: 'text-end' },
-                        { targets: [3], className: 'text-center' }
+                    columnDefs: [{
+                            targets: [1, 2],
+                            className: 'text-end'
+                        },
+                        {
+                            targets: [3],
+                            className: 'text-center'
+                        }
                     ],
                     dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rtip'
                 });

@@ -14,11 +14,9 @@
 
             <div class="d-flex gap-2">
                 @can('finance.program_funding.edit')
-                    @if ($programFunding->status === 'draft')
-                        <a href="{{ route('finance.program-funding.edit', $programFunding) }}" class="btn btn-warning">
-                            <i class="feather-edit me-1"></i> Edit
-                        </a>
-                    @endif
+                    <a href="{{ route('finance.program-funding.edit', $programFunding) }}" class="btn btn-warning">
+                        <i class="feather-edit me-1"></i> Edit
+                    </a>
                 @endcan
 
                 <a href="{{ route('finance.program-funding.index') }}" class="btn btn-light">
