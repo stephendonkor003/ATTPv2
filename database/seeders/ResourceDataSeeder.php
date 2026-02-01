@@ -10,7 +10,6 @@ use App\Models\Project;
 use App\Models\Activity;
 use App\Models\SubActivity;
 use Illuminate\Database\Seeder;
-use Faker\Factory as Faker;
 
 class ResourceDataSeeder extends Seeder
 {
@@ -104,15 +103,13 @@ class ResourceDataSeeder extends Seeder
             ['allocation_level' => 'sub_activity', 'collection' => $subActivities],
         ]);
 
-        $faker = Faker::create();
-
         foreach ($programFundings as $fundingId) {
             foreach ($levels as $levelEntry) {
                 foreach ($levelEntry['collection'] as $index => $target) {
                     for ($round = 0; $round < 3; $round++) {
                         $category = $categories[($index + $round) % $categories->count()];
                         $resource = $resources[($index + $round) % $resources->count()];
-                        $amount = $faker->randomFloat(2, 15000, 200000);
+                        $amount = mt_rand(15000, 200000);
                         $year = 2025 + ($round % 3);
                         BudgetCommitment::create([
                             'program_funding_id' => $fundingId,
@@ -122,7 +119,7 @@ class ResourceDataSeeder extends Seeder
                             'allocation_id' => $target->id,
                             'commitment_amount' => $amount,
                             'commitment_year' => $year,
-                            'status' => $faker->boolean(70) ? BudgetCommitment::STATUS_APPROVED : BudgetCommitment::STATUS_DRAFT,
+                            'status' => ($index + $round) % 2 === 0 ? BudgetCommitment::STATUS_APPROVED : BudgetCommitment::STATUS_DRAFT,
                             'created_by' => 1,
                         ]);
                     }
