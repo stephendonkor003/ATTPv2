@@ -26,18 +26,22 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
 {
-    $this->call([
-        RoleSeeder::class,
-        PermissionSeeder::class,
-        RolePermissionSeeder::class,
-        PartnerPortalPermissionsSeeder::class,
-        GovernanceLevelSeeder::class,
-        GovernanceNodeSeeder::class,
-        GovernanceReportingLineSeeder::class,
-        UserSeeder::class,
-        GovernanceAssignmentSeeder::class,
-        AssignPartnerPermissionsSeeder::class,
-    ]);
+        $this->call([
+            RoleSeeder::class,
+            PermissionSeeder::class,
+            RolePermissionSeeder::class,
+            PartnerPortalPermissionsSeeder::class,
+            GovernanceLevelSeeder::class,
+            GovernanceNodeSeeder::class,
+            GovernanceReportingLineSeeder::class,
+            UserSeeder::class,
+            GovernanceAssignmentSeeder::class,
+            FundingPartnerSeeder::class,
+            AssignPartnerPermissionsSeeder::class,
+            ProcurementStructureSeeder::class,
+            ResourceDataSeeder::class,
+            ProgramPlanSheetSeeder::class,
+        ]);
 }
 
 }

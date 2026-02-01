@@ -4002,3 +4002,24 @@ a.pthumb{
 * ----------------------------------------------------------------------------------------
 */
 
+/* Keep modal dialogs vivid even when the surrounding layout dims */
+body.modal-open .modal,
+body.modal-open .modal .modal-content,
+.modal-dialog,
+.modal-content {
+    opacity: 1 !important;
+    filter: none !important;
+}
+.modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.55) !important;
+    opacity: 1 !important;
+    backdrop-filter: none !important;
+}
+
+.modal {
+    z-index: 2050 !important;
+}
+
+.modal-dialog {
+    z-index: 2055 !important;
+}

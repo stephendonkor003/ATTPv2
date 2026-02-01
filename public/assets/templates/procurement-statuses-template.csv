@@ -1,0 +1,4 @@
+name,description,color,sort_order,is_active
+Draft,Initial status,#6c757d,0,yes
+Published,Published for bidding,#0d6efd,1,yes
+Archived,Closed procurement,#6c757d,2,no

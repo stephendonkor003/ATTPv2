@@ -19,7 +19,7 @@ class UserSeeder extends Seeder
         $users = [
             [
                 'name' => 'System Admin',
-                'email' => 'admin@example.com',
+                'email' => 'amodonlimited@gmail.com',
                 'role' => 'System Admin',
                 'user_type' => 'admin',
                 'node' => 'African Union Commission',

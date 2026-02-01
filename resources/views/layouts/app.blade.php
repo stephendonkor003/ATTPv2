@@ -163,6 +163,7 @@
 
     <!-- Page-specific scripts -->
     @stack('scripts')
+    @stack('modals')
 
 
 </body>

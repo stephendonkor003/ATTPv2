@@ -88,6 +88,12 @@ class SecurityController extends Controller
             'ip' => $request->ip(),
         ]);
 
+        // Redirect funding partners to their portal
+        if ($user->user_type === 'funding_partner' || $user->isFundingPartner()) {
+            return redirect()->intended(route('partner.dashboard'))
+                ->with('success', 'Your password has been updated successfully. Your account is now active.');
+        }
+
         return redirect()->intended(route('dashboard'))
             ->with('success', 'Your password has been updated successfully. Your account is now active.');
     }
@@ -153,6 +159,12 @@ class SecurityController extends Controller
             'email' => $user->email,
             'ip' => $request->ip(),
         ]);
+
+        // Redirect funding partners to their portal
+        if ($user->user_type === 'funding_partner' || $user->isFundingPartner()) {
+            return redirect()->intended(route('partner.dashboard'))
+                ->with('success', 'Identity verified successfully. Welcome back!');
+        }
 
         return redirect()->intended(route('dashboard'))
             ->with('success', 'Identity verified successfully. Welcome back!');

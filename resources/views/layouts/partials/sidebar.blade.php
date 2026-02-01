@@ -328,7 +328,122 @@
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.procurement') }}</label>
                     </li>
+                    {{-- ================= PROCUREMENT SETTINGS ================= --}}
+                    @canany(['procurement.settings.manage', 'procurement.view_all'])
+                        <li class="nxl-item nxl-hasmenu">
+                            <a href="javascript:void(0);" class="nxl-link">
+                                <span class="nxl-micon">
+                                    <i class="feather-settings"></i>
+                                </span>
+                                <span class="nxl-mtext">Procurement Settings</span>
+                                <span class="nxl-arrow">
+                                    <i class="feather-chevron-right"></i>
+                                </span>
+                            </a>
 
+                            <ul class="nxl-submenu">
+                                <li class="nxl-item">
+                                    <a href="{{ route('finance.governance.index') }}" class="nxl-link">
+                                        <i class="feather-grid me-2"></i>
+                                        Governance Structure
+                                    </a>
+                                </li>
+
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.settings.geographics.index') }}" class="nxl-link">
+                                        <i class="feather-map-pin me-2"></i>
+                                        Geographics
+                                    </a>
+                                </li>
+
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.settings.method-planned.index') }}" class="nxl-link">
+                                        <i class="feather-calendar me-2"></i>
+                                        Methods Planned
+                                    </a>
+                                </li>
+
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.settings.stages.index') }}" class="nxl-link">
+                                        <i class="feather-layers me-2"></i>
+                                        Stages
+                                    </a>
+                                </li>
+
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.settings.statuses.index') }}" class="nxl-link">
+                                        <i class="feather-flag me-2"></i>
+                                        Statuses
+                                    </a>
+                                </li>
+
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.settings.step-stages.index') }}" class="nxl-link">
+                                        <i class="feather-git-branch me-2"></i>
+                                        Step Stages
+                                    </a>
+                                </li>
+
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.settings.step-approvals.index') }}" class="nxl-link">
+                                        <i class="feather-check-circle me-2"></i>
+                                        Step Approvals
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    @endcanany
+                    {{-- ================= PROCUREMENT STRUCTURE ================= --}}
+                    @canany(['procurement.plan.view', 'procurement.plan.create', 'procurement.view_all'])
+                        <li class="nxl-item nxl-hasmenu">
+                            <a href="javascript:void(0);" class="nxl-link">
+                                <span class="nxl-micon">
+                                    <i class="feather-layers"></i>
+                                </span>
+                                <span class="nxl-mtext">Procurement Structure</span>
+                                <span class="nxl-arrow">
+                                    <i class="feather-chevron-right"></i>
+                                </span>
+                            </a>
+
+                            <ul class="nxl-submenu">
+                                @canany(['procurement.plan.view', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.structure.index') }}" class="nxl-link">
+                                            <i class="feather-check-square me-2"></i>
+                                            @can('procurement.view_all')
+                                                All Procurement Plans
+                                            @else
+                                                My Procurement Plan
+                                            @endcan
+                                        </a>
+                                    </li>
+                                @endcanany
+
+                                @canany(['procurement.plan.create', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.plans.create') }}" class="nxl-link">
+                                            <i class="feather-file-text me-2"></i>
+                                            Create Plan Item
+                                        </a>
+                                    </li>
+                                @endcanany
+
+                                @canany(['procurement.plan.view', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.plans.sheet') }}" class="nxl-link">
+                                            <i class="feather-share-2 me-2"></i>
+                                            @can('procurement.view_all')
+                                                All Procurement Sheets
+                                            @else
+                                                My Procurement Sheet
+                                            @endcan
+                                        </a>
+                                    </li>
+                                @endcanany
+                            </ul>
+                        </li>
+                    @endcanany
                     <li class="nxl-item nxl-hasmenu">
                         <a href="javascript:void(0);" class="nxl-link">
                             <span class="nxl-micon">
@@ -382,10 +497,11 @@
                                     Public Procurements
                                 </a>
                             </li>
-
                         </ul>
-
                     </li>
+
+
+
                 @endcanany
 
 
@@ -626,7 +742,8 @@
 
 
                 {{-- ================= AU MASTER DATA ================= --}}
-                @canany(['settings.au_master_data.view', 'settings.au_master_data.create', 'settings.au_master_data.edit'])
+                @canany(['settings.au_master_data.view', 'settings.au_master_data.create',
+                    'settings.au_master_data.edit'])
                     <li class="nxl-item nxl-caption">
                         <label>AU Master Data</label>
                     </li>

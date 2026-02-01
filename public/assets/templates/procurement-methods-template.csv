@@ -1,0 +1,6 @@
+﻿method_name,method_description,method_is_active,milestone_title,milestone_description,milestone_target_days,milestone_sort_order,milestone_is_active
+Competitive Bidding,Used when an open tender is required,yes,Prepare tender dossier,Gather specifications and approvals,5,1,yes
+Competitive Bidding,Used when an open tender is required,yes,Publish tender advertisement,Share opportunity across vendors,3,2,yes
+Competitive Bidding,Used when an open tender is required,yes,Receive bids and evaluate,Score submissions against criteria,7,3,yes
+Direct Procurement,Used for urgent requests,yes,Approve emergency sourcing,Escalate to governance node,2,1,yes
+Direct Procurement,Used for urgent requests,yes,Place order and monitor delivery,Confirm receipt and compliance,4,2,yes

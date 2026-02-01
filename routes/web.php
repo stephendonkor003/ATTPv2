@@ -143,9 +143,18 @@ use App\Http\Controllers\Procurement\{
     DynamicFormFieldController,
     ProcurementFormAssignmentController,
     PublicProcurementController,
+    ProcurementProgramPlanController,
     ProcurementSubmissionController,
+    ProcurementPlanController,
+};
 
-
+use App\Http\Controllers\Procurement\Settings\{
+    GeographicController,
+    MethodPlannedController,
+    StageController as ProcurementStageController,
+    StatusController as ProcurementSettingsStatusController,
+    StepStageController,
+    StepApprovalController,
 };
 
 /*
@@ -2029,6 +2038,111 @@ Route::middleware(['auth'])->prefix('security')->name('security.')->group(functi
     Route::post('/otp/resend', [SecurityController::class, 'resendOtp'])
         ->name('otp.resend');
 });
+
+
+/*
+|--------------------------------------------------------------------------
+| PROCUREMENT STRUCTURE
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'not.funding.partner'])
+    ->prefix('procurement/structure')
+    ->name('procurement.structure.')
+    ->group(function () {
+        Route::get('/', [ProcurementProgramPlanController::class, 'index'])->name('index');
+        Route::post('/', [ProcurementProgramPlanController::class, 'store'])->name('store');
+    });
+
+
+/*
+|--------------------------------------------------------------------------
+| PROCUREMENT PLANS MODULE
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'not.funding.partner'])
+    ->prefix('procurement/plans')
+    ->name('procurement.plans.')
+    ->group(function () {
+
+        // Index and create routes
+        Route::get('/', [ProcurementPlanController::class, 'index'])->name('index');
+        Route::get('/create', [ProcurementPlanController::class, 'create'])->name('create');
+        Route::post('/', [ProcurementPlanController::class, 'store'])->name('store');
+
+        // AJAX routes (static paths must come BEFORE parameter routes)
+        Route::get('/generate-code', [ProcurementPlanController::class, 'generateCode'])->name('generate-code');
+        Route::get('/sheet', [ProcurementPlanController::class, 'sheet'])->name('sheet');
+        Route::get('/program-plans/{programPlan}/sheet', [ProcurementPlanController::class, 'programPlanSheet'])
+            ->name('program-plans.sheet');
+        Route::get('/sub-activities/{activity}', [ProcurementPlanController::class, 'getSubActivities'])->name('sub-activities');
+        Route::post('/calculate-end-date', [ProcurementPlanController::class, 'calculateEndDate'])->name('calculate-end-date');
+
+        // Parameter routes (must come LAST)
+        Route::get('/{plan}', [ProcurementPlanController::class, 'show'])->name('show');
+        Route::get('/{plan}/edit', [ProcurementPlanController::class, 'edit'])->name('edit');
+        Route::put('/{plan}', [ProcurementPlanController::class, 'update'])->name('update');
+        Route::delete('/{plan}', [ProcurementPlanController::class, 'destroy'])->name('destroy');
+        Route::patch('/{plan}/toggle-launch', [ProcurementPlanController::class, 'toggleLaunch'])->name('toggle-launch');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| PROCUREMENT SETTINGS (Sub-modules)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'not.funding.partner'])
+    ->prefix('procurement/settings')
+    ->name('procurement.settings.')
+    ->group(function () {
+
+        // Geographics
+        Route::get('geographics/template', [GeographicController::class, 'template'])
+            ->name('geographics.template');
+        Route::post('geographics/import', [GeographicController::class, 'import'])
+            ->name('geographics.import');
+        Route::resource('geographics', GeographicController::class)
+            ->except(['show']);
+
+        // Method Planned
+        Route::get('method-planned/template', [MethodPlannedController::class, 'template'])
+            ->name('method-planned.template');
+        Route::post('method-planned/import', [MethodPlannedController::class, 'import'])
+            ->name('method-planned.import');
+        Route::resource('method-planned', MethodPlannedController::class)
+            ->except(['show']);
+
+        // Stages
+        Route::get('stages/template', [ProcurementStageController::class, 'template'])
+            ->name('stages.template');
+        Route::post('stages/import', [ProcurementStageController::class, 'import'])
+            ->name('stages.import');
+        Route::resource('stages', ProcurementStageController::class)
+            ->except(['show']);
+
+        // Statuses
+        Route::get('statuses/template', [ProcurementSettingsStatusController::class, 'template'])
+            ->name('statuses.template');
+        Route::post('statuses/import', [ProcurementSettingsStatusController::class, 'import'])
+            ->name('statuses.import');
+        Route::resource('statuses', ProcurementSettingsStatusController::class)
+            ->except(['show']);
+
+        // Step Stages
+        Route::get('step-stages/template', [StepStageController::class, 'template'])
+            ->name('step-stages.template');
+        Route::post('step-stages/import', [StepStageController::class, 'import'])
+            ->name('step-stages.import');
+        Route::resource('step-stages', StepStageController::class)
+            ->except(['show']);
+
+        // Step Approvals
+        Route::get('step-approvals/template', [StepApprovalController::class, 'template'])
+            ->name('step-approvals.template');
+        Route::post('step-approvals/import', [StepApprovalController::class, 'import'])
+            ->name('step-approvals.import');
+        Route::resource('step-approvals', StepApprovalController::class)
+            ->except(['show']);
+    });
 
 
 require __DIR__ . '/auth.php';

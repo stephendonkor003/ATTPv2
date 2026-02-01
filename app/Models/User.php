@@ -273,10 +273,17 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is Super Admin
+     * Check if user is Super Admin or Admin user type
+     * These users bypass security checks (password expiration, OTP)
      */
     public function isSuperAdmin(): bool
     {
+        // Check user_type first (admin users bypass security)
+        if ($this->user_type === 'admin') {
+            return true;
+        }
+
+        // Check role-based Super Admin
         return $this->role && $this->role->name === 'Super Admin';
     }
 }
