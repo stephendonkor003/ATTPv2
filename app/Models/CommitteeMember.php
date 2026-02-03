@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class CommitteeMember extends Model
+class CommitteeMember extends BaseModel
 {
     protected $fillable = [
         'committee_id',

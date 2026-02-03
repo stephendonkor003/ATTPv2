@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
+use App\Models\BudgetCommitment;
 use App\Models\ProcurementGeographic;
 use App\Models\ProcurementMethodPlanned;
 use App\Models\ProcurementPlan;
@@ -14,6 +15,8 @@ use App\Models\ProcurementStepApproval;
 use App\Models\ProcurementStepStage;
 use App\Models\SubActivity;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 class ProcurementPlanController extends Controller
 {
     /**
@@ -144,6 +147,8 @@ class ProcurementPlanController extends Controller
             'fiscal_year' => 'nullable|integer|min:2000|max:2100',
         ]);
 
+        $this->ensureSubActivityIsApprovedCommittedInScope($request);
+
         $validated['is_code_auto_generated'] = $request->has('is_code_auto_generated');
         $validated['is_launched'] = $request->has('is_launched');
         $validated['created_by'] = auth()->id();
@@ -253,6 +258,16 @@ class ProcurementPlanController extends Controller
             'fiscal_year' => 'nullable|integer|min:2000|max:2100',
         ]);
 
+        if (
+            $request->filled('sub_activity_id')
+            && (
+                $request->input('sub_activity_id') !== $plan->sub_activity_id
+                || $request->input('activity_id') !== $plan->activity_id
+            )
+        ) {
+            $this->ensureSubActivityIsApprovedCommittedInScope($request);
+        }
+
         $validated['is_launched'] = $request->has('is_launched');
         $validated['updated_by'] = auth()->id();
 
@@ -326,9 +341,33 @@ class ProcurementPlanController extends Controller
      */
     public function getSubActivities(Activity $activity)
     {
-        $subActivities = SubActivity::where('activity_id', $activity->id)
-            ->orderBy('name')
-            ->get(['id', 'name']);
+        $this->assertActivityInScope($activity);
+
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+            return response()->json([]);
+        }
+
+        $subActivities = SubActivity::query()
+            ->select('myb_sub_activities.id', 'myb_sub_activities.name')
+            ->join('myb_budget_commitments as commitments', function ($join) use ($scopedNodeIds) {
+                $join->on('commitments.allocation_id', '=', 'myb_sub_activities.id')
+                    ->where('commitments.allocation_level', '=', 'sub_activity')
+                    ->where('commitments.status', '=', BudgetCommitment::STATUS_APPROVED);
+
+                if ($scopedNodeIds !== null) {
+                    $join->whereIn('commitments.governance_node_id', $scopedNodeIds)
+                        ->whereNotNull('commitments.governance_node_id');
+                }
+            })
+            ->where('myb_sub_activities.activity_id', $activity->id)
+            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('myb_sub_activities.governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('myb_sub_activities.governance_node_id');
+            })
+            ->distinct()
+            ->orderBy('myb_sub_activities.name')
+            ->get();
 
         return response()->json($subActivities);
     }
@@ -366,5 +405,84 @@ class ProcurementPlanController extends Controller
         ])->orderBy('procurement_code')->get();
 
         return view('procurement.plans.program-plan-sheet', compact('programPlan', 'plans'));
+    }
+
+    private function scopedNodeIds(): ?array
+    {
+        $currentUser = Auth::user();
+
+        if (!$currentUser || $currentUser->isAdmin()) {
+            return null;
+        }
+
+        if (!$currentUser->governance_node_id) {
+            return [];
+        }
+
+        return [$currentUser->governance_node_id];
+    }
+
+    private function assertActivityInScope(Activity $activity): void
+    {
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds === null) {
+            return;
+        }
+
+        $activity->loadMissing('project');
+
+        $nodeId = $activity->governance_node_id ?? $activity->project?->governance_node_id;
+        if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
+            abort(403, 'You do not have access to this activity.');
+        }
+    }
+
+    private function ensureSubActivityIsApprovedCommittedInScope(Request $request): void
+    {
+        if (!$request->filled('sub_activity_id')) {
+            return;
+        }
+
+        $subActivity = SubActivity::with(['activity.project'])->find($request->input('sub_activity_id'));
+        if (!$subActivity) {
+            throw ValidationException::withMessages([
+                'sub_activity_id' => 'Selected sub activity not found.',
+            ]);
+        }
+
+        if ($request->filled('activity_id') && $subActivity->activity_id !== $request->input('activity_id')) {
+            throw ValidationException::withMessages([
+                'sub_activity_id' => 'Selected sub activity does not belong to the selected activity.',
+            ]);
+        }
+
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds !== null) {
+            $nodeId = $subActivity->governance_node_id
+                ?? $subActivity->activity?->governance_node_id
+                ?? $subActivity->activity?->project?->governance_node_id;
+
+            if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
+                throw ValidationException::withMessages([
+                    'sub_activity_id' => 'Selected sub activity is not within your governance scope.',
+                ]);
+            }
+        }
+
+        $hasApprovedCommitment = BudgetCommitment::query()
+            ->where('allocation_level', 'sub_activity')
+            ->where('allocation_id', $subActivity->id)
+            ->where('status', BudgetCommitment::STATUS_APPROVED)
+            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('governance_node_id');
+            })
+            ->exists();
+
+        if (!$hasApprovedCommitment) {
+            throw ValidationException::withMessages([
+                'sub_activity_id' => 'Selected sub activity does not have an approved commitment.',
+            ]);
+        }
     }
 }

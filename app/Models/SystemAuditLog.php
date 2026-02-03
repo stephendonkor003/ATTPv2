@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class SystemAuditLog extends Model
+class SystemAuditLog extends BaseModel
 {
     protected $fillable = [
         'user_id',

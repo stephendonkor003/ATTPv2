@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ThinkDataset extends Model
+class ThinkDataset extends BaseModel
 {
     protected $fillable = [
         'ottd_id', 'tt_name_en', 'country', 'continent', 'sub_region', 'Count', 'website',

@@ -67,13 +67,17 @@ class PermissionSeeder extends Seeder
             ['name' => 'finance.program_funding.delete', 'module' => 'Finance', 'description' => 'Delete program funding'],
             ['name' => 'finance.program_funding.submit', 'module' => 'Finance', 'description' => 'Submit program funding for approval'],
             ['name' => 'finance.program_funding.approve', 'module' => 'Finance', 'description' => 'Approve program funding'],
-            ['name' => 'finance.program_funding.manage', 'module' => 'Finance', 'description' => 'Manage program funding'],
-            ['name' => 'finance.commitments.view', 'module' => 'Finance', 'description' => 'View finance commitments'],
-            ['name' => 'finance.commitments.create', 'module' => 'Finance', 'description' => 'Create finance commitments'],
-            ['name' => 'finance.commitments.edit', 'module' => 'Finance', 'description' => 'Edit finance commitments'],
-            ['name' => 'finance.commitments.delete', 'module' => 'Finance', 'description' => 'Delete finance commitments'],
-            ['name' => 'finance.commitments.manage', 'module' => 'Finance', 'description' => 'Manage finance commitments'],
-            ['name' => 'finance.executions.view', 'module' => 'Finance', 'description' => 'View finance execution dashboard'],
+	            ['name' => 'finance.program_funding.manage', 'module' => 'Finance', 'description' => 'Manage program funding'],
+		            ['name' => 'finance.commitments.view', 'module' => 'Finance', 'description' => 'View finance commitments'],
+		            ['name' => 'finance.commitments.view_all', 'module' => 'Finance', 'description' => 'View all commitments across governance nodes'],
+		            ['name' => 'finance.commitments.create', 'module' => 'Finance', 'description' => 'Create finance commitments'],
+		            ['name' => 'finance.commitments.edit', 'module' => 'Finance', 'description' => 'Edit finance commitments'],
+		            ['name' => 'finance.commitments.delete', 'module' => 'Finance', 'description' => 'Delete finance commitments'],
+		            ['name' => 'finance.commitments.manage', 'module' => 'Finance', 'description' => 'Manage finance commitments'],
+		            ['name' => 'finance.purchase_requests.view', 'module' => 'Finance', 'description' => 'View purchase requests'],
+		            ['name' => 'finance.purchase_requests.view_all', 'module' => 'Finance', 'description' => 'View all purchase requests across governance nodes'],
+		            ['name' => 'finance.purchase_requests.send', 'module' => 'Finance', 'description' => 'Send purchase requests via email'],
+		            ['name' => 'finance.executions.view', 'module' => 'Finance', 'description' => 'View finance execution dashboard'],
 
             // Budget
             ['name' => 'budget.access', 'module' => 'Budget', 'description' => 'Access budget module'],
@@ -122,6 +126,13 @@ class PermissionSeeder extends Seeder
             ['name' => 'forms.approve', 'module' => 'procurement', 'description' => 'Approve procurement forms'],
             ['name' => 'forms.reject', 'module' => 'procurement', 'description' => 'Reject procurement forms with reason'],
             ['name' => 'procurement.audit', 'module' => 'procurement', 'description' => 'View procurement audit logs'],
+
+            // Site Visits (Procurement)
+            ['name' => 'site_visits.view', 'module' => 'procurement', 'description' => 'View site visits'],
+            ['name' => 'site_visits.create', 'module' => 'procurement', 'description' => 'Create site visits'],
+            ['name' => 'site_visits.observe', 'module' => 'procurement', 'description' => 'Add observations and upload evidence for site visits'],
+            ['name' => 'site_visits.submit', 'module' => 'procurement', 'description' => 'Submit site visits for approval'],
+            ['name' => 'site_visits.approve', 'module' => 'procurement', 'description' => 'Approve or reject site visits'],
 
             // System Audit
             ['name' => 'system.audit.view', 'module' => 'system', 'description' => 'View system activity audit logs'],

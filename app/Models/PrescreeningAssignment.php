@@ -1,9 +1,9 @@
 <?php
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class PrescreeningAssignment extends Model
+class PrescreeningAssignment extends BaseModel
 {
     protected $fillable = [
         'procurement_id',

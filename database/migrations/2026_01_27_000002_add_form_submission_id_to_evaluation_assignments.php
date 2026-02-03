@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('evaluation_assignments', function (Blueprint $table) {
-            $table->foreignId('form_submission_id')
+            $table->foreignUuid('form_submission_id')
                 ->nullable()
                 ->after('procurement_id')
                 ->constrained('form_submissions')

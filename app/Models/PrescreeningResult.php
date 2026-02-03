@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class PrescreeningResult extends Model
+class PrescreeningResult extends BaseModel
 {
     protected $fillable = [
         'submission_id',

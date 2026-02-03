@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class SiteVisitObservation extends Model
+class SiteVisitObservation extends BaseModel
 {
     public $timestamps = false;
 

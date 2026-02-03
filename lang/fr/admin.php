@@ -33,12 +33,14 @@ return [
     // Budget Execution
     'execution_commitments' => 'Exécution & Engagements',
     'budget_commitments' => 'Engagements Budgétaires',
+    'purchase_requests' => 'Demandes d\'Achat',
     'resource_categories' => 'Catégories de Ressources',
     'resource_items' => 'Éléments de Ressources',
 
     // Reports & Analytics
     'reports_oversight' => 'Rapports & Supervision',
     'budget_reports' => 'Rapports Budgétaires',
+    'commitment_report' => 'Rapport des Engagements',
     'execution_dashboard' => 'Tableau de Bord d\'Exécution',
     'program_allocation' => 'Allocation de Programme',
     'allocations_reports' => 'Rapports d\'Allocations',

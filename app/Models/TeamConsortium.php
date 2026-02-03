@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class TeamConsortium extends Model
+class TeamConsortium extends BaseModel
 {
     use HasFactory;
 

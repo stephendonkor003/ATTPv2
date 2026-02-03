@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ResourceCategory extends Model
+class ResourceCategory extends BaseModel
 {
     protected $table = 'myb_resource_categories';
 

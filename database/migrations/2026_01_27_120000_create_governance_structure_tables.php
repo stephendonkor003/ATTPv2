@@ -10,7 +10,7 @@ return new class extends Migration
     {
         // Governance Levels - Defines the hierarchy levels (Organ → Commission → Department → Directorate → Division/Unit)
         Schema::create('myb_governance_levels', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('key', 50)->unique()->comment('Unique identifier key');
             $table->string('name', 100)->comment('Display name of the level');
             $table->unsignedInteger('sort_order')->default(0)->index()->comment('Display order in hierarchy');
@@ -23,8 +23,8 @@ return new class extends Migration
 
         // Governance Nodes - Individual organizational units/entities
         Schema::create('myb_governance_nodes', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('level_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('level_id')
                 ->constrained('myb_governance_levels')
                 ->onDelete('restrict') // Prevent deletion if nodes exist
                 ->comment('Reference to governance level');
@@ -34,7 +34,7 @@ return new class extends Migration
             $table->enum('status', ['active', 'inactive', 'pending', 'archived'])->default('active')->comment('Current status');
             $table->date('effective_start')->nullable()->comment('When this node becomes effective');
             $table->date('effective_end')->nullable()->comment('When this node becomes inactive');
-            $table->foreignId('created_by')->nullable()
+            $table->foreignUuid('created_by')->nullable()
                 ->constrained('users')
                 ->nullOnDelete()
                 ->comment('User who created this node');
@@ -49,12 +49,12 @@ return new class extends Migration
 
         // Governance Reporting Lines - Defines relationships between nodes
         Schema::create('myb_governance_reporting_lines', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('child_node_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('child_node_id')
                 ->constrained('myb_governance_nodes')
                 ->onDelete('cascade')
                 ->comment('The subordinate node');
-            $table->foreignId('parent_node_id')
+            $table->foreignUuid('parent_node_id')
                 ->constrained('myb_governance_nodes')
                 ->onDelete('cascade')
                 ->comment('The superior/parent node');
@@ -62,7 +62,7 @@ return new class extends Migration
                 ->comment('Type of reporting relationship: primary (hierarchy), dotted (matrix), advisory (guidance)');
             $table->date('effective_start')->nullable()->comment('When this reporting line becomes active');
             $table->date('effective_end')->nullable()->comment('When this reporting line ends');
-            $table->foreignId('created_by')->nullable()
+            $table->foreignUuid('created_by')->nullable()
                 ->constrained('users')
                 ->nullOnDelete()
                 ->comment('User who created this reporting line');
@@ -81,12 +81,12 @@ return new class extends Migration
 
         // Governance Node Assignments - Assigns users/employees to nodes with roles
         Schema::create('myb_governance_node_assignments', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('node_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('node_id')
                 ->constrained('myb_governance_nodes')
                 ->onDelete('cascade')
                 ->comment('The organizational node');
-            $table->foreignId('user_id')
+            $table->foreignUuid('user_id')
                 ->constrained('users')
                 ->onDelete('cascade')
                 ->comment('The assigned employee/user');
@@ -94,7 +94,7 @@ return new class extends Migration
             $table->boolean('is_primary')->default(false)->comment('Is this the primary assignment for the user?');
             $table->date('effective_start')->nullable()->comment('Assignment start date');
             $table->date('effective_end')->nullable()->comment('Assignment end date');
-            $table->foreignId('created_by')->nullable()
+            $table->foreignUuid('created_by')->nullable()
                 ->constrained('users')
                 ->nullOnDelete()
                 ->comment('User who created this assignment');

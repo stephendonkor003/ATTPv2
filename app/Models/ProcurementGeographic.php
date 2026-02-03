@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ProcurementGeographic extends Model
+class ProcurementGeographic extends BaseModel
 {
     protected $table = 'myb_procurement_geographics';
 

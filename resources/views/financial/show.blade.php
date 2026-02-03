@@ -48,33 +48,33 @@
                         <tbody>
                             <tr>
                                 <td>Financial Health</td>
-                                <td>{!! $evaluation->strength_financial_health ?? '-' !!}</td>
-                                <td>{!! $evaluation->gap_financial_health ?? '-' !!}</td>
+                                <td>{{ $evaluation->strength_financial_health ?? '-' }}</td>
+                                <td>{{ $evaluation->gap_financial_health ?? '-' }}</td>
                             </tr>
                             <tr>
                                 <td>Accuracy</td>
-                                <td>{!! $evaluation->strength_accuracy ?? '-' !!}</td>
-                                <td>{!! $evaluation->gap_accuracy ?? '-' !!}</td>
+                                <td>{{ $evaluation->strength_accuracy ?? '-' }}</td>
+                                <td>{{ $evaluation->gap_accuracy ?? '-' }}</td>
                             </tr>
                             <tr>
                                 <td>Revenue</td>
-                                <td>{!! $evaluation->strength_revenue ?? '-' !!}</td>
-                                <td>{!! $evaluation->gap_revenue ?? '-' !!}</td>
+                                <td>{{ $evaluation->strength_revenue ?? '-' }}</td>
+                                <td>{{ $evaluation->gap_revenue ?? '-' }}</td>
                             </tr>
                             <tr>
                                 <td>Fund Utilization</td>
-                                <td>{!! $evaluation->strength_fund_use ?? '-' !!}</td>
-                                <td>{!! $evaluation->gap_fund_use ?? '-' !!}</td>
+                                <td>{{ $evaluation->strength_fund_use ?? '-' }}</td>
+                                <td>{{ $evaluation->gap_fund_use ?? '-' }}</td>
                             </tr>
                             <tr>
                                 <td>Liabilities</td>
-                                <td>{!! $evaluation->strength_liabilities ?? '-' !!}</td>
-                                <td>{!! $evaluation->gap_liabilities ?? '-' !!}</td>
+                                <td>{{ $evaluation->strength_liabilities ?? '-' }}</td>
+                                <td>{{ $evaluation->gap_liabilities ?? '-' }}</td>
                             </tr>
                             <tr>
                                 <td>Compliance</td>
-                                <td>{!! $evaluation->strength_compliance ?? '-' !!}</td>
-                                <td>{!! $evaluation->gap_compliance ?? '-' !!}</td>
+                                <td>{{ $evaluation->strength_compliance ?? '-' }}</td>
+                                <td>{{ $evaluation->gap_compliance ?? '-' }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -82,7 +82,7 @@
                     {{-- Overall Assessment --}}
                     <div class="mt-4">
                         <h6>Overall Financial Assessment</h6>
-                        <p>{!! $evaluation->overall_financial_assessment ?? 'No remarks provided.' !!}</p>
+                        <p>{!! nl2br(e($evaluation->overall_financial_assessment ?? 'No remarks provided.')) !!}</p>
                     </div>
 
                 </div>

@@ -52,9 +52,9 @@
             </div>
         @endif
 
-        {{-- ================= FORM ================= --}}
-        <form method="POST" action="{{ route('system.permissions.assign.store', $role->id) }}">
-            @csrf
+	        {{-- ================= FORM ================= --}}
+	        <form method="POST" action="{{ route('system.permissions.assign.store', $role->id) }}">
+	            @csrf
 
             @php
                 $groupedPermissions = $permissions->groupBy(fn($p) => $p->module ?? 'general');
@@ -73,38 +73,49 @@
                 ];
             @endphp
 
-            {{-- ================= MODULE PERMISSION CARDS ================= --}}
-            @foreach ($groupedPermissions as $module => $modulePermissions)
-                <div class="card shadow-sm border-0 mb-4">
+	            {{-- ================= MODULE PERMISSION CARDS ================= --}}
+	            @foreach ($groupedPermissions as $module => $modulePermissions)
+	                @php
+	                    $moduleKey = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $module);
+	                @endphp
+	                <div class="card shadow-sm border-0 mb-4">
 
-                    {{-- Module Header --}}
-                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                        <div>
+	                    {{-- Module Header --}}
+	                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+	                        <div>
                             <h6 class="fw-bold text-primary mb-0">
                                 <i class="feather-layers me-1"></i>
                                 {{ strtoupper($module) }} MODULE
                             </h6>
                             <small class="text-muted">
                                 {{ $moduleDescriptions[$module] ?? 'Controls access to features in this module.' }}
-                            </small>
-                        </div>
+	                            </small>
+	                        </div>
 
-                        <span class="badge bg-secondary">
-                            {{ $modulePermissions->count() }} permissions
-                        </span>
-                    </div>
+	                        <div class="d-flex align-items-center gap-2">
+	                            <button type="button" class="btn btn-sm btn-outline-primary js-module-toggle"
+	                                data-module="{{ $moduleKey }}">
+	                                Select all
+	                            </button>
 
-                    {{-- Module Body --}}
-                    <div class="card-body">
-                        <div class="row">
+	                            <span class="badge bg-secondary">
+	                                {{ $modulePermissions->count() }} permissions
+	                            </span>
+	                        </div>
+	                    </div>
+
+	                    {{-- Module Body --}}
+	                    <div class="card-body">
+	                        <div class="row">
 
                             @foreach ($modulePermissions as $permission)
                                 <div class="col-xl-4 col-lg-6 col-md-6 mb-3">
                                     <label class="form-check form-switch d-flex align-items-start gap-2">
 
-                                        <input class="form-check-input mt-1" type="checkbox" name="permissions[]"
-                                            value="{{ $permission->id }}"
-                                            {{ $role->permissions->contains('id', $permission->id) ? 'checked' : '' }}>
+	                                        <input class="form-check-input mt-1" type="checkbox" name="permissions[]"
+	                                            data-module="{{ $moduleKey }}"
+	                                            value="{{ $permission->id }}"
+	                                            {{ $role->permissions->contains('id', $permission->id) ? 'checked' : '' }}>
 
                                         <span class="form-check-label" title="{{ $permission->name }}">
                                             {{ $permission->description ?? 'No description provided' }}
@@ -120,19 +131,74 @@
                 </div>
             @endforeach
 
-            {{-- ================= ACTION BUTTONS ================= --}}
-            <div class="d-flex justify-content-end gap-2 mt-4">
-                <a href="{{ route('system.roles.index') }}" class="btn btn-light">
-                    Cancel
-                </a>
+	            {{-- ================= ACTION BUTTONS ================= --}}
+	            <div class="d-flex justify-content-end gap-2 mt-4">
+	                <a href="{{ route('system.roles.index') }}" class="btn btn-light">
+	                    Cancel
+	                </a>
 
                 <button type="submit" class="btn btn-primary px-4">
                     <i class="feather-save me-1"></i>
                     Save Permissions
                 </button>
-            </div>
+	            </div>
 
-        </form>
+	        </form>
 
-    </div>
-@endsection
+	        <script>
+	            (function () {
+	                function getModuleCheckboxes(moduleKey) {
+	                    return Array.prototype.slice.call(
+	                        document.querySelectorAll('input[type="checkbox"][data-module="' + moduleKey + '"]')
+	                    );
+	                }
+
+	                function updateToggleLabel(btn) {
+	                    var moduleKey = btn.getAttribute('data-module');
+	                    if (!moduleKey) return;
+
+	                    var checkboxes = getModuleCheckboxes(moduleKey);
+	                    if (!checkboxes.length) return;
+
+	                    var allChecked = checkboxes.every(function (c) { return c.checked; });
+	                    btn.textContent = allChecked ? 'Unselect all' : 'Select all';
+	                }
+
+	                var toggles = Array.prototype.slice.call(document.querySelectorAll('.js-module-toggle'));
+
+	                toggles.forEach(function (btn) {
+	                    updateToggleLabel(btn);
+
+	                    btn.addEventListener('click', function () {
+	                        var moduleKey = btn.getAttribute('data-module');
+	                        if (!moduleKey) return;
+
+	                        var checkboxes = getModuleCheckboxes(moduleKey);
+	                        if (!checkboxes.length) return;
+
+	                        var allChecked = checkboxes.every(function (c) { return c.checked; });
+	                        checkboxes.forEach(function (c) {
+	                            c.checked = !allChecked;
+	                            c.dispatchEvent(new Event('change', { bubbles: true }));
+	                        });
+
+	                        updateToggleLabel(btn);
+	                    });
+	                });
+
+	                document.addEventListener('change', function (e) {
+	                    var target = e && e.target;
+	                    if (!target || target.tagName !== 'INPUT') return;
+	                    if (target.type !== 'checkbox') return;
+
+	                    var moduleKey = target.getAttribute('data-module');
+	                    if (!moduleKey) return;
+
+	                    var btn = document.querySelector('.js-module-toggle[data-module="' + moduleKey + '"]');
+	                    if (btn) updateToggleLabel(btn);
+	                });
+	            })();
+	        </script>
+
+	    </div>
+	@endsection

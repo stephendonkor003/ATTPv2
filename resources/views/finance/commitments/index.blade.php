@@ -83,15 +83,28 @@
                                     </div>
                                 </td>
 
-                                {{-- Resource --}}
-                                <td>
-                                    <div class="fw-semibold">{{ $c->resource->name ?? '—' }}</div>
-                                    <small class="text-muted">
-                                        <span class="badge bg-info-subtle text-info">
-                                            {{ $c->resourceCategory->name ?? '—' }}
-                                        </span>
-                                    </small>
-                                </td>
+	                                {{-- Resource --}}
+	                                <td>
+	                                    @if ($c->purchaseRequest)
+	                                        <div class="fw-semibold">
+	                                            @can('finance.purchase_requests.view')
+	                                                <a href="{{ route('finance.purchase-requests.show', $c->purchaseRequest) }}">
+	                                                    {{ $c->purchaseRequest->reference_no }}
+	                                                </a>
+	                                            @else
+	                                                {{ $c->purchaseRequest->reference_no }}
+	                                            @endcan
+	                                        </div>
+	                                        <small class="text-muted">Purchase Request</small>
+	                                    @else
+	                                        <div class="fw-semibold">{{ $c->resource->name ?? '—' }}</div>
+	                                        <small class="text-muted">
+	                                            <span class="badge bg-info-subtle text-info">
+	                                                {{ $c->resourceCategory->name ?? '—' }}
+	                                            </span>
+	                                        </small>
+	                                    @endif
+	                                </td>
 
                                 {{-- Amount --}}
                                 <td class="text-end fw-bold">

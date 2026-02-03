@@ -11,6 +11,8 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use App\Models\UserLoginOtp;
+use Illuminate\Pagination\Paginator;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,6 +27,9 @@ class AppServiceProvider extends ServiceProvider
 
 public function boot()
 {
+    // Align paginator HTML with the app's Bootstrap UI.
+    Paginator::useBootstrapFive();
+
     Gate::before(function ($user, $ability) {
         return $user->hasPermission($ability);
     });
@@ -109,6 +114,11 @@ private function logModelEvent(string $type, array $data): void
         return;
     }
 
+    // Avoid logging OTP records (contains sensitive verification material).
+    if ($model instanceof UserLoginOtp) {
+        return;
+    }
+
     $changes = [];
     if ($type === 'updated') {
         $changes = $model->getChanges();
@@ -125,6 +135,20 @@ private function logModelEvent(string $type, array $data): void
     $module = $this->resolveAuditModule($model);
     $actionMessage = $this->buildActionMessage($type, $model);
 
+    $payload = [
+        'model' => get_class($model),
+        'table' => $model->getTable(),
+        'id' => $model->getKey(),
+    ];
+
+    if ($type === 'updated') {
+        // Store only the diff for updates to reduce log volume.
+        $payload['changes'] = $this->redactAuditPayload($changes);
+        $payload['original'] = $this->redactAuditPayload($original);
+    } else {
+        $payload['attributes'] = $this->redactAuditPayload($model->getAttributes());
+    }
+
     SystemAuditLog::create([
         'user_id' => optional($request?->user())->id,
         'module' => $module,
@@ -138,15 +162,35 @@ private function logModelEvent(string $type, array $data): void
         'country' => $country,
         'user_agent' => $request?->userAgent() ? substr((string) $request->userAgent(), 0, 1000) : null,
         'status_code' => $request ? 200 : null,
-        'payload' => [
-            'model' => get_class($model),
-            'table' => $model->getTable(),
-            'id' => $model->getKey(),
-            'attributes' => $model->getAttributes(),
-            'changes' => $changes,
-            'original' => $original,
-        ],
+        'payload' => $payload,
     ]);
+}
+
+/**
+ * Remove secrets/credentials from audit payloads before persisting them.
+ *
+ * Note: This is not a substitute for careful auditing scope; it's a safety net.
+ */
+private function redactAuditPayload(array $data): array
+{
+    $redactKeys = [
+        'password',
+        'remember_token',
+        'current_password',
+        'password_confirmation',
+        'otp_code',
+        'token',
+        'secret',
+        'api_token',
+    ];
+
+    foreach ($redactKeys as $key) {
+        if (array_key_exists($key, $data)) {
+            $data[$key] = '[REDACTED]';
+        }
+    }
+
+    return $data;
 }
 
 private function resolveAuditModule(Model $model): string

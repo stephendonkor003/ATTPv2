@@ -144,7 +144,7 @@
                                         <ul class="mb-0">
                                             @foreach ($observation->media as $media)
                                                 <li>
-                                                    <a href="{{ asset('storage/' . $media->file_path) }}" target="_blank">
+                                                    <a href="{{ route('site-visits.media.download', [$siteVisit, $media]) }}" target="_blank">
                                                         {{ basename($media->file_path) }}
                                                     </a>
                                                 </li>

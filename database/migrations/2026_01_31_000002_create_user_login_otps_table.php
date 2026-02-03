@@ -10,8 +10,8 @@ return new class extends Migration
     {
         if (!Schema::hasTable('user_login_otps')) {
             Schema::create('user_login_otps', function (Blueprint $table) {
-                $table->id();
-                $table->foreignId('user_id')->constrained()->onDelete('cascade');
+                $table->uuid('id')->primary();
+                $table->foreignUuid('user_id')->constrained()->onDelete('cascade');
                 $table->string('otp_code', 6);
                 $table->string('session_id')->nullable();
                 $table->timestamp('expires_at');

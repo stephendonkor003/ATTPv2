@@ -9,9 +9,12 @@ use App\Models\Resource;
 use App\Models\Project;
 use App\Models\Activity;
 use App\Models\SubActivity;
+use App\Models\PurchaseRequest;
+use App\Models\PurchaseRequestItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class BudgetCommitmentController extends Controller
@@ -31,19 +34,21 @@ class BudgetCommitmentController extends Controller
 
     public function index()
 {
-    $scopedNodeIds = $this->scopedNodeIds();
+    $canViewAll = Auth::user()?->can('finance.commitments.view_all') === true;
+    $scopedNodeIds = $canViewAll ? null : $this->scopedNodeIds();
     if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
         abort(403, 'You do not have access to commitments.');
     }
 
-    $commitments = BudgetCommitment::with([
-        'programFunding.program',
-        'resourceCategory',
-        'resource',
-
-        // eager load concrete models
-        'programFunding',
-    ])
+	    $commitments = BudgetCommitment::with([
+	        'programFunding.program',
+	        'resourceCategory',
+	        'resource',
+	        'purchaseRequest',
+	
+	        // eager load concrete models
+	        'programFunding',
+	    ])
     ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
         $query->whereIn('governance_node_id', $scopedNodeIds)
             ->whereNotNull('governance_node_id');
@@ -76,25 +81,33 @@ class BudgetCommitmentController extends Controller
 
     public function store(Request $request)
 {
-    /* =====================================================
-     * 1. VALIDATION
-     * ===================================================== */
-    $validated = $request->validate([
-        'program_funding_id'   => 'required|exists:myb_program_fundings,id',
-        'allocation_level'     => 'required|in:project,activity,sub_activity',
-        'allocation_id'        => 'required|integer',
-        'resource_category_id' => 'required|exists:myb_resource_categories,id',
-        'resource_id'          => 'required|exists:myb_resources,id',
-        'commitment_amount'    => 'required|numeric|min:0.01',
-        'commitment_year'      => 'required|integer|min:2000',
-    ]);
+	    /* =====================================================
+	     * 1. VALIDATION
+	     * ===================================================== */
+		        $validated = $request->validate([
+			        'program_funding_id'   => 'required|exists:myb_program_fundings,id',
+			        'allocation_level'     => 'required|in:sub_activity',
+			        'commitment_year'      => 'required|integer|min:2000',
+			        'allocation_id'        => 'required|string|exists:myb_sub_activities,id',
+			        'description'          => 'nullable|string|max:5000',
+			        'delivery_date'        => 'required|date|after_or_equal:today',
+		        // Backwards compatible: allow old single-item fields if items[] isn't provided
+		        'resource_category_id' => 'nullable|exists:myb_resource_categories,id',
+		        'resource_id'          => 'nullable|exists:myb_resources,id',
+		        'commitment_amount'    => 'nullable|numeric|min:0.01',
 
-    DB::beginTransaction();
+		        'items'                => 'nullable|array|min:1',
+		        'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
+		        'items.*.resource_id'          => 'required|exists:myb_resources,id',
+		        'items.*.amount'               => 'required|numeric|min:0.01',
+		    ]);
 
-    try {
+	    $transactionStarted = false;
 
-        /* =====================================================
-         * 2. FUNDING VALIDATION
+	    try {
+
+	        /* =====================================================
+	         * 2. FUNDING VALIDATION
          * ===================================================== */
         $funding = ProgramFunding::find($validated['program_funding_id']);
 
@@ -114,108 +127,283 @@ class BudgetCommitmentController extends Controller
         /* =====================================================
          * 3. ALLOCATION VALIDATION
          * ===================================================== */
-        $allocationExists = match ($validated['allocation_level']) {
-            'project'      => Project::where('id', $validated['allocation_id'])->exists(),
-            'activity'     => Activity::where('id', $validated['allocation_id'])->exists(),
-            'sub_activity' => SubActivity::where('id', $validated['allocation_id'])->exists(),
-        };
+	        $allocationExists = SubActivity::where('id', $validated['allocation_id'])->exists();
 
-        if (!$allocationExists) {
-            return back()
-                ->withErrors(['allocation_id' => 'Selected allocation record does not exist.'])
-                ->withInput();
-        }
-        $this->assertAllocationInScope($validated['allocation_level'], (int) $validated['allocation_id']);
-        $this->assertResourceCategoryInScope((int) $validated['resource_category_id']);
+		        if (!$allocationExists) {
+		            return back()
+		                ->withErrors(['allocation_id' => 'Selected allocation record does not exist.'])
+		                ->withInput();
+		        }
+			        $this->assertAllocationInScope($validated['allocation_level'], $validated['allocation_id']);
 
-        /* =====================================================
-         * 4. ALLOCATED AMOUNT (SAFE)
-         * ===================================================== */
-        $allocatedAmount = $this->getAllocatedAmount(
-            $validated['allocation_level'],
-            $validated['allocation_id'],
-            $validated['commitment_year']
-        );
+		        $itemsInput = collect($validated['items'] ?? []);
+		        if ($itemsInput->isEmpty()) {
+		            if (
+		                empty($validated['resource_category_id'])
+		                || empty($validated['resource_id'])
+		                || empty($validated['commitment_amount'])
+		            ) {
+		                return back()
+		                    ->withErrors([
+		                        'items' => 'Please add at least one purchase request item.',
+		                    ])
+		                    ->withInput();
+		            }
 
-        $allocatedAmount = (float) ($allocatedAmount ?? 0);
+		            $itemsInput = collect([
+		                [
+		                    'resource_category_id' => $validated['resource_category_id'],
+		                    'resource_id' => $validated['resource_id'],
+		                    'amount' => $validated['commitment_amount'],
+		                ],
+		            ]);
+		        }
 
-        if ($allocatedAmount <= 0) {
-            return back()
-                ->withErrors([
-                    'commitment_year' =>
-                        'No budget allocation exists for the selected year.'
-                ])
-                ->withInput();
-        }
+		        $items = $itemsInput->map(function ($item) {
+		            return [
+		                'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
+		                'resource_id' => (string) ($item['resource_id'] ?? ''),
+		                'amount' => round((float) ($item['amount'] ?? 0), 2),
+		            ];
+		        })->values();
 
-        /* =====================================================
-         * 5. COMMITTED SO FAR
-         * ===================================================== */
-        $committedAmount = BudgetCommitment::where(
-                'allocation_level',
-                $validated['allocation_level']
-            )
-            ->where('allocation_id', $validated['allocation_id'])
-            ->where('commitment_year', $validated['commitment_year'])
-            ->whereIn('status', [
-                BudgetCommitment::STATUS_DRAFT,
-                BudgetCommitment::STATUS_SUBMITTED,
-                BudgetCommitment::STATUS_APPROVED,
-            ])
-            ->sum('commitment_amount');
+		        $requestedAmount = round((float) $items->sum('amount'), 2);
+		        if ($requestedAmount <= 0) {
+		            return back()
+		                ->withErrors([
+		                    'commitment_amount' => 'Commitment amount must be greater than zero.',
+		                ])
+		                ->withInput();
+		        }
 
-        $remaining = $allocatedAmount - $committedAmount;
+		        foreach ($items as $item) {
+		            $this->assertResourceCategoryInScope($item['resource_category_id']);
 
-        if ($validated['commitment_amount'] > $remaining) {
-            return back()
-                ->withErrors([
-                    'commitment_amount' =>
-                        'Commitment exceeds remaining budget. Available: ' .
-                        number_format($remaining, 2)
-                ])
-                ->withInput();
-        }
+		            $resource = Resource::find($item['resource_id']);
+		            if (!$resource) {
+		                return back()
+		                    ->withErrors([
+		                        'items' => 'One or more selected resource items were not found.',
+		                    ])
+		                    ->withInput();
+		            }
 
-        /* =====================================================
-         * 6. CREATE COMMITMENT
-         * ===================================================== */
-        BudgetCommitment::create([
-            'program_funding_id'   => $validated['program_funding_id'],
-            'governance_node_id'   => $funding->governance_node_id,
-            'allocation_level'     => $validated['allocation_level'],
-            'allocation_id'        => $validated['allocation_id'],
-            'resource_category_id' => $validated['resource_category_id'],
-            'resource_id'          => $validated['resource_id'],
-            'commitment_amount'    => $validated['commitment_amount'],
-            'commitment_year'      => $validated['commitment_year'],
-            'status'               => BudgetCommitment::STATUS_DRAFT,
-            'created_by'           => Auth::id(),
-        ]);
+		            $this->assertResourceInScope($resource);
 
-        DB::commit();
+		            if ((string) $resource->resource_category_id !== (string) $item['resource_category_id']) {
+		                return back()
+		                    ->withErrors([
+		                        'items' => 'One or more resource items do not match their selected category.',
+		                    ])
+		                    ->withInput();
+		            }
+		        }
 
-        return redirect()
-            ->route('finance.commitments.index')
-            ->with('success', 'Budget commitment created successfully (Draft).');
+		        /* =====================================================
+		         * 4. MULTI-YEAR SPLITTING (START YEAR + FORWARD)
+		         * ===================================================== */
+		        $startYear = (int) $validated['commitment_year'];
 
-    } catch (\Throwable $e) {
+		        $startYearAllocated = (float) $this->getAllocatedAmount(
+		            $validated['allocation_level'],
+		            $validated['allocation_id'],
+	            $startYear
+	        );
 
-        DB::rollBack();
+	        if ($startYearAllocated <= 0) {
+	            return back()
+	                ->withErrors([
+	                    'commitment_year' => 'No budget allocation exists for the selected year.',
+	                ])
+	                ->withInput();
+	        }
+
+	        $years = DB::table('myb_sub_activity_allocations')
+	            ->where('sub_activity_id', $validated['allocation_id'])
+	            ->whereNotNull('year')
+	            ->distinct()
+	            ->orderBy('year')
+	            ->pluck('year')
+	            ->map(fn ($year) => (int) $year)
+	            ->filter(fn ($year) => $year >= $startYear)
+	            ->values();
+
+	        if ($years->isEmpty()) {
+	            return back()
+	                ->withErrors([
+	                    'commitment_year' => 'No budget allocation years found from the selected year.',
+	                ])
+	                ->withInput();
+	        }
+
+	        $remainingToAllocate = $requestedAmount;
+	        $totalRemainingAvailable = 0.0;
+	        $splits = [];
+
+	        foreach ($years as $year) {
+	            $allocated = (float) $this->getAllocatedAmount(
+	                $validated['allocation_level'],
+	                $validated['allocation_id'],
+	                (int) $year
+	            );
+
+	            if ($allocated <= 0) {
+	                continue;
+	            }
+
+	            $committedQuery = BudgetCommitment::query()
+	                ->where('allocation_level', $validated['allocation_level'])
+	                ->where('allocation_id', $validated['allocation_id'])
+	                ->where('commitment_year', (int) $year)
+	                ->whereIn('status', [
+	                    BudgetCommitment::STATUS_DRAFT,
+	                    BudgetCommitment::STATUS_SUBMITTED,
+	                    BudgetCommitment::STATUS_APPROVED,
+	                ]);
+
+	            if (!empty($funding->governance_node_id)) {
+	                $committedQuery->where('governance_node_id', $funding->governance_node_id);
+	            } else {
+	                $scopedNodeIds = $this->scopedNodeIds();
+	                if ($scopedNodeIds !== null) {
+	                    $committedQuery->whereIn('governance_node_id', $scopedNodeIds)
+	                        ->whereNotNull('governance_node_id');
+	                }
+	            }
+
+	            $committed = (float) $committedQuery->sum('commitment_amount');
+	            $remaining = round($allocated - $committed, 2);
+
+	            if ($remaining <= 0) {
+	                continue;
+	            }
+
+	            $totalRemainingAvailable += $remaining;
+
+	            if ($remainingToAllocate <= 0) {
+	                continue;
+	            }
+
+	            $use = round(min($remaining, $remainingToAllocate), 2);
+	            if ($use <= 0) {
+	                continue;
+	            }
+
+	            $splits[] = [
+	                'year' => (int) $year,
+	                'amount' => $use,
+	            ];
+
+	            $remainingToAllocate = round($remainingToAllocate - $use, 2);
+	            if ($remainingToAllocate <= 0) {
+	                $remainingToAllocate = 0;
+	                break;
+	            }
+	        }
+
+	        $totalRemainingAvailable = round($totalRemainingAvailable, 2);
+
+	        if ($requestedAmount > $totalRemainingAvailable) {
+	            return back()
+	                ->withErrors([
+	                    'commitment_amount' =>
+	                        'Commitment exceeds remaining budget across allocation years. Available: ' .
+	                        number_format($totalRemainingAvailable, 2),
+	                ])
+	                ->withInput();
+	        }
+
+		        if ($remainingToAllocate > 0 || empty($splits)) {
+		            return back()
+		                ->withErrors([
+		                    'commitment_amount' => 'Unable to distribute commitment across allocation years.',
+		                ])
+		                ->withInput();
+		        }
+
+		        DB::beginTransaction();
+		        $transactionStarted = true;
+
+			        $purchaseRequest = PurchaseRequest::create([
+			            'reference_no' => $this->generatePurchaseRequestReference(),
+			            'program_funding_id' => $validated['program_funding_id'],
+			            'governance_node_id' => $funding->governance_node_id,
+			            'allocation_level' => $validated['allocation_level'],
+			            'allocation_id' => $validated['allocation_id'],
+			            'start_year' => $startYear,
+			            'commitment_date' => now()->toDateString(),
+			            'delivery_date' => $validated['delivery_date'],
+			            'currency' => $funding->currency ?? $funding->program?->currency,
+			            'total_amount' => $requestedAmount,
+			            'description' => $validated['description'] ?? null,
+			            'status' => 'draft',
+			            'created_by' => Auth::id(),
+			        ]);
+
+		        foreach ($items as $item) {
+		            PurchaseRequestItem::create([
+		                'purchase_request_id' => $purchaseRequest->id,
+		                'resource_category_id' => $item['resource_category_id'],
+		                'resource_id' => $item['resource_id'],
+		                'amount' => $item['amount'],
+		            ]);
+		        }
+
+		        foreach ($splits as $split) {
+		            BudgetCommitment::create([
+		                'purchase_request_id' => $purchaseRequest->id,
+		                'program_funding_id'   => $validated['program_funding_id'],
+		                'governance_node_id'   => $funding->governance_node_id,
+		                'allocation_level'     => $validated['allocation_level'],
+		                'allocation_id'        => $validated['allocation_id'],
+		                'resource_category_id' => null,
+		                'resource_id'          => null,
+		                'commitment_amount'    => $split['amount'],
+		                'commitment_year'      => $split['year'],
+		                'status'               => BudgetCommitment::STATUS_DRAFT,
+		                'description'          => $validated['description'] ?? null,
+		                'created_by'           => Auth::id(),
+		            ]);
+		        }
+
+		        DB::commit();
+		        $transactionStarted = false;
+
+		        return redirect()
+		            ->route('finance.purchase-requests.show', $purchaseRequest)
+		            ->with(
+		                'success',
+		                'Purchase Request ' . $purchaseRequest->reference_no . ' created successfully (Draft).'
+		            );
+
+	    } catch (\Throwable $e) {
+
+	        if ($transactionStarted) {
+	            DB::rollBack();
+	        }
 
         /* =====================================================
          * 7. LOG + SURFACE ERROR
          * ===================================================== */
         \Log::error('Budget Commitment Store Failed', [
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
-            'payload' => $request->all(),
+            'exception' => get_class($e),
+            'user_id' => Auth::id(),
         ]);
 
-         return back()
-    ->withErrors([
-        'system' => $e->getMessage()
-    ])
-    ->withInput();
+        if (config('app.debug')) {
+            \Log::debug('Budget Commitment Store Failed (debug context)', [
+                'trace' => $e->getTraceAsString(),
+                // Avoid logging raw request payloads in production (PII risk).
+                'payload' => $request->except(['password', 'password_confirmation', 'current_password', '_token']),
+            ]);
+        }
+
+        return back()
+            ->withErrors([
+                'system' => 'Unable to save the budget commitment. Please try again.',
+            ])
+            ->withInput();
 
     }
 }
@@ -223,12 +411,16 @@ class BudgetCommitmentController extends Controller
 
     public function show(BudgetCommitment $commitment)
     {
-        $this->assertCommitmentInScope($commitment);
-        $commitment->load([
-            'programFunding.program',
-            'resourceCategory',
-            'resource'
-        ]);
+        if (Auth::user()?->can('finance.commitments.view_all') !== true) {
+            $this->assertCommitmentInScope($commitment);
+        }
+	        $commitment->load([
+	            'programFunding.program',
+	            'resourceCategory',
+	            'resource',
+	            'purchaseRequest.items.resourceCategory',
+	            'purchaseRequest.items.resource',
+	        ]);
 
         return view('finance.commitments.show', compact('commitment'));
     }
@@ -411,7 +603,7 @@ class BudgetCommitmentController extends Controller
         'is_human_resource'    => 'nullable|boolean', // ✅ NEW
     ]);
 
-    $this->assertResourceCategoryInScope((int) $validated['resource_category_id']);
+	    $this->assertResourceCategoryInScope($validated['resource_category_id']);
 
     Resource::create([
         'resource_category_id' => $validated['resource_category_id'],
@@ -440,7 +632,7 @@ class BudgetCommitmentController extends Controller
             'status'               => 'required|in:active,inactive',
         ]);
 
-        $this->assertResourceCategoryInScope((int) $validated['resource_category_id']);
+	        $this->assertResourceCategoryInScope($validated['resource_category_id']);
 
         $resource->update([
             'resource_category_id' => $validated['resource_category_id'],
@@ -523,7 +715,7 @@ class BudgetCommitmentController extends Controller
 
     public function allocationYears($level, $id)
     {
-        $this->assertAllocationInScope($level, (int) $id);
+        $this->assertAllocationInScope($level, $id);
         $years = match ($level) {
             'project' => DB::table('myb_project_allocations')->where('project_id',$id)->pluck('year'),
             'activity' => DB::table('myb_activity_allocations')->where('activity_id',$id)->pluck('year'),
@@ -533,24 +725,88 @@ class BudgetCommitmentController extends Controller
         return response()->json($years->unique()->values());
     }
 
+    public function allocationBreakdown($level, $id)
+    {
+        $this->assertAllocationInScope($level, $id);
+
+        $years = match ($level) {
+            'project' => DB::table('myb_project_allocations')
+                ->where('project_id', $id)
+                ->pluck('year'),
+
+            'activity' => DB::table('myb_activity_allocations')
+                ->where('activity_id', $id)
+                ->pluck('year'),
+
+            'sub_activity' => DB::table('myb_sub_activity_allocations')
+                ->where('sub_activity_id', $id)
+                ->pluck('year'),
+
+            default => collect(),
+        };
+
+        $years = $years
+            ->filter(fn ($year) => $year !== null)
+            ->unique()
+            ->sort()
+            ->values();
+
+        $scopedNodeIds = $this->scopedNodeIds();
+
+        $breakdown = $years->map(function ($year) use ($level, $id, $scopedNodeIds) {
+            $allocated = (float) $this->allocationSum($level, $id, (int) $year);
+
+            $committed = (float) BudgetCommitment::query()
+                ->where('allocation_level', $level)
+                ->where('allocation_id', $id)
+                ->where('commitment_year', (int) $year)
+                ->whereIn('status', [
+                    self::STATUS_DRAFT,
+                    self::STATUS_SUBMITTED,
+                    self::STATUS_APPROVED,
+                ])
+                ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                    $query->whereIn('governance_node_id', $scopedNodeIds)
+                        ->whereNotNull('governance_node_id');
+                })
+                ->sum('commitment_amount');
+
+            return [
+                'year' => (int) $year,
+                'allocated' => $allocated,
+                'committed' => $committed,
+                'remaining' => $allocated - $committed,
+            ];
+        });
+
+        return response()->json($breakdown);
+    }
+
     public function remainingBudget(Request $request)
     {
-        $this->assertAllocationInScope($request->allocation_level, (int) $request->allocation_id);
+        $this->assertAllocationInScope($request->allocation_level, $request->allocation_id);
         $allocated = $this->allocationSum(
             $request->allocation_level,
             $request->allocation_id,
             $request->year
         );
 
+        $scopedNodeIds = $this->scopedNodeIds();
         $committed = BudgetCommitment::where([
             'allocation_level' => $request->allocation_level,
             'allocation_id' => $request->allocation_id,
             'commitment_year' => $request->year,
-        ])->whereIn('status', [
-            self::STATUS_DRAFT,
-            self::STATUS_SUBMITTED,
-            self::STATUS_APPROVED,
-        ])->sum('commitment_amount');
+        ])
+            ->whereIn('status', [
+                self::STATUS_DRAFT,
+                self::STATUS_SUBMITTED,
+                self::STATUS_APPROVED,
+            ])
+            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('governance_node_id');
+            })
+            ->sum('commitment_amount');
 
         return response()->json([
             'allocated' => (float)$allocated,
@@ -699,7 +955,7 @@ protected function aiSummary(array $allocated, array $committed)
      | ================== INTERNAL HELPERS ====================
      ========================================================= */
 
-    private function allocationSum(string $level, int $id, int $year): float
+    private function allocationSum(string $level, string $id, int $year): float
     {
         return match ($level) {
             'project' => DB::table('myb_project_allocations')
@@ -713,15 +969,26 @@ protected function aiSummary(array $allocated, array $committed)
         };
     }
 
+    private function generatePurchaseRequestReference(): string
+    {
+        $year = now()->year;
+
+        do {
+            $reference = 'PR-' . $year . '-' . strtoupper(Str::random(5));
+        } while (PurchaseRequest::where('reference_no', $reference)->exists());
+
+        return $reference;
+    }
+
     /**
  * AJAX: Get resources by category
  */
-public function resourcesByCategory($categoryId)
-{
-    $this->assertResourceCategoryInScope((int) $categoryId);
-    return Resource::where('resource_category_id', $categoryId)
-        ->where('status', 'active')
-        ->select('id', 'name')
+		public function resourcesByCategory($categoryId)
+	{
+	    $this->assertResourceCategoryInScope($categoryId);
+	    return Resource::where('resource_category_id', $categoryId)
+	        ->where('status', 'active')
+	        ->select('id', 'name')
         ->when($this->scopedNodeIds() !== null, function ($query) {
             $query->whereIn('governance_node_id', $this->scopedNodeIds())
                 ->whereNotNull('governance_node_id');
@@ -735,7 +1002,7 @@ public function resourcesByCategory($categoryId)
  * HELPER: Get Allocated Amount for a Level & Year
  * =========================================================
  */
-private function getAllocatedAmount(string $level, int $id, int $year): float
+	private function getAllocatedAmount(string $level, string $id, int $year): float
 {
     return match ($level) {
 
@@ -823,7 +1090,7 @@ private function getAllocatedAmount(string $level, int $id, int $year): float
         }
     }
 
-    private function assertAllocationInScope(string $level, int $id): void
+    private function assertAllocationInScope(string $level, string $id): void
     {
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
@@ -842,7 +1109,7 @@ private function getAllocatedAmount(string $level, int $id, int $year): float
         }
     }
 
-    private function assertResourceCategoryInScope(int $categoryId): void
+    private function assertResourceCategoryInScope(string $categoryId): void
     {
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {

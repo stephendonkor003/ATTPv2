@@ -33,12 +33,14 @@ return [
     // Budget Execution
     'execution_commitments' => 'Utekelezaji & Ahadi',
     'budget_commitments' => 'Ahadi za Bajeti',
+    'purchase_requests' => 'Maombi ya Ununuzi',
     'resource_categories' => 'Kategoria za Rasilimali',
     'resource_items' => 'Vitu vya Rasilimali',
 
     // Reports & Analytics
     'reports_oversight' => 'Ripoti & Usimamizi',
     'budget_reports' => 'Ripoti za Bajeti',
+    'commitment_report' => 'Ripoti ya Ahadi',
     'execution_dashboard' => 'Dashibodi ya Utekelezaji',
     'program_allocation' => 'Ugawaji wa Programu',
     'allocations_reports' => 'Ripoti za Ugawaji',

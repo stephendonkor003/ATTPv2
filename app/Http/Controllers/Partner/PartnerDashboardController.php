@@ -290,16 +290,32 @@ class PartnerDashboardController extends Controller
             'file_name' => $document->file_name,
         ]);
 
-        // Check if file exists
-        if (!Storage::disk('public')->exists($document->file_path)) {
-            abort(404, 'Document file not found.');
+        $privateDisk = Storage::disk('local');
+        $path = $document->file_path;
+
+        // The project previously stored some files on the public disk. Migrate on first access.
+        if (! $privateDisk->exists($path) && Storage::disk('public')->exists($path)) {
+            $stream = Storage::disk('public')->readStream($path);
+            if ($stream !== false) {
+                $privateDisk->writeStream($path, $stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+                Storage::disk('public')->delete($path);
+            }
         }
 
+        // Check if file exists on the private disk
+        abort_unless($privateDisk->exists($path), 404, 'Document file not found.');
+
+        $headers = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
         // Return the file for download
-        return Storage::disk('public')->download(
-            $document->file_path,
-            $document->file_name
-        );
+        return $privateDisk->download($path, $document->file_name, $headers);
     }
 
     /**

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class SiteVisitGroup extends Model
+class SiteVisitGroup extends BaseModel
 {
     public $timestamps = false;
 

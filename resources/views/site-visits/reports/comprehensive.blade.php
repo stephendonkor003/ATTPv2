@@ -123,7 +123,7 @@
                                             <ul>
                                                 @foreach ($obs->media as $media)
                                                     <li>
-                                                        <a href="{{ asset('storage/' . $media->file_path) }}"
+                                                        <a href="{{ route('site-visits.media.download', [$visit, $media]) }}"
                                                             target="_blank">
                                                             {{ basename($media->file_path) }}
                                                         </a>

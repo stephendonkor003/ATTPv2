@@ -10,6 +10,7 @@ return [
     'create' => 'Créer',
     'update' => 'Mettre à Jour',
     'back' => 'Retour',
+    'logout' => 'Déconnexion',
     'next' => 'Suivant',
     'previous' => 'Précédent',
     'close' => 'Fermer',

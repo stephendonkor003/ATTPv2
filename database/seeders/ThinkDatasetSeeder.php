@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Seeder;
 use App\Models\ThinkDataset;
+use App\Models\User;
 use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -9,6 +10,10 @@ class ThinkDatasetSeeder extends Seeder
 {
     public function run()
     {
+        // UUID migration: use a real user id instead of hardcoding "1".
+        $createdBy = User::where('email', 'amodonlimited@gmail.com')->value('id')
+            ?? User::query()->value('id');
+
         $filePath = database_path('seeders/thindata.xlsx');
         $spreadsheet = IOFactory::load($filePath);
         $sheet = $spreadsheet->getActiveSheet();
@@ -58,7 +63,7 @@ class ThinkDatasetSeeder extends Seeder
                 'youtube_page' => $data['Youtube Page'] ?? null,
                 'instagram_acc' => $data['Instagram Acc'] ?? null,
                 'linkedIn_acc' => $data['Linkedin Acc'] ?? null,
-                'created_by' => 1,
+                'created_by' => $createdBy,
                 'is_validated' => 'Yes',
             ]);
         }

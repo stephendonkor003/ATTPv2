@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class PartnerInformationRequest extends Model
+class PartnerInformationRequest extends BaseModel
 {
     protected $table = 'myb_partner_information_requests';
 

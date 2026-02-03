@@ -14,7 +14,7 @@ return new class extends Migration
     {
         // Add governance_node_id to hr_positions
         Schema::table('hr_positions', function (Blueprint $table) {
-            $table->foreignId('governance_node_id')
+            $table->foreignUuid('governance_node_id')
                 ->nullable()
                 ->after('id')
                 ->constrained('myb_governance_nodes')
@@ -23,7 +23,7 @@ return new class extends Migration
 
         // Add governance_node_id to hr_vacancies
         Schema::table('hr_vacancies', function (Blueprint $table) {
-            $table->foreignId('governance_node_id')
+            $table->foreignUuid('governance_node_id')
                 ->nullable()
                 ->after('id')
                 ->constrained('myb_governance_nodes')
@@ -32,7 +32,7 @@ return new class extends Migration
 
         // Add governance_node_id to hr_applicants
         Schema::table('hr_applicants', function (Blueprint $table) {
-            $table->foreignId('governance_node_id')
+            $table->foreignUuid('governance_node_id')
                 ->nullable()
                 ->after('id')
                 ->constrained('myb_governance_nodes')
@@ -41,7 +41,7 @@ return new class extends Migration
 
         // Add governance_node_id to hr_employees
         Schema::table('hr_employees', function (Blueprint $table) {
-            $table->foreignId('governance_node_id')
+            $table->foreignUuid('governance_node_id')
                 ->nullable()
                 ->after('id')
                 ->constrained('myb_governance_nodes')

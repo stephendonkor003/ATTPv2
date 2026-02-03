@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class HrPosition extends Model
+class HrPosition extends BaseModel
 {
     protected $table = 'hr_positions';
 

@@ -10,11 +10,11 @@ return new class extends Migration
     {
         // 1. Procurement Geographics
         Schema::create('myb_procurement_geographics', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name');
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
             $table->index('name');
@@ -23,11 +23,11 @@ return new class extends Migration
 
         // 2. Procurement Method Planned
         Schema::create('myb_procurement_method_planned', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('method_name');
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
             $table->index('method_name');
@@ -36,12 +36,12 @@ return new class extends Migration
 
         // 3. Procurement Stage
         Schema::create('myb_procurement_stages', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('stage_name');
             $table->text('description')->nullable();
             $table->integer('sort_order')->default(0);
             $table->boolean('is_active')->default(true);
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
             $table->index('stage_name');
@@ -51,13 +51,13 @@ return new class extends Migration
 
         // 4. Procurement Status
         Schema::create('myb_procurement_statuses', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name');
             $table->string('color')->nullable()->default('#6c757d');
             $table->text('description')->nullable();
             $table->integer('sort_order')->default(0);
             $table->boolean('is_active')->default(true);
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
             $table->index('name');
@@ -66,13 +66,13 @@ return new class extends Migration
 
         // 5. Procurement Step Stage
         Schema::create('myb_procurement_step_stages', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name');
-            $table->foreignId('stage_id')->nullable()->constrained('myb_procurement_stages')->nullOnDelete();
+            $table->foreignUuid('stage_id')->nullable()->constrained('myb_procurement_stages')->nullOnDelete();
             $table->text('description')->nullable();
             $table->integer('sort_order')->default(0);
             $table->boolean('is_active')->default(true);
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
             $table->index('name');
@@ -82,15 +82,15 @@ return new class extends Migration
 
         // 6. Procurement Step Approval Process
         Schema::create('myb_procurement_step_approvals', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name');
-            $table->foreignId('step_stage_id')->nullable()->constrained('myb_procurement_step_stages')->nullOnDelete();
-            $table->foreignId('governance_node_id')->nullable()->constrained('myb_governance_nodes')->nullOnDelete();
+            $table->foreignUuid('step_stage_id')->nullable()->constrained('myb_procurement_step_stages')->nullOnDelete();
+            $table->foreignUuid('governance_node_id')->nullable()->constrained('myb_governance_nodes')->nullOnDelete();
             $table->text('description')->nullable();
             $table->integer('approval_order')->default(0);
             $table->boolean('is_required')->default(true);
             $table->boolean('is_active')->default(true);
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
             $table->index('name');

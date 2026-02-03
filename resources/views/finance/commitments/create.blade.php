@@ -82,248 +82,622 @@
                         Allocation Context
                     </h6>
 
-                    <div class="row g-3">
+	                    <div class="row g-3">
 
-                        {{-- Allocation Level --}}
-                        <div class="col-md-4">
-                            <label class="form-label">Allocation Level</label>
-                            <select class="form-select @error('allocation_level') is-invalid @enderror"
-                                id="allocation_level" name="allocation_level" required>
-                                <option value="">Select Level</option>
-                                <option value="project" {{ old('allocation_level') == 'project' ? 'selected' : '' }}>Project
-                                </option>
-                                <option value="activity" {{ old('allocation_level') == 'activity' ? 'selected' : '' }}>
-                                    Activity</option>
-                                <option value="sub_activity"
-                                    {{ old('allocation_level') == 'sub_activity' ? 'selected' : '' }}>Sub-Activity</option>
-                            </select>
-                            @error('allocation_level')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+	                        {{-- Allocation Level --}}
+	                        <div class="col-md-4">
+	                            <label class="form-label">Allocation Level</label>
+	                            <input type="text" class="form-control" value="Sub-Activity" readonly>
+	                            <input type="hidden" name="allocation_level" id="allocation_level" value="sub_activity">
+	                        </div>
 
-                        {{-- Project --}}
-                        <div class="col-md-4 d-none" id="projectWrap">
-                            <label class="form-label">Project</label>
-                            <select class="form-select" id="project_id"></select>
-                        </div>
+	                        {{-- Project --}}
+	                        <div class="col-md-4 d-none" id="projectWrap">
+	                            <label class="form-label">Project</label>
+	                            <select class="form-select" id="project_id" name="project_id"
+	                                data-old="{{ old('project_id') }}"></select>
+	                        </div>
 
-                        {{-- Activity --}}
-                        <div class="col-md-4 d-none" id="activityWrap">
-                            <label class="form-label">Activity</label>
-                            <select class="form-select" id="activity_id"></select>
-                        </div>
+	                        {{-- Activity --}}
+	                        <div class="col-md-4 d-none" id="activityWrap">
+	                            <label class="form-label">Activity</label>
+	                            <select class="form-select" id="activity_id" name="activity_id"
+	                                data-old="{{ old('activity_id') }}"></select>
+	                        </div>
 
-                        {{-- Sub-Activity --}}
-                        <div class="col-md-4 d-none" id="subActivityWrap">
-                            <label class="form-label">Sub-Activity</label>
-                            <select class="form-select" id="sub_activity_id"></select>
-                        </div>
+	                        {{-- Sub-Activity --}}
+	                        <div class="col-md-4 d-none" id="subActivityWrap">
+	                            <label class="form-label">Sub-Activity</label>
+	                            <select class="form-select" id="sub_activity_id" name="sub_activity_id"
+	                                data-old="{{ old('sub_activity_id', old('allocation_id')) }}"></select>
+	                        </div>
 
-                        {{-- Year --}}
-                        <div class="col-md-4 d-none" id="yearWrap">
-                            <label class="form-label">Allocation Year</label>
-                            <select class="form-select @error('commitment_year') is-invalid @enderror" id="commitment_year"
-                                name="commitment_year"></select>
-                            @error('commitment_year')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+	                        {{-- Year --}}
+	                        <div class="col-md-4 d-none" id="yearWrap">
+	                            <label class="form-label">Start Year</label>
+	                            <select class="form-select @error('commitment_year') is-invalid @enderror" id="commitment_year"
+	                                name="commitment_year" data-old="{{ old('commitment_year') }}" required></select>
+	                            @error('commitment_year')
+	                                <div class="invalid-feedback">{{ $message }}</div>
+	                            @enderror
+	                        </div>
 
                         <input type="hidden" name="allocation_id" id="allocation_id" value="{{ old('allocation_id') }}">
                     </div>
 
                     {{-- ===================== ALLOCATION PREVIEW ===================== --}}
-                    <div class="row g-3 mt-4 d-none" id="allocationPreview">
+	                    <div class="row g-3 mt-4 d-none" id="allocationPreview">
 
-                        <div class="col-md-4">
-                            <div class="alert alert-light border">
-                                <strong>Allocated</strong><br>
-                                <span id="allocatedAmount">—</span>
-                            </div>
-                        </div>
+	                        <div class="col-md-4">
+	                            <div class="alert alert-light border">
+	                                <strong>Total Allocated (from Start Year)</strong><br>
+	                                <span id="allocatedAmount">—</span>
+	                            </div>
+	                        </div>
 
-                        <div class="col-md-4">
-                            <div class="alert alert-warning border">
-                                <strong>Remaining</strong><br>
-                                <span id="remainingAmount">—</span>
-                            </div>
-                        </div>
+	                        <div class="col-md-4">
+	                            <div class="alert alert-warning border">
+	                                <strong>Total Remaining (from Start Year)</strong><br>
+	                                <span id="remainingAmount">—</span>
+	                            </div>
+	                        </div>
 
-                        <div class="col-md-12">
-                            <div class="alert alert-info mb-0">
-                                You are committing resources to:
-                                <strong id="confirmText"></strong>
-                            </div>
-                        </div>
+	                        <div class="col-md-12">
+	                            <div class="alert alert-info mb-0">
+	                                You are committing resources to:
+	                                <strong id="confirmText"></strong>
+	                            </div>
+	                        </div>
 
-                    </div>
+	                    </div>
 
-                </div>
-            </div>
+	                    {{-- ===================== YEAR DISTRIBUTION ===================== --}}
+	                    <div class="mt-4 d-none" id="distributionWrap">
+	                        <div class="d-flex justify-content-between align-items-center mb-2">
+	                            <h6 class="fw-bold mb-0">Year Contribution (Auto)</h6>
+	                            <small class="text-muted">Spreads from start year forward</small>
+	                        </div>
 
-            {{-- ===================== RESOURCE & AMOUNT ===================== --}}
-            <div class="card shadow-sm mb-4 d-none" id="resourceSection">
-                <div class="card-body">
+	                        <div class="alert alert-danger d-none" id="distributionError"></div>
 
-                    <h6 class="fw-bold text-success mb-3">
-                        Resource Commitment
-                    </h6>
+	                        <div class="table-responsive">
+	                            <table class="table table-sm table-bordered align-middle mb-0">
+	                                <thead class="table-light">
+	                                    <tr>
+	                                        <th style="width: 90px;">Year</th>
+	                                        <th>Allocated</th>
+	                                        <th>Committed</th>
+	                                        <th>Remaining</th>
+	                                        <th>This Commitment</th>
+	                                    </tr>
+	                                </thead>
+	                                <tbody id="distributionBody"></tbody>
+	                            </table>
+	                        </div>
+	                    </div>
 
-                    <div class="row g-3">
+	                </div>
+	            </div>
 
-                        <div class="col-md-4">
-                            <label class="form-label">Resource Category</label>
-                            <select class="form-select @error('resource_category_id') is-invalid @enderror"
-                                id="resource_category_id" name="resource_category_id" required>
-                                <option value="">Select Category</option>
-                                @foreach ($resourceCategories as $cat)
-                                    <option value="{{ $cat->id }}"
-                                        {{ old('resource_category_id') == $cat->id ? 'selected' : '' }}>
-                                        {{ $cat->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('resource_category_id')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+	            {{-- ===================== PURCHASE REQUEST ITEMS ===================== --}}
+	            <div class="card shadow-sm mb-4 d-none" id="resourceSection">
+	                <div class="card-body">
+	                    <h6 class="fw-bold text-success mb-3">
+	                        Purchase Request (Auto-created)
+	                    </h6>
+	
+	                    <div class="row g-3">
+	                        <div class="col-12">
+	                            <label class="form-label">Description (optional)</label>
+	                            <textarea
+	                                name="description"
+	                                id="description"
+	                                rows="3"
+	                                class="form-control @error('description') is-invalid @enderror"
+	                                placeholder="Brief description of this purchase request...">{{ old('description') }}</textarea>
+	                            @error('description')
+	                                <div class="invalid-feedback">{{ $message }}</div>
+	                            @enderror
+	                        </div>
+	
+	                        <div class="col-md-4">
+	                            <label class="form-label">Delivery Date</label>
+	                            <input type="date"
+	                                name="delivery_date"
+	                                id="delivery_date"
+	                                value="{{ old('delivery_date') }}"
+	                                class="form-control @error('delivery_date') is-invalid @enderror"
+	                                required>
+	                            @error('delivery_date')
+	                                <div class="invalid-feedback">{{ $message }}</div>
+	                            @enderror
+	                        </div>
+	                    </div>
+	
+	                    <div class="table-responsive mt-3">
+	                        <table class="table table-sm table-bordered align-middle mb-0">
+	                            <thead class="table-light">
+	                                <tr>
+	                                    <th style="width: 35%;">Resource Category</th>
+	                                    <th>Resource Item</th>
+	                                    <th style="width: 160px;" class="text-end">Price / Amount</th>
+	                                    <th style="width: 80px;" class="text-center">Action</th>
+	                                </tr>
+	                            </thead>
+	                            <tbody id="itemsBody"></tbody>
+	                        </table>
+	                    </div>
+	
+	                    <div class="d-flex justify-content-between align-items-center mt-3">
+	                        <button type="button" class="btn btn-sm btn-outline-secondary" id="addItemBtn">
+	                            <i class="feather-plus me-1"></i> Add Item
+	                        </button>
+	
+	                        <div style="min-width: 260px;">
+	                            <label class="form-label mb-1">Total Commitment Amount</label>
+	                            <input type="number" step="0.01" id="commitment_amount"
+	                                class="form-control @error('commitment_amount') is-invalid @enderror text-end fw-bold"
+	                                name="commitment_amount" value="{{ old('commitment_amount', 0) }}" readonly>
+	                            <small class="text-muted">Auto-calculated from items</small>
+	                            @error('commitment_amount')
+	                                <div class="invalid-feedback d-block">{{ $message }}</div>
+	                            @enderror
+	                        </div>
+	                    </div>
+	                </div>
+	            </div>
 
-                        <div class="col-md-4">
-                            <label class="form-label">Resource Item</label>
-                            <select class="form-select @error('resource_id') is-invalid @enderror" id="resource_id"
-                                name="resource_id" required>
-                                <option value="">Select Resource</option>
-                            </select>
-                            @error('resource_id')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="form-label">Commitment Amount</label>
-                            <input type="number" step="0.01"
-                                class="form-control @error('commitment_amount') is-invalid @enderror"
-                                name="commitment_amount" value="{{ old('commitment_amount') }}" required>
-                            @error('commitment_amount')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                    </div>
-
-                </div>
-            </div>
-
-            {{-- ===================== ACTION ===================== --}}
-            <div class="text-end">
-                <button class="btn btn-primary px-4">
-                    <i class="feather-save me-1"></i>
-                    Save Commitment
-                </button>
-            </div>
+	            {{-- ===================== ACTION ===================== --}}
+	            <div class="text-end">
+	                <button class="btn btn-primary px-4" id="saveCommitmentBtn" type="submit">
+	                    <i class="feather-save me-1"></i>
+	                    Save Commitment
+	                </button>
+	            </div>
 
         </form>
     </div>
 
-    {{-- ===================== SCRIPT ===================== --}}
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
+	    {{-- ===================== SCRIPT ===================== --}}
+	    <script>
+	        document.addEventListener('DOMContentLoaded', () => {
+	            document.getElementById('commitment_ref').value =
+	                'COM-' + Date.now().toString().slice(-6);
 
-            document.getElementById('commitment_ref').value =
-                'COM-' + Date.now().toString().slice(-6);
+	            const allocationLevel = document.getElementById('allocation_level'); // hidden, always sub_activity
+	            const projectSelect = document.getElementById('project_id');
+	            const activitySelect = document.getElementById('activity_id');
+	            const subActivitySelect = document.getElementById('sub_activity_id');
+	            const yearSelect = document.getElementById('commitment_year');
+	            const allocationIdInput = document.getElementById('allocation_id');
 
-            const levelSelect = document.getElementById('allocation_level');
+	            const allocationPreview = document.getElementById('allocationPreview');
+		            const distributionWrap = document.getElementById('distributionWrap');
+		            const distributionBody = document.getElementById('distributionBody');
+		            const distributionError = document.getElementById('distributionError');
+		            const resourceSection = document.getElementById('resourceSection');
+		            const itemsBody = document.getElementById('itemsBody');
+		            const addItemBtn = document.getElementById('addItemBtn');
+		            const commitmentAmountInput = document.getElementById('commitment_amount');
+		            const saveBtn = document.getElementById('saveCommitmentBtn');
 
-            levelSelect.addEventListener('change', () => {
-                resetUI();
-                if (levelSelect.value) {
-                    show('projectWrap');
-                    loadProjects();
-                }
-            });
+		            const formatter = new Intl.NumberFormat(undefined, {
+		                minimumFractionDigits: 2,
+		                maximumFractionDigits: 2,
+		            });
+	
+		            const categoryOptionsHtml = `
+		                <option value="">Select Category</option>
+		                @foreach ($resourceCategories as $cat)
+		                    <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+		                @endforeach
+		            `;
 
-            document.getElementById('project_id').addEventListener('change', e => {
-                document.getElementById('allocation_id').value = e.target.value;
-                levelSelect.value === 'project' ?
-                    loadYears('project', e.target.value) :
-                    (show('activityWrap'), loadActivities(e.target.value));
-            });
+	            let breakdown = [];
 
-            document.getElementById('activity_id').addEventListener('change', e => {
-                document.getElementById('allocation_id').value = e.target.value;
-                levelSelect.value === 'activity' ?
-                    loadYears('activity', e.target.value) :
-                    (show('subActivityWrap'), loadSubActivities(e.target.value));
-            });
+	            function formatNumber(value) {
+	                const number = Number(value);
+	                if (!Number.isFinite(number)) return '—';
+	                return formatter.format(number);
+	            }
 
-            document.getElementById('sub_activity_id').addEventListener('change', e => {
-                document.getElementById('allocation_id').value = e.target.value;
-                loadYears('sub_activity', e.target.value);
-            });
+	            function show(id) {
+	                document.getElementById(id).classList.remove('d-none');
+	            }
 
-            document.getElementById('commitment_year').addEventListener('change', fetchRemaining);
+	            function hide(id) {
+	                document.getElementById(id).classList.add('d-none');
+	            }
 
-            document.getElementById('resource_category_id').addEventListener('change', e => {
-                fetch(`/finance/resources/ajax/resources/${e.target.value}`)
-                    .then(r => r.json())
-                    .then(d => {
-                        const sel = document.getElementById('resource_id');
-                        sel.innerHTML = '<option value="">Select Resource</option>';
-                        d.forEach(i => sel.innerHTML += `<option value="${i.id}">${i.name}</option>`);
-                    });
-            });
+	            function fillSelect(selectEl, data, { raw = false } = {}) {
+	                selectEl.innerHTML = '<option value="">Select</option>';
+	                data.forEach(item => {
+	                    const value = raw ? item : item.id;
+	                    const label = raw ? item : item.name;
+	                    const option = document.createElement('option');
+	                    option.value = value;
+	                    option.textContent = label;
+	                    selectEl.appendChild(option);
+	                });
+	            }
 
-            function fetchRemaining() {
-                fetch(
-                        `/finance/commitments/ajax/remaining-budget?allocation_level=${levelSelect.value}&allocation_id=${document.getElementById('allocation_id').value}&year=${document.getElementById('commitment_year').value}`)
-                    .then(r => r.json())
-                    .then(d => {
-                        show('allocationPreview');
-                        show('resourceSection');
-                        document.getElementById('allocatedAmount').innerText = d.allocated.toFixed(2);
-                        document.getElementById('remainingAmount').innerText = d.remaining.toFixed(2);
-                        document.getElementById('confirmText').innerText =
-                            `${levelSelect.value.replace('_',' ')} – ${document.getElementById('commitment_year').value}`;
-                    });
-            }
+	            function resetFromProject() {
+	                activitySelect.innerHTML = '<option value="">Select</option>';
+	                subActivitySelect.innerHTML = '<option value="">Select</option>';
+	                yearSelect.innerHTML = '<option value="">Select</option>';
+	                allocationIdInput.value = '';
+	                breakdown = [];
 
-            function loadProjects() {
-                fetch('/finance/commitments/ajax/projects').then(r => r.json()).then(d => fill('project_id', d));
-            }
+	                hide('activityWrap');
+	                hide('subActivityWrap');
+	                hide('yearWrap');
+	                hide('allocationPreview');
+	                hide('distributionWrap');
+	                hide('resourceSection');
 
-            function loadActivities(id) {
-                fetch(`/finance/commitments/ajax/activities/${id}`).then(r => r.json()).then(d => fill(
-                    'activity_id', d));
-            }
+	                distributionError.textContent = '';
+	                distributionError.classList.add('d-none');
+	                saveBtn.disabled = false;
+	            }
 
-            function loadSubActivities(id) {
-                fetch(`/finance/commitments/ajax/sub-activities/${id}`).then(r => r.json()).then(d => fill(
-                    'sub_activity_id', d));
-            }
+	            function resetFromActivity() {
+	                subActivitySelect.innerHTML = '<option value="">Select</option>';
+	                yearSelect.innerHTML = '<option value="">Select</option>';
+	                allocationIdInput.value = '';
+	                breakdown = [];
 
-            function loadYears(level, id) {
-                show('yearWrap');
-                fetch(`/finance/commitments/ajax/allocation-years/${level}/${id}`).then(r => r.json()).then(d =>
-                    fill('commitment_year', d, true));
-            }
+	                hide('subActivityWrap');
+	                hide('yearWrap');
+	                hide('allocationPreview');
+	                hide('distributionWrap');
+	                hide('resourceSection');
 
-            function fill(id, data, raw = false) {
-                const el = document.getElementById(id);
-                el.innerHTML = '<option value="">Select</option>';
-                data.forEach(i => el.innerHTML += `<option value="${raw ? i : i.id}">${raw ? i : i.name}</option>`);
-            }
+	                distributionError.textContent = '';
+	                distributionError.classList.add('d-none');
+	                saveBtn.disabled = false;
+	            }
 
-            function show(id) {
-                document.getElementById(id).classList.remove('d-none');
-            }
+	            function resetFromSubActivity() {
+	                yearSelect.innerHTML = '<option value="">Select</option>';
+	                allocationIdInput.value = '';
+	                breakdown = [];
 
-            function resetUI() {
-                ['projectWrap', 'activityWrap', 'subActivityWrap', 'yearWrap', 'allocationPreview',
-                    'resourceSection'
-                ]
-                .forEach(id => document.getElementById(id).classList.add('d-none'));
-            }
-        });
-    </script>
-@endsection
+	                hide('yearWrap');
+	                hide('allocationPreview');
+	                hide('distributionWrap');
+	                hide('resourceSection');
+
+	                distributionError.textContent = '';
+	                distributionError.classList.add('d-none');
+	                saveBtn.disabled = false;
+	            }
+
+	            function loadProjects() {
+	                show('projectWrap');
+	                fetch('/finance/commitments/ajax/projects')
+	                    .then(r => r.json())
+	                    .then(d => {
+	                        fillSelect(projectSelect, d);
+	                        const old = projectSelect.dataset.old;
+	                        if (old) {
+	                            projectSelect.value = old;
+	                            projectSelect.dataset.old = '';
+	                            projectSelect.dispatchEvent(new Event('change'));
+	                        }
+	                    });
+	            }
+
+	            function loadActivities(projectId) {
+	                show('activityWrap');
+	                fetch(`/finance/commitments/ajax/activities/${projectId}`)
+	                    .then(r => r.json())
+	                    .then(d => {
+	                        fillSelect(activitySelect, d);
+	                        const old = activitySelect.dataset.old;
+	                        if (old) {
+	                            activitySelect.value = old;
+	                            activitySelect.dataset.old = '';
+	                            activitySelect.dispatchEvent(new Event('change'));
+	                        }
+	                    });
+	            }
+
+	            function loadSubActivities(activityId) {
+	                show('subActivityWrap');
+	                fetch(`/finance/commitments/ajax/sub-activities/${activityId}`)
+	                    .then(r => r.json())
+	                    .then(d => {
+	                        fillSelect(subActivitySelect, d);
+	                        const old = subActivitySelect.dataset.old;
+	                        if (old) {
+	                            subActivitySelect.value = old;
+	                            subActivitySelect.dataset.old = '';
+	                            subActivitySelect.dispatchEvent(new Event('change'));
+	                        }
+	                    });
+	            }
+
+	            function loadBreakdown(subActivityId) {
+	                const level = allocationLevel.value || 'sub_activity';
+	                fetch(`/finance/commitments/ajax/allocation-breakdown/${level}/${subActivityId}`)
+	                    .then(r => r.json())
+	                    .then(d => {
+	                        breakdown = Array.isArray(d) ? d : [];
+
+	                        const years = breakdown
+	                            .map(row => row.year)
+	                            .filter(year => Number.isFinite(Number(year)))
+	                            .sort((a, b) => Number(a) - Number(b));
+
+	                        show('yearWrap');
+	                        fillSelect(yearSelect, years, { raw: true });
+
+	                        const oldYear = yearSelect.dataset.old;
+	                        if (oldYear) {
+	                            yearSelect.value = oldYear;
+	                            yearSelect.dataset.old = '';
+	                        } else if (years.length) {
+	                            yearSelect.value = years[0];
+	                        }
+
+	                        show('allocationPreview');
+	                        show('resourceSection');
+	                        updateDistribution();
+	                    })
+	                    .catch(() => {
+	                        breakdown = [];
+	                        hide('allocationPreview');
+	                        hide('distributionWrap');
+	                    });
+	            }
+
+		            function updateDistribution() {
+		                distributionBody.innerHTML = '';
+		                distributionError.textContent = '';
+		                distributionError.classList.add('d-none');
+		                hide('distributionWrap');
+		                saveBtn.disabled = true;
+
+		                const startYear = Number(yearSelect.value);
+		                const amount = Number(commitmentAmountInput.value);
+
+		                if (!breakdown.length || !Number.isFinite(startYear) || !Number.isFinite(amount) || amount <= 0) {
+		                    return;
+		                }
+	
+		                saveBtn.disabled = false;
+
+	                const rows = breakdown
+	                    .filter(r => Number(r.year) >= startYear)
+	                    .sort((a, b) => Number(a.year) - Number(b.year))
+	                    .map(r => ({
+	                        year: Number(r.year),
+	                        allocated: Number(r.allocated) || 0,
+	                        committed: Number(r.committed) || 0,
+	                        remaining: Number(r.remaining) || 0,
+	                    }));
+
+	                const totalAllocated = rows.reduce((sum, r) => sum + r.allocated, 0);
+	                const totalRemaining = rows.reduce((sum, r) => sum + Math.max(0, r.remaining), 0);
+
+	                document.getElementById('allocatedAmount').innerText = formatNumber(totalAllocated);
+	                document.getElementById('remainingAmount').innerText = formatNumber(totalRemaining);
+	                document.getElementById('confirmText').innerText = `Sub-Activity – Start year ${startYear}`;
+
+	                if (amount > totalRemaining) {
+	                    show('distributionWrap');
+	                    distributionError.textContent =
+	                        `Insufficient remaining budget from ${startYear}. Available: ${formatNumber(totalRemaining)}.`;
+	                    distributionError.classList.remove('d-none');
+	                    saveBtn.disabled = true;
+	                    return;
+	                }
+
+	                let remainingToAllocate = amount;
+
+	                rows.forEach(r => {
+	                    const available = Math.max(0, r.remaining);
+	                    const use = Math.min(available, remainingToAllocate);
+	                    remainingToAllocate = Math.max(0, remainingToAllocate - use);
+
+	                    const tr = document.createElement('tr');
+	                    tr.innerHTML = `
+	                        <td>${r.year}</td>
+	                        <td>${formatNumber(r.allocated)}</td>
+	                        <td>${formatNumber(r.committed)}</td>
+	                        <td>${formatNumber(r.remaining)}</td>
+	                        <td class="fw-semibold">${formatNumber(use)}</td>
+	                    `;
+	                    distributionBody.appendChild(tr);
+	                });
+
+	                show('distributionWrap');
+	            }
+
+	            projectSelect.addEventListener('change', e => {
+	                resetFromProject();
+	                const projectId = e.target.value;
+	                if (!projectId) return;
+	                loadActivities(projectId);
+	            });
+
+	            activitySelect.addEventListener('change', e => {
+	                resetFromActivity();
+	                const activityId = e.target.value;
+	                if (!activityId) return;
+	                loadSubActivities(activityId);
+	            });
+
+	            subActivitySelect.addEventListener('change', e => {
+	                resetFromSubActivity();
+	                const subActivityId = e.target.value;
+	                if (!subActivityId) return;
+
+	                allocationIdInput.value = subActivityId;
+	                loadBreakdown(subActivityId);
+	            });
+
+		            yearSelect.addEventListener('change', updateDistribution);
+		            commitmentAmountInput.addEventListener('input', updateDistribution);
+	
+		            function roundMoney(value) {
+		                const number = Number(value);
+		                if (!Number.isFinite(number)) return 0;
+		                return Math.round((number + Number.EPSILON) * 100) / 100;
+		            }
+	
+		            function renumberItemRows() {
+		                Array.from(itemsBody.querySelectorAll('tr')).forEach((row, index) => {
+		                    row.querySelectorAll('[data-field]').forEach(el => {
+		                        el.name = `items[${index}][${el.dataset.field}]`;
+		                    });
+		                });
+		            }
+	
+		            function loadResourcesForRow(row, categoryId, selectedResourceId = '') {
+		                const resourceSelect = row.querySelector('.item-resource');
+		                if (!categoryId) {
+		                    resourceSelect.innerHTML = '<option value="">Select Resource</option>';
+		                    resourceSelect.value = '';
+		                    return;
+		                }
+	
+		                resourceSelect.innerHTML = '<option value="">Loading...</option>';
+		                fetch(`/finance/resources/ajax/resources/${categoryId}`)
+		                    .then(r => r.json())
+		                    .then(d => {
+		                        resourceSelect.innerHTML = '<option value="">Select Resource</option>';
+		                        d.forEach(i => {
+		                            const option = document.createElement('option');
+		                            option.value = i.id;
+		                            option.textContent = i.name;
+		                            resourceSelect.appendChild(option);
+		                        });
+	
+		                        if (selectedResourceId) {
+		                            resourceSelect.value = selectedResourceId;
+		                        }
+		                    })
+		                    .catch(() => {
+		                        resourceSelect.innerHTML = '<option value="">Select Resource</option>';
+		                    });
+		            }
+	
+		            function setTotalFromItems() {
+		                const total = roundMoney(
+		                    Array.from(itemsBody.querySelectorAll('.item-amount')).reduce((sum, input) => {
+		                        const value = Number(input.value);
+		                        return sum + (Number.isFinite(value) ? value : 0);
+		                    }, 0)
+		                );
+	
+		                commitmentAmountInput.value = (total > 0 ? total : 0).toFixed(2);
+		                updateDistribution();
+		            }
+	
+		            function addItemRow(item = null) {
+		                const tr = document.createElement('tr');
+		                tr.innerHTML = `
+		                    <td>
+		                        <select class="form-select item-category" data-field="resource_category_id" required>
+		                            ${categoryOptionsHtml}
+		                        </select>
+		                    </td>
+		                    <td>
+		                        <select class="form-select item-resource" data-field="resource_id" required>
+		                            <option value="">Select Resource</option>
+		                        </select>
+		                    </td>
+		                    <td>
+		                        <input type="number" min="0.01" step="0.01"
+		                            class="form-control text-end item-amount" data-field="amount" required>
+		                    </td>
+		                    <td class="text-center">
+		                        <button type="button" class="btn btn-sm btn-outline-danger remove-item-btn" title="Remove">
+		                            <i class="feather-trash-2"></i>
+		                        </button>
+		                    </td>
+		                `;
+	
+		                itemsBody.appendChild(tr);
+		                renumberItemRows();
+	
+		                const categorySelect = tr.querySelector('.item-category');
+		                const amountInput = tr.querySelector('.item-amount');
+	
+		                if (item && item.resource_category_id) {
+		                    categorySelect.value = item.resource_category_id;
+		                    loadResourcesForRow(tr, item.resource_category_id, item.resource_id || '');
+		                }
+	
+		                if (item && item.amount) {
+		                    amountInput.value = item.amount;
+		                }
+	
+		                setTotalFromItems();
+		            }
+	
+		            addItemBtn.addEventListener('click', () => addItemRow());
+	
+		            itemsBody.addEventListener('change', e => {
+		                if (!e.target.classList.contains('item-category')) return;
+		                const row = e.target.closest('tr');
+		                loadResourcesForRow(row, e.target.value, '');
+		            });
+	
+		            itemsBody.addEventListener('input', e => {
+		                if (!e.target.classList.contains('item-amount')) return;
+		                setTotalFromItems();
+		            });
+	
+		            itemsBody.addEventListener('click', e => {
+		                const removeBtn = e.target.closest('.remove-item-btn');
+		                if (!removeBtn) return;
+	
+		                const row = removeBtn.closest('tr');
+		                const rows = itemsBody.querySelectorAll('tr');
+		                if (rows.length <= 1) {
+		                    row.querySelector('.item-category').value = '';
+		                    row.querySelector('.item-resource').innerHTML = '<option value="">Select Resource</option>';
+		                    row.querySelector('.item-amount').value = '';
+		                    setTotalFromItems();
+		                    return;
+		                }
+	
+		                row.remove();
+		                renumberItemRows();
+		                setTotalFromItems();
+		            });
+	
+		            function initItemRows() {
+		                const oldItems = @json(old('items', []));
+		                const legacyCategory = @json(old('resource_category_id'));
+		                const legacyResource = @json(old('resource_id'));
+		                const legacyAmount = @json(old('commitment_amount'));
+	
+		                if (Array.isArray(oldItems) && oldItems.length) {
+		                    oldItems.forEach(item => addItemRow(item));
+		                    return;
+		                }
+	
+		                if (legacyCategory) {
+		                    addItemRow({
+		                        resource_category_id: legacyCategory,
+		                        resource_id: legacyResource,
+		                        amount: legacyAmount,
+		                    });
+		                    return;
+		                }
+	
+		                // Default: start with 2 rows (user can add/remove)
+		                addItemRow();
+		                addItemRow();
+		            }
+	
+		            initItemRows();
+		            setTotalFromItems();
+
+		            loadProjects();
+	        });
+	    </script>
+	@endsection

@@ -3,9 +3,9 @@
 // App\Models\EvaluationResult.php
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class EvaluationResult extends Model
+class EvaluationResult extends BaseModel
 {
     protected $fillable = [
         'submission_id',

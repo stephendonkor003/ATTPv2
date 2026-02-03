@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class SubActivityAllocation extends Model
+class SubActivityAllocation extends BaseModel
 {
     protected $table = 'myb_sub_activity_allocations';
 

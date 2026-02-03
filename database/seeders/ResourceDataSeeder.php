@@ -9,12 +9,20 @@ use App\Models\ProgramFunding;
 use App\Models\Project;
 use App\Models\Activity;
 use App\Models\SubActivity;
+use App\Models\PurchaseRequest;
+use App\Models\PurchaseRequestItem;
+use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 class ResourceDataSeeder extends Seeder
 {
     public function run(): void
     {
+        // UUID migration: use a real user id instead of hardcoding "1".
+        $createdBy = User::where('email', 'amodonlimited@gmail.com')->value('id')
+            ?? User::query()->value('id');
+
         $categoryNames = [
             'Hardware & Devices',
             'Software Licensing',
@@ -38,13 +46,13 @@ class ResourceDataSeeder extends Seeder
             'Cloud Hosting'
         ];
 
-        $categories = collect($categoryNames)->map(function ($name, $index) {
+        $categories = collect($categoryNames)->map(function ($name, $index) use ($createdBy) {
             return ResourceCategory::updateOrCreate(
                 ['name' => $name],
                 [
                     'description' => "{$name} for program support",
                     'status' => 'active',
-                    'created_by' => 1,
+                    'created_by' => $createdBy,
                 ]
             );
         });
@@ -72,7 +80,7 @@ class ResourceDataSeeder extends Seeder
             'Data Center Backup'
         ];
 
-        $resources = collect($resourceTemplates)->map(function ($name, $index) use ($categories) {
+        $resources = collect($resourceTemplates)->map(function ($name, $index) use ($categories, $createdBy) {
             $category = $categories[$index % $categories->count()];
             return Resource::updateOrCreate(
                 ['reference_code' => 'RC-' . str_pad($index + 1, 3, '0', STR_PAD_LEFT)],
@@ -82,47 +90,77 @@ class ResourceDataSeeder extends Seeder
                     'description' => "Provisioning {$name} across programs",
                     'status' => 'active',
                     'is_human_resource' => false,
-                    'created_by' => 1,
+                    'created_by' => $createdBy,
                 ]
             );
         });
 
-        $programFundings = ProgramFunding::pluck('id');
+        $programFundings = ProgramFunding::with('program')->get();
         if ($programFundings->isEmpty()) {
             $this->command->warn('No program fundings present; run ProcurementStructureSeeder first.');
             return;
         }
 
-        $projects = Project::limit(6)->get();
-        $activities = Activity::limit(10)->get();
         $subActivities = SubActivity::limit(20)->get();
 
-        $levels = collect([
-            ['allocation_level' => 'project', 'collection' => $projects],
-            ['allocation_level' => 'activity', 'collection' => $activities],
-            ['allocation_level' => 'sub_activity', 'collection' => $subActivities],
-        ]);
+        if ($subActivities->isEmpty()) {
+            $this->command->warn('No sub-activities found; run ProcurementStructureSeeder first.');
+            return;
+        }
 
-        foreach ($programFundings as $fundingId) {
-            foreach ($levels as $levelEntry) {
-                foreach ($levelEntry['collection'] as $index => $target) {
-                    for ($round = 0; $round < 3; $round++) {
-                        $category = $categories[($index + $round) % $categories->count()];
-                        $resource = $resources[($index + $round) % $resources->count()];
-                        $amount = mt_rand(15000, 200000);
-                        $year = 2025 + ($round % 3);
-                        BudgetCommitment::create([
-                            'program_funding_id' => $fundingId,
-                            'resource_category_id' => $category->id,
-                            'resource_id' => $resource->id,
-                            'allocation_level' => $levelEntry['allocation_level'],
-                            'allocation_id' => $target->id,
-                            'commitment_amount' => $amount,
-                            'commitment_year' => $year,
-                            'status' => ($index + $round) % 2 === 0 ? BudgetCommitment::STATUS_APPROVED : BudgetCommitment::STATUS_DRAFT,
-                            'created_by' => 1,
-                        ]);
-                    }
+        $generateReference = function () {
+            $year = now()->year;
+            do {
+                $reference = 'PR-' . $year . '-' . strtoupper(Str::random(5));
+            } while (PurchaseRequest::where('reference_no', $reference)->exists());
+            return $reference;
+        };
+
+        foreach ($programFundings as $funding) {
+            foreach ($subActivities as $index => $subActivity) {
+                for ($round = 0; $round < 3; $round++) {
+                    $category = $categories[($index + $round) % $categories->count()];
+                    $resource = $resources[($index + $round) % $resources->count()];
+                    $amount = mt_rand(15000, 200000);
+                    $year = 2025 + ($round % 3);
+
+                    $purchaseRequest = PurchaseRequest::create([
+                        'reference_no' => $generateReference(),
+                        'program_funding_id' => $funding->id,
+                        'governance_node_id' => $funding->governance_node_id,
+                        'allocation_level' => 'sub_activity',
+                        'allocation_id' => $subActivity->id,
+                        'start_year' => $year,
+                        'commitment_date' => now()->toDateString(),
+                        'delivery_date' => now()->toDateString(),
+                        'currency' => $funding->currency ?? $funding->program?->currency,
+                        'total_amount' => $amount,
+                        'description' => "Seeded PR for {$subActivity->name}",
+                        'status' => 'draft',
+                        'created_by' => $createdBy,
+                    ]);
+
+                    PurchaseRequestItem::create([
+                        'purchase_request_id' => $purchaseRequest->id,
+                        'resource_category_id' => $category->id,
+                        'resource_id' => $resource->id,
+                        'amount' => $amount,
+                    ]);
+
+                    BudgetCommitment::create([
+                        'purchase_request_id' => $purchaseRequest->id,
+                        'program_funding_id' => $funding->id,
+                        'governance_node_id' => $funding->governance_node_id,
+                        'resource_category_id' => null,
+                        'resource_id' => null,
+                        'allocation_level' => 'sub_activity',
+                        'allocation_id' => $subActivity->id,
+                        'commitment_amount' => $amount,
+                        'commitment_year' => $year,
+                        'status' => ($index + $round) % 2 === 0 ? BudgetCommitment::STATUS_APPROVED : BudgetCommitment::STATUS_DRAFT,
+                        'description' => $purchaseRequest->description,
+                        'created_by' => $createdBy,
+                    ]);
                 }
             }
         }

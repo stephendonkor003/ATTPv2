@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class Applicant extends Model
+class Applicant extends BaseModel
 {
     protected $fillable = [
         'think_tank_name',

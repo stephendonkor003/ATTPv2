@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class DynamicFormField extends Model
+class DynamicFormField extends BaseModel
 {
     protected $table = 'dynamic_form_fields';
 

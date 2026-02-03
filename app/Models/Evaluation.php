@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\EvaluationCriteria;
 use App\Models\EvaluationSection;
 
 
-class Evaluation extends Model
+class Evaluation extends BaseModel
 {
     use HasFactory;
 

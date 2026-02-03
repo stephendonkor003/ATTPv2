@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\ProcurementMethodPlannedMilestone;
 use App\Models\User;
 
-class ProcurementMethodPlanned extends Model
+class ProcurementMethodPlanned extends BaseModel
 {
     protected $table = 'myb_procurement_method_planned';
 

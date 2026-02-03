@@ -8,8 +8,8 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::create('system_audit_logs', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('user_id')->nullable();
             $table->string('action')->nullable();
             $table->text('description')->nullable();
             $table->string('method')->nullable();

@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class GovernanceReportingLine extends Model
+class GovernanceReportingLine extends BaseModel
 {
     protected $table = 'myb_governance_reporting_lines';
 

@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use App\Models\GovernanceNode;
 use App\Models\User;
 
-class ProgramFunding extends Model
+class ProgramFunding extends BaseModel
 {
     protected $table = 'myb_program_fundings';
 

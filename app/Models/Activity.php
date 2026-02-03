@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use App\Models\GovernanceNode;
 
-class Activity extends Model
+class Activity extends BaseModel
 {
     protected $table = 'myb_activities';
 

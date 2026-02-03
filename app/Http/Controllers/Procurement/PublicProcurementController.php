@@ -49,11 +49,9 @@ class PublicProcurementController extends Controller
      * SUBMIT PROCUREMENT APPLICATION
      * ===============================
      */
-    public function submit(Request $request, string $slug)
+    public function submit(Request $request, Procurement $procurement)
     {
-        $procurement = Procurement::where('slug', $slug)
-            ->where('status', 'published')
-            ->firstOrFail();
+        abort_if($procurement->status !== 'published', 404);
 
         $form = DynamicForm::approved()
             ->where('procurement_id', $procurement->id)
@@ -80,7 +78,8 @@ class PublicProcurementController extends Controller
                     break;
 
                 case 'file':
-                    $rules[$key] = "$required|file|max:5242880"; // 5GB
+                    // NOTE: Laravel's "max" is in kilobytes. Keep public uploads small to reduce DoS risk.
+                    $rules[$key] = "$required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip|max:20480"; // 20MB
                     break;
 
                 case 'checkbox':       // Select2 multi-select
@@ -126,7 +125,8 @@ class PublicProcurementController extends Controller
                 // FILE
                 if ($field->field_type === 'file' && $request->hasFile($key)) {
                     $value = $request->file($key)
-                        ->store('procurement_submissions', 'public');
+                        // Store submissions on the default (private) disk; access must be authorized.
+                        ->store('procurement_submissions');
                 }
 
                 // MULTI SELECT (ARRAY FROM SELECT2)

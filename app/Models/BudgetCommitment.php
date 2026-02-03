@@ -2,16 +2,17 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use App\Models\User;
 
 
-class BudgetCommitment extends Model
+class BudgetCommitment extends BaseModel
 {
     protected $table = 'myb_budget_commitments';
     public $timestamps = false; // ✅ IMPORTANT
 
     protected $fillable = [
+        'purchase_request_id',
         'program_funding_id',
         'governance_node_id',
         'allocation_level',
@@ -21,6 +22,7 @@ class BudgetCommitment extends Model
         'commitment_amount',
         'commitment_year',
         'status',
+        'description',
         'created_by',
         'approved_by',
         'approved_at',
@@ -46,6 +48,11 @@ class BudgetCommitment extends Model
     public function programFunding()
     {
         return $this->belongsTo(ProgramFunding::class, 'program_funding_id');
+    }
+
+    public function purchaseRequest()
+    {
+        return $this->belongsTo(PurchaseRequest::class, 'purchase_request_id');
     }
 
     public function resourceCategory()

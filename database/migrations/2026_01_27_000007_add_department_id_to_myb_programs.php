@@ -9,7 +9,7 @@ return new class extends Migration {
     {
         Schema::table('myb_programs', function (Blueprint $table) {
             if (!Schema::hasColumn('myb_programs', 'department_id')) {
-                $table->foreignId('department_id')->nullable()->after('sector_id');
+                $table->foreignUuid('department_id')->nullable()->after('sector_id');
             }
         });
     }

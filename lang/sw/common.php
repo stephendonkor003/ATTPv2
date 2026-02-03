@@ -9,6 +9,7 @@ return [
     'create' => 'Unda',
     'update' => 'Sasisha',
     'back' => 'Rudi',
+    'logout' => 'Toka',
     'next' => 'Ifuatayo',
     'previous' => 'Iliyotangulia',
     'close' => 'Funga',

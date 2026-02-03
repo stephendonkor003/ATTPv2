@@ -34,12 +34,15 @@ class DatabaseSeeder extends Seeder
             GovernanceLevelSeeder::class,
             GovernanceNodeSeeder::class,
             GovernanceReportingLineSeeder::class,
-            UserSeeder::class,
+            LegacyUserSeeder::class,
             GovernanceAssignmentSeeder::class,
             FundingPartnerSeeder::class,
             AssignPartnerPermissionsSeeder::class,
             ProcurementStructureSeeder::class,
+            ProcurementPermissionsSeeder::class,
             ResourceDataSeeder::class,
+            LegacyProcurementSeeder::class,
+            LegacyEvaluationSeeder::class,
             ProgramPlanSheetSeeder::class,
         ]);
 }

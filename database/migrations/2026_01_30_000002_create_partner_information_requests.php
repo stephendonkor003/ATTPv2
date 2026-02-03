@@ -12,19 +12,19 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('myb_partner_information_requests', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
 
-            $table->foreignId('funder_id')
+            $table->foreignUuid('funder_id')
                 ->constrained('myb_funders')
                 ->cascadeOnDelete()
                 ->comment('The funding partner making the request');
 
-            $table->foreignId('program_funding_id')->nullable()
+            $table->foreignUuid('program_funding_id')->nullable()
                 ->constrained('myb_program_fundings')
                 ->nullOnDelete()
                 ->comment('Specific program funding this request relates to (optional)');
 
-            $table->foreignId('requested_by')
+            $table->foreignUuid('requested_by')
                 ->constrained('users')
                 ->cascadeOnDelete()
                 ->comment('Partner user who submitted the request');
@@ -44,7 +44,7 @@ return new class extends Migration
             $table->text('response')->nullable()
                 ->comment('Admin response to the request');
 
-            $table->foreignId('responded_by')->nullable()
+            $table->foreignUuid('responded_by')->nullable()
                 ->constrained('users')
                 ->nullOnDelete()
                 ->comment('Admin user who responded');

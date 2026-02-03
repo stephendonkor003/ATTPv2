@@ -4,8 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class BudgetAllocation extends Model
+class BudgetAllocation extends BaseModel
 {
     use HasFactory;
 

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class Resource extends Model
+class Resource extends BaseModel
 {
     protected $table = 'myb_resources';
 

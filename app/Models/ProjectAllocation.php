@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ProjectAllocation extends Model
+class ProjectAllocation extends BaseModel
 {
     protected $table = 'myb_project_allocations';
 

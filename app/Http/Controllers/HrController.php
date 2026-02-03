@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class HrController extends Controller
@@ -341,6 +342,59 @@ class HrController extends Controller
             ->get();
 
         return view('hr.applicants.index', compact('vacancy', 'applicants'));
+    }
+
+    public function showApplicant(HrApplicant $applicant)
+    {
+        $this->assertApplicantInScope($applicant);
+
+        $applicant->load(['shortlist', 'vacancy']);
+        $shortlist = $applicant->shortlist;
+
+        return view('hr.applicants.show', compact('applicant', 'shortlist'));
+    }
+
+    public function downloadApplicantFile(Request $request, HrApplicant $applicant, string $which)
+    {
+        $this->assertApplicantInScope($applicant);
+
+        $map = [
+            'cv' => 'cv_path',
+            'cover_letter' => 'cover_letter_path',
+        ];
+
+        abort_unless(isset($map[$which]), 404);
+
+        $path = (string) ($applicant->getAttribute($map[$which]) ?? '');
+        abort_if($path === '', 404, 'File not found.');
+
+        $privateDisk = Storage::disk('local');
+
+        if (! $privateDisk->exists($path) && Storage::disk('public')->exists($path)) {
+            // Best-effort migration from public -> private.
+            $stream = Storage::disk('public')->readStream($path);
+            if ($stream !== false) {
+                $privateDisk->writeStream($path, $stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+                Storage::disk('public')->delete($path);
+            }
+        }
+
+        abort_unless($privateDisk->exists($path), 404, 'File missing on disk.');
+
+        $headers = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        if ($request->boolean('download')) {
+            return $privateDisk->download($path, basename($path), $headers);
+        }
+
+        return $privateDisk->response($path, null, $headers);
     }
 
     /* =====================================================

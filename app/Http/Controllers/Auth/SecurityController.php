@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 
 class SecurityController extends Controller
@@ -143,12 +145,25 @@ class SecurityController extends Controller
 
         $user = auth()->user();
 
+        // Rate limit OTP verification attempts to reduce brute-force risk.
+        $throttleKey = Str::lower('otp_verify|'.$user->id.'|'.$request->ip());
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+
+            return back()->withErrors([
+                'otp_code' => "Too many attempts. Please try again in {$seconds} seconds.",
+            ]);
+        }
+
         // Verify the OTP
         if (!UserLoginOtp::verifyCode($user, $request->otp_code)) {
+            RateLimiter::hit($throttleKey, 600); // 10 minutes
             return back()->withErrors([
                 'otp_code' => 'The verification code is invalid or has expired. Please request a new code.',
             ]);
         }
+
+        RateLimiter::clear($throttleKey);
 
         // Mark OTP as verified for the session
         $user->markOtpAsVerified();
@@ -198,7 +213,9 @@ class SecurityController extends Controller
     {
         $otp = UserLoginOtp::generateFor($user, session()->getId());
 
-        Mail::to($user->email)->queue(new LoginOtpMail($user, $otp->otp_code));
+        Mail::to($user->email)->queue(
+            (new LoginOtpMail($user, $otp->otp_code))->onQueue('otp')
+        );
 
         // Log the activity
         Log::info('Login OTP code sent', [

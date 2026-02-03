@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class ProcurementStepStage extends Model
+class ProcurementStepStage extends BaseModel
 {
     protected $table = 'myb_procurement_step_stages';
 

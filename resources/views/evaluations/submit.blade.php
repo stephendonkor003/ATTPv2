@@ -70,10 +70,10 @@
                                                 {{ ucwords(str_replace('_', ' ', $value->field_key)) }}
                                             </th>
                                             <td>
-                                                @if (is_string($val) && Str::contains($val, ['storage', 'procurement_submissions']))
-                                                    <a href="{{ asset('storage/' . $val) }}" target="_blank"
+                                                @if (is_string($val) && Str::contains($val, 'procurement_submissions'))
+                                                    <a href="{{ route('procurement.submissions.values.download', ['submission' => $applicant->id, 'value' => $value->id]) }}" target="_blank"
                                                         class="btn btn-sm btn-outline-primary me-2">View</a>
-                                                    <a href="{{ asset('storage/' . $val) }}" download
+                                                    <a href="{{ route('procurement.submissions.values.download', ['submission' => $applicant->id, 'value' => $value->id, 'download' => 1]) }}" download
                                                         class="btn btn-sm btn-outline-secondary">Download</a>
                                                 @elseif (is_array($decoded))
                                                     @foreach ($decoded as $item)

@@ -9,6 +9,7 @@ return [
     'create' => 'Crear',
     'update' => 'Actualizar',
     'back' => 'Atrás',
+    'logout' => 'Cerrar sesión',
     'next' => 'Siguiente',
     'previous' => 'Anterior',
     'close' => 'Cerrar',

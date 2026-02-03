@@ -29,14 +29,15 @@ class SetLocale
         // Set the application locale
         App::setLocale($locale);
 
-        // Store locale in session
-        $request->session()->put('locale', $locale);
-
         // Prepare response
         $response = $next($request);
 
+        // Sync session/cookie with the final locale in case it was changed downstream
+        $finalLocale = App::getLocale();
+        $request->session()->put('locale', $finalLocale);
+
         // Set cookie for 30 days
-        Cookie::queue('preferred_locale', $locale, 43200); // 30 days in minutes
+        Cookie::queue('preferred_locale', $finalLocale, 43200); // 30 days in minutes
 
         return $response;
     }

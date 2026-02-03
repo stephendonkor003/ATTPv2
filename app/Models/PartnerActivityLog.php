@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class PartnerActivityLog extends Model
+class PartnerActivityLog extends BaseModel
 {
     protected $table = 'myb_partner_activity_log';
 

@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('myb_program_fundings', function (Blueprint $table) {
             $table->text('rejection_reason')->nullable()->after('status');
-            $table->unsignedBigInteger('rejected_by')->nullable()->after('rejection_reason');
+            $table->uuid('rejected_by')->nullable()->after('rejection_reason');
             $table->timestamp('rejected_at')->nullable()->after('rejected_by');
         });
     }

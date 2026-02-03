@@ -4,10 +4,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use App\Models\GovernanceNode;
 
-class Sector extends Model
+class Sector extends BaseModel
 {
     protected $table = 'myb_sectors';
 

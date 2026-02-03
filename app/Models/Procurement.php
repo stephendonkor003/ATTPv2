@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Support\Str;
 use App\Models\EvaluationAssignment;
 
-class Procurement extends Model
+class Procurement extends BaseModel
 {
     protected $fillable = [
         'resource_id',

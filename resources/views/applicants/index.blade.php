@@ -118,6 +118,10 @@
                                 @endforelse
                             </tbody>
                         </table>
+
+                        <div class="mt-3">
+                            {{ $applicants->withQueryString()->links() }}
+                        </div>
                     </div>
                 </div>
             </div>

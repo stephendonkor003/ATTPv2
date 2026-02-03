@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ReworkRequest extends Model
+class ReworkRequest extends BaseModel
 {
     use HasFactory;
 

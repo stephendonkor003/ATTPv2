@@ -14,12 +14,17 @@ use App\Models\ActivityAllocation;
 use App\Models\SubActivityAllocation;
 use App\Models\AuMemberState;
 use App\Models\AuRegionalBlock;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class ProcurementStructureSeeder extends Seeder
 {
     public function run(): void
     {
+        // UUID migration: use a real user id instead of hardcoding "1".
+        $createdBy = User::where('email', 'amodonlimited@gmail.com')->value('id')
+            ?? User::query()->value('id');
+
         $sectors = collect([
             'Infrastructure & Connectivity',
             'Climate Resilience',
@@ -49,7 +54,7 @@ class ProcurementStructureSeeder extends Seeder
             'Water Security & Sanitation Program',
         ];
 
-        $programs = collect($programNames)->map(function ($name, $index) use ($sectors) {
+        $programs = collect($programNames)->map(function ($name, $index) use ($sectors, $createdBy) {
             $sector = $sectors[$index % $sectors->count()];
             return Program::updateOrCreate(
                 ['name' => $name],
@@ -62,7 +67,7 @@ class ProcurementStructureSeeder extends Seeder
                     'end_year' => 2029,
                     'total_years' => 5,
                     'total_budget' => 1000000 + ($index * 250000),
-                    'created_by' => 1,
+                    'created_by' => $createdBy,
                 ]
             );
         })->values();
@@ -76,7 +81,7 @@ class ProcurementStructureSeeder extends Seeder
             'Renewable irrigation expansion',
         ];
 
-        $projects = collect($projectNames)->map(function ($projectName, $index) use ($programs) {
+        $projects = collect($projectNames)->map(function ($projectName, $index) use ($programs, $createdBy) {
             $program = $programs[$index % $programs->count()];
             return Project::updateOrCreate(
                 ['project_id' => "PRJ-" . str_pad($index + 1, 3, '0', STR_PAD_LEFT)],
@@ -89,12 +94,12 @@ class ProcurementStructureSeeder extends Seeder
                     'end_year' => 2027,
                     'total_years' => 3,
                     'total_budget' => 750000 + ($index * 50000),
-                    'created_by' => 1,
+                    'created_by' => $createdBy,
                 ]
             );
         })->values();
 
-        $activities = collect(range(1, 14))->map(function ($i) use ($projects) {
+        $activities = collect(range(1, 14))->map(function ($i) use ($projects, $createdBy) {
             $project = $projects[($i - 1) % $projects->count()];
             return Activity::updateOrCreate(
                 [
@@ -104,12 +109,12 @@ class ProcurementStructureSeeder extends Seeder
                 [
                     'description' => "Support task {$i} for the {$project->name}",
                     'governance_node_id' => null,
-                    'created_by' => 1,
+                    'created_by' => $createdBy,
                 ]
             );
         })->values();
 
-        collect(range(1, 20))->each(function ($i) use ($activities) {
+        collect(range(1, 20))->each(function ($i) use ($activities, $createdBy) {
             $activity = $activities[($i - 1) % $activities->count()];
             SubActivity::updateOrCreate(
                 [
@@ -118,7 +123,7 @@ class ProcurementStructureSeeder extends Seeder
                 ],
                 [
                     'description' => "Detailing sub-task {$i}.",
-                    'created_by' => 1,
+                    'created_by' => $createdBy,
                 ]
             );
         });
@@ -198,7 +203,7 @@ class ProcurementStructureSeeder extends Seeder
                         'status' => 'approved',
                         'start_year' => 2025 + $i,
                         'end_year' => 2027 + $i,
-                        'created_by' => 1,
+                        'created_by' => $createdBy,
                     ]
                 );
 

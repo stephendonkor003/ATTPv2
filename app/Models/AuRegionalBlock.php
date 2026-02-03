@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class AuRegionalBlock extends Model
+class AuRegionalBlock extends BaseModel
 {
     use HasFactory;
 

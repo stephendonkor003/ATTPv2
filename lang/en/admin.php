@@ -33,12 +33,14 @@ return [
     // Budget Execution
     'execution_commitments' => 'Execution & Commitments',
     'budget_commitments' => 'Budget Commitments',
+    'purchase_requests' => 'Purchase Requests',
     'resource_categories' => 'Resource Categories',
     'resource_items' => 'Resource Items',
 
     // Reports & Analytics
     'reports_oversight' => 'Reports & Oversight',
     'budget_reports' => 'Budget Reports',
+    'commitment_report' => 'Commitment Report',
     'execution_dashboard' => 'Execution Dashboard',
     'program_allocation' => 'Program Allocation',
     'allocations_reports' => 'Allocations Reports',
@@ -208,4 +210,3 @@ return [
     'view_title' => 'View :item',
     'details_title' => ':item Details',
 ];
-

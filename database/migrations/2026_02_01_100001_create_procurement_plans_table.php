@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('myb_procurement_plans', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
 
             // Procurement Code - format: ET-AUC-469498-CS-CQS
             $table->string('procurement_code')->unique();
@@ -23,16 +23,16 @@ return new class extends Migration
             $table->text('description')->nullable();
 
             // Activity & Sub-Activity relationship
-            $table->foreignId('activity_id')->nullable()->constrained('myb_activities')->nullOnDelete();
-            $table->foreignId('sub_activity_id')->nullable()->constrained('myb_sub_activities')->nullOnDelete();
+            $table->foreignUuid('activity_id')->nullable()->constrained('myb_activities')->nullOnDelete();
+            $table->foreignUuid('sub_activity_id')->nullable()->constrained('myb_sub_activities')->nullOnDelete();
 
             // Procurement settings relationships
-            $table->foreignId('method_planned_id')->nullable()->constrained('myb_procurement_method_planned')->nullOnDelete();
-            $table->foreignId('geographic_id')->nullable()->constrained('myb_procurement_geographics')->nullOnDelete();
-            $table->foreignId('stage_id')->nullable()->constrained('myb_procurement_stages')->nullOnDelete();
-            $table->foreignId('status_id')->nullable()->constrained('myb_procurement_statuses')->nullOnDelete();
-            $table->foreignId('step_stage_id')->nullable()->constrained('myb_procurement_step_stages')->nullOnDelete();
-            $table->foreignId('step_approval_id')->nullable()->constrained('myb_procurement_step_approvals')->nullOnDelete();
+            $table->foreignUuid('method_planned_id')->nullable()->constrained('myb_procurement_method_planned')->nullOnDelete();
+            $table->foreignUuid('geographic_id')->nullable()->constrained('myb_procurement_geographics')->nullOnDelete();
+            $table->foreignUuid('stage_id')->nullable()->constrained('myb_procurement_stages')->nullOnDelete();
+            $table->foreignUuid('status_id')->nullable()->constrained('myb_procurement_statuses')->nullOnDelete();
+            $table->foreignUuid('step_stage_id')->nullable()->constrained('myb_procurement_step_stages')->nullOnDelete();
+            $table->foreignUuid('step_approval_id')->nullable()->constrained('myb_procurement_step_approvals')->nullOnDelete();
 
             // Launch status
             $table->boolean('is_launched')->default(false);
@@ -53,8 +53,8 @@ return new class extends Migration
             $table->integer('fiscal_year')->nullable();
 
             // Audit fields
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('updated_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
             // Indexes

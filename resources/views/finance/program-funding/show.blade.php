@@ -244,7 +244,7 @@
         {{-- ================= SUPPORTING DOCUMENTS ================= --}}
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-body">
-                @can('finance.program_funding.documents')
+                @can('finance.program_funding.view')
                     <h6 class="fw-bold mb-3">Supporting Documents</h6>
 
                     @if ($programFunding->documents->count())
@@ -266,7 +266,7 @@
                                             <td>{{ $doc->created_at ?? '—' }}</td>
                                             <td>{{ $doc->created_at ?? '—' }}</td>
                                             <td class="text-center">
-                                                <a href="{{ asset('storage/' . $doc->file_path) }}" target="_blank"
+                                                <a href="{{ route('finance.program-funding.documents.download', [$programFunding, $doc]) }}" target="_blank"
                                                     class="btn btn-sm btn-outline-primary">
                                                     <i class="feather-download me-1"></i> View
                                                 </a>

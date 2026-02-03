@@ -3,9 +3,9 @@
 // App\Models\ProcurementFormMap.php
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ProcurementFormMap extends Model
+class ProcurementFormMap extends BaseModel
 {
     protected $fillable = [
         'procurement_id',

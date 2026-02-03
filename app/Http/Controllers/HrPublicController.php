@@ -52,12 +52,14 @@ class HrPublicController extends Controller
         // Fetch vacancy to inherit governance_node_id
         $vacancy = HrVacancy::findOrFail($validated['vacancy_id']);
 
+        // Store applicant documents on the default (private) disk. These files must
+        // only be accessible via authorized download endpoints.
         $resumePath = $request->file('resume')
-            ->store('hr/applications/cv', 'public');
+            ->store('hr/applications/cv');
 
         $coverPath = $request->hasFile('cover_letter')
             ? $request->file('cover_letter')
-                ->store('hr/applications/cover_letters', 'public')
+                ->store('hr/applications/cover_letters')
             : null;
 
         HrApplicant::create([

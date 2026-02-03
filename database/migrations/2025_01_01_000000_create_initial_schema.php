@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('applicants', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('think_tank_name')->nullable();
             $table->string('country')->nullable();
             $table->string('sub_region')->nullable();
@@ -36,51 +36,51 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('assignments', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('applicant_id')->nullable();
-            $table->foreignId('evaluator_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('applicant_id')->nullable();
+            $table->foreignUuid('evaluator_id')->nullable();
             $table->string('evaluator_ids')->nullable();
             $table->string('role')->nullable();
             $table->timestamps();
         });
         Schema::create('bids', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('project_id')->nullable();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('project_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
             $table->decimal('amount', 15, 2)->nullable();
             $table->text('proposal')->nullable();
             $table->timestamps();
         });
         Schema::create('budget_allocations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('allocatable_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('allocatable_id')->nullable();
             $table->string('allocatable_type')->nullable();
             $table->integer('year_number')->nullable();
             $table->decimal('amount', 15, 2)->nullable();
             $table->timestamps();
         });
         Schema::create('categories', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
         });
         Schema::create('committee_members', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('committee_id')->nullable();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('committee_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
             $table->timestamps();
         });
         Schema::create('committees', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
-            $table->foreignId('project_id')->nullable();
-            $table->foreignId('chairperson_id')->nullable();
+            $table->foreignUuid('project_id')->nullable();
+            $table->foreignUuid('chairperson_id')->nullable();
             $table->timestamps();
         });
         Schema::create('dynamic_form_fields', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('form_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('form_id')->nullable();
             $table->string('label')->nullable();
             $table->string('field_key')->nullable();
             $table->string('field_type')->nullable();
@@ -91,14 +91,14 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('dynamic_forms', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('resource_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('resource_id')->nullable();
             $table->string('name')->nullable();
             $table->string('applies_to')->nullable();
             $table->string('status')->nullable();
             $table->boolean('is_active')->nullable();
             $table->string('created_by')->nullable();
-            $table->foreignId('procurement_id')->nullable();
+            $table->foreignUuid('procurement_id')->nullable();
             $table->timestamp('submitted_at')->nullable();
             $table->timestamp('approved_at')->nullable();
             $table->string('approved_by')->nullable();
@@ -106,65 +106,65 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('evaluation_assignments', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('evaluation_id')->nullable();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('evaluation_id')->nullable();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
             $table->string('assigned_by')->nullable();
             $table->timestamp('assigned_at')->nullable();
             $table->string('status')->nullable();
             $table->timestamps();
         });
         Schema::create('evaluation_criteria', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('evaluation_section_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('evaluation_section_id')->nullable();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->decimal('max_score', 15, 2)->nullable();
             $table->timestamps();
         });
         Schema::create('evaluation_criteria_scores', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('submission_id')->nullable();
-            $table->foreignId('evaluation_criteria_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('submission_id')->nullable();
+            $table->foreignUuid('evaluation_criteria_id')->nullable();
             $table->decimal('score', 15, 2)->nullable();
             $table->string('decision')->nullable();
             $table->text('comment')->nullable();
             $table->timestamps();
         });
         Schema::create('evaluation_results', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('submission_id')->nullable();
-            $table->foreignId('form_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('submission_id')->nullable();
+            $table->foreignUuid('form_id')->nullable();
             $table->string('field_key')->nullable();
-            $table->foreignId('evaluator_id')->nullable();
+            $table->foreignUuid('evaluator_id')->nullable();
             $table->decimal('score', 15, 2)->nullable();
             $table->text('comment')->nullable();
             $table->timestamp('evaluated_at')->nullable();
             $table->timestamps();
         });
         Schema::create('evaluation_section_scores', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('submission_id')->nullable();
-            $table->foreignId('evaluation_section_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('submission_id')->nullable();
+            $table->foreignUuid('evaluation_section_id')->nullable();
             $table->decimal('section_score', 15, 2)->nullable();
             $table->text('strengths')->nullable();
             $table->string('weaknesses')->nullable();
             $table->timestamps();
         });
         Schema::create('evaluation_sections', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('evaluation_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('evaluation_id')->nullable();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
         });
         Schema::create('evaluation_submissions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('evaluation_id')->nullable();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('evaluator_id')->nullable();
-            $table->foreignId('form_submission_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('evaluation_id')->nullable();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('evaluator_id')->nullable();
+            $table->foreignUuid('form_submission_id')->nullable();
             $table->decimal('overall_score', 15, 2)->nullable();
             $table->text('comments')->nullable();
             $table->string('video_path')->nullable();
@@ -173,7 +173,7 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('evaluations', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->string('status')->nullable();
@@ -182,16 +182,16 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('evaluator_teams', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
-            $table->foreignId('leader_id')->nullable();
+            $table->foreignUuid('leader_id')->nullable();
             $table->string('created_by')->nullable();
             $table->timestamps();
         });
         Schema::create('financial_evaluations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('applicant_id')->nullable();
-            $table->foreignId('evaluator_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('applicant_id')->nullable();
+            $table->foreignUuid('evaluator_id')->nullable();
             $table->text('strength_financial_health')->nullable();
             $table->text('gap_financial_health')->nullable();
             $table->text('strength_accuracy')->nullable();
@@ -209,24 +209,24 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('form_submission_values', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('submission_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('submission_id')->nullable();
             $table->string('field_key')->nullable();
             $table->string('value')->nullable();
             $table->timestamps();
         });
         Schema::create('form_submissions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('procurement_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('procurement_id')->nullable();
             $table->string('procurement_submission_code')->nullable();
-            $table->foreignId('form_id')->nullable();
+            $table->foreignUuid('form_id')->nullable();
             $table->string('submitted_by')->nullable();
             $table->string('status')->nullable();
             $table->timestamp('submitted_at')->nullable();
             $table->timestamps();
         });
         Schema::create('geo_regions', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('continent')->nullable();
             $table->string('sub_region')->nullable();
             $table->string('country')->nullable();
@@ -234,8 +234,8 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('hr_applicants', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('vacancy_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('vacancy_id')->nullable();
             $table->string('full_name')->nullable();
             $table->string('email')->nullable();
             $table->string('phone')->nullable();
@@ -247,9 +247,9 @@ return new class extends Migration
             $table->timestamp('submitted_at')->nullable();
         });
         Schema::create('hr_employees', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('applicant_id')->nullable();
-            $table->foreignId('position_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('applicant_id')->nullable();
+            $table->foreignUuid('position_id')->nullable();
             $table->string('employee_code')->nullable();
             $table->date('employment_start_date')->nullable();
             $table->date('employment_end_date')->nullable();
@@ -259,9 +259,9 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('hr_positions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('resource_id')->nullable();
-            $table->foreignId('department_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('resource_id')->nullable();
+            $table->foreignUuid('department_id')->nullable();
             $table->string('title')->nullable();
             $table->string('employment_type')->nullable();
             $table->string('grade_level')->nullable();
@@ -271,8 +271,8 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('hr_vacancies', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('position_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('position_id')->nullable();
             $table->string('vacancy_code')->nullable();
             $table->date('open_date')->nullable();
             $table->date('close_date')->nullable();
@@ -285,27 +285,27 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('myb_activities', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('project_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('project_id')->nullable();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->string('created_by')->nullable();
             $table->timestamps();
         });
         Schema::create('myb_activity_allocations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('activity_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('activity_id')->nullable();
             $table->integer('year')->nullable();
             $table->decimal('amount', 15, 2)->nullable();
             $table->timestamps();
         });
         Schema::create('myb_budget_commitments', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('program_funding_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('program_funding_id')->nullable();
             $table->decimal('allocation_level', 15, 2)->nullable();
-            $table->foreignId('allocation_id')->nullable();
-            $table->foreignId('resource_category_id')->nullable();
-            $table->foreignId('resource_id')->nullable();
+            $table->foreignUuid('allocation_id')->nullable();
+            $table->foreignUuid('resource_category_id')->nullable();
+            $table->foreignUuid('resource_id')->nullable();
             $table->decimal('commitment_amount', 15, 2)->nullable();
             $table->integer('commitment_year')->nullable();
             $table->string('status')->nullable();
@@ -314,25 +314,25 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
         });
         Schema::create('myb_departments', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('code')->nullable();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
-            $table->foreignId('head_user_id')->nullable();
+            $table->foreignUuid('head_user_id')->nullable();
             $table->string('status')->nullable();
             $table->string('created_by')->nullable();
             $table->timestamps();
         });
         Schema::create('myb_funders', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->string('type')->nullable();
             $table->string('currency')->nullable();
             $table->timestamps();
         });
         Schema::create('myb_program_funding_documents', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('program_funding_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('program_funding_id')->nullable();
             $table->string('document_type')->nullable();
             $table->string('file_name')->nullable();
             $table->string('file_path')->nullable();
@@ -340,10 +340,10 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('myb_program_fundings', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('department_id')->nullable();
-            $table->foreignId('program_id')->nullable();
-            $table->foreignId('funder_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('department_id')->nullable();
+            $table->foreignUuid('program_id')->nullable();
+            $table->foreignUuid('funder_id')->nullable();
             $table->decimal('funding_type', 15, 2)->nullable();
             $table->decimal('approved_amount', 15, 2)->nullable();
             $table->string('currency')->nullable();
@@ -356,9 +356,9 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('myb_programs', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('program_id')->nullable();
-            $table->foreignId('sector_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('program_id')->nullable();
+            $table->foreignUuid('sector_id')->nullable();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->string('currency')->nullable();
@@ -369,17 +369,17 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('myb_project_allocations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('project_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('project_id')->nullable();
             $table->integer('year')->nullable();
             $table->integer('year_number')->nullable();
             $table->integer('actual_year')->nullable();
             $table->decimal('amount', 15, 2)->nullable();
         });
         Schema::create('myb_projects', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('program_id')->nullable();
-            $table->foreignId('project_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('program_id')->nullable();
+            $table->foreignUuid('project_id')->nullable();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->string('currency')->nullable();
@@ -391,7 +391,7 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('myb_resource_categories', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->string('status')->nullable();
@@ -399,8 +399,8 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('myb_resources', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('resource_category_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('resource_category_id')->nullable();
             $table->string('name')->nullable();
             $table->string('reference_code')->nullable();
             $table->text('description')->nullable();
@@ -410,43 +410,43 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('myb_sectors', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
         });
         Schema::create('myb_sub_activities', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('activity_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('activity_id')->nullable();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->string('created_by')->nullable();
             $table->timestamps();
         });
         Schema::create('myb_sub_activity_allocations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('sub_activity_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('sub_activity_id')->nullable();
             $table->integer('year')->nullable();
             $table->decimal('amount', 15, 2)->nullable();
             $table->timestamps();
         });
         Schema::create('permissions', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->string('module')->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
         });
         Schema::create('prescreening_assignments', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
             $table->string('assigned_by')->nullable();
             $table->timestamp('assigned_at')->nullable();
         });
         Schema::create('prescreening_criteria', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('prescreening_template_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('prescreening_template_id')->nullable();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->string('field_key')->nullable();
@@ -457,20 +457,20 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('prescreening_evaluations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('submission_id')->nullable();
-            $table->foreignId('prescreening_template_id')->nullable();
-            $table->foreignId('criterion_id')->nullable();
-            $table->foreignId('evaluator_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('submission_id')->nullable();
+            $table->foreignUuid('prescreening_template_id')->nullable();
+            $table->foreignUuid('criterion_id')->nullable();
+            $table->foreignUuid('evaluator_id')->nullable();
             $table->string('evaluation_value')->nullable();
             $table->boolean('is_passed')->nullable();
             $table->text('remarks')->nullable();
             $table->timestamp('evaluated_at')->nullable();
         });
         Schema::create('prescreening_results', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('submission_id')->nullable();
-            $table->foreignId('prescreening_template_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('submission_id')->nullable();
+            $table->foreignUuid('prescreening_template_id')->nullable();
             $table->decimal('total_criteria', 15, 2)->nullable();
             $table->string('passed_criteria')->nullable();
             $table->string('failed_criteria')->nullable();
@@ -482,14 +482,14 @@ return new class extends Migration
             $table->timestamp('rework_requested_at')->nullable();
         });
         Schema::create('prescreening_template_procurements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('prescreening_template_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('prescreening_template_id')->nullable();
             $table->string('assigned_by')->nullable();
             $table->timestamp('assigned_at')->nullable();
         });
         Schema::create('prescreening_templates', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->boolean('is_active')->nullable();
@@ -497,35 +497,35 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('procurement_audit_logs', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('user_id')->nullable();
             $table->string('action')->nullable();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('form_id')->nullable();
-            $table->foreignId('submission_id')->nullable();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('form_id')->nullable();
+            $table->foreignUuid('submission_id')->nullable();
             $table->string('metadata')->nullable();
             $table->timestamp('created_at')->nullable();
         });
         Schema::create('procurement_form_assignments', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('form_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('form_id')->nullable();
             $table->string('stage')->nullable();
             $table->string('created_by')->nullable();
             $table->timestamps();
         });
         Schema::create('procurement_form_maps', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('form_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('form_id')->nullable();
             $table->string('stage')->nullable();
             $table->timestamps();
         });
         Schema::create('procurement_user_permissions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->nullable();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('form_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('user_id')->nullable();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('form_id')->nullable();
             $table->string('stage')->nullable();
             $table->string('permission')->nullable();
             $table->string('assigned_by')->nullable();
@@ -534,14 +534,14 @@ return new class extends Migration
         });
         Schema::create('applicant_user', function (Blueprint $table) {
             // Pivot table
-            $table->foreignId('applicant_id')->nullable();
-            $table->foreignId('user_id')->nullable();
+            $table->foreignUuid('applicant_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
             $table->string('role')->nullable();
             $table->timestamps();
         });
         Schema::create('procurements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('resource_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('resource_id')->nullable();
             $table->string('title')->nullable();
             $table->string('slug')->nullable();
             $table->string('reference_no')->nullable();
@@ -553,56 +553,56 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('program_budget_allocations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('project_id')->nullable();
-            $table->foreignId('activity_id')->nullable();
-            $table->foreignId('sub_activity_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('project_id')->nullable();
+            $table->foreignUuid('activity_id')->nullable();
+            $table->foreignUuid('sub_activity_id')->nullable();
             $table->integer('year')->nullable();
             $table->decimal('allocated_amount', 15, 2)->nullable();
             $table->timestamps();
         });
         Schema::create('rework_requests', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('evaluation_id')->nullable();
-            $table->foreignId('evaluator_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('evaluation_id')->nullable();
+            $table->foreignUuid('evaluator_id')->nullable();
             $table->string('message')->nullable();
             $table->string('status')->nullable();
             $table->timestamps();
         });
         Schema::create('user_permission', function (Blueprint $table) {
             // Pivot table
-            $table->foreignId('user_id')->nullable();
-            $table->foreignId('permission_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
+            $table->foreignUuid('permission_id')->nullable();
         });
         Schema::create('role_permission', function (Blueprint $table) {
             // Pivot table
-            $table->foreignId('role_id')->nullable();
-            $table->foreignId('permission_id')->nullable();
+            $table->foreignUuid('role_id')->nullable();
+            $table->foreignUuid('permission_id')->nullable();
         });
         Schema::create('roles', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
         });
         Schema::create('site_visit_approvals', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('site_visit_id')->nullable();
-            $table->foreignId('reviewer_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('site_visit_id')->nullable();
+            $table->foreignUuid('reviewer_id')->nullable();
             $table->string('status')->nullable();
             $table->text('remarks')->nullable();
         });
         Schema::create('site_visit_assignments', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('site_visit_id')->nullable();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('site_visit_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
         });
         Schema::create('site_visit_evaluations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('consortium_id')->nullable();
-            $table->foreignId('team_id')->nullable();
-            $table->foreignId('leader_id')->nullable();
-            $table->foreignId('evaluator_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('consortium_id')->nullable();
+            $table->foreignUuid('team_id')->nullable();
+            $table->foreignUuid('leader_id')->nullable();
+            $table->foreignUuid('evaluator_id')->nullable();
             $table->date('evaluation_date')->nullable();
             $table->decimal('s1_1_score', 15, 2)->nullable();
             $table->text('s1_1_strength')->nullable();
@@ -681,37 +681,37 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('site_visit_group_members', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('group_id')->nullable();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('group_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
             $table->string('role')->nullable();
         });
         Schema::create('site_visit_groups', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('site_visit_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('site_visit_id')->nullable();
             $table->string('group_name')->nullable();
-            $table->foreignId('leader_id')->nullable();
+            $table->foreignUuid('leader_id')->nullable();
         });
         Schema::create('site_visit_medias', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('site_visit_id')->nullable();
-            $table->foreignId('observation_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('site_visit_id')->nullable();
+            $table->foreignUuid('observation_id')->nullable();
             $table->string('file_path')->nullable();
             $table->string('file_type')->nullable();
             $table->string('uploaded_by')->nullable();
         });
         Schema::create('site_visit_observations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('site_visit_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('site_visit_id')->nullable();
             $table->string('category')->nullable();
             $table->text('description')->nullable();
             $table->string('severity')->nullable();
             $table->string('action_required')->nullable();
         });
         Schema::create('site_visits', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('procurement_id')->nullable();
-            $table->foreignId('form_submission_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('procurement_id')->nullable();
+            $table->foreignUuid('form_submission_id')->nullable();
             $table->string('assignment_type')->nullable();
             $table->string('visit_type')->nullable();
             $table->date('visit_date')->nullable();
@@ -721,23 +721,23 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('team_consortiums', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('team_id')->nullable();
-            $table->foreignId('consortium_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('team_id')->nullable();
+            $table->foreignUuid('consortium_id')->nullable();
             $table->string('assigned_by')->nullable();
             $table->string('status')->nullable();
             $table->timestamps();
         });
         Schema::create('team_members', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('team_id')->nullable();
-            $table->foreignId('user_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('team_id')->nullable();
+            $table->foreignUuid('user_id')->nullable();
             $table->string('role')->nullable();
             $table->timestamps();
         });
         Schema::create('think_datasets', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('ottd_id')->nullable();
+            $table->uuid('id')->primary();
+            $table->foreignUuid('ottd_id')->nullable();
             $table->string('tt_name_en')->nullable();
             $table->string('country')->nullable();
             $table->string('continent')->nullable();
@@ -780,13 +780,13 @@ return new class extends Migration
             $table->timestamps();
         });
         Schema::create('users', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name')->nullable();
             $table->string('email')->nullable();
             $table->string('password')->nullable();
             $table->string('user_type')->nullable();
             $table->boolean('must_change_password')->nullable();
-            $table->foreignId('role_id')->nullable();
+            $table->foreignUuid('role_id')->nullable();
             $table->timestamps();
         });
     }

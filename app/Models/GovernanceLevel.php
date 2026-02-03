@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class GovernanceLevel extends Model
+class GovernanceLevel extends BaseModel
 {
     protected $table = 'myb_governance_levels';
 

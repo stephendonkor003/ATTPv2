@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class Assignment extends Model
+class Assignment extends BaseModel
 {
     protected $fillable = [
         'applicant_id',

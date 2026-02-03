@@ -1,9 +1,9 @@
 <?php
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class PrescreeningTemplate extends Model
+class PrescreeningTemplate extends BaseModel
 {
     protected $fillable = [
         'name',

@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ProcurementMethodPlannedMilestone extends Model
+class ProcurementMethodPlannedMilestone extends BaseModel
 {
     protected $table = 'myb_procurement_method_planned_milestones';
 

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class GeoRegion extends Model
+class GeoRegion extends BaseModel
 {
     protected $fillable = ['continent', 'sub_region', 'country', 'region_group'];
 }

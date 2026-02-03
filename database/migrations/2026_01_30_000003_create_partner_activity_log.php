@@ -12,14 +12,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('myb_partner_activity_log', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
 
-            $table->foreignId('funder_id')
+            $table->foreignUuid('funder_id')
                 ->constrained('myb_funders')
                 ->cascadeOnDelete()
                 ->comment('The funding partner');
 
-            $table->foreignId('user_id')
+            $table->foreignUuid('user_id')
                 ->constrained('users')
                 ->cascadeOnDelete()
                 ->comment('The partner user performing the action');

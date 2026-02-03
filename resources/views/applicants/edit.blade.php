@@ -116,7 +116,7 @@
                                 <label class="form-label">{{ $label }}</label>
                                 @if ($applicant->$field)
                                     <div class="mb-2">
-                                        <a href="{{ asset('storage/' . $applicant->$field) }}" target="_blank"
+                                        <a href="{{ route('applicants.documents.download', [$applicant->id, $field]) }}" target="_blank"
                                             class="btn btn-sm btn-outline-success">
                                             <i class="feather-eye"></i> View Current
                                         </a>

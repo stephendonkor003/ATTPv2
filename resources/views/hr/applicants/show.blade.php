@@ -45,9 +45,13 @@
                     <div class="card-body">
                         <h6 class="fw-semibold mb-3">CV Preview</h6>
 
-                        <iframe src="{{ asset('storage/' . $applicant->cv_path) }}"
-                            style="width:100%; height:500px; border:none;">
-                        </iframe>
+                        @if ($applicant->cv_path)
+                            <iframe src="{{ route('hr.applicants.files', [$applicant->id, 'cv']) }}"
+                                style="width:100%; height:500px; border:none;">
+                            </iframe>
+                        @else
+                            <div class="alert alert-warning mb-0">No CV uploaded.</div>
+                        @endif
                     </div>
                 </div>
             </div>

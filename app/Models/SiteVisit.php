@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class SiteVisit extends Model
+class SiteVisit extends BaseModel
 {
     protected $fillable = [
         'procurement_id',

@@ -128,7 +128,7 @@
 
 
                 {{-- ================= BUDGET EXECUTION ================= --}}
-                @canany(['finance.commitments.view', 'finance.resources.view', 'finance.executions.view'])
+	                @canany(['finance.commitments.view', 'finance.purchase_requests.view', 'finance.resources.view', 'finance.executions.view'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.budget_execution') }}</label>
                     </li>
@@ -140,19 +140,27 @@
                             <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
                         </a>
 
-                        <ul class="nxl-submenu">
-                            @can('finance.commitments.view')
-                                <li class="nxl-item">
-                                    <a href="{{ route('finance.commitments.index') }}" class="nxl-link">
-                                        <i class="feather-edit me-2"></i> {{ __('admin.budget_commitments') }}
-                                    </a>
-                                </li>
-                            @endcan
+	                        <ul class="nxl-submenu">
+	                            @can('finance.commitments.view')
+	                                <li class="nxl-item">
+	                                    <a href="{{ route('finance.commitments.index') }}" class="nxl-link">
+	                                        <i class="feather-edit me-2"></i> {{ __('admin.budget_commitments') }}
+	                                    </a>
+	                                </li>
+	                            @endcan
+	
+	                            @can('finance.purchase_requests.view')
+	                                <li class="nxl-item">
+	                                    <a href="{{ route('finance.purchase-requests.index') }}" class="nxl-link">
+	                                        <i class="feather-file-text me-2"></i> {{ __('admin.purchase_requests') }}
+	                                    </a>
+	                                </li>
+	                            @endcan
 
-                            @can('finance.resources.view')
-                                <li class="nxl-item">
-                                    <a href="{{ route('finance.resources.categories.index') }}" class="nxl-link">
-                                        <i class="feather-folder me-2"></i> {{ __('admin.resource_categories') }}
+	                            @can('finance.resources.view')
+	                                <li class="nxl-item">
+	                                    <a href="{{ route('finance.resources.categories.index') }}" class="nxl-link">
+	                                        <i class="feather-folder me-2"></i> {{ __('admin.resource_categories') }}
                                     </a>
                                 </li>
 
@@ -193,6 +201,12 @@
                                     <a href="{{ route('budget.reports.index') }}" class="nxl-link">
                                         <i class="feather-file-text me-2"></i>
                                         {{ __('admin.budget_reports') }}
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.reports.commitments') }}" class="nxl-link">
+                                        <i class="feather-bar-chart-2 me-2"></i>
+                                        {{ __('admin.commitment_report') }}
                                     </a>
                                 </li>
                             @endcan
@@ -810,7 +824,7 @@
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="btn btn-danger text-white w-100">
-                            <i class="feather-log-out me-1"></i> Logout
+                            <i class="feather-log-out me-1"></i> {{ __('common.logout') }}
                         </button>
                     </form>
                 </div>

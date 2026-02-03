@@ -35,4 +35,20 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | IP Geolocation (Optional)
+    |--------------------------------------------------------------------------
+    |
+    | For security/audit logs you may want to enrich requests with an IP → country
+    | lookup. This can add latency and share IP addresses with a third-party,
+    | so keep it disabled by default and enable explicitly in production.
+    |
+    */
+    'ipgeo' => [
+        'enabled' => env('IP_GEO_ENABLED', false),
+        'base_url' => env('IP_GEO_BASE_URL', 'https://ipapi.co'),
+        'timeout_seconds' => (int) env('IP_GEO_TIMEOUT', 2),
+    ],
+
 ];

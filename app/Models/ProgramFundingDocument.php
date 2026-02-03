@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ProgramFundingDocument extends Model
+class ProgramFundingDocument extends BaseModel
 {
     protected $table = 'myb_program_funding_documents';
 

@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class EvaluationAssignment extends Model
+class EvaluationAssignment extends BaseModel
 {
     use HasFactory;
 

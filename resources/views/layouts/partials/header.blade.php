@@ -33,7 +33,7 @@
                 <div class="nxl-lavel-mega-menu-toggle d-flex d-lg-none">
                     <a href="javascript:void(0)" id="nxl-lavel-mega-menu-hide">
                         <i class="feather-arrow-left me-2"></i>
-                        <span>Back</span>
+                        <span>{{ __('common.back') }}</span>
                     </a>
                 </div>
                 <!--! [Start] nxl-lavel-mega-menu-wrapper !-->
@@ -102,7 +102,7 @@
                             @csrf
                             <button type="submit" class="dropdown-item">
                                 <i class="feather-log-out"></i>
-                                <span>Logout</span>
+                                <span>{{ __('common.logout') }}</span>
                             </button>
                         </form>
 

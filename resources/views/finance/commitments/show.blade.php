@@ -124,20 +124,78 @@
 
                 <hr>
 
-                {{-- ===================== RESOURCE DETAILS ===================== --}}
-                <h6 class="fw-bold text-success mb-3">Resource Commitment</h6>
+                {{-- ===================== RESOURCE / PURCHASE REQUEST DETAILS ===================== --}}
+                @if ($commitment->purchaseRequest)
+                    <h6 class="fw-bold text-success mb-3">Purchase Request</h6>
 
-                <div class="row g-3 mb-4">
-                    <div class="col-md-6">
-                        <strong>Resource Category</strong><br>
-                        {{ $commitment->resourceCategory->name ?? '—' }}
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <strong>Reference</strong><br>
+                            @can('finance.purchase_requests.view')
+                                <a href="{{ route('finance.purchase-requests.show', $commitment->purchaseRequest) }}">
+                                    {{ $commitment->purchaseRequest->reference_no }}
+                                </a>
+                            @else
+                                {{ $commitment->purchaseRequest->reference_no }}
+                            @endcan
+                        </div>
+
+                        <div class="col-md-6">
+                            <strong>Total Amount</strong><br>
+                            <span class="fw-bold text-primary">
+                                {{ $commitment->purchaseRequest->currency ?? $commitment->programFunding->program->currency ?? '' }}
+                                {{ number_format((float) $commitment->purchaseRequest->total_amount, 2) }}
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="col-md-6">
-                        <strong>Resource Item</strong><br>
-                        {{ $commitment->resource->name ?? '—' }}
+                    @if (!empty($commitment->description))
+                        <div class="mb-3">
+                            <strong>Description</strong><br>
+                            <span class="text-muted">{{ $commitment->description }}</span>
+                        </div>
+                    @endif
+
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th>Category</th>
+                                    <th>Resource Item</th>
+                                    <th class="text-end" style="width: 160px;">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($commitment->purchaseRequest->items as $item)
+                                    <tr>
+                                        <td>{{ $loop->iteration }}</td>
+                                        <td>{{ $item->resourceCategory->name ?? '—' }}</td>
+                                        <td>{{ $item->resource->name ?? '—' }}</td>
+                                        <td class="text-end fw-semibold">
+                                            {{ $commitment->purchaseRequest->currency ?? $commitment->programFunding->program->currency ?? '' }}
+                                            {{ number_format((float) $item->amount, 2) }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
                     </div>
-                </div>
+                @else
+                    <h6 class="fw-bold text-success mb-3">Resource Commitment</h6>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <strong>Resource Category</strong><br>
+                            {{ $commitment->resourceCategory->name ?? '—' }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <strong>Resource Item</strong><br>
+                            {{ $commitment->resource->name ?? '—' }}
+                        </div>
+                    </div>
+                @endif
 
                 <hr>
 

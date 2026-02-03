@@ -15,7 +15,7 @@ return new class extends Migration
             $table->boolean('has_portal_access')->default(false)->after('currency')
                 ->comment('Whether this funder has access to the partner portal');
 
-            $table->foreignId('user_id')->nullable()->after('has_portal_access')
+            $table->foreignUuid('user_id')->nullable()->after('has_portal_access')
                 ->constrained('users')
                 ->nullOnDelete()
                 ->comment('User account for portal access');

@@ -10,6 +10,7 @@ use App\Mail\EvaluationCompleted;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 class EvaluationSubmissionController extends Controller
 {
@@ -337,8 +338,9 @@ class EvaluationSubmissionController extends Controller
         /* ===============================
          | VIDEO + FINALIZE
          =============================== */
+        // Store identity video on the default (private) disk. Access is via authorized routes only.
         $submission->video_path = $request->file('video')
-            ->store("evaluation_proofs/{$submission->id}", 'public');
+            ->store("evaluation_proofs/{$submission->id}");
 
         $submission->submitted_at = now();
         $submission->save();
@@ -417,6 +419,53 @@ class EvaluationSubmissionController extends Controller
             'submission',
             'applicant'
         ));
+    }
+
+    /**
+     * Stream the evaluator identity video securely from the private disk.
+     */
+    public function video(EvaluationAssignment $assignment, FormSubmission $applicant)
+    {
+        abort_if(!$this->canAccessAssignment($assignment), 403);
+        abort_if($applicant->procurement_id !== $assignment->procurement_id, 404);
+
+        if ($assignment->form_submission_id) {
+            abort_if($assignment->form_submission_id !== $applicant->id, 403);
+        }
+
+        $submission = EvaluationSubmission::where([
+            'evaluation_id'      => $assignment->evaluation_id,
+            'procurement_id'     => $assignment->procurement_id,
+            'evaluator_id'       => auth()->id(),
+            'form_submission_id' => $applicant->id,
+        ])->firstOrFail();
+
+        $path = (string) ($submission->video_path ?? '');
+        abort_if($path === '', 404, 'Video not found.');
+
+        $privateDisk = Storage::disk('local');
+
+        if (! $privateDisk->exists($path) && Storage::disk('public')->exists($path)) {
+            // Best-effort migration from public -> private.
+            $stream = Storage::disk('public')->readStream($path);
+            if ($stream !== false) {
+                $privateDisk->writeStream($path, $stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+                Storage::disk('public')->delete($path);
+            }
+        }
+
+        abort_unless($privateDisk->exists($path), 404, 'Video file missing on disk.');
+
+        $headers = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        return $privateDisk->response($path, null, $headers);
     }
 
     /* =====================================================

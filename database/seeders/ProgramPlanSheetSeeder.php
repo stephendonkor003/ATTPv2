@@ -10,11 +10,16 @@ use App\Models\ProcurementStage;
 use App\Models\ProcurementStatus;
 use App\Models\ProcurementStepApproval;
 use App\Models\ProcurementStepStage;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 class ProgramPlanSheetSeeder extends Seeder
 {
     public function run(): void
     {
+        // UUID migration: created_by is a FK to users.id (uuid), so don't hardcode "1".
+        $createdBy = User::where('email', 'amodonlimited@gmail.com')->value('id')
+            ?? User::query()->value('id');
+
         $method = ProcurementMethodPlanned::first();
         $stage = ProcurementStage::active()->ordered()->first();
         $status = ProcurementStatus::active()->orderBy('sort_order')->first();
@@ -54,7 +59,7 @@ class ProgramPlanSheetSeeder extends Seeder
                 [
                     'description' => $planData['description'],
                     'is_active' => true,
-                    'created_by' => 1,
+                    'created_by' => $createdBy,
                 ]
             );
 
@@ -96,7 +101,7 @@ class ProgramPlanSheetSeeder extends Seeder
                         'estimated_budget' => $budget,
                         'currency' => 'USD',
                         'fiscal_year' => 2026,
-                        'created_by' => 1,
+                        'created_by' => $createdBy,
                     ]
                 );
             }

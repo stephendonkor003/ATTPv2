@@ -80,7 +80,11 @@
                     <div class="text-muted small mb-1">Procurement Description</div>
 
                     <div class="border rounded p-3 bg-light" style="line-height:1.75;">
-                        {!! $procurement->description ?: '<span class="text-muted">No description provided.</span>' !!}
+                        @if ($procurement->description)
+                            {!! nl2br(e($procurement->description)) !!}
+                        @else
+                            <span class="text-muted">No description provided.</span>
+                        @endif
                     </div>
                 </div>
             </div>

@@ -10,6 +10,7 @@ return [
     'create' => 'Create',
     'update' => 'Update',
     'back' => 'Back',
+    'logout' => 'Logout',
     'next' => 'Next',
     'previous' => 'Previous',
     'close' => 'Close',

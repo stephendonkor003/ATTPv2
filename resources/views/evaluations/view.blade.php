@@ -231,7 +231,7 @@
 
                     @if ($submission->video_path)
                         <video class="w-100 mt-2" controls>
-                            <source src="{{ asset('storage/' . $submission->video_path) }}">
+                            <source src="{{ route('eval.assign.video', [$assignment->id, $applicant->id]) }}">
                         </video>
                     @else
                         <div class="alert alert-warning mt-2">

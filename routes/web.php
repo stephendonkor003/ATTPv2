@@ -86,19 +86,20 @@ use App\Http\Controllers\{
 | BUDGET & FINANCE MODULE
 |--------------------------------------------------------------------------
 */
-use App\Http\Controllers\{
-    SectorController,
-    ProgramController,
-    ProjectController,
-    ActivityController,
-    SubActivityController,
-    // AllocationController,
-    AllocationSummaryController,
-    BudgetAllocationController,
-    BudgetCommitmentController,
-    BudgetReportController,
-    ProjectBudgetController,
-};
+	use App\Http\Controllers\{
+	    SectorController,
+	    ProgramController,
+	    ProjectController,
+	    ActivityController,
+	    SubActivityController,
+	    // AllocationController,
+	    AllocationSummaryController,
+	    BudgetAllocationController,
+	    BudgetCommitmentController,
+	    PurchaseRequestController,
+	    BudgetReportController,
+	    ProjectBudgetController,
+	};
 
 /*
 |--------------------------------------------------------------------------
@@ -268,30 +269,13 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
 
 Route::prefix('careers')->name('careers.')->group(function () {
 
-    // List all published vacancies
-    Route::get('/', [HrPublicController::class, 'index'])
-        ->name('index');
-
-    // View a single vacancy
-    Route::get('/{vacancy}', [HrPublicController::class, 'show'])
-        ->name('show');
-
-    // Submit application
-    Route::post('/{vacancy}/apply', [HrPublicController::class, 'apply'])
-        ->name('apply');
-});
-
-
-
-
-Route::prefix('careers')->name('careers.')->group(function () {
-
     // Careers listing page
     Route::get('/', [HrPublicController::class, 'index'])
         ->name('index');
 
     // Store job application (PUBLIC)
     Route::post('/apply', [HrPublicController::class, 'storeApplication'])
+        ->middleware('throttle:30,1')
         ->name('apply.store');
 
 });
@@ -372,6 +356,10 @@ Route::prefix('careers')->name('careers.')->group(function () {
             ->middleware('permission:hr.applicants.view')
             ->name('applicants.show');
 
+        Route::get('applicants/{applicant}/files/{which}', [HrController::class, 'downloadApplicantFile'])
+            ->middleware('permission:hr.applicants.view')
+            ->name('applicants.files');
+
         // MANAGEMENT ACTIONS
         Route::post('applicants/{applicant}/shortlist', [HrController::class, 'shortlistApplicant'])
             ->middleware('permission:hr.applicants.hire')
@@ -445,10 +433,15 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             [BudgetCommitmentController::class, 'subActivities']
         );
 
-        // Load allocation years
-        Route::get('commitments/ajax/allocation-years/{level}/{id}',
-            [BudgetCommitmentController::class, 'allocationYears']
-        );
+	        // Load allocation years
+	        Route::get('commitments/ajax/allocation-years/{level}/{id}',
+	            [BudgetCommitmentController::class, 'allocationYears']
+	        );
+
+	        // Allocation breakdown (allocated/committed/remaining by year)
+	        Route::get('commitments/ajax/allocation-breakdown/{level}/{id}',
+	            [BudgetCommitmentController::class, 'allocationBreakdown']
+	        );
 
         // Remaining budget
         Route::get('commitments/ajax/remaining-budget',
@@ -663,6 +656,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
         ->middleware('permission:finance.program_funding.view')
         ->name('program-funding.show');
 
+    Route::get('program-funding/{programFunding}/documents/{document}/download', [ProgramFundingDocumentController::class, 'download'])
+        ->middleware('permission:finance.program_funding.view')
+        ->name('program-funding.documents.download');
+
     /* EDIT */
     Route::get('program-funding/{programFunding}/edit', [ProgramFundingController::class, 'edit'])
         ->middleware('permission:finance.program_funding.edit')
@@ -727,9 +724,33 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.commitments.edit')
             ->name('commitments.update');
 
-        Route::delete('commitments/{commitment}', [BudgetCommitmentController::class, 'destroy'])
-            ->middleware('permission:finance.commitments.delete')
-            ->name('commitments.destroy');
+	        Route::delete('commitments/{commitment}', [BudgetCommitmentController::class, 'destroy'])
+	            ->middleware('permission:finance.commitments.delete')
+	            ->name('commitments.destroy');
+
+	        /* =====================================================
+	         | PURCHASE REQUESTS (AUTO-CREATED FROM COMMITMENTS)
+	         ===================================================== */
+
+	        Route::get('purchase-requests', [PurchaseRequestController::class, 'index'])
+	            ->middleware('permission:finance.purchase_requests.view')
+	            ->name('purchase-requests.index');
+
+	        Route::get('purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'show'])
+	            ->middleware('permission:finance.purchase_requests.view')
+	            ->name('purchase-requests.show');
+
+	        Route::get('purchase-requests/{purchaseRequest}/pdf', [PurchaseRequestController::class, 'pdf'])
+	            ->middleware('permission:finance.purchase_requests.view')
+	            ->name('purchase-requests.pdf');
+
+	        Route::get('purchase-requests/{purchaseRequest}/download', [PurchaseRequestController::class, 'download'])
+	            ->middleware('permission:finance.purchase_requests.view')
+	            ->name('purchase-requests.download');
+
+	        Route::post('purchase-requests/{purchaseRequest}/send', [PurchaseRequestController::class, 'send'])
+	            ->middleware('permission:finance.purchase_requests.send')
+	            ->name('purchase-requests.send');
 
 
 
@@ -949,6 +970,18 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::get('reports/activity/{activity}', [BudgetReportController::class, 'activityReport'])
             ->middleware('permission:activity.report')
             ->name('reports.activity');
+
+        Route::get('reports/commitments', [BudgetReportController::class, 'commitmentReport'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.commitments');
+
+        Route::match(['get', 'post'], 'reports/commitments/export/pdf', [BudgetReportController::class, 'exportCommitmentPdf'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.commitments.export.pdf');
+
+        Route::get('reports/commitments/export/excel', [BudgetReportController::class, 'exportCommitmentExcel'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.commitments.export.excel');
 
 
         /* =====================================================
@@ -1207,7 +1240,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:forms.manage'])
 });
 
 
-Route::middleware(['auth'])
+Route::middleware(['auth', 'not.funding.partner'])
     ->prefix('procurement/submissions')
     ->group(function () {
 
@@ -1246,7 +1279,7 @@ Route::middleware(['auth', 'not.funding.partner', 'can:procurement.audit'])
 
 
 Route::prefix('procurement/submissions')
-    ->middleware(['auth'])
+    ->middleware(['auth', 'not.funding.partner'])
     ->group(function () {
 
         // List submissions
@@ -1258,6 +1291,10 @@ Route::prefix('procurement/submissions')
         Route::get('/{submission}', [ProcurementSubmissionController::class, 'show'])
             // ->middleware('can:procurement.view')
             ->name('procurement.submissions.show');
+
+        // Secure download/stream of uploaded submission files (private storage)
+        Route::get('/{submission}/values/{value}/download', [ProcurementSubmissionController::class, 'downloadValue'])
+            ->name('procurement.submissions.values.download');
 });
 
 
@@ -1428,6 +1465,7 @@ Route::prefix('public/procurement')->group(function () {
         ->name('public.procurement.show');
 
     Route::post('/{procurement}/apply', [PublicProcurementController::class, 'submit'])
+        ->middleware('throttle:20,1')
         ->name('public.procurement.apply');
 
 });
@@ -1684,6 +1722,11 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evalua
         Route::get('/{assignment}/view/{applicant}',
             [EvaluationSubmissionController::class, 'view']
         )->name('view');
+
+        // Secure video streaming (identity proof)
+        Route::get('/{assignment}/video/{applicant}',
+            [EvaluationSubmissionController::class, 'video']
+        )->name('video');
     });
 
 Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evaluate'])
@@ -1711,18 +1754,24 @@ use App\Http\Controllers\{
     ProcurementSiteVisitReportController
 };
 
-Route::prefix('site-visits')->name('site-visits.')->group(function () {
+Route::middleware(['auth', 'not.funding.partner'])
+    ->prefix('site-visits')
+    ->name('site-visits.')
+    ->group(function () {
 
     /* =========================
      | MAIN
      ========================= */
     Route::get('/', [SiteVisitController::class, 'index'])
+        ->middleware('permission:site_visits.view')
         ->name('index');
 
     Route::get('/create', [SiteVisitController::class, 'create'])
+        ->middleware('permission:site_visits.create')
         ->name('create');
 
     Route::post('/', [SiteVisitController::class, 'store'])
+        ->middleware('permission:site_visits.create')
         ->name('store');
 
     Route::get('/{siteVisit}', [SiteVisitController::class, 'show'])
@@ -1734,11 +1783,15 @@ Route::prefix('site-visits')->name('site-visits.')->group(function () {
      ========================= */
     Route::post('/{siteVisit}/assign-individual',
         [SiteVisitAssignmentController::class, 'assignIndividual']
-    )->name('assign.individual');
+    )
+        ->middleware('permission:site_visits.approve')
+        ->name('assign.individual');
 
     Route::post('/{siteVisit}/assign-group',
         [SiteVisitGroupController::class, 'assignGroup']
-    )->name('assign.group');
+    )
+        ->middleware('permission:site_visits.approve')
+        ->name('assign.group');
 
 
     /* =========================
@@ -1746,11 +1799,15 @@ Route::prefix('site-visits')->name('site-visits.')->group(function () {
      ========================= */
     Route::get('/{siteVisit}/observations/create',
         [SiteVisitObservationController::class, 'create']
-    )->name('observations.create');
+    )
+        ->middleware('permission:site_visits.observe')
+        ->name('observations.create');
 
     Route::post('/{siteVisit}/observations',
         [SiteVisitObservationController::class, 'store']
-    )->name('observations.store');
+    )
+        ->middleware('permission:site_visits.observe')
+        ->name('observations.store');
 
 
     /* =========================
@@ -1758,7 +1815,14 @@ Route::prefix('site-visits')->name('site-visits.')->group(function () {
      ========================= */
     Route::post('/{siteVisit}/media',
         [SiteVisitMediaController::class, 'store']
-    )->name('media.store');
+    )
+        ->middleware('permission:site_visits.observe')
+        ->name('media.store');
+
+    Route::get('/{siteVisit}/media/{media}/download',
+        [SiteVisitMediaController::class, 'download']
+    )
+        ->name('media.download');
 
 
     /* =========================
@@ -1766,7 +1830,9 @@ Route::prefix('site-visits')->name('site-visits.')->group(function () {
      ========================= */
     Route::post('/{siteVisit}/submit',
         [SiteVisitController::class, 'submit']
-    )->name('submit');
+    )
+        ->middleware('permission:site_visits.submit')
+        ->name('submit');
 
 
     /* =========================
@@ -1774,20 +1840,26 @@ Route::prefix('site-visits')->name('site-visits.')->group(function () {
      ========================= */
     Route::post('/{siteVisit}/approve',
         [SiteVisitController::class, 'approve']
-    )->name('approve');
+    )
+        ->middleware('permission:site_visits.approve')
+        ->name('approve');
 
 
 
     Route::get(
     '/procurements/{procurement}/site-visit-report',
     [ProcurementSiteVisitReportController::class, 'show']
-    )->name('procurements.site-visit-report');
+    )
+        ->middleware('permission:site_visits.approve')
+        ->name('procurements.site-visit-report');
 
 
     Route::get(
     '/reports/site-visits',
     [ProcurementSiteVisitReportController::class, 'index']
-)->name('reports.index');
+    )
+        ->middleware('permission:site_visits.approve')
+        ->name('reports.index');
 
 
 
@@ -1807,7 +1879,9 @@ Route::prefix('site-visits')->name('site-visits.')->group(function () {
 
 Route::get('/', [LandingPageController::class, 'index'])->name('landing.index');
 Route::get('/contact', [LandingPageController::class, 'contact'])->name('landing.contact');
-Route::post('/impact-map/request-information', [LandingPageController::class, 'submitInformationRequest'])->name('impact.request');
+Route::post('/impact-map/request-information', [LandingPageController::class, 'submitInformationRequest'])
+    ->middleware('throttle:20,1')
+    ->name('impact.request');
 
 /*
 |--------------------------------------------------------------------------
@@ -1817,16 +1891,38 @@ Route::post('/impact-map/request-information', [LandingPageController::class, 's
 use App\Http\Controllers\ImpactMapController;
 
 Route::get('/impact-map', [ImpactMapController::class, 'index'])->name('impact.map');
-Route::post('/api/impact-map/filter', [ImpactMapController::class, 'getFilteredData'])->name('impact.filter');
-Route::get('/impact-map/download/pdf', [ImpactMapController::class, 'downloadPdf'])->name('impact.download.pdf');
-Route::get('/impact-map/download/excel', [ImpactMapController::class, 'downloadExcel'])->name('impact.download.excel');
+Route::post('/api/impact-map/filter', [ImpactMapController::class, 'getFilteredData'])
+    ->middleware('throttle:60,1')
+    ->name('impact.filter');
+Route::get('/impact-map/download/pdf', [ImpactMapController::class, 'downloadPdf'])
+    ->middleware('throttle:10,1')
+    ->name('impact.download.pdf');
+Route::get('/impact-map/download/excel', [ImpactMapController::class, 'downloadExcel'])
+    ->middleware('throttle:10,1')
+    ->name('impact.download.excel');
 Route::get('/bids/{project}', [LandingPageController::class, 'showBid'])->name('landing.show');
-Route::get('/applicants', [ApplicantController::class, 'index'])->name('applicants.index');
-Route::get('/evaluation', [EvaluationController::class, 'index'])->name('evaluations.index');
-Route::get('/create/{applicant_id}', [EvaluationController::class, 'create'])
-    ->name('evaluations.create');
+Route::get('/applicants', [ApplicantController::class, 'index'])
+    ->middleware('auth')
+    ->name('applicants.index');
+Route::get('/applicants/{applicant}', [ApplicantController::class, 'show'])
+    ->middleware('auth')
+    ->name('applicants.show');
+Route::get('/applicants/{applicant}/documents/{field}', [ApplicantController::class, 'downloadDocument'])
+    ->middleware('auth')
+    ->name('applicants.documents.download');
+Route::get('/applicants/{applicant}/edit', [ApplicantController::class, 'edit'])
+    ->middleware('auth')
+    ->name('applicants.edit');
+Route::put('/applicants/{applicant}', [ApplicantController::class, 'update'])
+    ->middleware('auth')
+    ->name('applicants.update');
+Route::delete('/applicants/{applicant}', [ApplicantController::class, 'destroy'])
+    ->middleware('auth')
+    ->name('applicants.destroy');
 
-Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+Route::get('/reports', [ReportController::class, 'index'])
+    ->middleware(['auth', 'not.funding.partner', 'permission:prescreening.reports.view_all'])
+    ->name('reports.index');
 
 Route::middleware(['auth', 'not.funding.partner', 'permission:prescreening.reports.view_all'])
     ->prefix('reports/prescreening')

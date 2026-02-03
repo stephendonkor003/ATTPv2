@@ -3,9 +3,9 @@
 // App\Models\ProcurementAuditLog.php
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class ProcurementAuditLog extends Model
+class ProcurementAuditLog extends BaseModel
 {
     public $timestamps = false;
 

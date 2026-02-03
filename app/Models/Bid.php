@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class Bid extends Model
+class Bid extends BaseModel
 {
     protected $fillable = [
         'project_id',

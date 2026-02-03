@@ -149,7 +149,7 @@
 
                                 <td class="text-center">
                                     @if ($applicant->cv_path)
-                                        <a href="{{ asset('storage/' . $applicant->cv_path) }}" target="_blank"
+                                        <a href="{{ route('hr.applicants.files', [$applicant->id, 'cv']) }}" target="_blank"
                                             class="btn btn-sm btn-outline-primary">
                                             <i class="feather-file-text me-1"></i> CV
                                         </a>
@@ -157,7 +157,7 @@
                                         <span class="badge bg-secondary-subtle text-secondary">No CV</span>
                                     @endif
                                     @if ($applicant->cover_letter_path)
-                                        <a href="{{ asset('storage/' . $applicant->cover_letter_path) }}"
+                                        <a href="{{ route('hr.applicants.files', [$applicant->id, 'cover_letter']) }}"
                                             target="_blank" class="btn btn-sm btn-outline-secondary ms-1">
                                             Cover
                                         </a>

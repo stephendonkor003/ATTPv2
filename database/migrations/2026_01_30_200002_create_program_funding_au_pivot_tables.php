@@ -13,11 +13,11 @@ return new class extends Migration
     {
         // Program Funding - Member States pivot table
         Schema::create('myb_program_funding_member_states', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('program_funding_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('program_funding_id')
                 ->constrained('myb_program_fundings')
                 ->onDelete('cascade');
-            $table->foreignId('member_state_id')
+            $table->foreignUuid('member_state_id')
                 ->constrained('myb_au_member_states')
                 ->onDelete('cascade');
             $table->timestamps();
@@ -27,11 +27,11 @@ return new class extends Migration
 
         // Program Funding - Regional Blocks pivot table
         Schema::create('myb_program_funding_regional_blocks', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('program_funding_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('program_funding_id')
                 ->constrained('myb_program_fundings')
                 ->onDelete('cascade');
-            $table->foreignId('regional_block_id')
+            $table->foreignUuid('regional_block_id')
                 ->constrained('myb_au_regional_blocks')
                 ->onDelete('cascade');
             $table->timestamps();
@@ -41,11 +41,11 @@ return new class extends Migration
 
         // Program Funding - Aspirations pivot table
         Schema::create('myb_program_funding_aspirations', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('program_funding_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('program_funding_id')
                 ->constrained('myb_program_fundings')
                 ->onDelete('cascade');
-            $table->foreignId('aspiration_id')
+            $table->foreignUuid('aspiration_id')
                 ->constrained('myb_au_aspirations')
                 ->onDelete('cascade');
             $table->timestamps();
@@ -55,11 +55,11 @@ return new class extends Migration
 
         // Program Funding - Goals pivot table
         Schema::create('myb_program_funding_goals', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('program_funding_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('program_funding_id')
                 ->constrained('myb_program_fundings')
                 ->onDelete('cascade');
-            $table->foreignId('goal_id')
+            $table->foreignUuid('goal_id')
                 ->constrained('myb_au_goals')
                 ->onDelete('cascade');
             $table->timestamps();
@@ -69,9 +69,9 @@ return new class extends Migration
 
         // Program Funding - Flagship Projects pivot table
         Schema::create('myb_program_funding_flagship_projects', function (Blueprint $table) {
-            $table->id();
-            $table->unsignedBigInteger('program_funding_id');
-            $table->unsignedBigInteger('flagship_project_id');
+            $table->uuid('id')->primary();
+            $table->uuid('program_funding_id');
+            $table->uuid('flagship_project_id');
             $table->timestamps();
 
             $table->foreign('program_funding_id', 'pf_fp_funding_fk')

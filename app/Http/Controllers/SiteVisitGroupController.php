@@ -14,7 +14,8 @@ class SiteVisitGroupController extends Controller
 {
     public function assignGroup(Request $request, SiteVisit $siteVisit)
     {
-        $this->authorize('assign', $siteVisit);
+        $user = auth()->user();
+        abort_unless($user && $user->can('site_visits.approve'), 403);
 
         $request->validate([
             'group_name' => 'required|string',

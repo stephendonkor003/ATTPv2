@@ -13,7 +13,7 @@ return new class extends Migration
     {
         // AU Member States (55 countries)
         Schema::create('myb_au_member_states', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name');
             $table->string('code', 3)->nullable()->comment('ISO 3166-1 alpha-3 code');
             $table->string('code_alpha2', 2)->nullable()->comment('ISO 3166-1 alpha-2 code');
@@ -27,7 +27,7 @@ return new class extends Migration
 
         // AU Regional Economic Communities (RECs) - 8 blocks
         Schema::create('myb_au_regional_blocks', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name');
             $table->string('abbreviation', 20)->nullable();
             $table->text('description')->nullable();
@@ -41,7 +41,7 @@ return new class extends Migration
 
         // Agenda 2063 Aspirations (7 aspirations)
         Schema::create('myb_au_aspirations', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->unsignedTinyInteger('number')->comment('Aspiration number 1-7');
             $table->string('title');
             $table->text('description')->nullable();
@@ -54,8 +54,8 @@ return new class extends Migration
 
         // Agenda 2063 Goals (20 goals linked to aspirations)
         Schema::create('myb_au_goals', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('aspiration_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('aspiration_id')
                 ->constrained('myb_au_aspirations')
                 ->onDelete('cascade');
             $table->unsignedTinyInteger('number')->comment('Goal number 1-20');
@@ -70,7 +70,7 @@ return new class extends Migration
 
         // AU Flagship Projects (12 flagship projects)
         Schema::create('myb_au_flagship_projects', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->unsignedTinyInteger('number')->comment('Flagship project number 1-12');
             $table->string('name');
             $table->text('description')->nullable();

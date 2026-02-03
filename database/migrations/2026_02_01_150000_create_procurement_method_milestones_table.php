@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::dropIfExists('myb_procurement_method_planned_milestones');
         Schema::create('myb_procurement_method_planned_milestones', function (Blueprint $table) {
-            $table->id();
-            $table->unsignedBigInteger('procurement_method_planned_id');
+            $table->uuid('id')->primary();
+            $table->uuid('procurement_method_planned_id');
             $table->foreign('procurement_method_planned_id', 'fk_pmpm_proc_method')
                 ->references('id')
                 ->on('myb_procurement_method_planned')
@@ -21,7 +21,7 @@ return new class extends Migration
             $table->integer('target_days')->default(0);
             $table->integer('sort_order')->default(0);
             $table->boolean('is_active')->default(true);
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignUuid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
             $table->index('procurement_method_planned_id', 'idx_pmpm_method_id');

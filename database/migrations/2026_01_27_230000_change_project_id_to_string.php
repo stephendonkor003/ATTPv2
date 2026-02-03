@@ -21,7 +21,7 @@ return new class extends Migration
             ->update(['project_id' => null]);
 
         Schema::table('myb_projects', function (Blueprint $table) {
-            $table->foreignId('project_id')->nullable()->change();
+            $table->foreignUuid('project_id')->nullable()->change();
         });
     }
 };

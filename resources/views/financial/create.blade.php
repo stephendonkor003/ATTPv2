@@ -22,11 +22,11 @@
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             <span><i class="feather-file-text text-primary me-2"></i> Work Plan & Budget</span>
                             <span>
-                                <a href="{{ asset('storage/' . $applicant->work_plan_budget) }}" target="_blank"
+                                <a href="{{ route('applicants.documents.download', ['applicant' => $applicant->id, 'field' => 'work_plan_budget']) }}" target="_blank"
                                     class="btn btn-sm btn-outline-primary me-2">
                                     <i class="feather-eye"></i> View
                                 </a>
-                                <a href="{{ asset('storage/' . $applicant->work_plan_budget) }}" download
+                                <a href="{{ route('applicants.documents.download', ['applicant' => $applicant->id, 'field' => 'work_plan_budget', 'download' => 1]) }}" download
                                     class="btn btn-sm btn-outline-success">
                                     <i class="feather-download"></i> Download
                                 </a>
@@ -39,11 +39,11 @@
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             <span><i class="feather-file-text text-primary me-2"></i> Audited Reports</span>
                             <span>
-                                <a href="{{ asset('storage/' . $applicant->audited_reports) }}" target="_blank"
+                                <a href="{{ route('applicants.documents.download', ['applicant' => $applicant->id, 'field' => 'audited_reports']) }}" target="_blank"
                                     class="btn btn-sm btn-outline-primary me-2">
                                     <i class="feather-eye"></i> View
                                 </a>
-                                <a href="{{ asset('storage/' . $applicant->audited_reports) }}" download
+                                <a href="{{ route('applicants.documents.download', ['applicant' => $applicant->id, 'field' => 'audited_reports', 'download' => 1]) }}" download
                                     class="btn btn-sm btn-outline-success">
                                     <i class="feather-download"></i> Download
                                 </a>

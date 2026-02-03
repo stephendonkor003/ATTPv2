@@ -68,7 +68,7 @@
                             <div class="col-md-4">
                                 <strong>{{ $label }}:</strong><br>
                                 @if ($applicant->$field)
-                                    <a href="{{ asset('storage/' . $applicant->$field) }}" target="_blank"
+                                    <a href="{{ route('applicants.documents.download', [$applicant->id, $field]) }}" target="_blank"
                                         class="btn btn-sm btn-outline-success mt-2">
                                         <i class="feather-eye"></i> View
                                     </a>

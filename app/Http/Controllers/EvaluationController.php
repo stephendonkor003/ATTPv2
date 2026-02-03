@@ -46,7 +46,7 @@ class EvaluationController extends Controller
     ]);
 
     return redirect()
-        ->route('evaluations.index')
+        ->route('evals.cfg.index')
         ->with('success', 'Evaluation created successfully.');
 }
 
@@ -132,7 +132,7 @@ class EvaluationController extends Controller
         $evaluation->delete();
 
         return redirect()
-            ->route('evaluations.index')
+            ->route('evals.cfg.index')
             ->with('success', 'Evaluation deleted successfully.');
     }
 }

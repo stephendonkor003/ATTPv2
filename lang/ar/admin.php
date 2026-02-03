@@ -33,12 +33,14 @@ return [
     // Budget Execution
     'execution_commitments' => 'التنفيذ والالتزامات',
     'budget_commitments' => 'الالتزامات الموازنية',
+    'purchase_requests' => 'طلبات الشراء',
     'resource_categories' => 'فئات الموارد',
     'resource_items' => 'عناصر الموارد',
 
     // Reports & Analytics
     'reports_oversight' => 'التقارير والإشراف',
     'budget_reports' => 'تقارير الموازنة',
+    'commitment_report' => 'تقرير الالتزامات',
     'execution_dashboard' => 'لوحة التنفيذ',
     'program_allocation' => 'تخصيص البرنامج',
     'allocations_reports' => 'تقارير التخصيصات',

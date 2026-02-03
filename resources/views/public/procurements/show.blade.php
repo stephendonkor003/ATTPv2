@@ -294,7 +294,7 @@
             <h3>Procurement Details</h3>
 
             <div style="margin-top:1rem; line-height:1.7;">
-                {!! $procurement->description !!}
+                {!! nl2br(e($procurement->description ?? '')) !!}
             </div>
 
 

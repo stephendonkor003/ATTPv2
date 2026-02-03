@@ -9,7 +9,8 @@ class SiteVisitAssignmentController extends Controller
 {
     public function assignIndividual(Request $request, SiteVisit $siteVisit)
     {
-        $this->authorize('assign', $siteVisit);
+        $user = auth()->user();
+        abort_unless($user && $user->can('site_visits.approve'), 403);
 
         $request->validate([
             'user_id' => 'required|exists:users,id',

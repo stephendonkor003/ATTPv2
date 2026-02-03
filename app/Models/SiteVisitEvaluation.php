@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\BaseModel;
 
-class SiteVisitEvaluation extends Model
+class SiteVisitEvaluation extends BaseModel
 {
     use HasFactory;
 

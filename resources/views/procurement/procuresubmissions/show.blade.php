@@ -72,14 +72,15 @@
             <div class="card-body">
 
                 @php
-                    $submittedValues = $submission->values->pluck('value', 'field_key')->toArray();
+                    $submittedValues = $submission->values->keyBy('field_key');
                 @endphp
 
                 <div class="row g-4">
 
                     @forelse ($submission->form->fields as $field)
                         @php
-                            $value = $submittedValues[$field->field_key] ?? null;
+                            $valueObj = $submittedValues->get($field->field_key);
+                            $value = $valueObj?->value;
                         @endphp
 
                         <div class="col-lg-6 col-md-6 col-12">
@@ -135,8 +136,8 @@
 
                                         {{-- FILE --}}
                                         @case('file')
-                                            @if ($value)
-                                                <a href="{{ asset('storage/' . $value) }}" target="_blank"
+                                            @if ($valueObj && $value)
+                                                <a href="{{ route('procurement.submissions.values.download', ['submission' => $submission->id, 'value' => $valueObj->id]) }}" target="_blank"
                                                     class="btn btn-sm btn-outline-primary">
                                                     <i class="feather-paperclip me-1"></i>
                                                     View Attachment

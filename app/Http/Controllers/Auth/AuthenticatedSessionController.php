@@ -71,7 +71,9 @@ class AuthenticatedSessionController extends Controller
         $otp = UserLoginOtp::generateFor($user, $sessionId);
 
         // Send email with OTP
-        Mail::to($user->email)->send(new LoginOtpMail($user, $otp->otp_code));
+        Mail::to($user->email)->queue(
+            (new LoginOtpMail($user, $otp->otp_code))->onQueue('otp')
+        );
     }
 
     /**
