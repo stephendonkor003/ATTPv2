@@ -41,6 +41,7 @@ return [
     'reports_oversight' => 'Reports & Oversight',
     'budget_reports' => 'Budget Reports',
     'commitment_report' => 'Commitment Report',
+    'ifr_report' => 'IFR Report',
     'execution_dashboard' => 'Execution Dashboard',
     'program_allocation' => 'Program Allocation',
     'allocations_reports' => 'Allocations Reports',

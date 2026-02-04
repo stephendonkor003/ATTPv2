@@ -127,6 +127,12 @@ class PermissionSeeder extends Seeder
             ['name' => 'forms.reject', 'module' => 'procurement', 'description' => 'Reject procurement forms with reason'],
             ['name' => 'procurement.audit', 'module' => 'procurement', 'description' => 'View procurement audit logs'],
 
+            // Vendors
+            ['name' => 'vendor.manage', 'module' => 'vendor', 'description' => 'Manage vendor accounts and imports'],
+            ['name' => 'vendor.requests.manage', 'module' => 'vendor', 'description' => 'View vendor clarification requests'],
+            ['name' => 'vendor.requests.respond', 'module' => 'vendor', 'description' => 'Respond to vendor clarification requests'],
+            ['name' => 'vendor.outreach.send', 'module' => 'vendor', 'description' => 'Send procurement notifications to vendor groups'],
+
             // Site Visits (Procurement)
             ['name' => 'site_visits.view', 'module' => 'procurement', 'description' => 'View site visits'],
             ['name' => 'site_visits.create', 'module' => 'procurement', 'description' => 'Create site visits'],

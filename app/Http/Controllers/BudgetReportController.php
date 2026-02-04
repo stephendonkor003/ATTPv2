@@ -7,11 +7,13 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\Activity;
 use App\Models\BudgetCommitment;
+use App\Models\ProcurementDisbursement;
 
 use App\Exports\ProgramExport;
 use App\Exports\ProjectExport;
 use App\Exports\ActivityExport;
 use App\Exports\CommitmentReportExport;
+use App\Exports\InterimFinancialReportExport;
 
 use Maatwebsite\Excel\Facades\Excel;
 use PDF;
@@ -336,6 +338,296 @@ class BudgetReportController extends Controller
             $filters['end_date']
         );
         $summary = $this->buildCommitmentSummary($totals, $rows, $filters['label']);
+
+        return [
+            'program' => $program,
+            'rows' => $rows,
+            'totals' => $totals,
+            'filters' => $filters,
+            'chartData' => $chartData,
+            'summary' => $summary,
+        ];
+    }
+
+    /* ================================
+       IFR REPORT
+    ================================== */
+    public function ifrReport(Request $request)
+    {
+        $programs = Program::orderBy('name')->get();
+        $programId = $request->input('program_id');
+
+        $report = null;
+        $chartData = null;
+        $summary = null;
+        $totals = null;
+        $filters = $this->resolveCommitmentFilter($request, null);
+        $program = null;
+        $funders = collect();
+
+        if ($programId) {
+            $program = Program::with([
+                'projects.activities.subActivities.allocations',
+                'approvedFundings.funder',
+                'fundings.funder',
+            ])->findOrFail($programId);
+
+            $filters = $this->resolveCommitmentFilter($request, $program);
+
+            $fundings = $program->approvedFundings;
+            if ($fundings->isEmpty()) {
+                $fundings = $program->fundings;
+            }
+
+            $funders = $fundings->pluck('funder')->filter()->unique('id')->values();
+            $fundingIds = $fundings->pluck('id')->all();
+
+            $commitments = BudgetCommitment::with('purchaseRequest')
+                ->whereIn('program_funding_id', $fundingIds)
+                ->where('allocation_level', 'sub_activity')
+                ->get();
+
+            $filteredCommitments = $commitments->filter(function ($commitment) use ($filters) {
+                $date = $this->resolveCommitmentDate($commitment);
+                if (!$filters['start_date'] || !$filters['end_date']) {
+                    return true;
+                }
+
+                return $date->between($filters['start_date'], $filters['end_date']);
+            });
+
+            $subActivityIds = $program->projects
+                ->flatMap(fn ($project) => $project->activities
+                    ->flatMap(fn ($activity) => $activity->subActivities->pluck('id')))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $disbursements = empty($subActivityIds)
+                ? collect()
+                : ProcurementDisbursement::whereIn('sub_activity_id', $subActivityIds)->get();
+
+            $filteredDisbursements = $disbursements->filter(function ($disbursement) use ($filters) {
+                $date = $this->resolveDisbursementDate($disbursement);
+                if (!$filters['start_date'] || !$filters['end_date']) {
+                    return true;
+                }
+
+                return $date->between($filters['start_date'], $filters['end_date']);
+            });
+
+            $commitmentBySub = $filteredCommitments
+                ->groupBy('allocation_id')
+                ->map(fn ($rows) => round((float) $rows->sum('commitment_amount'), 2))
+                ->all();
+
+            $commitmentReferencesBySub = $filteredCommitments
+                ->groupBy('allocation_id')
+                ->map(function ($rows) {
+                    return $rows->map(function ($commitment) {
+                        return $commitment->purchaseRequest?->reference_no;
+                    })->filter()->unique()->values()->all();
+                })
+                ->all();
+
+            $commitmentBySubYear = [];
+            foreach ($filteredCommitments as $commitment) {
+                $year = $this->resolveCommitmentDate($commitment)->year;
+                if (!in_array($year, $filters['year_range'], true)) {
+                    continue;
+                }
+                $commitmentBySubYear[$commitment->allocation_id][$year] = ($commitmentBySubYear[$commitment->allocation_id][$year] ?? 0)
+                    + (float) $commitment->commitment_amount;
+            }
+
+            $disbursementBySub = $filteredDisbursements
+                ->groupBy('sub_activity_id')
+                ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
+                ->all();
+
+            $disbursementBySubYear = [];
+            foreach ($filteredDisbursements as $disbursement) {
+                $year = $this->resolveDisbursementDate($disbursement)->year;
+                if (!in_array($year, $filters['year_range'], true)) {
+                    continue;
+                }
+                $disbursementBySubYear[$disbursement->sub_activity_id][$year] = ($disbursementBySubYear[$disbursement->sub_activity_id][$year] ?? 0)
+                    + (float) $disbursement->amount;
+            }
+
+            $report = $this->buildIfrHierarchy(
+                $program,
+                $commitmentBySub,
+                $disbursementBySub,
+                $commitmentReferencesBySub,
+                $commitmentBySubYear,
+                $disbursementBySubYear,
+                $filters['year_range']
+            );
+            $totals = $this->summarizeIfrTotals($report);
+            $chartData = $this->buildIfrCharts(
+                $filteredCommitments,
+                $filteredDisbursements,
+                $program,
+                $filters['year_range'],
+                $filters['mode'],
+                $filters['start_date'],
+                $filters['end_date']
+            );
+            $summary = $this->buildIfrSummary($totals, $report, $filters['label']);
+        }
+
+        return view('budgetreport.ifr', [
+            'programs' => $programs,
+            'program' => $program,
+            'funders' => $funders,
+            'report' => $report,
+            'summary' => $summary,
+            'totals' => $totals,
+            'chartData' => $chartData,
+            'filters' => $filters,
+            'query' => $request->query(),
+        ]);
+    }
+
+    public function exportIfrPdf(Request $request)
+    {
+        $data = $this->buildIfrExportData($request);
+        $data['chartImages'] = [
+            'line' => $request->input('chart_line'),
+            'bar' => $request->input('chart_bar'),
+            'bubble' => $request->input('chart_bubble'),
+        ];
+        $pdf = PDF::loadView('budgetreport.ifr_pdf', $data)->setPaper('a4', 'landscape');
+
+        return $pdf->download('ifr-report-' . ($data['program']?->id ?? 'program') . '.pdf');
+    }
+
+    public function exportIfrExcel(Request $request)
+    {
+        $data = $this->buildIfrExportData($request);
+        $export = new InterimFinancialReportExport($data['rows'], $data['totals'], $data['program'], $data['filters']['year_range']);
+
+        return Excel::download($export, 'ifr-report-' . ($data['program']?->id ?? 'program') . '.xlsx');
+    }
+
+    private function buildIfrExportData(Request $request): array
+    {
+        $programId = $request->input('program_id');
+        if (!$programId) {
+            abort(400, 'Program is required for export.');
+        }
+
+        $program = Program::with([
+            'projects.activities.subActivities.allocations',
+            'approvedFundings.funder',
+            'fundings.funder',
+        ])->findOrFail($programId);
+
+        $filters = $this->resolveCommitmentFilter($request, $program);
+
+        $fundings = $program->approvedFundings;
+        if ($fundings->isEmpty()) {
+            $fundings = $program->fundings;
+        }
+
+        $fundingIds = $fundings->pluck('id')->all();
+
+        $commitments = BudgetCommitment::with('purchaseRequest')
+            ->whereIn('program_funding_id', $fundingIds)
+            ->where('allocation_level', 'sub_activity')
+            ->get();
+
+        $filteredCommitments = $commitments->filter(function ($commitment) use ($filters) {
+            $date = $this->resolveCommitmentDate($commitment);
+            if (!$filters['start_date'] || !$filters['end_date']) {
+                return true;
+            }
+
+            return $date->between($filters['start_date'], $filters['end_date']);
+        });
+
+        $subActivityIds = $program->projects
+            ->flatMap(fn ($project) => $project->activities
+                ->flatMap(fn ($activity) => $activity->subActivities->pluck('id')))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $disbursements = empty($subActivityIds)
+            ? collect()
+            : ProcurementDisbursement::whereIn('sub_activity_id', $subActivityIds)->get();
+
+        $filteredDisbursements = $disbursements->filter(function ($disbursement) use ($filters) {
+            $date = $this->resolveDisbursementDate($disbursement);
+            if (!$filters['start_date'] || !$filters['end_date']) {
+                return true;
+            }
+
+            return $date->between($filters['start_date'], $filters['end_date']);
+        });
+
+        $commitmentBySub = $filteredCommitments
+            ->groupBy('allocation_id')
+            ->map(fn ($rows) => round((float) $rows->sum('commitment_amount'), 2))
+            ->all();
+
+        $commitmentReferencesBySub = $filteredCommitments
+            ->groupBy('allocation_id')
+            ->map(function ($rows) {
+                return $rows->map(function ($commitment) {
+                    return $commitment->purchaseRequest?->reference_no;
+                })->filter()->unique()->values()->all();
+            })
+            ->all();
+
+        $commitmentBySubYear = [];
+        foreach ($filteredCommitments as $commitment) {
+            $year = $this->resolveCommitmentDate($commitment)->year;
+            if (!in_array($year, $filters['year_range'], true)) {
+                continue;
+            }
+            $commitmentBySubYear[$commitment->allocation_id][$year] = ($commitmentBySubYear[$commitment->allocation_id][$year] ?? 0)
+                + (float) $commitment->commitment_amount;
+        }
+
+        $disbursementBySub = $filteredDisbursements
+            ->groupBy('sub_activity_id')
+            ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
+            ->all();
+
+        $disbursementBySubYear = [];
+        foreach ($filteredDisbursements as $disbursement) {
+            $year = $this->resolveDisbursementDate($disbursement)->year;
+            if (!in_array($year, $filters['year_range'], true)) {
+                continue;
+            }
+            $disbursementBySubYear[$disbursement->sub_activity_id][$year] = ($disbursementBySubYear[$disbursement->sub_activity_id][$year] ?? 0)
+                + (float) $disbursement->amount;
+        }
+
+        $rows = $this->buildIfrHierarchy(
+            $program,
+            $commitmentBySub,
+            $disbursementBySub,
+            $commitmentReferencesBySub,
+            $commitmentBySubYear,
+            $disbursementBySubYear,
+            $filters['year_range']
+        );
+        $totals = $this->summarizeIfrTotals($rows);
+        $chartData = $this->buildIfrCharts(
+            $filteredCommitments,
+            $filteredDisbursements,
+            $program,
+            $filters['year_range'],
+            $filters['mode'],
+            $filters['start_date'],
+            $filters['end_date']
+        );
+        $summary = $this->buildIfrSummary($totals, $rows, $filters['label']);
 
         return [
             'program' => $program,
@@ -730,6 +1022,328 @@ class BudgetReportController extends Controller
 
         if ($variance > 0) {
             $summary[] = 'Remaining allocation: ' . number_format($variance, 2) . '.';
+        }
+
+        return $summary;
+    }
+
+    private function resolveDisbursementDate(ProcurementDisbursement $disbursement): Carbon
+    {
+        if ($disbursement->paid_at) {
+            return Carbon::parse($disbursement->paid_at)->startOfDay();
+        }
+
+        if ($disbursement->created_at) {
+            return Carbon::parse($disbursement->created_at)->startOfDay();
+        }
+
+        return now()->startOfDay();
+    }
+
+    private function buildIfrHierarchy(
+        Program $program,
+        array $commitmentBySub,
+        array $disbursementBySub,
+        array $commitmentReferencesBySub,
+        array $commitmentBySubYear,
+        array $disbursementBySubYear,
+        array $yearRange
+    ): array
+    {
+        $rows = [];
+
+        foreach ($program->projects->sortBy('name') as $project) {
+            $projectTotalCommitted = 0;
+            $projectTotalDisbursed = 0;
+            $projectYearlyCommitted = array_fill_keys($yearRange, 0.0);
+            $projectYearlyDisbursed = array_fill_keys($yearRange, 0.0);
+            $activities = [];
+
+            foreach ($project->activities->sortBy('name') as $activity) {
+                $activityTotalCommitted = 0;
+                $activityTotalDisbursed = 0;
+                $activityYearlyCommitted = array_fill_keys($yearRange, 0.0);
+                $activityYearlyDisbursed = array_fill_keys($yearRange, 0.0);
+                $subRows = [];
+
+                foreach ($activity->subActivities->sortBy('name') as $subActivity) {
+                    $committed = (float) ($commitmentBySub[$subActivity->id] ?? 0);
+                    $disbursed = (float) ($disbursementBySub[$subActivity->id] ?? 0);
+                    $references = $commitmentReferencesBySub[$subActivity->id] ?? [];
+                    $referenceLabel = $this->formatReferenceDisplay($references);
+
+                    $committedByYear = array_fill_keys($yearRange, 0.0);
+                    if (isset($commitmentBySubYear[$subActivity->id])) {
+                        foreach ($commitmentBySubYear[$subActivity->id] as $year => $amount) {
+                            if (array_key_exists($year, $committedByYear)) {
+                                $committedByYear[$year] += (float) $amount;
+                            }
+                        }
+                    }
+
+                    $disbursedByYear = array_fill_keys($yearRange, 0.0);
+                    if (isset($disbursementBySubYear[$subActivity->id])) {
+                        foreach ($disbursementBySubYear[$subActivity->id] as $year => $amount) {
+                            if (array_key_exists($year, $disbursedByYear)) {
+                                $disbursedByYear[$year] += (float) $amount;
+                            }
+                        }
+                    }
+
+                    $varianceByYear = [];
+                    foreach ($yearRange as $year) {
+                        $varianceByYear[$year] = round($committedByYear[$year] - $disbursedByYear[$year], 2);
+                        $activityYearlyCommitted[$year] += $committedByYear[$year];
+                        $activityYearlyDisbursed[$year] += $disbursedByYear[$year];
+                    }
+
+                    $variance = round($committed - $disbursed, 2);
+                    $utilization = $committed > 0 ? round(($disbursed / $committed) * 100, 2) : 0;
+
+                    $subRows[] = [
+                        'subActivity' => $subActivity,
+                        'references' => $referenceLabel['display'],
+                        'references_full' => $referenceLabel['full'],
+                        'committed' => round($committed, 2),
+                        'disbursed' => round($disbursed, 2),
+                        'variance' => $variance,
+                        'utilization' => $utilization,
+                        'yearly' => [
+                            'committed' => array_map(fn ($v) => round((float) $v, 2), $committedByYear),
+                            'disbursed' => array_map(fn ($v) => round((float) $v, 2), $disbursedByYear),
+                            'variance' => $varianceByYear,
+                        ],
+                    ];
+
+                    $activityTotalCommitted += $committed;
+                    $activityTotalDisbursed += $disbursed;
+                }
+
+                foreach ($yearRange as $year) {
+                    $projectYearlyCommitted[$year] += $activityYearlyCommitted[$year];
+                    $projectYearlyDisbursed[$year] += $activityYearlyDisbursed[$year];
+                }
+
+                $activityVarianceByYear = [];
+                foreach ($yearRange as $year) {
+                    $activityVarianceByYear[$year] = round($activityYearlyCommitted[$year] - $activityYearlyDisbursed[$year], 2);
+                }
+
+                $activities[] = [
+                    'activity' => $activity,
+                    'references' => '',
+                    'committed' => round($activityTotalCommitted, 2),
+                    'disbursed' => round($activityTotalDisbursed, 2),
+                    'variance' => round($activityTotalCommitted - $activityTotalDisbursed, 2),
+                    'utilization' => $activityTotalCommitted > 0
+                        ? round(($activityTotalDisbursed / $activityTotalCommitted) * 100, 2)
+                        : 0,
+                    'yearly' => [
+                        'committed' => array_map(fn ($v) => round((float) $v, 2), $activityYearlyCommitted),
+                        'disbursed' => array_map(fn ($v) => round((float) $v, 2), $activityYearlyDisbursed),
+                        'variance' => $activityVarianceByYear,
+                    ],
+                    'subActivities' => $subRows,
+                ];
+
+                $projectTotalCommitted += $activityTotalCommitted;
+                $projectTotalDisbursed += $activityTotalDisbursed;
+            }
+
+            $projectVarianceByYear = [];
+            foreach ($yearRange as $year) {
+                $projectVarianceByYear[$year] = round($projectYearlyCommitted[$year] - $projectYearlyDisbursed[$year], 2);
+            }
+
+            $rows[] = [
+                'project' => $project,
+                'references' => '',
+                'committed' => round($projectTotalCommitted, 2),
+                'disbursed' => round($projectTotalDisbursed, 2),
+                'variance' => round($projectTotalCommitted - $projectTotalDisbursed, 2),
+                'utilization' => $projectTotalCommitted > 0
+                    ? round(($projectTotalDisbursed / $projectTotalCommitted) * 100, 2)
+                    : 0,
+                'yearly' => [
+                    'committed' => array_map(fn ($v) => round((float) $v, 2), $projectYearlyCommitted),
+                    'disbursed' => array_map(fn ($v) => round((float) $v, 2), $projectYearlyDisbursed),
+                    'variance' => $projectVarianceByYear,
+                ],
+                'activities' => $activities,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function summarizeIfrTotals(array $rows): array
+    {
+        $committed = 0;
+        $disbursed = 0;
+
+        foreach ($rows as $projectRow) {
+            $committed += $projectRow['committed'];
+            $disbursed += $projectRow['disbursed'];
+        }
+
+        $variance = round($committed - $disbursed, 2);
+        $utilization = $committed > 0 ? round(($disbursed / $committed) * 100, 2) : 0;
+
+        return [
+            'committed' => round($committed, 2),
+            'disbursed' => round($disbursed, 2),
+            'variance' => $variance,
+            'utilization' => $utilization,
+        ];
+    }
+
+    private function buildIfrCharts($commitments, $disbursements, Program $program, array $yearRange, string $mode, ?Carbon $startDate, ?Carbon $endDate): array
+    {
+        $periodCommitments = [];
+        $periodDisbursements = [];
+        $diffMonths = $startDate && $endDate ? $startDate->diffInMonths($endDate) : 0;
+        $useMonthly = $mode === 'range' && $diffMonths <= 18;
+
+        foreach ($commitments as $commitment) {
+            $date = $this->resolveCommitmentDate($commitment);
+            $key = $useMonthly
+                ? $date->format('M Y')
+                : $this->periodKey($date, $mode);
+            $periodCommitments[$key] = ($periodCommitments[$key] ?? 0) + (float) $commitment->commitment_amount;
+        }
+
+        foreach ($disbursements as $disbursement) {
+            $date = $this->resolveDisbursementDate($disbursement);
+            $key = $useMonthly
+                ? $date->format('M Y')
+                : $this->periodKey($date, $mode);
+            $periodDisbursements[$key] = ($periodDisbursements[$key] ?? 0) + (float) $disbursement->amount;
+        }
+
+        $lineLabels = array_values(array_unique(array_merge(array_keys($periodCommitments), array_keys($periodDisbursements))));
+        sort($lineLabels);
+
+        $lineCommitments = array_map(fn ($key) => round((float) ($periodCommitments[$key] ?? 0), 2), $lineLabels);
+        $lineDisbursements = array_map(fn ($key) => round((float) ($periodDisbursements[$key] ?? 0), 2), $lineLabels);
+
+        $commitmentByYear = array_fill_keys($yearRange, 0);
+        $disbursementByYear = array_fill_keys($yearRange, 0);
+
+        foreach ($commitments as $commitment) {
+            $date = $this->resolveCommitmentDate($commitment);
+            $year = $date->year;
+            if (array_key_exists($year, $commitmentByYear)) {
+                $commitmentByYear[$year] += (float) $commitment->commitment_amount;
+            }
+        }
+
+        foreach ($disbursements as $disbursement) {
+            $date = $this->resolveDisbursementDate($disbursement);
+            $year = $date->year;
+            if (array_key_exists($year, $disbursementByYear)) {
+                $disbursementByYear[$year] += (float) $disbursement->amount;
+            }
+        }
+
+        $barLabels = array_map('strval', array_keys($commitmentByYear));
+        $barCommitments = array_map(fn ($value) => round((float) $value, 2), array_values($commitmentByYear));
+        $barDisbursements = array_map(fn ($value) => round((float) $value, 2), array_values($disbursementByYear));
+
+        $bubbleData = [];
+        foreach ($program->projects as $project) {
+            foreach ($project->activities as $activity) {
+                foreach ($activity->subActivities as $subActivity) {
+                    $committed = (float) $commitments
+                        ->where('allocation_id', $subActivity->id)
+                        ->sum('commitment_amount');
+                    $disbursed = (float) $disbursements
+                        ->where('sub_activity_id', $subActivity->id)
+                        ->sum('amount');
+                    if ($committed <= 0 && $disbursed <= 0) {
+                        continue;
+                    }
+                    $bubbleData[] = [
+                        'x' => round($committed, 2),
+                        'y' => round($disbursed, 2),
+                        'r' => max(4, min(18, sqrt(max($disbursed, 1)))),
+                        'label' => $subActivity->name,
+                    ];
+                }
+            }
+        }
+
+        return [
+            'line' => [
+                'labels' => $lineLabels,
+                'commitments' => $lineCommitments,
+                'disbursements' => $lineDisbursements,
+            ],
+            'bar' => [
+                'labels' => $barLabels,
+                'commitments' => $barCommitments,
+                'disbursements' => $barDisbursements,
+            ],
+            'bubble' => $bubbleData,
+        ];
+    }
+
+    private function buildIfrSummary(array $totals, array $rows, string $label): array
+    {
+        $committed = $totals['committed'];
+        $disbursed = $totals['disbursed'];
+        $utilization = $totals['utilization'];
+        $cappedUtilization = min(100, max(0, $utilization));
+        $variance = $totals['variance'];
+
+        $summary = [];
+        $summary[] = "Coverage period: {$label}.";
+
+        if ($committed <= 0) {
+            $summary[] = 'No commitments were found for the selected period, so disbursements cannot be compared.';
+        } else {
+            $summary[] = sprintf(
+                'Total committed is %s, while actual disbursements are %s (%s%% utilization).',
+                number_format($committed, 2),
+                number_format($disbursed, 2),
+                number_format($cappedUtilization, 2)
+            );
+
+            if ($utilization < 50) {
+                $summary[] = 'Disbursement levels are low compared to commitments. Monitor delivery progress and payment schedules.';
+            } elseif ($utilization < 80) {
+                $summary[] = 'Disbursements are moderate; there is still room to execute the remaining commitment balance.';
+            } elseif ($utilization <= 100) {
+                $summary[] = 'Disbursements are on track and within committed limits.';
+            } else {
+                $summary[] = 'Disbursements exceed commitments. Investigate overpayments or unapproved disbursement activity.';
+            }
+        }
+
+        $overDisbursed = [];
+        foreach ($rows as $projectRow) {
+            foreach ($projectRow['activities'] as $activityRow) {
+                foreach ($activityRow['subActivities'] as $subRow) {
+                    if ($subRow['committed'] > 0 && $subRow['disbursed'] > $subRow['committed']) {
+                        $overDisbursed[] = $subRow;
+                    }
+                }
+            }
+        }
+
+        if (!empty($overDisbursed)) {
+            $top = collect($overDisbursed)
+                ->sortByDesc('utilization')
+                ->take(3)
+                ->map(function ($row) {
+                    $utilization = min(100, max(0, (float) $row['utilization']));
+                    return $row['subActivity']->name . ' (' . number_format($utilization, 2) . '%)';
+                })
+                ->implode(', ');
+            $summary[] = 'Top over-disbursed sub-activities: ' . $top . '.';
+        }
+
+        if ($variance > 0) {
+            $summary[] = 'Remaining committed balance: ' . number_format($variance, 2) . '.';
         }
 
         return $summary;

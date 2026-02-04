@@ -6,7 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Procurement;
 use App\Models\Resource;
 use App\Models\DynamicForm;
+use App\Models\User;
+use App\Mail\VendorProcurementInvitation;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Mail;
 use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 
 class ProcurementController extends Controller
@@ -50,7 +54,11 @@ class ProcurementController extends Controller
             })
             ->get();
 
-        return view('procurement.create', compact('resources'));
+        $vendorCategories = \App\Models\VendorCategory::where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name');
+
+        return view('procurement.create', compact('resources', 'vendorCategories'));
     }
 
     /**
@@ -63,9 +71,30 @@ class ProcurementController extends Controller
         'title'             => 'required|string|max:255',
         'description'       => 'required|string',
         'fiscal_year'       => 'required|string|max:20',
-        'reference_no'      => 'nullable|unique:procurements,reference_no',
+        'application_start_date' => 'required|date',
+        'application_duration_days' => 'required|integer|min:1|max:365',
+        'visibility_type' => 'required|in:public,vendor_group',
+        'vendor_categories' => 'required_if:visibility_type,vendor_group|array|min:1',
+        'vendor_categories.*' => 'string|max:255',
+        'reference_no'      => [
+            'nullable',
+            'string',
+            'max:50',
+            Rule::exists('myb_procurement_plans', 'procurement_code')
+                ->where(function ($query) {
+                    if (!auth()->user()->can('procurement.view_all')) {
+                        $query->where('created_by', auth()->id());
+                    }
+                }),
+            Rule::unique('procurements', 'reference_no'),
+        ],
         'estimated_budget'  => 'nullable|numeric',
     ]);
+
+    $startDate = \Carbon\Carbon::parse($data['application_start_date']);
+    $data['application_end_date'] = $startDate->copy()
+        ->addDays((int) $data['application_duration_days'])
+        ->format('Y-m-d');
 
     $resource = Resource::findOrFail($data['resource_id']);
     $this->assertResourceInScope($resource);
@@ -73,6 +102,9 @@ class ProcurementController extends Controller
     $data['created_by'] = auth()->id();
     $data['status']     = 'draft';
     $data['governance_node_id'] = $resource->governance_node_id;
+    if (($data['visibility_type'] ?? 'public') !== 'vendor_group') {
+        $data['vendor_categories'] = null;
+    }
 
     Procurement::create($data);
 
@@ -104,7 +136,11 @@ class ProcurementController extends Controller
             ->orderBy('name')
             ->get();
 
-        return view('procurement.show', compact('procurement', 'availableForms'));
+        $vendorCategories = \App\Models\VendorCategory::where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name');
+
+        return view('procurement.show', compact('procurement', 'availableForms', 'vendorCategories'));
     }
 
     /**
@@ -141,5 +177,35 @@ class ProcurementController extends Controller
             'success',
             'Form successfully attached to the procurement.'
         );
+    }
+
+    public function notifyVendors(Request $request, Procurement $procurement)
+    {
+        $request->validate([
+            'vendor_category' => 'nullable|string|max:255|exists:vendor_categories,name',
+            'message' => 'nullable|string|max:1000',
+        ]);
+
+        $vendorsQuery = User::where('user_type', 'vendor')
+            ->where('is_disabled', false)
+            ->where('is_blacklisted', false);
+
+        if ($request->filled('vendor_category')) {
+            $vendorsQuery->where('vendor_category', $request->input('vendor_category'));
+        }
+
+        $vendors = $vendorsQuery->get();
+
+        if ($vendors->isEmpty()) {
+            return back()->with('error', 'No vendors found for the selected category.');
+        }
+
+        foreach ($vendors as $vendor) {
+            Mail::to($vendor->email)->send(
+                new VendorProcurementInvitation($procurement, $vendor, $request->input('message'))
+            );
+        }
+
+        return back()->with('success', "Notification sent to {$vendors->count()} vendors.");
     }
 }

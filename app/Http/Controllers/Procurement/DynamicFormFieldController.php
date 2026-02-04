@@ -32,6 +32,10 @@ class DynamicFormFieldController extends Controller
         $data['is_required'] = $request->boolean('is_required');
         $data['created_by']  = auth()->id();
 
+        if ($form->fields()->where('field_key', $data['field_key'])->exists()) {
+            return back()->with('error', 'A field with this label already exists.');
+        }
+
         DynamicFormField::create($data);
 
         return back()->with('success', 'Field added successfully.');
@@ -45,6 +49,10 @@ class DynamicFormFieldController extends Controller
         // ❗ Prevent deletion if parent form is locked
         if (!$field->form->canEdit()) {
             return back()->with('error', 'Fields cannot be removed from a submitted or approved form.');
+        }
+
+        if (in_array($field->field_key, DynamicForm::globalFieldKeys(), true)) {
+            return back()->with('error', 'This is a required global field and cannot be removed.');
         }
 
         $field->delete();

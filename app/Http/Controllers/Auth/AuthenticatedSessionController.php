@@ -32,6 +32,26 @@ class AuthenticatedSessionController extends Controller
 
         $user = Auth::user();
 
+        if ($user->user_type === 'vendor') {
+            if ($user->is_blacklisted) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'Your vendor account has been blacklisted. Please contact the administrator.']);
+            }
+
+            if ($user->is_disabled) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect()->route('login')
+                    ->withErrors(['email' => 'Your vendor account has been disabled. Please contact the administrator.']);
+            }
+        }
+
         // Check if user is a super admin (bypass all security checks)
         if ($user->isSuperAdmin()) {
             // Funding partners who are also super admins go to partner dashboard
@@ -58,6 +78,11 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('partner.dashboard', absolute: false));
         }
 
+        // Redirect vendors to their portal
+        if ($user->user_type === 'vendor') {
+            return redirect()->intended(route('vendor.dashboard', absolute: false));
+        }
+
         // Default redirect to admin dashboard for all other users
         return redirect()->intended(route('dashboard', absolute: false));
     }
@@ -71,8 +96,8 @@ class AuthenticatedSessionController extends Controller
         $otp = UserLoginOtp::generateFor($user, $sessionId);
 
         // Send email with OTP
-        Mail::to($user->email)->queue(
-            (new LoginOtpMail($user, $otp->otp_code))->onQueue('otp')
+        Mail::to($user->email)->send(
+            new LoginOtpMail($user, $otp->otp_code)
         );
     }
 

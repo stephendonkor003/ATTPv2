@@ -171,6 +171,9 @@
                 <h6 class="fw-bold mb-3">Existing Fields</h6>
 
                 @if ($form->fields->count())
+                    @php
+                        $globalFieldKeys = \App\Models\DynamicForm::globalFieldKeys();
+                    @endphp
                     <table class="table table-bordered table-hover align-middle">
                         <thead class="table-light">
                             <tr>
@@ -183,6 +186,9 @@
                         </thead>
                         <tbody>
                             @foreach ($form->fields as $field)
+                                @php
+                                    $isGlobal = in_array($field->field_key, $globalFieldKeys, true);
+                                @endphp
                                 <tr>
                                     <td>{{ $field->label }}</td>
                                     <td><code>{{ $field->field_key }}</code></td>
@@ -193,9 +199,12 @@
                                         @else
                                             <span class="badge bg-secondary">No</span>
                                         @endif
+                                        @if ($isGlobal)
+                                            <span class="badge bg-info ms-1">Global</span>
+                                        @endif
                                     </td>
                                     <td class="text-center">
-                                        @if ($form->canEdit())
+                                        @if ($form->canEdit() && !$isGlobal)
                                             <form method="POST" action="{{ route('forms.fields.destroy', $field->id) }}"
                                                 onsubmit="return confirm('Remove this field?')">
                                                 @csrf

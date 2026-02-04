@@ -91,6 +91,7 @@ class DynamicFormController extends Controller
         $data['is_active']  = 0; // only active AFTER approval
 
         $form = DynamicForm::create($data);
+        $form->ensureGlobalFields();
 
         return redirect()
             ->route('forms.edit', $form->id)
@@ -103,6 +104,7 @@ class DynamicFormController extends Controller
     public function edit(DynamicForm $form)
     {
         $this->assertFormInScope($form);
+        $form->ensureGlobalFields();
         $form->load('fields');
         $resources = Resource::orderBy('name')
             ->when($this->scopedNodeIds() !== null, function ($query) {

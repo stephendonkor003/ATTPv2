@@ -12,12 +12,16 @@ class FormSubmissionController extends Controller
 {
     public function create(DynamicForm $form)
     {
+        $form->ensureGlobalFields();
         $form->load('fields');
         return view('procurement.submissions.create', compact('form'));
     }
 
     public function store(Request $request, DynamicForm $form)
     {
+        $form->ensureGlobalFields();
+        $form->load('fields');
+
         $submission = FormSubmission::create([
             'procurement_id' => request('procurement_id'),
             'form_id' => $form->id,

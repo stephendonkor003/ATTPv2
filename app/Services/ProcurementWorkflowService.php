@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Procurement;
 use App\Models\ProcurementAuditLog;
+use App\Models\ProcurementPlan;
 use Exception;
 
 class ProcurementWorkflowService
@@ -18,6 +19,7 @@ class ProcurementWorkflowService
     {
         $this->ensureStatus($procurement, 'approved');
         $this->transition($procurement, 'published', 'Published procurement');
+        ProcurementPlan::markLaunchedByCode($procurement->reference_no);
     }
 
     public function close(Procurement $procurement)
@@ -28,8 +30,7 @@ class ProcurementWorkflowService
 
     public function award(Procurement $procurement)
     {
-        $this->ensureStatus($procurement, 'closed');
-        $this->transition($procurement, 'awarded', 'Awarded procurement');
+        app(\App\Services\ProcurementAwardService::class)->award($procurement);
     }
 
     private function ensureStatus(Procurement $procurement, string $required)

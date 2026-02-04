@@ -41,6 +41,7 @@ return [
     'reports_oversight' => 'Relatórios & Supervisão',
     'budget_reports' => 'Relatórios Orçamentários',
     'commitment_report' => 'Relatório de Compromissos',
+    'ifr_report' => 'Relatório IFR',
     'execution_dashboard' => 'Painel de Execução',
     'program_allocation' => 'Alocação de Programa',
     'allocations_reports' => 'Relatórios de Alocações',

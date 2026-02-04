@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
 use App\Models\Procurement;
+use App\Models\ProcurementPlan;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 
@@ -75,6 +76,8 @@ class ProcurementStatusController extends Controller
             'status' => 'published',
         ]);
 
+        ProcurementPlan::markLaunchedByCode($procurement->reference_no);
+
         return back()->with('success', 'Procurement published.');
     }
 
@@ -92,17 +95,15 @@ class ProcurementStatusController extends Controller
         return back()->with('success', 'Procurement closed.');
     }
 
-    public function award(Procurement $procurement)
+    public function award(Procurement $procurement, \App\Services\ProcurementAwardService $awardService)
     {
         $this->assertProcurementInScope($procurement);
-        if ($procurement->status !== 'closed') {
-            return back()->with('error', 'Only closed procurements can be awarded.');
+        try {
+            $awardService->award($procurement);
+        } catch (\Throwable $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        $procurement->update([
-            'status' => 'awarded',
-        ]);
-
-        return back()->with('success', 'Procurement awarded.');
+        return back()->with('success', 'Procurement awarded and vendor notified.');
     }
 }

@@ -16,10 +16,54 @@ class Procurement extends BaseModel
         'reference_no',
         'description',
         'fiscal_year',
+        'application_start_date',
+        'application_end_date',
+        'application_duration_days',
         'estimated_budget',
         'status',
+        'visibility_type',
+        'vendor_categories',
+        'awarded_submission_id',
+        'awarded_vendor_id',
+        'awarded_at',
         'created_by',
     ];
+
+    protected $casts = [
+        'application_start_date' => 'date',
+        'application_end_date' => 'date',
+        'vendor_categories' => 'array',
+        'awarded_at' => 'datetime',
+    ];
+
+    public function isApplicationOpen(): bool
+    {
+        if ($this->status !== 'published') {
+            return false;
+        }
+
+        $today = now()->startOfDay();
+
+        if ($this->application_start_date && $today->lt($this->application_start_date)) {
+            return false;
+        }
+
+        if (!$this->application_end_date) {
+            return true;
+        }
+
+        return $today->lte($this->application_end_date);
+    }
+
+    public function autoCloseIfExpired(): bool
+    {
+        if ($this->status === 'published' && $this->application_end_date && now()->startOfDay()->gt($this->application_end_date)) {
+            $this->update(['status' => 'closed']);
+            return true;
+        }
+
+        return false;
+    }
 
     /* =========================================
      | RELATIONSHIPS
@@ -42,6 +86,31 @@ class Procurement extends BaseModel
     public function submissions()
     {
         return $this->hasMany(FormSubmission::class);
+    }
+
+    public function contractNegotiations()
+    {
+        return $this->hasMany(ProcurementContractNegotiation::class, 'procurement_id');
+    }
+
+    public function purchaseOrders()
+    {
+        return $this->hasMany(ProcurementPurchaseOrder::class, 'procurement_id');
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(ProcurementInvoice::class, 'procurement_id');
+    }
+
+    public function awardedSubmission()
+    {
+        return $this->belongsTo(FormSubmission::class, 'awarded_submission_id');
+    }
+
+    public function awardedVendor()
+    {
+        return $this->belongsTo(User::class, 'awarded_vendor_id');
     }
 
     public function evaluatorAssignments()

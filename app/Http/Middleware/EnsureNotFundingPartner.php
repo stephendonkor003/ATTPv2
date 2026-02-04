@@ -25,6 +25,11 @@ class EnsureNotFundingPartner
                 ->with('error', 'You do not have permission to access that area.');
         }
 
+        if ($user && $user->user_type === 'vendor') {
+            return redirect()->route('vendor.dashboard')
+                ->with('error', 'You do not have permission to access that area.');
+        }
+
         return $next($request);
     }
 }

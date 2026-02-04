@@ -90,9 +90,22 @@ class SecurityController extends Controller
             'ip' => $request->ip(),
         ]);
 
+        // Send OTP right after password change for all non-admin users
+        if ($user->requiresOtpVerification()) {
+            $this->sendOtpCode($user);
+            return redirect()->route('security.otp.show')
+                ->with('otpSent', true)
+                ->with('success', 'Your password has been updated. Please verify the OTP sent to your email.');
+        }
+
         // Redirect funding partners to their portal
         if ($user->user_type === 'funding_partner' || $user->isFundingPartner()) {
             return redirect()->intended(route('partner.dashboard'))
+                ->with('success', 'Your password has been updated successfully. Your account is now active.');
+        }
+
+        if ($user->user_type === 'vendor') {
+            return redirect()->intended(route('vendor.dashboard'))
                 ->with('success', 'Your password has been updated successfully. Your account is now active.');
         }
 
@@ -181,6 +194,11 @@ class SecurityController extends Controller
                 ->with('success', 'Identity verified successfully. Welcome back!');
         }
 
+        if ($user->user_type === 'vendor') {
+            return redirect()->intended(route('vendor.dashboard'))
+                ->with('success', 'Identity verified successfully. Welcome back!');
+        }
+
         return redirect()->intended(route('dashboard'))
             ->with('success', 'Identity verified successfully. Welcome back!');
     }
@@ -213,8 +231,8 @@ class SecurityController extends Controller
     {
         $otp = UserLoginOtp::generateFor($user, session()->getId());
 
-        Mail::to($user->email)->queue(
-            (new LoginOtpMail($user, $otp->otp_code))->onQueue('otp')
+        Mail::to($user->email)->send(
+            new LoginOtpMail($user, $otp->otp_code)
         );
 
         // Log the activity

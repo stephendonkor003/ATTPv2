@@ -149,13 +149,28 @@
 	                                </li>
 	                            @endcan
 	
-	                            @can('finance.purchase_requests.view')
-	                                <li class="nxl-item">
-	                                    <a href="{{ route('finance.purchase-requests.index') }}" class="nxl-link">
-	                                        <i class="feather-file-text me-2"></i> {{ __('admin.purchase_requests') }}
-	                                    </a>
-	                                </li>
-	                            @endcan
+		                            @can('finance.purchase_requests.view')
+		                                <li class="nxl-item">
+		                                    <a href="{{ route('finance.purchase-requests.index') }}" class="nxl-link">
+		                                        <i class="feather-file-text me-2"></i> {{ __('admin.purchase_requests') }}
+		                                    </a>
+		                                </li>
+                                        <li class="nxl-item">
+                                            <a href="{{ route('procurement.invoices.index') }}" class="nxl-link">
+                                                <i class="feather-file-text me-2"></i> Vendor Invoices
+                                            </a>
+                                        </li>
+                                        <li class="nxl-item">
+                                            <a href="{{ route('procurement.purchase-orders.index') }}" class="nxl-link">
+                                                <i class="feather-clipboard me-2"></i> Purchase Orders
+                                            </a>
+                                        </li>
+                                        <li class="nxl-item">
+                                            <a href="{{ route('procurement.disbursements.index') }}" class="nxl-link">
+                                                <i class="feather-dollar-sign me-2"></i> Disbursements
+                                            </a>
+                                        </li>
+		                            @endcan
 
 	                            @can('finance.resources.view')
 	                                <li class="nxl-item">
@@ -207,6 +222,12 @@
                                     <a href="{{ route('budget.reports.commitments') }}" class="nxl-link">
                                         <i class="feather-bar-chart-2 me-2"></i>
                                         {{ __('admin.commitment_report') }}
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.reports.ifr') }}" class="nxl-link">
+                                        <i class="feather-activity me-2"></i>
+                                        {{ __('admin.ifr_report') }}
                                     </a>
                                 </li>
                             @endcan
@@ -481,6 +502,24 @@
                             </li>
                             {{-- @endcan --}}
 
+                            @can('forms.manage')
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.contract-negotiations.index') }}" class="nxl-link">
+                                        <i class="feather-file-text me-2"></i>
+                                        Contract Negotiations
+                                    </a>
+                                </li>
+                            @endcan
+
+                            @can('vendor.manage')
+                                <li class="nxl-item">
+                                    <a href="{{ route('vendors.index') }}" class="nxl-link">
+                                        <i class="feather-users me-2"></i>
+                                        Procurement Vendors
+                                    </a>
+                                </li>
+                            @endcan
+
 
 
                             {{-- ================= SUBMISSIONS ================= --}}
@@ -516,6 +555,55 @@
 
 
 
+                @endcanany
+
+
+                {{-- ================= VENDOR MANAGEMENT ================= --}}
+                @canany(['vendor.manage', 'vendor.requests.manage'])
+                    <li class="nxl-item nxl-caption">
+                        <label>Vendors</label>
+                    </li>
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon">
+                                <i class="feather-briefcase"></i>
+                            </span>
+                            <span class="nxl-mtext">Vendor Management</span>
+                            <span class="nxl-arrow">
+                                <i class="feather-chevron-right"></i>
+                            </span>
+                        </a>
+                        <ul class="nxl-submenu">
+                            @can('vendor.manage')
+                                <li class="nxl-item">
+                                    <a href="{{ route('vendors.index') }}" class="nxl-link">
+                                        <i class="feather-users me-2"></i>
+                                        Vendor Directory
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('vendors.categories.index') }}" class="nxl-link">
+                                        <i class="feather-tag me-2"></i>
+                                        Vendor Categories
+                                    </a>
+                                </li>
+                            @endcan
+                            @can('vendor.requests.manage')
+                                <li class="nxl-item">
+                                    <a href="{{ route('vendors.requests.messages.index') }}" class="nxl-link">
+                                        <i class="feather-message-square me-2"></i>
+                                        Clarification Messages
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('vendors.requests.information.index') }}" class="nxl-link">
+                                        <i class="feather-inbox me-2"></i>
+                                        Information Requests
+                                    </a>
+                                </li>
+                            @endcan
+                        </ul>
+                    </li>
                 @endcanany
 
 

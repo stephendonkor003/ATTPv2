@@ -212,4 +212,19 @@ class ProcurementPlan extends BaseModel
 
         return $this->estimated_end_date->isPast() && !$this->is_launched;
     }
+
+    /**
+     * Mark a procurement plan as launched by procurement code.
+     */
+    public static function markLaunchedByCode(?string $procurementCode): void
+    {
+        if (!$procurementCode) {
+            return;
+        }
+
+        self::where('procurement_code', $procurementCode)->update([
+            'is_launched' => true,
+            'launched_at' => now(),
+        ]);
+    }
 }

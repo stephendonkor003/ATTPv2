@@ -392,6 +392,64 @@ class ProcurementPlanController extends Controller
         ]);
     }
 
+    /**
+     * Lookup procurement plan codes for selection.
+     */
+    public function lookup(Request $request)
+    {
+        $request->validate([
+            'q' => 'nullable|string|max:100',
+        ]);
+
+        $query = ProcurementPlan::query()
+            ->with([
+                'activity:id,name',
+                'subActivity:id,name',
+                'methodPlanned:id,method_name',
+                'programPlan:id,name',
+                'geographic:id,name',
+                'stage:id,stage_name',
+                'status:id,name',
+            ]);
+
+        if (!auth()->user()->can('procurement.view_all')) {
+            $query->where('created_by', auth()->id());
+        }
+
+        if ($request->filled('q')) {
+            $term = $request->input('q');
+            $query->where(function ($q) use ($term) {
+                $q->where('procurement_code', 'like', "%{$term}%")
+                    ->orWhere('title', 'like', "%{$term}%");
+            });
+        }
+
+        $plans = $query->orderByDesc('created_at')
+            ->limit(20)
+            ->get();
+
+        $payload = $plans->map(function (ProcurementPlan $plan) {
+            return [
+                'id' => $plan->id,
+                'procurement_code' => $plan->procurement_code,
+                'title' => $plan->title,
+                'fiscal_year' => $plan->fiscal_year,
+                'estimated_budget' => $plan->estimated_budget,
+                'estimated_start_date' => $plan->estimated_start_date?->format('Y-m-d'),
+                'estimated_end_date' => $plan->estimated_end_date?->format('Y-m-d'),
+                'program_plan' => $plan->programPlan?->name,
+                'activity' => $plan->activity?->name,
+                'sub_activity' => $plan->subActivity?->name,
+                'method' => $plan->methodPlanned?->method_name,
+                'geographic' => $plan->geographic?->name,
+                'stage' => $plan->stage?->stage_name,
+                'status' => $plan->status?->name,
+            ];
+        });
+
+        return response()->json($payload);
+    }
+
     public function programPlanSheet(ProcurementProgramPlan $programPlan)
     {
         $plans = $programPlan->procurements()->with([

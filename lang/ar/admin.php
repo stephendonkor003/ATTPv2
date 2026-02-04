@@ -41,6 +41,7 @@ return [
     'reports_oversight' => 'التقارير والإشراف',
     'budget_reports' => 'تقارير الموازنة',
     'commitment_report' => 'تقرير الالتزامات',
+    'ifr_report' => 'تقرير IFR',
     'execution_dashboard' => 'لوحة التنفيذ',
     'program_allocation' => 'تخصيص البرنامج',
     'allocations_reports' => 'تقارير التخصيصات',

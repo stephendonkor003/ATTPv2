@@ -17,6 +17,13 @@
             </a>
         </div>
 
+        @if (session('success'))
+            <div class="alert alert-success">{{ session('success') }}</div>
+        @endif
+        @if (session('error'))
+            <div class="alert alert-danger">{{ session('error') }}</div>
+        @endif
+
         {{-- ================= PROCUREMENT INFO ================= --}}
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
@@ -89,6 +96,42 @@
                 </div>
             </div>
         </div>
+
+        @canany(['vendor.outreach.send', 'procurement.manage'])
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold">Notify Vendor Groups</h6>
+                    <span class="badge bg-info">Vendor Outreach</span>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ route('procurements.notify-vendors', $procurement) }}" class="row g-3 align-items-end">
+                        @csrf
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Vendor Category</label>
+                            <select name="vendor_category" class="form-control">
+                                <option value="">All Vendors</option>
+                                @forelse ($vendorCategories as $category)
+                                    <option value="{{ $category }}">{{ $category }}</option>
+                                @empty
+                                    <option value="" disabled>No vendor categories configured</option>
+                                @endforelse
+                            </select>
+                            <small class="text-muted">Choose a vendor group or send to everyone.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Message (Optional)</label>
+                            <input type="text" name="message" class="form-control" maxlength="1000"
+                                placeholder="Add a short note to vendors (optional)">
+                        </div>
+                        <div class="col-md-2 text-md-end">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="feather-send me-1"></i> Notify
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        @endcanany
 
         {{-- ================= PROCUREMENT WORKFLOW ================= --}}
 

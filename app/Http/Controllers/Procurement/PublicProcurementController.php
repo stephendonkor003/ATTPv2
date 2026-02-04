@@ -7,8 +7,13 @@ use App\Models\Procurement;
 use App\Models\DynamicForm;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
+use App\Models\User;
+use App\Mail\VendorApplicationReceived;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class PublicProcurementController extends Controller
 {
@@ -19,7 +24,26 @@ class PublicProcurementController extends Controller
      */
     public function index()
     {
+        $today = now()->toDateString();
+
+        Procurement::where('status', 'published')
+            ->whereNotNull('application_end_date')
+            ->whereDate('application_end_date', '<', $today)
+            ->update(['status' => 'closed']);
+
         $procurements = Procurement::where('status', 'published')
+            ->where(function ($query) {
+                $query->whereNull('visibility_type')
+                    ->orWhere('visibility_type', 'public');
+            })
+            ->where(function ($query) use ($today) {
+                $query->whereNull('application_start_date')
+                    ->orWhereDate('application_start_date', '<=', $today);
+            })
+            ->where(function ($query) use ($today) {
+                $query->whereNull('application_end_date')
+                    ->orWhereDate('application_end_date', '>=', $today);
+            })
             ->latest()
             ->get();
 
@@ -33,13 +57,23 @@ class PublicProcurementController extends Controller
      */
     public function show(Procurement $procurement)
     {
-        abort_if($procurement->status !== 'published', 404);
+        if ($procurement->visibility_type && $procurement->visibility_type !== 'public') {
+            abort(404);
+        }
+
+        $procurement->autoCloseIfExpired();
+        abort_if(!$procurement->isApplicationOpen(), 404);
 
         $form = DynamicForm::approved()
             ->where('procurement_id', $procurement->id)
             ->where('is_active', true)
             ->with('fields')
             ->first(); // allow null for public view
+
+        if ($form) {
+            $form->ensureGlobalFields();
+            $form->load('fields');
+        }
 
         return view('public.procurements.show', compact('procurement', 'form'));
     }
@@ -51,13 +85,21 @@ class PublicProcurementController extends Controller
      */
     public function submit(Request $request, Procurement $procurement)
     {
-        abort_if($procurement->status !== 'published', 404);
+        if ($procurement->visibility_type && $procurement->visibility_type !== 'public') {
+            abort(404);
+        }
+
+        $procurement->autoCloseIfExpired();
+        abort_if(!$procurement->isApplicationOpen(), 404);
 
         $form = DynamicForm::approved()
             ->where('procurement_id', $procurement->id)
             ->where('is_active', true)
             ->with('fields')
             ->firstOrFail();
+
+        $form->ensureGlobalFields();
+        $form->load('fields');
 
         /*
         |--------------------------------------------------------------------------
@@ -102,17 +144,71 @@ class PublicProcurementController extends Controller
 
         $validated = $request->validate($rules);
 
+        $officialName = trim((string) $request->input('official_name'));
+        $officialEmail = trim((string) $request->input('official_email'));
+        if ($officialEmail === '') {
+            return back()->withErrors([
+                'official_email' => 'Official email is required to receive confirmation and access credentials.',
+            ]);
+        }
+
+        $existingUser = User::whereRaw('LOWER(email) = ?', [Str::lower($officialEmail)])->first();
+        $temporaryPassword = null;
+        $vendorUser = null;
+
+        if ($existingUser) {
+            if ($existingUser->user_type !== 'vendor') {
+                return back()->withErrors([
+                    'official_email' => 'This email belongs to an internal account and cannot be used for procurement submissions.',
+                ]);
+            }
+
+            if ($existingUser->is_blacklisted) {
+                return back()->withErrors([
+                    'official_email' => 'This vendor has been blacklisted and cannot submit procurement applications.',
+                ]);
+            }
+
+            if ($existingUser->is_disabled) {
+                return back()->withErrors([
+                    'official_email' => 'This vendor account is disabled. Please contact the administrator.',
+                ]);
+            }
+
+            $alreadySubmitted = FormSubmission::where('procurement_id', $procurement->id)
+                ->where('submitted_by', $existingUser->id)
+                ->exists();
+
+            if ($alreadySubmitted) {
+                return back()->withErrors([
+                    'official_email' => 'You have already submitted an application for this procurement.',
+                ]);
+            }
+
+            $vendorUser = $existingUser;
+        } else {
+            $temporaryPassword = Str::random(12);
+            $vendorUser = User::create([
+                'name' => $officialName ?: $officialEmail,
+                'email' => $officialEmail,
+                'password' => Hash::make($temporaryPassword),
+                'user_type' => 'vendor',
+                'must_change_password' => true,
+            ]);
+        }
+
         /*
         |--------------------------------------------------------------------------
         | SAVE SUBMISSION + VALUES
         |--------------------------------------------------------------------------
         */
-        DB::transaction(function () use ($request, $procurement, $form) {
+        $submission = null;
+        DB::transaction(function () use ($request, $procurement, $form, $vendorUser, &$submission) {
 
             $submission = FormSubmission::create([
                 'procurement_id' => $procurement->id,
                 'form_id'        => $form->id,
-                'submitted_by'   => null,
+                'submitted_by'   => $vendorUser?->id,
                 'status'         => 'submitted',
                 'submitted_at'   => now(),
             ]);
@@ -147,6 +243,11 @@ class PublicProcurementController extends Controller
             }
         });
 
-        return back()->with('success', 'Application submitted successfully.');
+        if ($vendorUser && $submission) {
+            Mail::to($vendorUser->email)
+                ->send(new VendorApplicationReceived($procurement, $submission, $vendorUser, $temporaryPassword));
+        }
+
+        return back()->with('success', 'Application submitted successfully. Your login credentials have been emailed to the official email address provided.');
     }
 }

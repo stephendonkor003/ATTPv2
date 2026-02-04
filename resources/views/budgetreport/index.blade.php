@@ -9,9 +9,12 @@
                 <h4 class="fw-bold text-dark mb-1">Budget Overview — All Sectors</h4>
                 <p class="text-muted mb-0">High-level financial summary across sectors and programs</p>
             </div>
-            <div>
+            <div class="d-flex flex-wrap gap-2">
                 <a href="{{ route('budget.reports.commitments') }}" class="btn btn-primary">
                     <i class="feather-file-text me-1"></i> Commitment Report
+                </a>
+                <a href="{{ route('budget.reports.ifr') }}" class="btn btn-outline-primary">
+                    <i class="feather-activity me-1"></i> IFR Report
                 </a>
             </div>
         </div>

@@ -8,6 +8,23 @@ class DynamicForm extends BaseModel
 {
     protected $table = 'dynamic_forms';
 
+    public const GLOBAL_FIELDS = [
+        [
+            'label' => 'Official Name',
+            'field_key' => 'official_name',
+            'field_type' => 'text',
+            'is_required' => true,
+            'sort_order' => '0',
+        ],
+        [
+            'label' => 'Official Email',
+            'field_key' => 'official_email',
+            'field_type' => 'email',
+            'is_required' => true,
+            'sort_order' => '1',
+        ],
+    ];
+
     protected $fillable = [
         'resource_id',
         'name',
@@ -91,5 +108,33 @@ class DynamicForm extends BaseModel
         return $query->where('applies_to', $stage);
     }
 
+    public static function globalFieldKeys(): array
+    {
+        return array_column(self::GLOBAL_FIELDS, 'field_key');
+    }
+
+    public function ensureGlobalFields(): void
+    {
+        if ($this->applies_to !== 'submission') {
+            return;
+        }
+
+        foreach (self::GLOBAL_FIELDS as $field) {
+            DynamicFormField::firstOrCreate(
+                [
+                    'form_id' => $this->id,
+                    'field_key' => $field['field_key'],
+                ],
+                [
+                    'label' => $field['label'],
+                    'field_type' => $field['field_type'],
+                    'is_required' => $field['is_required'],
+                    'options' => null,
+                    'sort_order' => $field['sort_order'],
+                    'created_by' => auth()->id(),
+                ]
+            );
+        }
+    }
 
 }

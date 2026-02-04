@@ -116,6 +116,16 @@ use App\Http\Controllers\{
     EvaluationAssignmentController,
 };
 
+use App\Http\Controllers\Vendor\{
+    VendorPortalController,
+    VendorManagementController,
+    VendorRequestManagementController,
+    VendorProcurementController,
+    VendorCategoryController,
+    VendorInvoiceController,
+    VendorDisbursementController,
+};
+
 /*
 |--------------------------------------------------------------------------
 | SYSTEM / RBAC MANAGEMENT
@@ -147,6 +157,7 @@ use App\Http\Controllers\Procurement\{
     ProcurementProgramPlanController,
     ProcurementSubmissionController,
     ProcurementPlanController,
+    ProcurementInvoiceController,
 };
 
 use App\Http\Controllers\Procurement\Settings\{
@@ -983,6 +994,18 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:budget.reports.view')
             ->name('reports.commitments.export.excel');
 
+        Route::get('reports/ifr', [BudgetReportController::class, 'ifrReport'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.ifr');
+
+        Route::match(['get', 'post'], 'reports/ifr/export/pdf', [BudgetReportController::class, 'exportIfrPdf'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.ifr.export.pdf');
+
+        Route::get('reports/ifr/export/excel', [BudgetReportController::class, 'exportIfrExcel'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.ifr.export.excel');
+
 
         /* =====================================================
          | EXECUTIVE SUMMARY
@@ -1138,6 +1161,10 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::post('/', [ProcurementController::class, 'store'])
             ->name('store');
 
+        Route::post('/{procurement}/notify-vendors', [ProcurementController::class, 'notifyVendors'])
+            ->middleware('permission:vendor.outreach.send')
+            ->name('notify-vendors');
+
         // ⚠️ GENERIC ROUTE MUST ALWAYS BE LAST
         Route::get('/{procurement}', [ProcurementController::class, 'show'])
             ->name('show');
@@ -1145,6 +1172,9 @@ Route::middleware(['auth', 'not.funding.partner'])
 
 
     use App\Http\Controllers\Procurement\ProcurementStatusController;
+    use App\Http\Controllers\Procurement\ProcurementContractNegotiationController;
+    use App\Http\Controllers\Procurement\ProcurementPurchaseOrderController;
+    use App\Http\Controllers\Procurement\ProcurementDisbursementController;
 
 Route::middleware(['auth', 'not.funding.partner'])
     ->prefix('procurement-status')
@@ -1174,6 +1204,80 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::post('{procurement}/award',
             [ProcurementStatusController::class, 'award']
         )->name('award');
+    });
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:forms.manage'])
+    ->prefix('procurement/contract-negotiations')
+    ->name('procurement.contract-negotiations.')
+    ->group(function () {
+        Route::get('/', [ProcurementContractNegotiationController::class, 'index'])
+            ->name('index');
+
+        Route::post('{procurement}/{negotiation}/agree', [ProcurementContractNegotiationController::class, 'agree'])
+            ->name('agree');
+
+        Route::post('{procurement}/{negotiation}/terminate', [ProcurementContractNegotiationController::class, 'terminate'])
+            ->name('terminate');
+
+        Route::post('{procurement}/{negotiation}/documents', [ProcurementContractNegotiationController::class, 'storeDocuments'])
+            ->name('documents.store');
+
+        Route::get('{procurement}/{negotiation}/documents/{document}', [ProcurementContractNegotiationController::class, 'downloadDocument'])
+            ->name('documents.download');
+
+        Route::get('{procurement}', [ProcurementContractNegotiationController::class, 'show'])
+            ->name('show');
+
+        Route::post('{procurement}', [ProcurementContractNegotiationController::class, 'store'])
+            ->name('store');
+    });
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_requests.view'])
+    ->prefix('procurement/purchase-orders')
+    ->name('procurement.purchase-orders.')
+    ->group(function () {
+        Route::get('/', [ProcurementPurchaseOrderController::class, 'index'])
+            ->name('index');
+        Route::get('{purchaseOrder}', [ProcurementPurchaseOrderController::class, 'show'])
+            ->name('show');
+        Route::get('{purchaseOrder}/pdf', [ProcurementPurchaseOrderController::class, 'pdf'])
+            ->name('pdf');
+        Route::get('{purchaseOrder}/download', [ProcurementPurchaseOrderController::class, 'download'])
+            ->name('download');
+    });
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_requests.view'])
+    ->prefix('procurement/disbursements')
+    ->name('procurement.disbursements.')
+    ->group(function () {
+        Route::get('/', [ProcurementDisbursementController::class, 'index'])
+            ->name('index');
+        Route::get('/create', [ProcurementDisbursementController::class, 'create'])
+            ->name('create');
+        Route::post('/', [ProcurementDisbursementController::class, 'store'])
+            ->name('store');
+        Route::get('{disbursement}', [ProcurementDisbursementController::class, 'show'])
+            ->name('show');
+        Route::get('{disbursement}/pdf', [ProcurementDisbursementController::class, 'pdf'])
+            ->name('pdf');
+        Route::get('{disbursement}/download', [ProcurementDisbursementController::class, 'download'])
+            ->name('download');
+    });
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_requests.view'])
+    ->prefix('procurement/invoices')
+    ->name('procurement.invoices.')
+    ->group(function () {
+        Route::get('/', [ProcurementInvoiceController::class, 'index'])
+            ->name('index');
+        Route::get('{invoice}', [ProcurementInvoiceController::class, 'show'])
+            ->name('show');
+        Route::post('{invoice}/approve', [ProcurementInvoiceController::class, 'approve'])
+            ->name('approve');
+        Route::post('{invoice}/reject', [ProcurementInvoiceController::class, 'reject'])
+            ->name('reject');
+        Route::post('{invoice}/purchase-order', [ProcurementInvoiceController::class, 'createPurchaseOrder'])
+            ->name('purchase-order');
     });
 
 
@@ -1962,6 +2066,59 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:system.audit.view'
         Route::get('/', [SystemAuditController::class, 'index'])->name('index');
     });
 
+/*
+|--------------------------------------------------------------------------
+| VENDOR MANAGEMENT (ADMIN)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'not.funding.partner', 'permission:vendor.manage'])
+    ->prefix('vendors')
+    ->name('vendors.')
+    ->group(function () {
+        Route::get('/', [VendorManagementController::class, 'index'])->name('index');
+        Route::get('/template', [VendorManagementController::class, 'template'])->name('template');
+        Route::post('/import', [VendorManagementController::class, 'import'])->name('import');
+        Route::get('/{vendor}/edit', [VendorManagementController::class, 'edit'])->name('edit');
+        Route::put('/{vendor}', [VendorManagementController::class, 'update'])->name('update');
+        Route::put('/{vendor}/disable', [VendorManagementController::class, 'disable'])->name('disable');
+        Route::put('/{vendor}/enable', [VendorManagementController::class, 'enable'])->name('enable');
+        Route::put('/{vendor}/blacklist', [VendorManagementController::class, 'blacklist'])->name('blacklist');
+        Route::put('/{vendor}/unblacklist', [VendorManagementController::class, 'unblacklist'])->name('unblacklist');
+    });
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:vendor.manage'])
+    ->prefix('vendors/categories')
+    ->name('vendors.categories.')
+    ->group(function () {
+        Route::get('/', [VendorCategoryController::class, 'index'])->name('index');
+        Route::get('/create', [VendorCategoryController::class, 'create'])->name('create');
+        Route::post('/', [VendorCategoryController::class, 'store'])->name('store');
+        Route::get('/{category}/edit', [VendorCategoryController::class, 'edit'])->name('edit');
+        Route::put('/{category}', [VendorCategoryController::class, 'update'])->name('update');
+        Route::delete('/{category}', [VendorCategoryController::class, 'destroy'])->name('destroy');
+    });
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:vendor.requests.manage'])
+    ->prefix('vendors/requests')
+    ->name('vendors.requests.')
+    ->group(function () {
+        Route::get('/messages', [VendorRequestManagementController::class, 'messagesIndex'])
+            ->name('messages.index');
+        Route::get('/messages/{message}', [VendorRequestManagementController::class, 'messagesShow'])
+            ->name('messages.show');
+        Route::post('/messages/{message}/respond', [VendorRequestManagementController::class, 'messagesRespond'])
+            ->middleware('permission:vendor.requests.respond')
+            ->name('messages.respond');
+
+        Route::get('/information', [VendorRequestManagementController::class, 'informationIndex'])
+            ->name('information.index');
+        Route::get('/information/{requestRecord}', [VendorRequestManagementController::class, 'informationShow'])
+            ->name('information.show');
+        Route::post('/information/{requestRecord}/respond', [VendorRequestManagementController::class, 'informationRespond'])
+            ->middleware('permission:vendor.requests.respond')
+            ->name('information.respond');
+    });
+
 
 /*
 |--------------------------------------------------------------------------
@@ -2040,6 +2197,59 @@ Route::middleware(['auth', 'funding.partner', 'permission:partner.dashboard.acce
         // Mark welcome as seen
         Route::post('/welcome/seen', [PartnerDashboardController::class, 'markWelcomeSeen'])
             ->name('welcome.seen');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| VENDOR PORTAL
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])
+    ->prefix('vendor')
+    ->name('vendor.')
+    ->group(function () {
+        Route::get('/dashboard', [VendorPortalController::class, 'dashboard'])
+            ->name('dashboard');
+        Route::get('/procurements', [VendorProcurementController::class, 'index'])
+            ->name('procurements.index');
+        Route::get('/procurements/{procurement}', [VendorProcurementController::class, 'show'])
+            ->name('procurements.show');
+        Route::post('/procurements/{procurement}', [VendorProcurementController::class, 'submit'])
+            ->name('procurements.submit');
+        Route::get('/clarifications', [VendorPortalController::class, 'clarifications'])
+            ->name('clarifications');
+        Route::get('/submissions', [VendorPortalController::class, 'submissions'])
+            ->name('submissions');
+        Route::get('/payment-details', [VendorPortalController::class, 'paymentDetails'])
+            ->name('payment-details');
+        Route::put('/payment-details', [VendorPortalController::class, 'updatePaymentDetails'])
+            ->name('payment-details.update');
+        Route::get('/payments', [VendorDisbursementController::class, 'index'])
+            ->name('payments.index');
+        Route::get('/payments/{disbursement}', [VendorDisbursementController::class, 'show'])
+            ->name('payments.show');
+        Route::get('/payments/{disbursement}/pdf', [VendorDisbursementController::class, 'pdf'])
+            ->name('payments.pdf');
+        Route::get('/payments/{disbursement}/download', [VendorDisbursementController::class, 'download'])
+            ->name('payments.download');
+        Route::get('/invoices', [VendorInvoiceController::class, 'index'])
+            ->name('invoices.index');
+        Route::post('/invoices', [VendorInvoiceController::class, 'store'])
+            ->name('invoices.store');
+        Route::get('/invoices/{invoice}', [VendorInvoiceController::class, 'show'])
+            ->name('invoices.show');
+        Route::get('/invoices/{invoice}/pdf', [VendorInvoiceController::class, 'pdf'])
+            ->name('invoices.pdf');
+        Route::get('/invoices/{invoice}/download', [VendorInvoiceController::class, 'download'])
+            ->name('invoices.download');
+        Route::post('/messages', [VendorPortalController::class, 'storeMessage'])
+            ->name('messages.store');
+        Route::post('/information-requests', [VendorPortalController::class, 'storeInformationRequest'])
+            ->name('information-requests.store');
+        Route::get('/applications/{submission}/edit', [VendorPortalController::class, 'editApplication'])
+            ->name('applications.edit');
+        Route::put('/applications/{submission}', [VendorPortalController::class, 'updateApplication'])
+            ->name('applications.update');
     });
 
 /*
@@ -2167,6 +2377,7 @@ Route::middleware(['auth', 'not.funding.partner'])
 
         // AJAX routes (static paths must come BEFORE parameter routes)
         Route::get('/generate-code', [ProcurementPlanController::class, 'generateCode'])->name('generate-code');
+        Route::get('/lookup', [ProcurementPlanController::class, 'lookup'])->name('lookup');
         Route::get('/sheet', [ProcurementPlanController::class, 'sheet'])->name('sheet');
         Route::get('/program-plans/{programPlan}/sheet', [ProcurementPlanController::class, 'programPlanSheet'])
             ->name('program-plans.sheet');
