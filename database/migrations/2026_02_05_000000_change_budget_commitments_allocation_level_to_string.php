@@ -12,6 +12,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE `myb_budget_commitments` MODIFY `allocation_level` DECIMAL(15,2) NULL");
+        DB::statement("ALTER TABLE `myb_budget_commitments` DROP COLUMN `allocation_level`");
+        DB::statement("ALTER TABLE `myb_budget_commitments` ADD `allocation_level` DECIMAL(15,2) NULL");
     }
 };
