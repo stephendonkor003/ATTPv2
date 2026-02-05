@@ -37,6 +37,10 @@ return [
     'program_name' => 'Program Name',
     'program_overview' => 'Program Overview',
     'program_details_description' => 'View detailed information about this program',
+    'program_report' => 'Program Report',
+    'program_report_description' => 'Detailed reporting and budget insights for this program',
+    'program_structure' => 'Program Structure',
+    'program_not_linked' => 'This funding is not linked to a program structure yet. Projects, activities, reports, and insights are not available for drill-down.',
     'governance_node' => 'Governance Node',
     'amount' => 'Amount',
     'approved_amount' => 'Approved Amount',
@@ -74,6 +78,7 @@ return [
     'apply_filters' => 'Apply Filters',
     'clear_filters' => 'Clear Filters',
     'showing_results' => 'Showing :count results',
+    'filtered_for_program' => 'Showing insights for :program',
     'drill_down' => 'Drill Down',
     'view_details' => 'View Details',
     'type' => 'Type',
@@ -100,6 +105,7 @@ return [
     'activity_name' => 'Activity Name',
     'no_activities_found' => 'No activities found for this project',
     'no_sub_activities_found' => 'No sub-activities found for this activity',
+    'no_projects_found' => 'No projects found for this program',
     'completed_sub_activities' => 'Completed',
     'in_progress_sub_activities' => 'In Progress',
     'completion_rate' => 'Completion Rate',
@@ -113,6 +119,8 @@ return [
     'period' => 'Period',
     'action' => 'Action',
     'view' => 'View',
+    'project_budget_trends' => 'Project Budget Trends',
+    'no_chart_data' => 'No chart data available for this program',
 
     // Email Translations
     'email' => [

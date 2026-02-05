@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>AU Bid Portal - Login</title>
+    <title>AUC- Login</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="{{ asset('assets/img/favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ asset('assets/css/login.css') }}">
@@ -327,7 +327,8 @@
 
                     <div class="form-group">
                         <label for="email">Email Address</label>
-                        <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus>
+                        <input id="email" type="email" name="email" value="{{ old('email') }}" required
+                            autofocus>
                         @error('email')
                             <span class="error">{{ $message }}</span>
                         @enderror
@@ -362,7 +363,8 @@
             {{-- Security Information Panel --}}
             <div class="security-info-panel">
                 <h3>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                     </svg>
                     Your Security Matters
@@ -370,27 +372,32 @@
 
                 <div class="security-feature">
                     <h4>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                         Two-Factor Authentication
                     </h4>
-                    <p>After login, a 6-digit verification code will be sent to your email for identity confirmation.</p>
+                    <p>After login, a 6-digit verification code will be sent to your email for identity confirmation.
+                    </p>
                 </div>
 
                 <div class="security-feature">
                     <h4>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                         Regular Password Updates
                     </h4>
-                    <p>For your protection, passwords expire every 60 days. You'll be prompted to create a new secure password.</p>
+                    <p>For your protection, passwords expire every 60 days. You'll be prompted to create a new secure
+                        password.</p>
                 </div>
 
                 <div class="security-feature">
                     <h4>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                         First Login Password Change
@@ -400,7 +407,9 @@
 
                 <div class="security-tip">
                     <h5>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <line x1="12" y1="16" x2="12" y2="12"></line>
                             <line x1="12" y1="8" x2="12.01" y2="8"></line>

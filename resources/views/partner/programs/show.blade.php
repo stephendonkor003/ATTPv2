@@ -6,7 +6,7 @@
     <div class="page-header">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h4 class="fw-bold mb-1">{{ $funding->program_name ?? ($funding->program->name ?? 'Program Details') }}</h4>
+                <h4 class="fw-bold mb-1">{{ $funding->program_name ?? ($funding->program?->name ?? 'Program Details') }}</h4>
                 <p class="text-muted mb-0">{{ __('partner.program_details_description') }}</p>
             </div>
             <a href="{{ route('partner.programs.index') }}" class="btn btn-light">
@@ -14,6 +14,13 @@
             </a>
         </div>
     </div>
+
+    @if(!$programLinked)
+        <div class="alert alert-info mt-3">
+            <i class="feather-info-circle me-2"></i>
+            {{ __('partner.program_not_linked') }}
+        </div>
+    @endif
 
     <div class="row mt-3">
         <!-- Main Program Information -->
@@ -27,7 +34,7 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="text-muted small">{{ __('partner.program_name') }}</label>
-                            <p class="fw-semibold mb-0">{{ $funding->program_name ?? ($funding->program->name ?? '—') }}</p>
+                            <p class="fw-semibold mb-0">{{ $funding->program_name ?? ($funding->program?->name ?? '—') }}</p>
                         </div>
 
                         <div class="col-md-6">
@@ -76,6 +83,7 @@
                                         <th>{{ __('partner.project_name') }}</th>
                                         <th>{{ __('partner.governance_node') }}</th>
                                         <th class="text-end">{{ __('partner.budget') }}</th>
+                                        <th class="text-center">{{ __('partner.activities') }}</th>
                                         <th>{{ __('partner.status') }}</th>
                                     </tr>
                                 </thead>
@@ -99,6 +107,9 @@
                                             <td class="text-end">
                                                 <strong>{{ $project->currency ?? $funding->currency ?? $funder->currency }} {{ number_format($project->total_budget ?? 0, 2) }}</strong>
                                             </td>
+                                            <td class="text-center">
+                                                <span class="badge bg-info">{{ $project->activities->count() }}</span>
+                                            </td>
                                             <td>
                                                 <span class="badge bg-info">{{ ucfirst($project->status ?? 'active') }}</span>
                                             </td>
@@ -106,6 +117,129 @@
                                     @endforeach
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+            @elseif($programLinked)
+                <div class="alert alert-info">
+                    <i class="feather-info-circle me-2"></i>
+                    {{ __('partner.no_projects_found') }}
+                </div>
+            @endif
+
+            <!-- Program Structure: Projects, Activities, Sub-Activities -->
+            @if(isset($projects) && $projects->count() > 0)
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="feather-list me-2"></i>{{ __('partner.program_structure') }}</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="accordion" id="programStructure{{ $funding->id }}">
+                            @foreach($projects as $project)
+                                <div class="accordion-item border mb-2">
+                                    <h2 class="accordion-header">
+                                        <button
+                                            class="accordion-button collapsed"
+                                            type="button"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#structureProject{{ $project->id }}"
+                                        >
+                                            <div class="w-100">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <i class="feather-box me-2 text-primary"></i>
+                                                        <strong>{{ $project->name }}</strong>
+                                                    </div>
+                                                    <div class="me-3">
+                                                        <span class="badge bg-secondary me-2">
+                                                            {{ $project->activities->count() }} {{ __('partner.activities') }}
+                                                        </span>
+                                                        <span class="badge bg-info me-2">
+                                                            {{ $project->activities->sum(fn($activity) => $activity->subActivities->count()) }}
+                                                            {{ __('partner.sub_activities') }}
+                                                        </span>
+                                                        <span class="text-success fw-semibold">
+                                                            {{ $project->currency ?? $funding->currency }} {{ number_format($project->total_budget ?? 0, 2) }}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <small class="text-muted d-block mt-1 ms-4">
+                                                    {{ $project->governanceNode->name ?? '—' }}
+                                                </small>
+                                            </div>
+                                        </button>
+                                    </h2>
+                                    <div
+                                        id="structureProject{{ $project->id }}"
+                                        class="accordion-collapse collapse"
+                                        data-bs-parent="#programStructure{{ $funding->id }}"
+                                    >
+                                        <div class="accordion-body bg-light">
+                                            <div class="d-flex justify-content-end mb-2">
+                                                <a href="{{ route('partner.projects.show', $project->id) }}" class="btn btn-sm btn-outline-primary">
+                                                    <i class="feather-eye me-1"></i> {{ __('partner.view_details') }}
+                                                </a>
+                                            </div>
+
+                                            @if($project->activities && $project->activities->count() > 0)
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-hover bg-white mb-0">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th>{{ __('partner.activity_name') }}</th>
+                                                                <th class="text-end">{{ __('partner.budget') }}</th>
+                                                                <th>{{ __('partner.sub_activities') }}</th>
+                                                                <th>{{ __('partner.status') }}</th>
+                                                                <th class="text-center">{{ __('partner.action') }}</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach($project->activities as $activity)
+                                                                <tr>
+                                                                    <td>
+                                                                        <a href="{{ route('partner.activities.show', $activity->id) }}" class="text-decoration-none">
+                                                                            <strong class="text-primary">{{ $activity->name }}</strong>
+                                                                        </a>
+                                                                        @if($activity->description)
+                                                                            <br><small class="text-muted">{{ Str::limit($activity->description, 80) }}</small>
+                                                                        @endif
+                                                                    </td>
+                                                                    <td class="text-end">
+                                                                        <strong>{{ $activity->currency ?? $project->currency ?? $funding->currency }} {{ number_format($activity->budget ?? 0, 2) }}</strong>
+                                                                    </td>
+                                                                    <td>
+                                                                        @if($activity->subActivities->count() > 0)
+                                                                            <div class="d-flex flex-wrap gap-1">
+                                                                                @foreach($activity->subActivities as $subActivity)
+                                                                                    <span class="badge bg-light text-dark border">{{ $subActivity->name }}</span>
+                                                                                @endforeach
+                                                                            </div>
+                                                                        @else
+                                                                            <span class="text-muted">—</span>
+                                                                        @endif
+                                                                    </td>
+                                                                    <td>
+                                                                        <span class="badge bg-{{ $activity->status === 'completed' ? 'success' : ($activity->status === 'in_progress' ? 'warning text-dark' : 'secondary') }}">
+                                                                            {{ ucfirst($activity->status ?? 'pending') }}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td class="text-center">
+                                                                        <a href="{{ route('partner.activities.show', $activity->id) }}" class="btn btn-sm btn-outline-primary">
+                                                                            <i class="feather-arrow-right"></i>
+                                                                        </a>
+                                                                    </td>
+                                                                </tr>
+                                                            @endforeach
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            @else
+                                                <p class="text-muted text-center mb-0">{{ __('partner.no_activities_found') }}</p>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
                     </div>
                 </div>
@@ -239,6 +373,16 @@
                     <h5 class="mb-0"><i class="feather-zap me-2"></i>{{ __('partner.quick_actions') }}</h5>
                 </div>
                 <div class="card-body">
+                    @can('partner.programs.view')
+                        <a href="{{ route('partner.programs.report', $funding->id) }}" class="btn btn-outline-primary w-100 mb-2">
+                            <i class="feather-file-text me-1"></i> {{ __('partner.program_report') }}
+                        </a>
+
+                        <a href="{{ route('partner.insights', ['funding' => $funding->id]) }}" class="btn btn-outline-secondary w-100 mb-2">
+                            <i class="feather-bar-chart-2 me-1"></i> {{ __('partner.program_insights') }}
+                        </a>
+                    @endcan
+
                     @can('partner.requests.create')
                         <a href="{{ route('partner.requests.create') }}?program={{ $funding->id }}" class="btn btn-primary w-100 mb-2">
                             <i class="feather-message-circle me-1"></i> {{ __('partner.request_information') }}

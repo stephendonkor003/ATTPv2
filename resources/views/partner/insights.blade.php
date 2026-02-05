@@ -22,6 +22,9 @@
         </div>
         <div class="card-body">
             <form method="GET" action="{{ route('partner.insights') }}" id="filterForm">
+                @if(request('funding'))
+                    <input type="hidden" name="funding" value="{{ request('funding') }}">
+                @endif
                 <div class="row g-3">
                     <!-- Search -->
                     <div class="col-md-4">
@@ -83,7 +86,7 @@
                         <button type="submit" class="btn btn-primary me-2">
                             <i class="feather-check me-1"></i> {{ __('partner.apply_filters') }}
                         </button>
-                        <a href="{{ route('partner.insights') }}" class="btn btn-outline-secondary">
+                        <a href="{{ request('funding') ? route('partner.insights', ['funding' => request('funding')]) : route('partner.insights') }}" class="btn btn-outline-secondary">
                             <i class="feather-x me-1"></i> {{ __('partner.clear_filters') }}
                         </a>
                     </div>
@@ -91,6 +94,16 @@
             </form>
         </div>
     </div>
+
+    @if($selectedFunding)
+        <div class="alert alert-success mt-3">
+            <i class="feather-filter me-2"></i>
+            {{ __('partner.filtered_for_program', ['program' => $selectedFunding->program_name ?? ($selectedFunding->program?->name ?? '—')]) }}
+            <a href="{{ route('partner.programs.show', $selectedFunding->id) }}" class="ms-2">
+                {{ __('partner.view_details') }}
+            </a>
+        </div>
+    @endif
 
     <!-- Results Summary -->
     @if($fundings->count() > 0)

@@ -2145,6 +2145,9 @@ Route::middleware(['auth', 'funding.partner', 'permission:partner.dashboard.acce
             Route::get('/programs/{funding}', [PartnerDashboardController::class, 'showProgram'])
                 ->name('programs.show');
 
+            Route::get('/programs/{funding}/report', [PartnerDashboardController::class, 'programReport'])
+                ->name('programs.report');
+
             Route::get('/insights', [PartnerDashboardController::class, 'insights'])
                 ->name('insights');
         });

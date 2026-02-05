@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Partner;
 
 use App\Http\Controllers\Controller;
 use App\Models\Funder;
+use App\Models\Program;
 use App\Models\ProgramFunding;
 use App\Models\ProgramFundingDocument;
 use App\Models\PartnerActivityLog;
@@ -113,6 +114,18 @@ class PartnerDashboardController extends Controller
             ->where('funder_id', $funder->id)
             ->where('status', 'approved');
 
+        $selectedFunding = null;
+        if ($request->filled('funding')) {
+            $selectedFunding = ProgramFunding::with('program')
+                ->where('funder_id', $funder->id)
+                ->where('status', 'approved')
+                ->find($request->funding);
+
+            abort_unless($selectedFunding, 404, 'Program funding not found.');
+
+            $query->where('id', $selectedFunding->id);
+        }
+
         // Apply filters
         if ($request->filled('search')) {
             $search = $request->search;
@@ -179,7 +192,7 @@ class PartnerDashboardController extends Controller
         $governanceNodes = \App\Models\GovernanceNode::orderBy('name')->get();
         $sectors = \App\Models\Sector::orderBy('name')->get();
 
-        return view('partner.insights', compact('funder', 'fundings', 'years', 'governanceNodes', 'sectors'));
+        return view('partner.insights', compact('funder', 'fundings', 'years', 'governanceNodes', 'sectors', 'selectedFunding'));
     }
 
     /**
@@ -202,19 +215,28 @@ class PartnerDashboardController extends Controller
             ->where('status', 'approved')
             ->findOrFail($fundingId);
 
-        // Get projects under this program
-        $projects = Project::where('program_id', $funding->program_id)
-            ->with(['activities', 'governanceNode'])
-            ->get();
+        $program = $this->resolveProgramForFunding($funding);
+        $programLinked = $program !== null;
 
-        // Get activities across all projects
-        $activities = Activity::whereIn('project_id', $projects->pluck('id'))
-            ->with(['project', 'subActivities'])
-            ->get();
+        if ($program && (! $funding->relationLoaded('program') || ! $funding->program)) {
+            $funding->setRelation('program', $program);
+        }
+
+        // Get projects (with activities and sub-activities) under this program
+        $projects = $program
+            ? Project::where('program_id', $program->id)
+                ->with([
+                    'governanceNode.level',
+                    'activities.governanceNode.level',
+                    'activities.subActivities.governanceNode',
+                ])
+                ->orderBy('name')
+                ->get()
+            : collect();
 
         $this->logActivity($funder, 'view_program', ['funding_id' => $fundingId]);
 
-        return view('partner.programs.show', compact('funder', 'funding', 'projects', 'activities'));
+        return view('partner.programs.show', compact('funder', 'funding', 'projects', 'programLinked'));
     }
 
     /**
@@ -233,10 +255,11 @@ class PartnerDashboardController extends Controller
         ])->findOrFail($projectId);
 
         // Verify this project belongs to a program funded by this partner
-        $funding = ProgramFunding::where('program_id', $project->program_id)
-            ->where('funder_id', $funder->id)
-            ->where('status', 'approved')
-            ->firstOrFail();
+        $funding = $this->resolveFundingForProgram(
+            $funder,
+            $project->program_id,
+            $project->program->name ?? null
+        );
 
         $this->logActivity($funder, 'view_project', ['project_id' => $projectId]);
 
@@ -258,14 +281,43 @@ class PartnerDashboardController extends Controller
         ])->findOrFail($activityId);
 
         // Verify this activity belongs to a project in a program funded by this partner
-        $funding = ProgramFunding::where('program_id', $activity->project->program_id)
-            ->where('funder_id', $funder->id)
-            ->where('status', 'approved')
-            ->firstOrFail();
+        $funding = $this->resolveFundingForProgram(
+            $funder,
+            $activity->project->program_id,
+            $activity->project->program->name ?? null
+        );
 
         $this->logActivity($funder, 'view_activity', ['activity_id' => $activityId]);
 
         return view('partner.activities.show', compact('funder', 'activity', 'funding'));
+    }
+
+    /**
+     * Show program report for a specific funded program
+     */
+    public function programReport($fundingId)
+    {
+        $funder = $this->getPartnerFunder();
+
+        $funding = ProgramFunding::with(['program', 'governanceNode.level'])
+            ->where('funder_id', $funder->id)
+            ->where('status', 'approved')
+            ->findOrFail($fundingId);
+
+        $program = $this->resolveProgramForFunding($funding, [
+            'projects.allocations',
+            'projects.activities.subActivities',
+        ]);
+
+        $programLinked = $program !== null;
+
+        if ($program && (! $funding->relationLoaded('program') || ! $funding->program)) {
+            $funding->setRelation('program', $program);
+        }
+
+        $this->logActivity($funder, 'view_program_report', ['funding_id' => $fundingId]);
+
+        return view('partner.programs.report', compact('funder', 'funding', 'program', 'programLinked'));
     }
 
     /**
@@ -347,5 +399,55 @@ class PartnerDashboardController extends Controller
             action: $action,
             metadata: $metadata
         );
+    }
+
+    /**
+     * Resolve a program instance for the given funding (by ID or name).
+     */
+    protected function resolveProgramForFunding(ProgramFunding $funding, array $with = []): ?Program
+    {
+        $program = $funding->program;
+
+        if ($program) {
+            if (!empty($with)) {
+                $program->loadMissing($with);
+            }
+            return $program;
+        }
+
+        if ($funding->program_id) {
+            return Program::with($with)->find($funding->program_id);
+        }
+
+        if ($funding->program_name) {
+            return Program::with($with)->where('name', $funding->program_name)->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve funding for a program by ID or name (for this partner).
+     */
+    protected function resolveFundingForProgram(Funder $funder, ?int $programId, ?string $programName): ProgramFunding
+    {
+        $baseQuery = ProgramFunding::where('funder_id', $funder->id)
+            ->where('status', 'approved');
+
+        if ($programId) {
+            $funding = (clone $baseQuery)->where('program_id', $programId)->first();
+            if ($funding) {
+                return $funding;
+            }
+        }
+
+        if ($programName) {
+            $funding = (clone $baseQuery)->where('program_name', $programName)->first();
+            if ($funding) {
+                return $funding;
+            }
+        }
+
+        abort(404, 'Program funding not found.');
     }
 }

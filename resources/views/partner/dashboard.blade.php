@@ -112,7 +112,7 @@
                     <tbody>
                         @forelse($fundings->take(5) as $funding)
                         <tr>
-                            <td><strong>{{ $funding->program_name ?? ($funding->program->name ?? '—') }}</strong></td>
+                            <td><strong>{{ $funding->program_name ?? ($funding->program?->name ?? '—') }}</strong></td>
                             <td>
                                 <div>{{ $funding->governanceNode->name ?? '-' }}</div>
                                 @if($funding->governanceNode)

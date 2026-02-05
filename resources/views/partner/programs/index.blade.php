@@ -19,14 +19,14 @@
                         <th>{{ __('partner.governance_node') }}</th>
                         <th style="width: 150px;" class="text-end">{{ __('partner.amount') }}</th>
                         <th style="width: 120px;">{{ __('partner.period') }}</th>
-                        <th style="width: 100px;" class="text-center no-sort no-export">{{ __('partner.action') }}</th>
+                        <th style="width: 140px;" class="text-center no-sort no-export">{{ __('partner.action') }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($fundings as $funding)
                     <tr>
                         <td class="text-center">{{ $loop->iteration }}</td>
-                        <td><strong>{{ $funding->program_name ?? ($funding->program->name ?? '—') }}</strong></td>
+                        <td><strong>{{ $funding->program_name ?? ($funding->program?->name ?? '—') }}</strong></td>
                         <td>
                             <div class="fw-semibold">{{ $funding->governanceNode->name ?? '-' }}</div>
                             <div class="text-muted small">{{ $funding->governanceNode->level->name ?? '' }}</div>
@@ -36,9 +36,14 @@
                         </td>
                         <td>{{ $funding->start_year }} - {{ $funding->end_year }}</td>
                         <td class="text-center no-export">
-                            <a href="{{ route('partner.programs.show', $funding->id) }}" class="btn btn-sm btn-outline-primary">
-                                <i class="feather-eye"></i>
-                            </a>
+                            <div class="btn-group" role="group">
+                                <a href="{{ route('partner.programs.show', $funding->id) }}" class="btn btn-sm btn-outline-primary" title="{{ __('partner.view_details') }}">
+                                    <i class="feather-eye"></i>
+                                </a>
+                                <a href="{{ route('partner.programs.report', $funding->id) }}" class="btn btn-sm btn-outline-secondary" title="{{ __('partner.program_report') }}">
+                                    <i class="feather-file-text"></i>
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     @empty
