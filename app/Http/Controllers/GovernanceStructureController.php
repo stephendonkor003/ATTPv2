@@ -24,12 +24,30 @@ class GovernanceStructureController extends Controller
         $assignments = GovernanceNodeAssignment::with(['node.level', 'user'])->orderBy('id')->get();
         $users = User::orderBy('name')->get();
 
+        $orgNodes = $nodes->map(function ($n) {
+            return [
+                'id' => $n->id,
+                'name' => $n->name,
+                'level' => $n->level->name ?? '',
+            ];
+        })->values();
+
+        $orgLines = $lines->map(function ($l) {
+            return [
+                'child' => $l->child_node_id,
+                'parent' => $l->parent_node_id,
+                'type' => $l->line_type,
+            ];
+        })->values();
+
         return view('finance.governance.index', compact(
             'levels',
             'nodes',
             'lines',
             'assignments',
-            'users'
+            'users',
+            'orgNodes',
+            'orgLines'
         ));
     }
 
