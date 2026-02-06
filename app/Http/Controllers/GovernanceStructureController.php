@@ -146,12 +146,11 @@ class GovernanceStructureController extends Controller
             'effective_end' => 'nullable|date',
         ]);
 
-        // Cast numeric fields to ensure type-safe downstream calls and trim stray whitespace
-        $validated['child_node_id'] = (int) trim((string) $validated['child_node_id']);
-        $validated['parent_node_id'] = (int) trim((string) $validated['parent_node_id']);
+        // Trim stray whitespace
+        $validated['child_node_id'] = trim((string) $validated['child_node_id']);
+        $validated['parent_node_id'] = trim((string) $validated['parent_node_id']);
 
-        // Guard against self-parenting which would also violate FK constraints/logical structure
-        // Re-verify the nodes exist after casting (defensive against malformed inputs)
+        // Re-verify the nodes exist after normalization (defensive against malformed inputs)
         if (!GovernanceNode::whereKey($validated['child_node_id'])->exists()) {
             throw ValidationException::withMessages([
                 'child_node_id' => 'Selected child node no longer exists.',
@@ -197,8 +196,8 @@ class GovernanceStructureController extends Controller
             'effective_end' => 'nullable|date',
         ]);
 
-        $validated['child_node_id'] = (int) trim((string) $validated['child_node_id']);
-        $validated['parent_node_id'] = (int) trim((string) $validated['parent_node_id']);
+        $validated['child_node_id'] = trim((string) $validated['child_node_id']);
+        $validated['parent_node_id'] = trim((string) $validated['parent_node_id']);
 
         if (!GovernanceNode::whereKey($validated['child_node_id'])->exists()) {
             throw ValidationException::withMessages([
@@ -243,8 +242,8 @@ class GovernanceStructureController extends Controller
     public function storeAssignment(Request $request)
     {
         $validated = $request->validate([
-            'node_id' => 'required|integer|exists:myb_governance_nodes,id',
-            'user_id' => 'required|integer|exists:users,id',
+            'node_id' => 'required|exists:myb_governance_nodes,id',
+            'user_id' => 'required|exists:users,id',
             'role_title' => 'nullable|string|max:255',
             'is_primary' => 'nullable|boolean',
             'notify_user' => 'nullable|boolean',
@@ -252,8 +251,8 @@ class GovernanceStructureController extends Controller
             'effective_end' => 'nullable|date|after_or_equal:effective_start',
         ]);
 
-        $validated['node_id'] = (int) $validated['node_id'];
-        $validated['user_id'] = (int) $validated['user_id'];
+        $validated['node_id'] = trim((string) $validated['node_id']);
+        $validated['user_id'] = trim((string) $validated['user_id']);
 
         $validated['is_primary'] = (bool) ($validated['is_primary'] ?? false);
         $notifyUser = (bool) ($validated['notify_user'] ?? false);
@@ -285,8 +284,8 @@ class GovernanceStructureController extends Controller
     public function updateAssignment(Request $request, GovernanceNodeAssignment $assignment)
     {
         $validated = $request->validate([
-            'node_id' => 'required|integer|exists:myb_governance_nodes,id',
-            'user_id' => 'required|integer|exists:users,id',
+            'node_id' => 'required|exists:myb_governance_nodes,id',
+            'user_id' => 'required|exists:users,id',
             'role_title' => 'nullable|string|max:255',
             'is_primary' => 'nullable|boolean',
             'notify_user' => 'nullable|boolean',
@@ -294,8 +293,8 @@ class GovernanceStructureController extends Controller
             'effective_end' => 'nullable|date|after_or_equal:effective_start',
         ]);
 
-        $validated['node_id'] = (int) $validated['node_id'];
-        $validated['user_id'] = (int) $validated['user_id'];
+        $validated['node_id'] = trim((string) $validated['node_id']);
+        $validated['user_id'] = trim((string) $validated['user_id']);
 
         $validated['is_primary'] = (bool) ($validated['is_primary'] ?? false);
         $notifyUser = (bool) ($validated['notify_user'] ?? false);
@@ -331,7 +330,7 @@ class GovernanceStructureController extends Controller
         return back()->with('success', 'Assignment deleted successfully.');
     }
 
-    private function assertPrimaryLineAvailable(int $childNodeId, ?string $start, ?string $end, ?int $ignoreId = null): void
+    private function assertPrimaryLineAvailable(string $childNodeId, ?string $start, ?string $end, ?string $ignoreId = null): void
     {
         $startDate = $start ?? '0001-01-01';
         $endDate = $end ?? '9999-12-31';
@@ -352,7 +351,7 @@ class GovernanceStructureController extends Controller
         }
     }
 
-    private function assertPrimaryAssignmentAvailable(int $nodeId, ?string $start, ?string $end, ?int $ignoreId = null): void
+    private function assertPrimaryAssignmentAvailable(string $nodeId, ?string $start, ?string $end, ?string $ignoreId = null): void
     {
         $startDate = $start ?? '0001-01-01';
         $endDate = $end ?? '9999-12-31';
