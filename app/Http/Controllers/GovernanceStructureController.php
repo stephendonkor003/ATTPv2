@@ -139,8 +139,8 @@ class GovernanceStructureController extends Controller
     public function storeLine(Request $request)
     {
         $validated = $request->validate([
-            'child_node_id' => 'required|integer|different:parent_node_id|exists:myb_governance_nodes,id',
-            'parent_node_id' => 'required|integer|exists:myb_governance_nodes,id',
+            'child_node_id' => 'required|different:parent_node_id|exists:myb_governance_nodes,id',
+            'parent_node_id' => 'required|exists:myb_governance_nodes,id',
             'line_type' => 'required|in:primary,dotted,advisory',
             'effective_start' => 'nullable|date',
             'effective_end' => 'nullable|date',
@@ -177,8 +177,8 @@ class GovernanceStructureController extends Controller
     public function updateLine(Request $request, GovernanceReportingLine $line)
     {
         $validated = $request->validate([
-            'child_node_id' => 'required|integer|different:parent_node_id|exists:myb_governance_nodes,id',
-            'parent_node_id' => 'required|integer|exists:myb_governance_nodes,id',
+            'child_node_id' => 'required|different:parent_node_id|exists:myb_governance_nodes,id',
+            'parent_node_id' => 'required|exists:myb_governance_nodes,id',
             'line_type' => 'required|in:primary,dotted,advisory',
             'effective_start' => 'nullable|date',
             'effective_end' => 'nullable|date',
