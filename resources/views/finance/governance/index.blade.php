@@ -104,7 +104,10 @@
 
                 <div class="card shadow-sm border-0 mt-3">
                     <div class="card-body">
-                        <table id="governanceNodesTable" class="table table-striped table-hover data-table" style="width: 100%;">
+                        <table id="governanceNodesTable"
+                            class="table table-striped table-hover data-table"
+                            style="width: 100%;"
+                            data-config='@json(["language" => ["emptyTable" => "No nodes created yet."]])'>
                             <thead>
                                 <tr>
                                     <th style="width: 120px;">Level</th>
@@ -116,7 +119,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @forelse ($nodes as $node)
+                                @foreach ($nodes as $node)
                                     <tr>
                                         <td><span class="badge bg-primary">{{ $node->level->name ?? '-' }}</span></td>
                                         <td>
@@ -160,11 +163,7 @@
                                             </div>
                                         </td>
                                     </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">No nodes created yet.</td>
-                                    </tr>
-                                @endforelse
+                                @endforeach
                             </tbody>
                         </table>
                     </div>
@@ -304,7 +303,10 @@
 
                 <div class="card shadow-sm border-0 mt-3">
                     <div class="card-body">
-                        <table id="governanceLinesTable" class="table table-striped table-hover data-table" style="width: 100%;">
+                        <table id="governanceLinesTable"
+                            class="table table-striped table-hover data-table"
+                            style="width: 100%;"
+                            data-config='@json(["language" => ["emptyTable" => "No reporting lines created yet."]])'>
                             <thead>
                                 <tr>
                                     <th>Child Node</th>
@@ -315,7 +317,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @forelse ($lines as $line)
+                                @foreach ($lines as $line)
                                     <tr>
                                         <td>
                                             <strong>{{ $line->child->name ?? '-' }}</strong>
@@ -364,12 +366,7 @@
                                             </div>
                                         </td>
                                     </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-4">No reporting lines created yet.
-                                        </td>
-                                    </tr>
-                                @endforelse
+                                @endforeach
                             </tbody>
                         </table>
                     </div>
@@ -523,7 +520,10 @@
 
                 <div class="card shadow-sm border-0 mt-3">
                     <div class="card-body">
-                        <table id="governanceAssignmentsTable" class="table table-striped table-hover data-table" style="width: 100%;">
+                        <table id="governanceAssignmentsTable"
+                            class="table table-striped table-hover data-table"
+                            style="width: 100%;"
+                            data-config='@json(["language" => ["emptyTable" => "No assignments created yet."]])'>
                             <thead>
                                 <tr>
                                     <th>Node</th>
@@ -535,7 +535,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @forelse ($assignments as $assignment)
+                                @foreach ($assignments as $assignment)
                                     <tr>
                                         <td>
                                             <strong>{{ $assignment->node->name ?? '-' }}</strong>
@@ -582,12 +582,7 @@
                                             </div>
                                         </td>
                                     </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">No assignments created yet.
-                                        </td>
-                                    </tr>
-                                @endforelse
+                                @endforeach
                             </tbody>
                         </table>
                     </div>
