@@ -139,7 +139,7 @@
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label fw-semibold">Sort Order</label>
-                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ $levels->max('sort_order') + 1 }}" readonly>
+                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ ($levels->max('sort_order') ?? -1) + 1 }}" readonly>
                                 </div>
                                 <div class="col-md-12">
                                     <label class="form-label fw-semibold">Description</label>
