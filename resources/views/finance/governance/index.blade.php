@@ -2,6 +2,58 @@
 
 @section('content')
     <div class="nxl-container">
+        <style>
+            .organogram-tree ul {
+                list-style: none;
+                padding-left: 1.25rem;
+                position: relative;
+                margin: 0;
+            }
+            .organogram-tree ul:before {
+                content: '';
+                position: absolute;
+                left: 0.4rem;
+                top: 0;
+                bottom: 0;
+                border-left: 1px solid #dee2e6;
+            }
+            .organogram-tree li {
+                position: relative;
+                padding-left: 1rem;
+                margin: 0.35rem 0;
+            }
+            .organogram-tree li:before {
+                content: '';
+                position: absolute;
+                left: 0.4rem;
+                top: 0.9rem;
+                width: 0.8rem;
+                border-top: 1px solid #dee2e6;
+            }
+            .organogram-node {
+                display: inline-block;
+                padding: 0.35rem 0.65rem;
+                background: #f8f9fa;
+                border: 1px solid #e5e7eb;
+                border-radius: 6px;
+                min-width: 220px;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            }
+            .organogram-name {
+                font-weight: 600;
+            }
+            .organogram-level {
+                font-size: 12px;
+                color: #6c757d;
+            }
+            .organogram-dotted {
+                font-size: 11px;
+                color: #0d6efd;
+            }
+            .organogram-root > li:first-child:before {
+                top: 1rem;
+            }
+        </style>
         <div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
                 <h4 class="fw-bold mb-1">Governance Structure</h4>
@@ -52,6 +104,12 @@
                 <button class="nav-link" id="assignments-tab" data-bs-toggle="tab" data-bs-target="#assignmentsTab"
                     type="button" role="tab" aria-controls="assignmentsTab" aria-selected="false">
                     Assignments
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="organogram-tab" data-bs-toggle="tab" data-bs-target="#organogramTab"
+                    type="button" role="tab" aria-controls="organogramTab" aria-selected="false">
+                    Organogram
                 </button>
             </li>
         </ul>
@@ -816,6 +874,25 @@
                     @endcanany
                 @endforeach
             </div>
+
+            <div class="tab-pane fade" id="organogramTab" role="tabpanel" aria-labelledby="organogram-tab">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                            <div>
+                                <h6 class="fw-bold mb-1">Organogram</h6>
+                                <p class="text-muted small mb-0">Derived from primary reporting lines. Dotted/advisory links are shown as side notes.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0 mt-3">
+                    <div class="card-body">
+                        <div id="organogramTree" class="organogram-tree"></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <script>
@@ -868,6 +945,67 @@
                         .replace(/^_+|_+$/g, '');
                     keyInput.value = slug;
                 });
+            }
+
+            // Organogram rendering
+            const orgContainer = document.getElementById('organogramTree');
+            if (orgContainer) {
+                const nodes = @json($nodes->map(fn($n) => [
+                    'id' => $n->id,
+                    'name' => $n->name,
+                    'level' => $n->level->name ?? '',
+                ]));
+                const lines = @json($lines->map(fn($l) => [
+                    'child' => $l->child_node_id,
+                    'parent' => $l->parent_node_id,
+                    'type' => $l->line_type,
+                ]));
+
+                const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
+                const childrenMap = {};
+                const dottedMap = {};
+
+                lines.forEach(l => {
+                    if (l.type === 'primary') {
+                        childrenMap[l.parent] = childrenMap[l.parent] || [];
+                        childrenMap[l.parent].push(l.child);
+                    } else {
+                        dottedMap[l.child] = dottedMap[l.child] || [];
+                        dottedMap[l.child].push({ parent: l.parent, type: l.type });
+                    }
+                });
+
+                const childIds = new Set(lines.filter(l => l.type === 'primary').map(l => l.child));
+                const rootIds = nodes
+                    .filter(n => !childIds.has(n.id))
+                    .map(n => n.id);
+
+                const renderNode = (id) => {
+                    const n = nodeMap[id];
+                    if (!n) return '';
+                    const children = childrenMap[id] || [];
+                    const dotted = dottedMap[id] || [];
+                    const dottedHtml = dotted.length
+                        ? `<div class="organogram-dotted">(${dotted.map(d => `${d.type} to ${nodeMap[d.parent]?.name || 'N/A'}`).join(', ')})</div>`
+                        : '';
+                    const childrenHtml = children.length
+                        ? `<ul>${children.map(renderNode).join('')}</ul>`
+                        : '';
+                    return `<li>
+                        <div class="organogram-node">
+                            <div class="organogram-name">${n.name}</div>
+                            <div class="organogram-level">${n.level}</div>
+                            ${dottedHtml}
+                        </div>
+                        ${childrenHtml}
+                    </li>`;
+                };
+
+                const rootsHtml = rootIds.length
+                    ? rootIds.map(renderNode).join('')
+                    : '<li><div class="text-muted">No reporting lines yet.</div></li>';
+
+                orgContainer.innerHTML = `<ul class="organogram-root">${rootsHtml}</ul>`;
             }
         </script>
     </div>
