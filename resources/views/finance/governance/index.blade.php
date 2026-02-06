@@ -980,13 +980,15 @@
                 });
             }
 
-            // Organogram rendering
+            // Organogram rendering (built strictly from reporting lines)
             const orgContainer = document.getElementById('organogramTree');
             if (orgContainer) {
-                const nodes = @json($orgNodes);
-                const lines = @json($orgLines);
+                const nodes = @json($orgNodes);   // [{id, name, level}]
+                const lines = @json($orgLines);   // [{child, parent, type}]
 
                 const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+                const primaryLines = lines.filter(l => l.type === 'primary');
                 const childrenMap = {};
                 const dottedMap = {};
 
@@ -1000,16 +1002,33 @@
                     }
                 });
 
-                const childIds = new Set(lines.filter(l => l.type === 'primary').map(l => l.child));
-                const rootIds = nodes
-                    .filter(n => !childIds.has(n.id))
-                    .map(n => n.id);
+                // Roots: parents that are never listed as a child in PRIMARY lines.
+                const childIds = new Set(primaryLines.map(l => l.child));
+                let rootIds = [...new Set(primaryLines.map(l => l.parent))].filter(id => !childIds.has(id));
 
-                const renderNode = (id) => {
+                // Fallbacks: if no primary hierarchy, show every node that appears in any line.
+                if (!rootIds.length) {
+                    const anyLineIds = new Set(lines.flatMap(l => [l.parent, l.child]));
+                    rootIds = [...anyLineIds];
+                }
+
+                const renderNode = (id, visited = new Set()) => {
+                    if (visited.has(id)) {
+                        return `<li><div class="organogram-node">
+                            <div class="organogram-name">${nodeMap[id]?.name ?? 'Loop detected'}</div>
+                            <div class="organogram-level text-muted">Cycle detected</div>
+                        </div></li>`;
+                    }
+
                     const n = nodeMap[id];
                     if (!n) return '';
+
+                    const nextVisited = new Set(visited);
+                    nextVisited.add(id);
+
                     const children = childrenMap[id] || [];
                     const dotted = dottedMap[id] || [];
+
                     const dottedHtml = dotted.length
                         ? `<div class="organogram-dotted">(${
                             dotted.map(function(d) {
@@ -1018,9 +1037,11 @@
                             }).join(', ')
                         })</div>`
                         : '';
+
                     const childrenHtml = children.length
-                        ? `<ul class="organogram-children">${children.map(renderNode).join('')}</ul>`
+                        ? `<ul class="organogram-children">${children.map(childId => renderNode(childId, nextVisited)).join('')}</ul>`
                         : '';
+
                     return `<li>
                         <div class="organogram-node">
                             <div class="organogram-name">${n.name}</div>
@@ -1032,7 +1053,7 @@
                 };
 
                 const rootsHtml = rootIds.length
-                    ? rootIds.map(renderNode).join('')
+                    ? rootIds.map(id => renderNode(id)).join('')
                     : '<li><div class="text-muted">No reporting lines yet.</div></li>';
 
                 orgContainer.innerHTML = `<ul class="organogram-root">${rootsHtml}</ul>`;
