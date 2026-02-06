@@ -5,53 +5,73 @@
         <style>
             .organogram-tree ul {
                 list-style: none;
-                padding-left: 1.25rem;
-                position: relative;
+                padding-left: 1.5rem;
                 margin: 0;
+                position: relative;
             }
             .organogram-tree ul:before {
                 content: '';
                 position: absolute;
-                left: 0.4rem;
+                left: 0.55rem;
                 top: 0;
                 bottom: 0;
-                border-left: 1px solid #dee2e6;
+                border-left: 1px solid #d0d7de;
             }
             .organogram-tree li {
                 position: relative;
-                padding-left: 1rem;
-                margin: 0.35rem 0;
+                padding-left: 1.5rem;
+                margin: 0.5rem 0;
             }
             .organogram-tree li:before {
                 content: '';
                 position: absolute;
-                left: 0.4rem;
-                top: 0.9rem;
-                width: 0.8rem;
-                border-top: 1px solid #dee2e6;
+                left: 0.55rem;
+                top: 0.95rem;
+                width: 1.1rem;
+                border-top: 1px solid #d0d7de;
+            }
+            .organogram-tree li:after {
+                content: '';
+                position: absolute;
+                left: 1.6rem;
+                top: 0.78rem;
+                width: 0;
+                height: 0;
+                border-top: 6px solid transparent;
+                border-bottom: 6px solid transparent;
+                border-left: 7px solid #9aa4b5;
+            }
+            .organogram-root > li:first-child:before,
+            .organogram-root > li:first-child:after {
+                top: 1.05rem;
+            }
+            .organogram-tree ul.organogram-root {
+                padding-left: 0;
+            }
+            .organogram-tree ul.organogram-root:before {
+                content: none;
             }
             .organogram-node {
                 display: inline-block;
-                padding: 0.35rem 0.65rem;
-                background: #f8f9fa;
-                border: 1px solid #e5e7eb;
+                padding: 0.45rem 0.75rem;
+                background: #fdfefe;
+                border: 1px solid #e2e8f0;
                 border-radius: 6px;
-                min-width: 220px;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+                min-width: 240px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.06);
             }
             .organogram-name {
-                font-weight: 600;
+                font-weight: 700;
+                color: #1f2937;
             }
             .organogram-level {
                 font-size: 12px;
-                color: #6c757d;
+                color: #6b7280;
             }
             .organogram-dotted {
                 font-size: 11px;
                 color: #0d6efd;
-            }
-            .organogram-root > li:first-child:before {
-                top: 1rem;
+                margin-top: 2px;
             }
         </style>
         <div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
@@ -986,7 +1006,7 @@
                         })</div>`
                         : '';
                     const childrenHtml = children.length
-                        ? `<ul>${children.map(renderNode).join('')}</ul>`
+                        ? `<ul class="organogram-children">${children.map(renderNode).join('')}</ul>`
                         : '';
                     return `<li>
                         <div class="organogram-node">
