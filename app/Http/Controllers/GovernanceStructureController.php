@@ -9,6 +9,7 @@ use App\Models\GovernanceNodeAssignment;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
@@ -30,6 +31,49 @@ class GovernanceStructureController extends Controller
             'assignments',
             'users'
         ));
+    }
+
+    public function storeLevel(Request $request)
+    {
+        $validated = $request->validate([
+            'key'         => 'required|string|max:50|unique:myb_governance_levels,key',
+            'name'        => 'required|string|max:100',
+            'sort_order'  => 'nullable|integer|min:0',
+            'description' => 'nullable|string',
+        ]);
+
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+
+        GovernanceLevel::create($validated);
+
+        return back()->with('success', 'Governance level created successfully.');
+    }
+
+    public function updateLevel(Request $request, GovernanceLevel $level)
+    {
+        $validated = $request->validate([
+            'key'         => 'required|string|max:50|unique:myb_governance_levels,key,' . $level->id,
+            'name'        => 'required|string|max:100',
+            'sort_order'  => 'nullable|integer|min:0',
+            'description' => 'nullable|string',
+        ]);
+
+        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+
+        $level->update($validated);
+
+        return back()->with('success', 'Governance level updated successfully.');
+    }
+
+    public function destroyLevel(GovernanceLevel $level)
+    {
+        if ($level->nodes()->exists()) {
+            return back()->with('error', 'Cannot delete a level that is already assigned to nodes. Please move or delete those nodes first.');
+        }
+
+        $level->delete();
+
+        return back()->with('success', 'Governance level deleted successfully.');
     }
 
     public function storeNode(Request $request)
@@ -80,8 +124,17 @@ class GovernanceStructureController extends Controller
             'parent_node_id' => 'required|exists:myb_governance_nodes,id',
             'line_type' => 'required|in:primary,dotted,advisory',
             'effective_start' => 'nullable|date',
-            'effective_end' => 'nullable|date|after_or_equal:effective_start',
+            'effective_end' => 'nullable|date',
         ]);
+
+        // Only enforce ordering when both dates are supplied
+        if ($validated['effective_start'] && $validated['effective_end']) {
+            if (Carbon::parse($validated['effective_end'])->lt(Carbon::parse($validated['effective_start']))) {
+                throw ValidationException::withMessages([
+                    'effective_end' => 'End date must be on or after the start date.',
+                ]);
+            }
+        }
 
         if ($validated['line_type'] === 'primary') {
             $this->assertPrimaryLineAvailable(
@@ -105,8 +158,16 @@ class GovernanceStructureController extends Controller
             'parent_node_id' => 'required|exists:myb_governance_nodes,id',
             'line_type' => 'required|in:primary,dotted,advisory',
             'effective_start' => 'nullable|date',
-            'effective_end' => 'nullable|date|after_or_equal:effective_start',
+            'effective_end' => 'nullable|date',
         ]);
+
+        if ($validated['effective_start'] && $validated['effective_end']) {
+            if (Carbon::parse($validated['effective_end'])->lt(Carbon::parse($validated['effective_start']))) {
+                throw ValidationException::withMessages([
+                    'effective_end' => 'End date must be on or after the start date.',
+                ]);
+            }
+        }
 
         if ($validated['line_type'] === 'primary') {
             $this->assertPrimaryLineAvailable(

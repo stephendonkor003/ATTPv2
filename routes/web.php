@@ -571,6 +571,18 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.governance_structure.view')
             ->name('governance.index');
 
+        Route::post('governance-structure/levels', [GovernanceStructureController::class, 'storeLevel'])
+            ->middleware('permission:finance.governance_structure.create')
+            ->name('governance.levels.store');
+
+        Route::put('governance-structure/levels/{level}', [GovernanceStructureController::class, 'updateLevel'])
+            ->middleware('permission:finance.governance_structure.edit')
+            ->name('governance.levels.update');
+
+        Route::delete('governance-structure/levels/{level}', [GovernanceStructureController::class, 'destroyLevel'])
+            ->middleware('permission:finance.governance_structure.delete')
+            ->name('governance.levels.destroy');
+
         Route::post('governance-structure/nodes', [GovernanceStructureController::class, 'storeNode'])
             ->middleware('permission:finance.governance_structure.create')
             ->name('governance.nodes.store');

@@ -17,6 +17,12 @@
             </div>
         @endif
 
+        @if (session('error'))
+            <div class="alert alert-danger mt-3">
+                {{ session('error') }}
+            </div>
+        @endif
+
         @if ($errors->any())
             <div class="alert alert-danger mt-3">
                 {{ $errors->first() }}
@@ -25,8 +31,14 @@
 
         <ul class="nav nav-tabs mt-3" id="governanceTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="nodes-tab" data-bs-toggle="tab" data-bs-target="#nodesTab"
-                    type="button" role="tab" aria-controls="nodesTab" aria-selected="true">
+                <button class="nav-link active" id="levels-tab" data-bs-toggle="tab" data-bs-target="#levelsTab"
+                    type="button" role="tab" aria-controls="levelsTab" aria-selected="true">
+                    Levels
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="nodes-tab" data-bs-toggle="tab" data-bs-target="#nodesTab"
+                    type="button" role="tab" aria-controls="nodesTab" aria-selected="false">
                     Structure Nodes
                 </button>
             </li>
@@ -45,7 +57,143 @@
         </ul>
 
         <div class="tab-content mt-3">
-            <div class="tab-pane fade show active" id="nodesTab" role="tabpanel" aria-labelledby="nodes-tab">
+            <div class="tab-pane fade show active" id="levelsTab" role="tabpanel" aria-labelledby="levels-tab">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                            <div>
+                                <h6 class="fw-bold mb-1">Governance Levels</h6>
+                                <p class="text-muted small mb-0">Define the hierarchy levels used across the governance structure.</p>
+                            </div>
+                        </div>
+
+                        @canany(['finance.governance_structure.create', 'finance.governance_structure.manage'])
+                            <hr>
+                            <form method="POST" action="{{ route('finance.governance.levels.store') }}" class="row g-3">
+                                @csrf
+                                <div class="col-md-3">
+                                    <label class="form-label fw-semibold">Key</label>
+                                    <input type="text" name="key" class="form-control" required placeholder="e.g. organ">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-semibold">Name</label>
+                                    <input type="text" name="name" class="form-control" required placeholder="e.g. Organ">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label fw-semibold">Sort Order</label>
+                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ $levels->max('sort_order') + 1 }}">
+                                </div>
+                                <div class="col-md-12">
+                                    <label class="form-label fw-semibold">Description</label>
+                                    <input type="text" name="description" class="form-control" placeholder="Optional description">
+                                </div>
+                                <div class="col-12">
+                                    <button class="btn btn-primary">
+                                        <i class="feather-plus-circle me-1"></i> Add Level
+                                    </button>
+                                </div>
+                            </form>
+                        @endcanany
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0 mt-3">
+                    <div class="card-body">
+                        <table id="governanceLevelsTable"
+                            class="table table-striped table-hover data-table"
+                            style="width: 100%;"
+                            data-config='@json(["language" => ["emptyTable" => "No levels created yet."]])'>
+                            <thead>
+                                <tr>
+                                    <th style="width: 140px;">Key</th>
+                                    <th>Name</th>
+                                    <th style="width: 110px;">Sort Order</th>
+                                    <th>Description</th>
+                                    <th style="width: 140px;" class="text-center no-sort no-export">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($levels as $level)
+                                    <tr>
+                                        <td><code>{{ $level->key }}</code></td>
+                                        <td>{{ $level->name }}</td>
+                                        <td>{{ $level->sort_order }}</td>
+                                        <td>{{ $level->description ?? '-' }}</td>
+                                        <td class="text-center no-export">
+                                            <div class="d-flex justify-content-center gap-2">
+                                                @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
+                                                    <button class="btn btn-sm btn-outline-warning" type="button"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#editLevelModal{{ $level->id }}">
+                                                        <i class="feather-edit"></i>
+                                                    </button>
+                                                @endcanany
+                                                @canany(['finance.governance_structure.delete', 'finance.governance_structure.manage'])
+                                                    <form method="POST"
+                                                        action="{{ route('finance.governance.levels.destroy', $level) }}" class="d-inline">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button class="btn btn-sm btn-outline-danger"
+                                                            onclick="return confirm('Delete this level?')">
+                                                            <i class="feather-trash-2"></i>
+                                                        </button>
+                                                    </form>
+                                                @endcanany
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Edit Level Modals -->
+                @foreach ($levels as $level)
+                    @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
+                        <div class="modal fade" id="editLevelModal{{ $level->id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Edit Level: {{ $level->name }}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <form method="POST" action="{{ route('finance.governance.levels.update', $level) }}">
+                                        @csrf
+                                        @method('PUT')
+                                        <div class="modal-body">
+                                            <div class="row g-3">
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">Key</label>
+                                                    <input type="text" name="key" class="form-control" value="{{ $level->key }}" required>
+                                                </div>
+                                                <div class="col-md-8">
+                                                    <label class="form-label fw-semibold">Name</label>
+                                                    <input type="text" name="name" class="form-control" value="{{ $level->name }}" required>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-semibold">Sort Order</label>
+                                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ $level->sort_order }}">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-semibold">Description</label>
+                                                    <input type="text" name="description" class="form-control" value="{{ $level->description }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    @endcanany
+                @endforeach
+            </div>
+
+            <div class="tab-pane fade" id="nodesTab" role="tabpanel" aria-labelledby="nodes-tab">
                 <div class="card shadow-sm border-0">
                     <div class="card-body">
                         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
@@ -682,6 +830,7 @@
                 });
 
                 // Initialize each table
+                $('#governanceLevelsTable').DataTable(governanceTableConfig);
                 $('#governanceNodesTable').DataTable(governanceTableConfig);
                 $('#governanceLinesTable').DataTable(governanceTableConfig);
                 $('#governanceAssignmentsTable').DataTable(governanceTableConfig);
