@@ -68,8 +68,8 @@ class PartnerActivityLog extends BaseModel
      * Create a new activity log entry
      */
     public static function logActivity(
-        int $funderId,
-        int $userId,
+        string $funderId,
+        string $userId,
         string $action,
         ?string $ipAddress = null,
         ?string $userAgent = null,
