@@ -26,7 +26,7 @@ class StepApprovalController extends Controller
     public function create()
     {
         $stepStages = ProcurementStepStage::active()->ordered()->get();
-        $governanceNodes = GovernanceNode::where('is_active', true)->orderBy('name')->get();
+        $governanceNodes = GovernanceNode::where('status', 'active')->orderBy('name')->get();
 
         return view('procurement.settings.step-approvals.create', compact('stepStages', 'governanceNodes'));
     }
@@ -57,7 +57,7 @@ class StepApprovalController extends Controller
     public function edit(ProcurementStepApproval $stepApproval)
     {
         $stepStages = ProcurementStepStage::active()->ordered()->get();
-        $governanceNodes = GovernanceNode::where('is_active', true)->orderBy('name')->get();
+        $governanceNodes = GovernanceNode::where('status', 'active')->orderBy('name')->get();
 
         return view('procurement.settings.step-approvals.edit', compact('stepApproval', 'stepStages', 'governanceNodes'));
     }
