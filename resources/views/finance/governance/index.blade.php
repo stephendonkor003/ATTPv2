@@ -73,15 +73,15 @@
                                 @csrf
                                 <div class="col-md-3">
                                     <label class="form-label fw-semibold">Key</label>
-                                    <input type="text" name="key" class="form-control" required placeholder="e.g. organ">
+                                    <input type="text" name="key" id="createLevelKey" class="form-control" required placeholder="e.g. organ" readonly>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Name</label>
-                                    <input type="text" name="name" class="form-control" required placeholder="e.g. Organ">
+                                    <input type="text" name="name" id="createLevelName" class="form-control" required placeholder="e.g. Organ">
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label fw-semibold">Sort Order</label>
-                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ $levels->max('sort_order') + 1 }}">
+                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ $levels->max('sort_order') + 1 }}" readonly>
                                 </div>
                                 <div class="col-md-12">
                                     <label class="form-label fw-semibold">Description</label>
@@ -165,7 +165,7 @@
                                             <div class="row g-3">
                                                 <div class="col-md-4">
                                                     <label class="form-label fw-semibold">Key</label>
-                                                    <input type="text" name="key" class="form-control" value="{{ $level->key }}" required>
+                                                    <input type="text" name="key" class="form-control" value="{{ $level->key }}" required readonly>
                                                 </div>
                                                 <div class="col-md-8">
                                                     <label class="form-label fw-semibold">Name</label>
@@ -173,7 +173,7 @@
                                                 </div>
                                                 <div class="col-md-4">
                                                     <label class="form-label fw-semibold">Sort Order</label>
-                                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ $level->sort_order }}">
+                                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ $level->sort_order }}" readonly>
                                                 </div>
                                                 <div class="col-md-12">
                                                     <label class="form-label fw-semibold">Description</label>
@@ -855,6 +855,20 @@
                     });
                 });
             });
+
+            // Auto-generate level key from name (slug) and keep sort order readonly
+            const nameInput = document.getElementById('createLevelName');
+            const keyInput = document.getElementById('createLevelKey');
+            if (nameInput && keyInput) {
+                nameInput.addEventListener('input', () => {
+                    const slug = nameInput.value
+                        .toLowerCase()
+                        .trim()
+                        .replace(/[^a-z0-9]+/g, '_')
+                        .replace(/^_+|_+$/g, '');
+                    keyInput.value = slug;
+                });
+            }
         </script>
     </div>
 @endsection

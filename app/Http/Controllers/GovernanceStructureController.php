@@ -42,7 +42,8 @@ class GovernanceStructureController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $nextSort = (GovernanceLevel::max('sort_order') ?? -1) + 1;
+        $validated['sort_order'] = $nextSort;
 
         GovernanceLevel::create($validated);
 
@@ -58,7 +59,7 @@ class GovernanceStructureController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['sort_order'] = $validated['sort_order'] ?? $level->sort_order;
 
         $level->update($validated);
 
