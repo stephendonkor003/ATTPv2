@@ -950,16 +950,24 @@
             // Organogram rendering
             const orgContainer = document.getElementById('organogramTree');
             if (orgContainer) {
-                const nodes = @json($nodes->map(fn($n) => [
-                    'id' => $n->id,
-                    'name' => $n->name,
-                    'level' => $n->level->name ?? '',
-                ]));
-                const lines = @json($lines->map(fn($l) => [
-                    'child' => $l->child_node_id,
-                    'parent' => $l->parent_node_id,
-                    'type' => $l->line_type,
-                ]));
+                const nodes = @json(
+                    $nodes->map(function ($n) {
+                        return [
+                            'id' => $n->id,
+                            'name' => $n->name,
+                            'level' => $n->level->name ?? '',
+                        ];
+                    })->values()->all()
+                );
+                const lines = @json(
+                    $lines->map(function ($l) {
+                        return [
+                            'child' => $l->child_node_id,
+                            'parent' => $l->parent_node_id,
+                            'type' => $l->line_type,
+                        ];
+                    })->values()->all()
+                );
 
                 const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
                 const childrenMap = {};
@@ -986,7 +994,12 @@
                     const children = childrenMap[id] || [];
                     const dotted = dottedMap[id] || [];
                     const dottedHtml = dotted.length
-                        ? `<div class="organogram-dotted">(${dotted.map(d => `${d.type} to ${nodeMap[d.parent]?.name || 'N/A'}`).join(', ')})</div>`
+                        ? `<div class="organogram-dotted">(${
+                            dotted.map(function(d) {
+                                const parentName = nodeMap[d.parent] ? nodeMap[d.parent].name : 'N/A';
+                                return `${d.type} to ${parentName}`;
+                            }).join(', ')
+                        })</div>`
                         : '';
                     const childrenHtml = children.length
                         ? `<ul>${children.map(renderNode).join('')}</ul>`
