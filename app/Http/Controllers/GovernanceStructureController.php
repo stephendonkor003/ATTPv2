@@ -139,7 +139,7 @@ class GovernanceStructureController extends Controller
     public function storeLine(Request $request)
     {
         $validated = $request->validate([
-            'child_node_id' => 'required|different:parent_node_id|exists:myb_governance_nodes,id',
+            'child_node_id' => 'required|exists:myb_governance_nodes,id',
             'parent_node_id' => 'required|exists:myb_governance_nodes,id',
             'line_type' => 'required|in:primary,dotted,advisory',
             'effective_start' => 'nullable|date',
@@ -151,12 +151,6 @@ class GovernanceStructureController extends Controller
         $validated['parent_node_id'] = (int) trim((string) $validated['parent_node_id']);
 
         // Guard against self-parenting which would also violate FK constraints/logical structure
-        if ($validated['child_node_id'] === $validated['parent_node_id']) {
-            throw ValidationException::withMessages([
-                'parent_node_id' => 'Parent node must be different from the child node.',
-            ]);
-        }
-
         // Re-verify the nodes exist after casting (defensive against malformed inputs)
         if (!GovernanceNode::whereKey($validated['child_node_id'])->exists()) {
             throw ValidationException::withMessages([
@@ -196,7 +190,7 @@ class GovernanceStructureController extends Controller
     public function updateLine(Request $request, GovernanceReportingLine $line)
     {
         $validated = $request->validate([
-            'child_node_id' => 'required|different:parent_node_id|exists:myb_governance_nodes,id',
+            'child_node_id' => 'required|exists:myb_governance_nodes,id',
             'parent_node_id' => 'required|exists:myb_governance_nodes,id',
             'line_type' => 'required|in:primary,dotted,advisory',
             'effective_start' => 'nullable|date',
@@ -205,12 +199,6 @@ class GovernanceStructureController extends Controller
 
         $validated['child_node_id'] = (int) trim((string) $validated['child_node_id']);
         $validated['parent_node_id'] = (int) trim((string) $validated['parent_node_id']);
-
-        if ($validated['child_node_id'] === $validated['parent_node_id']) {
-            throw ValidationException::withMessages([
-                'parent_node_id' => 'Parent node must be different from the child node.',
-            ]);
-        }
 
         if (!GovernanceNode::whereKey($validated['child_node_id'])->exists()) {
             throw ValidationException::withMessages([
