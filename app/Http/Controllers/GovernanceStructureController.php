@@ -146,9 +146,28 @@ class GovernanceStructureController extends Controller
             'effective_end' => 'nullable|date',
         ]);
 
-        // Cast numeric fields to ensure type-safe downstream calls
-        $validated['child_node_id'] = (int) $validated['child_node_id'];
-        $validated['parent_node_id'] = (int) $validated['parent_node_id'];
+        // Cast numeric fields to ensure type-safe downstream calls and trim stray whitespace
+        $validated['child_node_id'] = (int) trim((string) $validated['child_node_id']);
+        $validated['parent_node_id'] = (int) trim((string) $validated['parent_node_id']);
+
+        // Guard against self-parenting which would also violate FK constraints/logical structure
+        if ($validated['child_node_id'] === $validated['parent_node_id']) {
+            throw ValidationException::withMessages([
+                'parent_node_id' => 'Parent node must be different from the child node.',
+            ]);
+        }
+
+        // Re-verify the nodes exist after casting (defensive against malformed inputs)
+        if (!GovernanceNode::whereKey($validated['child_node_id'])->exists()) {
+            throw ValidationException::withMessages([
+                'child_node_id' => 'Selected child node no longer exists.',
+            ]);
+        }
+        if (!GovernanceNode::whereKey($validated['parent_node_id'])->exists()) {
+            throw ValidationException::withMessages([
+                'parent_node_id' => 'Selected parent node no longer exists.',
+            ]);
+        }
 
         // Only enforce ordering when both dates are supplied
         if ($validated['effective_start'] && $validated['effective_end']) {
@@ -184,8 +203,25 @@ class GovernanceStructureController extends Controller
             'effective_end' => 'nullable|date',
         ]);
 
-        $validated['child_node_id'] = (int) $validated['child_node_id'];
-        $validated['parent_node_id'] = (int) $validated['parent_node_id'];
+        $validated['child_node_id'] = (int) trim((string) $validated['child_node_id']);
+        $validated['parent_node_id'] = (int) trim((string) $validated['parent_node_id']);
+
+        if ($validated['child_node_id'] === $validated['parent_node_id']) {
+            throw ValidationException::withMessages([
+                'parent_node_id' => 'Parent node must be different from the child node.',
+            ]);
+        }
+
+        if (!GovernanceNode::whereKey($validated['child_node_id'])->exists()) {
+            throw ValidationException::withMessages([
+                'child_node_id' => 'Selected child node no longer exists.',
+            ]);
+        }
+        if (!GovernanceNode::whereKey($validated['parent_node_id'])->exists()) {
+            throw ValidationException::withMessages([
+                'parent_node_id' => 'Selected parent node no longer exists.',
+            ]);
+        }
 
         if ($validated['effective_start'] && $validated['effective_end']) {
             if (Carbon::parse($validated['effective_end'])->lt(Carbon::parse($validated['effective_start']))) {

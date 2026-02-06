@@ -41,6 +41,19 @@
                 border-bottom: 6px solid transparent;
                 border-left: 7px solid #9aa4b5;
             }
+
+            /* Prevent Bootstrap modal backdrop from blurring entire page */
+            .modal-backdrop {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+                filter: none !important;
+            }
+
+            body.modal-open .main-wrapper,
+            body.modal-open .content-wrapper,
+            body.modal-open {
+                filter: none !important;
+            }
             .organogram-root > li:first-child:before,
             .organogram-root > li:first-child:after {
                 top: 1.05rem;
