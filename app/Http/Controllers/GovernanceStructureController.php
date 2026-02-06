@@ -139,12 +139,16 @@ class GovernanceStructureController extends Controller
     public function storeLine(Request $request)
     {
         $validated = $request->validate([
-            'child_node_id' => 'required|different:parent_node_id|exists:myb_governance_nodes,id',
-            'parent_node_id' => 'required|exists:myb_governance_nodes,id',
+            'child_node_id' => 'required|integer|different:parent_node_id|exists:myb_governance_nodes,id',
+            'parent_node_id' => 'required|integer|exists:myb_governance_nodes,id',
             'line_type' => 'required|in:primary,dotted,advisory',
             'effective_start' => 'nullable|date',
             'effective_end' => 'nullable|date',
         ]);
+
+        // Cast numeric fields to ensure type-safe downstream calls
+        $validated['child_node_id'] = (int) $validated['child_node_id'];
+        $validated['parent_node_id'] = (int) $validated['parent_node_id'];
 
         // Only enforce ordering when both dates are supplied
         if ($validated['effective_start'] && $validated['effective_end']) {
@@ -173,12 +177,15 @@ class GovernanceStructureController extends Controller
     public function updateLine(Request $request, GovernanceReportingLine $line)
     {
         $validated = $request->validate([
-            'child_node_id' => 'required|different:parent_node_id|exists:myb_governance_nodes,id',
-            'parent_node_id' => 'required|exists:myb_governance_nodes,id',
+            'child_node_id' => 'required|integer|different:parent_node_id|exists:myb_governance_nodes,id',
+            'parent_node_id' => 'required|integer|exists:myb_governance_nodes,id',
             'line_type' => 'required|in:primary,dotted,advisory',
             'effective_start' => 'nullable|date',
             'effective_end' => 'nullable|date',
         ]);
+
+        $validated['child_node_id'] = (int) $validated['child_node_id'];
+        $validated['parent_node_id'] = (int) $validated['parent_node_id'];
 
         if ($validated['effective_start'] && $validated['effective_end']) {
             if (Carbon::parse($validated['effective_end'])->lt(Carbon::parse($validated['effective_start']))) {
@@ -212,14 +219,17 @@ class GovernanceStructureController extends Controller
     public function storeAssignment(Request $request)
     {
         $validated = $request->validate([
-            'node_id' => 'required|exists:myb_governance_nodes,id',
-            'user_id' => 'required|exists:users,id',
+            'node_id' => 'required|integer|exists:myb_governance_nodes,id',
+            'user_id' => 'required|integer|exists:users,id',
             'role_title' => 'nullable|string|max:255',
             'is_primary' => 'nullable|boolean',
             'notify_user' => 'nullable|boolean',
             'effective_start' => 'nullable|date',
             'effective_end' => 'nullable|date|after_or_equal:effective_start',
         ]);
+
+        $validated['node_id'] = (int) $validated['node_id'];
+        $validated['user_id'] = (int) $validated['user_id'];
 
         $validated['is_primary'] = (bool) ($validated['is_primary'] ?? false);
         $notifyUser = (bool) ($validated['notify_user'] ?? false);
@@ -251,14 +261,17 @@ class GovernanceStructureController extends Controller
     public function updateAssignment(Request $request, GovernanceNodeAssignment $assignment)
     {
         $validated = $request->validate([
-            'node_id' => 'required|exists:myb_governance_nodes,id',
-            'user_id' => 'required|exists:users,id',
+            'node_id' => 'required|integer|exists:myb_governance_nodes,id',
+            'user_id' => 'required|integer|exists:users,id',
             'role_title' => 'nullable|string|max:255',
             'is_primary' => 'nullable|boolean',
             'notify_user' => 'nullable|boolean',
             'effective_start' => 'nullable|date',
             'effective_end' => 'nullable|date|after_or_equal:effective_start',
         ]);
+
+        $validated['node_id'] = (int) $validated['node_id'];
+        $validated['user_id'] = (int) $validated['user_id'];
 
         $validated['is_primary'] = (bool) ($validated['is_primary'] ?? false);
         $notifyUser = (bool) ($validated['notify_user'] ?? false);
