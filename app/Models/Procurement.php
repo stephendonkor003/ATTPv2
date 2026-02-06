@@ -103,6 +103,11 @@ class Procurement extends BaseModel
         return $this->hasMany(ProcurementInvoice::class, 'procurement_id');
     }
 
+    public function deliverables()
+    {
+        return $this->hasMany(ProcurementDeliverable::class, 'procurement_id');
+    }
+
     public function awardedSubmission()
     {
         return $this->belongsTo(FormSubmission::class, 'awarded_submission_id');

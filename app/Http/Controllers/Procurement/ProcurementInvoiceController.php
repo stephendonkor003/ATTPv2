@@ -43,7 +43,7 @@ class ProcurementInvoiceController extends Controller
     {
         $this->assertInvoiceInScope($invoice);
 
-        $invoice->load(['procurement', 'vendor', 'subActivity', 'purchaseOrder']);
+        $invoice->load(['procurement', 'vendor', 'subActivity', 'purchaseOrder', 'deliverables']);
 
         $budget = null;
         $currency = null;

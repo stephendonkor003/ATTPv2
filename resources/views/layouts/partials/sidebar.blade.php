@@ -520,6 +520,15 @@
                                 </li>
                             @endcan
 
+                            @can('procurement.manage_all')
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.deliverables.index') }}" class="nxl-link">
+                                        <i class="feather-clipboard me-2"></i>
+                                        Vendor Deliverables
+                                    </a>
+                                </li>
+                            @endcan
+
 
 
                             {{-- ================= SUBMISSIONS ================= --}}

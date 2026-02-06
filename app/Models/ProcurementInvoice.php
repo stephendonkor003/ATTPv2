@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
 
 class ProcurementInvoice extends BaseModel
@@ -56,6 +57,16 @@ class ProcurementInvoice extends BaseModel
     public function purchaseOrder(): HasOne
     {
         return $this->hasOne(ProcurementPurchaseOrder::class, 'invoice_id');
+    }
+
+    public function deliverables(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            ProcurementDeliverable::class,
+            'procurement_invoice_deliverables',
+            'invoice_id',
+            'deliverable_id'
+        )->withTimestamps();
     }
 
     public static function generateReference(): string

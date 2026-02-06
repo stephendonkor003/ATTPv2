@@ -234,6 +234,9 @@
                 <a href="{{ route('vendor.invoices.index') }}" class="{{ request()->routeIs('vendor.invoices.*') ? 'active' : '' }}">
                     My Invoices
                 </a>
+                <a href="{{ route('vendor.deliverables.index') }}" class="{{ request()->routeIs('vendor.deliverables.*') ? 'active' : '' }}">
+                    Vendor Deliverables
+                </a>
             </nav>
         </aside>
 

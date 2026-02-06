@@ -129,6 +129,46 @@
             </div>
         </div>
 
+        @if ($invoice->deliverables && $invoice->deliverables->isNotEmpty())
+            <div class="card detail-card mb-4">
+                <div class="card-body">
+                    <h6 class="fw-semibold mb-3">Linked Deliverables</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Deliverable</th>
+                                    <th>Timeline</th>
+                                    <th class="text-end">Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($invoice->deliverables as $deliverable)
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">{{ $deliverable->title }}</div>
+                                            <span class="badge bg-light text-dark">{{ ucfirst($deliverable->type) }}</span>
+                                        </td>
+                                        <td>
+                                            {{ $deliverable->timeline_start?->format('M d, Y') ?? '—' }}
+                                            -
+                                            {{ $deliverable->timeline_end?->format('M d, Y') ?? '—' }}
+                                        </td>
+                                        <td class="text-end">
+                                            {{ $deliverable->amount ? number_format($deliverable->amount, 2) : '—' }}
+                                            {{ $deliverable->currency ?? '' }}
+                                        </td>
+                                        <td class="text-capitalize">{{ $deliverable->status }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        @endif
+
         <div class="card detail-card">
             <div class="card-body">
                 <h6 class="fw-semibold mb-3">Actions</h6>

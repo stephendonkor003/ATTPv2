@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Procurement;
 use App\Models\ProcurementAuditLog;
 use App\Models\ProcurementContractNegotiation;
+use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPlan;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -42,6 +43,18 @@ class VendorInvoiceController extends Controller
                 : null;
         }
 
+        $eligibleDeliverables = ProcurementDeliverable::with('procurement')
+            ->where('vendor_id', $user->id)
+            ->whereIn('procurement_id', $awardedProcurements->pluck('id'))
+            ->where('status', 'completed')
+            ->where('vendor_approval_status', 'approved')
+            ->where('admin_approval_status', 'approved')
+            ->whereDoesntHave('invoices', function ($query) {
+                $query->where('status', '!=', 'rejected');
+            })
+            ->orderByRaw('COALESCE(timeline_end, timeline_start, created_at)')
+            ->get();
+
         $invoices = ProcurementInvoice::with(['procurement', 'purchaseOrder'])
             ->where('vendor_id', $user->id)
             ->orderByDesc('created_at')
@@ -53,6 +66,7 @@ class VendorInvoiceController extends Controller
             'budgetByProcurement' => $budgetByProcurement,
             'currencyByProcurement' => $currencyByProcurement,
             'remainingByProcurement' => $remainingByProcurement,
+            'eligibleDeliverables' => $eligibleDeliverables,
         ]);
     }
 
@@ -64,8 +78,10 @@ class VendorInvoiceController extends Controller
         $data = $request->validate([
             'procurement_id' => 'required|exists:procurements,id',
             'invoice_month' => 'required|date_format:Y-m',
-            'amount' => 'required|numeric|min:0.01',
+            'amount' => 'required_without:deliverable_ids|numeric|min:0.01',
             'notes' => 'nullable|string|max:1000',
+            'deliverable_ids' => 'nullable|array',
+            'deliverable_ids.*' => 'exists:procurement_deliverables,id',
         ]);
 
         $procurement = Procurement::where('status', 'awarded')
@@ -84,7 +100,7 @@ class VendorInvoiceController extends Controller
             ->where('status', '!=', 'rejected')
             ->exists();
 
-        if ($existingMonthly) {
+        if ($existingMonthly && empty($data['deliverable_ids'])) {
             return back()->withErrors([
                 'invoice_month' => 'An invoice already exists for this month.',
             ])->withInput();
@@ -95,6 +111,35 @@ class VendorInvoiceController extends Controller
             return back()->withErrors([
                 'procurement_id' => 'Unable to determine the sub-activity budget for this procurement.',
             ])->withInput();
+        }
+
+        $selectedDeliverables = collect();
+        if (!empty($data['deliverable_ids'])) {
+            $selectedDeliverables = ProcurementDeliverable::whereIn('id', $data['deliverable_ids'])
+                ->where('vendor_id', $user->id)
+                ->where('procurement_id', $procurement->id)
+                ->where('status', 'completed')
+                ->where('vendor_approval_status', 'approved')
+                ->where('admin_approval_status', 'approved')
+                ->whereDoesntHave('invoices', function ($query) {
+                    $query->where('status', '!=', 'rejected');
+                })
+                ->get();
+
+            if ($selectedDeliverables->count() !== count($data['deliverable_ids'])) {
+                return back()->withErrors([
+                    'deliverable_ids' => 'Some selected deliverables are no longer eligible for invoicing.',
+                ])->withInput();
+            }
+
+            $deliverableTotal = $selectedDeliverables->sum('amount');
+            if ($deliverableTotal <= 0) {
+                return back()->withErrors([
+                    'deliverable_ids' => 'Selected deliverables must have a total amount greater than zero.',
+                ])->withInput();
+            }
+
+            $data['amount'] = $deliverableTotal;
         }
 
         $totalInvoiced = ProcurementInvoice::where('procurement_id', $procurement->id)
@@ -129,6 +174,10 @@ class VendorInvoiceController extends Controller
             'notes' => $data['notes'] ?? null,
         ]);
 
+        if ($selectedDeliverables->isNotEmpty()) {
+            $invoice->deliverables()->attach($selectedDeliverables->pluck('id')->all());
+        }
+
         ProcurementAuditLog::create([
             'user_id' => $user->id,
             'action' => 'Submitted procurement invoice',
@@ -153,7 +202,7 @@ class VendorInvoiceController extends Controller
             abort(403, 'You do not have access to this invoice.');
         }
 
-        $invoice->load(['procurement', 'purchaseOrder', 'subActivity']);
+        $invoice->load(['procurement', 'purchaseOrder', 'subActivity', 'deliverables']);
 
         return view('vendor.invoices.show', [
             'invoice' => $invoice,

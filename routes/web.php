@@ -124,6 +124,7 @@ use App\Http\Controllers\Vendor\{
     VendorCategoryController,
     VendorInvoiceController,
     VendorDisbursementController,
+    VendorDeliverableController,
 };
 
 /*
@@ -158,6 +159,7 @@ use App\Http\Controllers\Procurement\{
     ProcurementSubmissionController,
     ProcurementPlanController,
     ProcurementInvoiceController,
+    ProcurementDeliverableController,
 };
 
 use App\Http\Controllers\Procurement\Settings\{
@@ -1280,6 +1282,22 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
             ->name('purchase-order');
     });
 
+Route::middleware(['auth', 'not.funding.partner', 'permission:procurement.manage_all'])
+    ->prefix('procurement/deliverables')
+    ->name('procurement.deliverables.')
+    ->group(function () {
+        Route::get('/', [ProcurementDeliverableController::class, 'index'])
+            ->name('index');
+        Route::get('/sheet', [ProcurementDeliverableController::class, 'sheet'])
+            ->name('sheet');
+        Route::post('/{deliverable}/approve', [ProcurementDeliverableController::class, 'approve'])
+            ->name('approve');
+        Route::post('/{deliverable}/reject', [ProcurementDeliverableController::class, 'reject'])
+            ->name('reject');
+        Route::post('/{deliverable}/status', [ProcurementDeliverableController::class, 'updateStatus'])
+            ->name('status');
+    });
+
 
 
 Route::middleware(['auth', 'not.funding.partner', 'permission:forms.manage'])
@@ -2245,6 +2263,18 @@ Route::middleware(['auth'])
             ->name('invoices.pdf');
         Route::get('/invoices/{invoice}/download', [VendorInvoiceController::class, 'download'])
             ->name('invoices.download');
+        Route::get('/deliverables', [VendorDeliverableController::class, 'index'])
+            ->name('deliverables.index');
+        Route::get('/deliverables/sheet', [VendorDeliverableController::class, 'sheet'])
+            ->name('deliverables.sheet');
+        Route::get('/deliverables/template', [VendorDeliverableController::class, 'template'])
+            ->name('deliverables.template');
+        Route::post('/deliverables/import', [VendorDeliverableController::class, 'import'])
+            ->name('deliverables.import');
+        Route::post('/deliverables/{deliverable}/approve', [VendorDeliverableController::class, 'approve'])
+            ->name('deliverables.approve');
+        Route::post('/deliverables/{deliverable}/status', [VendorDeliverableController::class, 'updateStatus'])
+            ->name('deliverables.status');
         Route::post('/messages', [VendorPortalController::class, 'storeMessage'])
             ->name('messages.store');
         Route::post('/information-requests', [VendorPortalController::class, 'storeInformationRequest'])
