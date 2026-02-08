@@ -646,8 +646,27 @@ class BudgetReportController extends Controller
         $endDate = null;
         $label = '';
 
-        $defaultStartYear = $program?->start_year ?? now()->year;
-        $defaultEndYear = $program?->end_year ?? now()->year;
+        // Derive sensible defaults from program / data
+        $projectYears = collect($program?->projects ?? [])->flatMap(function ($p) {
+            return [$p->start_year, $p->end_year];
+        })->filter()->values();
+
+        $allocationYears = collect($program?->projects ?? [])
+            ->flatMap(fn($p) => $p->activities)
+            ->flatMap(fn($a) => $a->subActivities)
+            ->flatMap(fn($s) => $s->allocations->pluck('year'))
+            ->filter()
+            ->values();
+
+        $defaultStartYear = $program?->start_year
+            ?? $projectYears->min()
+            ?? $allocationYears->min()
+            ?? now()->year;
+
+        $defaultEndYear = $program?->end_year
+            ?? $projectYears->max()
+            ?? $allocationYears->max()
+            ?? $defaultStartYear;
 
         if ($mode === 'range') {
             $startDate = $request->input('start_date')
