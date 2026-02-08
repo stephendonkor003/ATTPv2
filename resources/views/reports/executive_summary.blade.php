@@ -290,8 +290,24 @@
             <div class="card shadow-sm mt-5 mb-4">
                 <div class="card-body">
 
-                    <h4 class="fw-bold mb-3">📘 Budget Sheet — {{ $program->name }}</h4>
-                    <p class="text-muted small">Program Code: <strong>{{ $program->program_id }}</strong></p>
+                    @php
+                        $maxYears = 5;
+                        $programCurrency = $program->currency ?? ($program->projects->first()->currency ?? '—');
+
+                        $programTotalsBudget = 0;
+                        $programTotalsCff = 0;
+                        $programTotalsOverall = 0;
+                        $programYearTotals = [];
+                        for ($i = 2; $i <= $maxYears; $i++) {
+                            $programYearTotals[$i] = 0;
+                        }
+                    @endphp
+
+                    <h4 class="fw-bold mb-2">📘 Budget Sheet — {{ $program->name }}</h4>
+                    <p class="text-muted small mb-3">
+                        Program Code: <strong>{{ $program->program_id }}</strong>
+                        <span class="ms-3">Currency: <strong>{{ $programCurrency }}</strong></span>
+                    </p>
 
                     <!-- SCROLL CONTAINER WITH STICKY HEADER -->
                     <div class="table-responsive" style="max-height: 650px; overflow-y: auto;">
@@ -327,6 +343,21 @@
                                     <td class="toggle-icon text-center">+</td>
                                 </tr>
 
+                                <!-- PROGRAM TOTAL SUMMARY -->
+                                <tr class="table-info fw-bold">
+                                    <td class="text-center">{{ $program->program_id }} TOTAL</td>
+                                    <td>Program Total ({{ $programCurrency }})</td>
+                                    <td class="text-end">{{ number_format($programTotalsBudget, 2) }}</td>
+                                    <td class="text-end">{{ number_format($programTotalsCff, 2) }}</td>
+
+                                    @for ($i = 2; $i <= $maxYears; $i++)
+                                        <td class="text-end">{{ number_format($programYearTotals[$i] ?? 0, 2) }}</td>
+                                    @endfor
+
+                                    <td class="text-end">{{ number_format($programTotalsOverall, 2) }}</td>
+                                    <td class="text-center">—</td>
+                                </tr>
+
                                 <!-- PROJECTS LOOP -->
                                 @foreach ($program->projects as $project)
                                     @php
@@ -336,12 +367,16 @@
                                             fn($a) => $a->allocations->where('year', $start)->sum('amount'),
                                         );
                                         $total = $project->activities->sum(fn($a) => $a->allocations->sum('amount'));
+
+                                        $programTotalsBudget += $budget;
+                                        $programTotalsCff += $cff;
+                                        $programTotalsOverall += $total;
                                     @endphp
 
-                                <tr class="excel-project-row child-row program-{{ $program->id }} expand-toggle"
-                                    data-target="project-{{ $project->id }}" style="display: none;">
-                                    <td class="fw-bold text-center">{{ $project->project_id }}</td>
-                                    <td class="fw-bold">📂 {{ $project->name }}</td>
+                                    <tr class="excel-project-row child-row program-{{ $program->id }} expand-toggle"
+                                        data-target="project-{{ $project->id }}" style="display: none;">
+                                        <td class="fw-bold text-center">{{ $project->project_id }}</td>
+                                        <td class="fw-bold">📂 {{ $project->name }}</td>
                                     <td class="fw-bold text-end">{{ number_format($budget, 2) }}</td>
                                         <td class="fw-bold text-end">{{ number_format($cff, 2) }}</td>
 
@@ -351,13 +386,14 @@
                                                 $v = $project->activities->sum(
                                                     fn($a) => $a->allocations->where('year', $yr)->sum('amount'),
                                                 );
+                                                $programYearTotals[$i] += $v;
                                             @endphp
                                             <td class="text-end">{{ number_format($v, 2) }}</td>
                                         @endfor
 
-                                    <td class="fw-bold text-end">{{ number_format($total, 2) }}</td>
-                                    <td class="toggle-icon text-center">+</td>
-                                </tr>
+                                        <td class="fw-bold text-end">{{ number_format($total, 2) }}</td>
+                                        <td class="toggle-icon text-center">+</td>
+                                    </tr>
 
                                 <!-- ===== ACTIVITIES LOOP ===== -->
                                 @php $activityIndex = 1; @endphp
