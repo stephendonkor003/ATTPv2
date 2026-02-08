@@ -301,6 +301,27 @@
                         for ($i = 2; $i <= $maxYears; $i++) {
                             $programYearTotals[$i] = 0;
                         }
+                        // Pre-compute program totals before rendering table rows
+                        foreach ($program->projects as $projectTotalsHelper) {
+                            $startYearHelper = $projectTotalsHelper->start_year;
+                            $budgetHelper = $projectTotalsHelper->total_budget;
+                            $cffHelper = $projectTotalsHelper->activities->sum(
+                                fn($a) => $a->allocations->where('year', $startYearHelper)->sum('amount'),
+                            );
+                            $totalHelper = $projectTotalsHelper->activities->sum(fn($a) => $a->allocations->sum('amount'));
+
+                            $programTotalsBudget += $budgetHelper;
+                            $programTotalsCff += $cffHelper;
+                            $programTotalsOverall += $totalHelper;
+
+                            for ($i = 2; $i <= $maxYears; $i++) {
+                                $yr = $startYearHelper + ($i - 1);
+                                $v = $projectTotalsHelper->activities->sum(
+                                    fn($a) => $a->allocations->where('year', $yr)->sum('amount'),
+                                );
+                                $programYearTotals[$i] += $v;
+                            }
+                        }
                     @endphp
 
                     <h4 class="fw-bold mb-2">📘 Budget Sheet — {{ $program->name }}</h4>
@@ -367,10 +388,6 @@
                                             fn($a) => $a->allocations->where('year', $start)->sum('amount'),
                                         );
                                         $total = $project->activities->sum(fn($a) => $a->allocations->sum('amount'));
-
-                                        $programTotalsBudget += $budget;
-                                        $programTotalsCff += $cff;
-                                        $programTotalsOverall += $total;
                                     @endphp
 
                                     <tr class="excel-project-row child-row program-{{ $program->id }} expand-toggle"
