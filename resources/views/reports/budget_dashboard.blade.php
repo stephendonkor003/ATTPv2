@@ -84,23 +84,7 @@
                             <p class="m-0 text-muted">Total Projects:</p>
                             <h4 class="fw-bold text-primary">{{ number_format($totalProjects) }}</h4>
                         </div>
-
-                        <div class="col-md-4">
-                            <p class="m-0 text-muted">Remaining Budget:</p>
-                            <h4 class="fw-bold text-success">{{ number_format($remainingBudget, 2) }}</h4>
-                        </div>
                     </div>
-
-                    <!-- OVERALL PROGRESS -->
-                    @php
-                        $percent = $totalBudget > 0 ? (($totalAllocated + $totalSubAllocated) / $totalBudget) * 100 : 0;
-                    @endphp
-
-                    <div class="progress mt-3">
-                        <div class="progress-bar bg-info" style="width: {{ $percent }}%">
-                        </div>
-                    </div>
-                    <small class="text-muted">{{ number_format($percent, 1) }}% Allocated</small>
 
                 </div>
             </div>
