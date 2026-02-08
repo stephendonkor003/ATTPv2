@@ -81,9 +81,8 @@
                         </div>
 
                         <div class="col-md-4">
-                            <p class="m-0 text-muted">Allocated (Activities + Sub Activities):</p>
-                            <h4 class="fw-bold text-primary">{{ number_format($totalAllocated + $totalSubAllocated, 2) }}
-                            </h4>
+                            <p class="m-0 text-muted">Total Projects:</p>
+                            <h4 class="fw-bold text-primary">{{ number_format($totalProjects) }}</h4>
                         </div>
 
                         <div class="col-md-4">
