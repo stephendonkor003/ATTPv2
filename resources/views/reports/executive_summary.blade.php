@@ -609,14 +609,18 @@
                         'years' => $years,
                         'activities' => $p->activities->map(function ($a) use ($years) {
                             return [
-                                'id' => $a->id,
+                                'id'   => $a->id,
                                 'name' => $a->name,
-                                'series' => collect($years)->map(fn($y) => (float) $a->allocations->where('year', $y)->sum('amount'))->values(),
+                                'series' => collect($years)->map(function ($y) use ($a) {
+                                    return (float) $a->allocations->where('year', $y)->sum('amount');
+                                })->values(),
                                 'subs' => $a->subActivities->map(function ($s) use ($years) {
                                     return [
-                                        'id' => $s->id,
+                                        'id'   => $s->id,
                                         'name' => $s->name,
-                                        'series' => collect($years)->map(fn($y) => (float) $s->allocations->where('year', $y)->sum('amount'))->values(),
+                                        'series' => collect($years)->map(function ($y) use ($s) {
+                                            return (float) $s->allocations->where('year', $y)->sum('amount');
+                                        })->values(),
                                     ];
                                 })->values(),
                             ];
