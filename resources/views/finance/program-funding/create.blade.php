@@ -275,8 +275,14 @@
                                     placeholder="e.g. Signed Grant Agreement 2025" required>
                             </div>
 
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">Document Description</label>
+                                <input type="text" name="document_descriptions[]" class="form-control"
+                                    placeholder="Summary or purpose (optional)">
+                            </div>
+
                             {{-- FILE --}}
-                            <div class="col-md-4">
+                            <div class="col-md-2">
                                 <label class="form-label fw-semibold">Upload File *</label>
                                 <input type="file" name="documents[]" class="form-control"
                                     accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png" required>
@@ -362,7 +368,15 @@
                        required>
             </div>
 
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <label class="form-label fw-semibold">Document Description</label>
+                <input type="text"
+                       name="document_descriptions[]"
+                       class="form-control"
+                       placeholder="Summary or purpose (optional)">
+            </div>
+
+            <div class="col-md-2">
                 <label class="form-label fw-semibold">Upload File *</label>
                 <input type="file"
                        name="documents[]"

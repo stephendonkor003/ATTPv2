@@ -258,34 +258,42 @@
                                 @endphp
                                 <div class="border rounded p-3 mb-2">
                                     <div class="row g-2 align-items-end">
-                                        <div class="col-md-3">
-                                            <label class="form-label fw-semibold">Document Type</label>
-                                            <input type="text"
-                                                   name="existing_documents[{{ $doc->id }}][document_type]"
-                                                   class="form-control"
-                                                   value="{{ $oldDoc['document_type'] ?? $doc->document_type }}"
-                                                   required>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label fw-semibold">Document Name</label>
-                                            <input type="text"
-                                                   name="existing_documents[{{ $doc->id }}][file_name]"
-                                                   class="form-control"
-                                                   value="{{ $oldDoc['file_name'] ?? $doc->file_name }}"
-                                                   required>
-                                            <small class="text-muted">Current name shown above.</small>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label fw-semibold">Replace File (optional)</label>
-                                            <input type="file"
-                                                   name="existing_documents[{{ $doc->id }}][file]"
-                                                   class="form-control"
-                                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png">
-                                            <small class="text-muted d-block mt-1">
-                                                <a href="{{ route('finance.program-funding.documents.download', [$programFunding, $doc]) }}"
-                                                   target="_blank">View current file</a>
-                                            </small>
-                                        </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold">Document Type</label>
+                                        <input type="text"
+                                               name="existing_documents[{{ $doc->id }}][document_type]"
+                                               class="form-control"
+                                               value="{{ $oldDoc['document_type'] ?? $doc->document_type }}"
+                                               required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-semibold">Document Name</label>
+                                        <input type="text"
+                                               name="existing_documents[{{ $doc->id }}][file_name]"
+                                               class="form-control"
+                                               value="{{ $oldDoc['file_name'] ?? $doc->file_name }}"
+                                               required>
+                                        <small class="text-muted">Current name shown above.</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold">Description</label>
+                                        <input type="text"
+                                               name="existing_documents[{{ $doc->id }}][description]"
+                                               class="form-control"
+                                               value="{{ $oldDoc['description'] ?? $doc->description }}"
+                                               placeholder="Summary or purpose">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label fw-semibold">Replace File (optional)</label>
+                                        <input type="file"
+                                               name="existing_documents[{{ $doc->id }}][file]"
+                                               class="form-control"
+                                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png">
+                                        <small class="text-muted d-block mt-1">
+                                            <a href="{{ route('finance.program-funding.documents.download', [$programFunding, $doc]) }}"
+                                               target="_blank">View current file</a>
+                                        </small>
+                                    </div>
                                         <div class="col-md-2">
                                             <div class="form-check mt-4">
                                                 <input class="form-check-input"
@@ -344,7 +352,15 @@
                                                required>
                                     </div>
 
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold">Document Description</label>
+                                        <input type="text"
+                                               name="document_descriptions[]"
+                                               class="form-control"
+                                               placeholder="Summary or purpose (optional)">
+                                    </div>
+
+                                    <div class="col-md-2">
                                         <label class="form-label fw-semibold">Upload File *</label>
                                         <input type="file"
                                                name="documents[]"

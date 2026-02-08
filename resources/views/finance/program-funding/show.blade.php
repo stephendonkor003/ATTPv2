@@ -253,6 +253,7 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th>Document Type</th>
+                                        <th>Description</th>
                                         <th>Submitted Date</th>
                                         <th>System Recieved Date</th>
                                         <th class="text-center">File</th>
@@ -263,6 +264,7 @@
                                     @foreach ($programFunding->documents as $doc)
                                         <tr>
                                             <td>{{ $doc->document_type ?? '—' }}</td>
+                                            <td>{{ $doc->description ?? '—' }}</td>
                                             <td>{{ $doc->created_at ?? '—' }}</td>
                                             <td>{{ $doc->created_at ?? '—' }}</td>
                                             <td class="text-center">

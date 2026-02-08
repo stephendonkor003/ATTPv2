@@ -11,6 +11,7 @@ class ProgramFundingDocument extends BaseModel
      protected $fillable = [
         'program_funding_id',
         'document_type',
+        'description',
         'file_name',      // ✅ ADD THIS
         'file_path',
         'uploaded_by',

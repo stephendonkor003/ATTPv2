@@ -112,6 +112,8 @@ class ProgramFundingController extends Controller
             'document_types.*' => 'required|string|max:100',
             'document_names'   => 'required_with:documents|array',
             'document_names.*' => 'required|string|max:255',
+            'document_descriptions' => 'nullable|array',
+            'document_descriptions.*' => 'nullable|string|max:500',
         ]);
 
         /* ================= PROGRAM RULES ================= */
@@ -162,6 +164,7 @@ class ProgramFundingController extends Controller
             $files = $request->file('documents');
             $types = $request->input('document_types');
             $names = $request->input('document_names');
+            $descriptions = $request->input('document_descriptions', []);
 
             foreach ($files as $index => $file) {
 
@@ -185,6 +188,7 @@ class ProgramFundingController extends Controller
                 ProgramFundingDocument::create([
                     'program_funding_id' => $funding->id,
                     'document_type'      => $types[$index],
+                    'description'        => $descriptions[$index] ?? null,
                     'file_name'          => $fileName, // ✅ FIXED
                     'file_path'          => $storedPath,
                     'uploaded_by'        => Auth::id(),
@@ -392,6 +396,7 @@ public function edit(ProgramFunding $programFunding)
             'existing_documents.*.file_name'     => 'required_without:existing_documents.*.delete|string|max:255',
             'existing_documents.*.file'          => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,png|max:5242880',
             'existing_documents.*.delete'        => 'nullable|boolean',
+            'existing_documents.*.description'   => 'nullable|string|max:500',
         ]);
 
         $this->assertNodeInScope((int) $validated['governance_node_id']);
@@ -538,6 +543,7 @@ public function edit(ProgramFunding $programFunding)
 
             $updatePayload = [
                 'document_type' => $docData['document_type'] ?? $document->document_type,
+                'description'   => $docData['description'] ?? $document->description,
                 'file_name'     => $docData['file_name'] ?? $document->file_name,
             ];
 
@@ -553,6 +559,7 @@ public function edit(ProgramFunding $programFunding)
         $files = $request->file('documents', []);
         $types = $request->input('document_types', []);
         $names = $request->input('document_names', []);
+        $descriptions = $request->input('document_descriptions', []);
 
         foreach ($files ?? [] as $index => $file) {
             if (!$file) {
@@ -562,6 +569,7 @@ public function edit(ProgramFunding $programFunding)
             ProgramFundingDocument::create([
                 'program_funding_id' => $programFunding->id,
                 'document_type'      => $types[$index] ?? 'Supporting Document',
+                'description'        => $descriptions[$index] ?? null,
                 'file_name'          => $names[$index] ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
                 'file_path'          => $file->store('program-funding-documents', 'public'),
                 'uploaded_by'        => Auth::id(),
