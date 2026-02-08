@@ -596,11 +596,11 @@
                 });
             });
 
-            // Prepare chart data in JS-safe JSON to avoid trailing comma issues
-            const projectChartData = @json(
-                $projectRankings->map(function ($item) {
+            @php
+                $projectChartData = $projectRankings->map(function ($item) {
                     $p = $item['project'];
                     $years = range($p->start_year, $p->end_year);
+
                     return [
                         'id' => $p->id,
                         'chartId' => 'projectLineChart_' . $p->id,
@@ -608,26 +608,33 @@
                         'activitySelectId' => 'activitySelect_' . $p->id,
                         'years' => $years,
                         'activities' => $p->activities->map(function ($a) use ($years) {
+                            $activitySeries = array_map(function ($y) use ($a) {
+                                return (float) $a->allocations->where('year', $y)->sum('amount');
+                            }, $years);
+
+                            $subSeries = $a->subActivities->map(function ($s) use ($years) {
+                                $series = array_map(function ($y) use ($s) {
+                                    return (float) $s->allocations->where('year', $y)->sum('amount');
+                                }, $years);
+
+                                return [
+                                    'id' => $s->id,
+                                    'name' => $s->name,
+                                    'series' => $series,
+                                ];
+                            })->values()->all();
+
                             return [
-                                'id'   => $a->id,
+                                'id' => $a->id,
                                 'name' => $a->name,
-                                'series' => collect($years)->map(function ($y) use ($a) {
-                                    return (float) $a->allocations->where('year', $y)->sum('amount');
-                                })->values(),
-                                'subs' => $a->subActivities->map(function ($s) use ($years) {
-                                    return [
-                                        'id'   => $s->id,
-                                        'name' => $s->name,
-                                        'series' => collect($years)->map(function ($y) use ($s) {
-                                            return (float) $s->allocations->where('year', $y)->sum('amount');
-                                        })->values(),
-                                    ];
-                                })->values(),
+                                'series' => $activitySeries,
+                                'subs' => $subSeries,
                             ];
-                        })->values(),
+                        })->values()->all(),
                     ];
-                })->values()
-            );
+                })->values()->toJson();
+            @endphp
+            const projectChartData = {!! $projectChartData !!};
 
             // Chart registry + exporters
             const lineCharts = {};
