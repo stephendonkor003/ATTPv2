@@ -583,158 +583,148 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", () => {
-
+            // Expand / collapse rows
             document.querySelectorAll(".expand-toggle").forEach(row => {
                 row.addEventListener("click", function() {
-                    let target = this.getAttribute("data-target");
-                    let icon = this.querySelector(".toggle-icon");
-
+                    const target = this.getAttribute("data-target");
+                    const icon = this.querySelector(".toggle-icon");
                     if (!target || !icon) return;
-
-                    let children = document.querySelectorAll("." + target);
-
-                    let isOpen = icon.textContent === "-";
-
-                    children.forEach(child => {
-                        child.style.display = isOpen ? "none" : "table-row";
-                    });
-
+                    const children = document.querySelectorAll("." + target);
+                    const isOpen = icon.textContent === "-";
+                    children.forEach(child => child.style.display = isOpen ? "none" : "table-row");
                     icon.textContent = isOpen ? "+" : "-";
                 });
             });
 
-        });
-    </script>
+            // Prepare chart data in JS-safe JSON to avoid trailing comma issues
+            const projectChartData = @json(
+                $projectRankings->map(function ($item) {
+                    $p = $item['project'];
+                    $years = range($p->start_year, $p->end_year);
+                    return [
+                        'id' => $p->id,
+                        'chartId' => 'projectLineChart_' . $p->id,
+                        'subChartId' => 'subLineChart_' . $p->id,
+                        'activitySelectId' => 'activitySelect_' . $p->id,
+                        'years' => $years,
+                        'activities' => $p->activities->map(function ($a) use ($years) {
+                            return [
+                                'id' => $a->id,
+                                'name' => $a->name,
+                                'series' => collect($years)->map(fn($y) => (float) $a->allocations->where('year', $y)->sum('amount'))->values(),
+                                'subs' => $a->subActivities->map(function ($s) use ($years) {
+                                    return [
+                                        'id' => $s->id,
+                                        'name' => $s->name,
+                                        'series' => collect($years)->map(fn($y) => (float) $s->allocations->where('year', $y)->sum('amount'))->values(),
+                                    ];
+                                })->values(),
+                            ];
+                        })->values(),
+                    ];
+                })->values()
+            );
 
+            // Chart registry + exporters
+            const lineCharts = {};
+            window.registerLineChart = (id, chart) => lineCharts[id] = chart;
+            window.downloadChartPNG = (id) => {
+                const c = lineCharts[id];
+                if (!c) return;
+                c.dataURI().then(({ imgURI }) => {
+                    const link = document.createElement("a");
+                    link.href = imgURI;
+                    link.download = id + ".png";
+                    link.click();
+                });
+            };
+            window.downloadChartSVG = (id) => {
+                const c = lineCharts[id];
+                if (!c) return;
+                c.dataURI().then(({ svgURI }) => {
+                    const link = document.createElement("a");
+                    link.href = svgURI;
+                    link.download = id + ".svg";
+                    link.click();
+                });
+            };
 
-    <!-- PROJECT LINE GRAPH SCRIPTS -->
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
+            // Build charts
+            projectChartData.forEach(p => {
+                const years = p.years;
 
-            @foreach ($projectRankings as $item)
-                @php
-                    $project = $item['project'];
-                    $years = range($project->start_year, $project->end_year);
-                    $yearList = json_encode($years);
-                @endphp
+                // Activity chart
+                const activitySeries = p.activities.map(a => ({
+                    name: a.name,
+                    data: a.series
+                }));
 
-                // ACTIVITY SERIES
-                let projectSeries_{{ $project->id }} = [
-                    @foreach ($project->activities as $activity)
-                        {
-                            name: "{{ $activity->name }}",
-                            data: [
-                                @foreach ($years as $yr)
-                                    {{ $activity->allocations->where('year', $yr)->sum('amount') }},
-                                @endforeach
-                            ]
-                        },
-                    @endforeach
-                ];
-
-                const projectChart_{{ $project->id }} = new ApexCharts(
-                    document.querySelector("#projectLineChart_{{ $project->id }}"),
+                const activityChart = new ApexCharts(
+                    document.querySelector(`#${p.chartId}`),
                     {
                         chart: { type: 'line', height: 320, toolbar: { show: false } },
                         stroke: { width: 3, curve: 'smooth' },
-                        series: projectSeries_{{ $project->id }},
-                        xaxis: { categories: {!! $yearList !!}, title: { text: 'Year' } },
-                        yaxis: {
-                            title: { text: 'Allocated Amount' },
-                            labels: { formatter: val => val.toLocaleString() }
-                        },
-                        colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1'],
+                        series: activitySeries,
+                        xaxis: { categories: years, title: { text: 'Year' } },
+                        yaxis: { title: { text: 'Allocated Amount' }, labels: { formatter: v => v.toLocaleString() } },
+                        colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1', '#ffc107'],
                         markers: { size: 4 },
-                        legend: { position: 'top' }
+                        legend: { position: 'top' },
+                        noData: { text: 'No activity data' }
                     }
                 );
-                projectChart_{{ $project->id }}.render();
-                registerLineChart('projectLineChart_{{ $project->id }}', projectChart_{{ $project->id }});
+                activityChart.render();
+                registerLineChart(p.chartId, activityChart);
 
-                // SUB-ACTIVITY SERIES PER ACTIVITY (precomputed map)
-                const subSeriesMap_{{ $project->id }} = {
-                    @foreach ($project->activities as $activity)
-                        "{{ $activity->id }}": [
-                            @foreach ($activity->subActivities as $sub)
-                                {
-                                    name: "{{ $sub->name }}",
-                                    data: [
-                                        @foreach ($years as $yr)
-                                            {{ $sub->allocations->where('year', $yr)->sum('amount') }},
-                                        @endforeach
-                                    ]
-                                },
-                            @endforeach
-                        ],
-                    @endforeach
-                };
+                // Sub-activity chart, default first activity
+                const select = document.querySelector(`#${p.activitySelectId}`);
+                const firstActivityId = select?.value || (p.activities[0]?.id ?? null);
+                const subSeriesMap = {};
+                p.activities.forEach(a => {
+                    subSeriesMap[a.id] = a.subs.map(sub => ({
+                        name: sub.name,
+                        data: sub.series
+                    }));
+                });
 
-                const subChartEl_{{ $project->id }} = document.querySelector("#subLineChart_{{ $project->id }}");
-                const subChart_{{ $project->id }} = new ApexCharts(
-                    subChartEl_{{ $project->id }},
+                const subChart = new ApexCharts(
+                    document.querySelector(`#${p.subChartId}`),
                     {
                         chart: { type: 'line', height: 260, toolbar: { show: false } },
                         stroke: { width: 3, curve: 'smooth' },
-                        series: subSeriesMap_{{ $project->id }}[Object.keys(subSeriesMap_{{ $project->id }})[0]] || [],
-                        xaxis: { categories: {!! $yearList !!}, title: { text: 'Year' } },
-                        yaxis: {
-                            title: { text: 'Allocated Amount' },
-                            labels: { formatter: val => val.toLocaleString() }
-                        },
-                        colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1'],
+                        series: subSeriesMap[firstActivityId] || [],
+                        xaxis: { categories: years, title: { text: 'Year' } },
+                        yaxis: { title: { text: 'Allocated Amount' }, labels: { formatter: v => v.toLocaleString() } },
+                        colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1', '#ffc107'],
                         markers: { size: 4 },
                         legend: { position: 'top' },
                         noData: { text: 'No sub-activity data for this activity' }
                     }
                 );
-                subChart_{{ $project->id }}.render();
-                registerLineChart('subLineChart_{{ $project->id }}', subChart_{{ $project->id }});
+                subChart.render();
+                registerLineChart(p.subChartId, subChart);
 
-                // Activity selector to swap sub-activity series
-                const selectEl_{{ $project->id }} = document.querySelector('#activitySelect_{{ $project->id }}');
-                if (selectEl_{{ $project->id }}) {
-                    selectEl_{{ $project->id }}.addEventListener('change', (e) => {
+                if (select) {
+                    select.addEventListener('change', (e) => {
                         const actId = e.target.value;
-                        const series = subSeriesMap_{{ $project->id }}[actId] || [];
-                        subChart_{{ $project->id }}.updateSeries(series);
+                        subChart.updateSeries(subSeriesMap[actId] || []);
                     });
                 }
-            @endforeach
+            });
 
+            // Project allocation bar chart (overall)
+            const allocContainer = document.querySelector("#projectAllocChart");
+            if (allocContainer) {
+                const projectNames = @json($projectRankings->pluck('project.name'));
+                const projectValues = @json($projectRankings->pluck('allocated'));
+                new ApexCharts(allocContainer, {
+                    chart: { type: 'bar', height: 350 },
+                    series: [{ name: 'Allocated', data: projectValues }],
+                    xaxis: { categories: projectNames },
+                    colors: ['#0d6efd']
+                }).render();
+            }
         });
-    </script>
-
-
-    <script>
-        // Store references to all rendered charts
-        let lineCharts = {};
-
-        // Register charts from loop
-        window.registerLineChart = function(projectId, chartInstance) {
-            lineCharts[projectId] = chartInstance;
-        };
-
-        // PNG Export
-        window.downloadChartPNG = function(chartId) {
-            if (!lineCharts[chartId]) return;
-            lineCharts[chartId].dataURI().then(({ imgURI }) => {
-                const link = document.createElement("a");
-                link.href = imgURI;
-                link.download = chartId + ".png";
-                link.click();
-            });
-        };
-
-        // SVG Export
-        window.downloadChartSVG = function(chartId) {
-            if (!lineCharts[chartId]) return;
-            lineCharts[chartId].dataURI().then(({ svgURI }) => {
-                const link = document.createElement("a");
-                link.href = svgURI;
-                link.download = chartId + ".svg";
-                link.click();
-            });
-        };
     </script>
 
 @endsection
