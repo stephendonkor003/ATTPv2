@@ -578,6 +578,9 @@
 
     </main>
 
+    <!-- CHART LIBRARY -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
     <script>
         document.addEventListener("DOMContentLoaded", () => {
 
@@ -697,46 +700,6 @@
                     });
                 }
             @endforeach
-
-        });
-    </script>
-    <!-- CHART LIBRARY -->
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-
-            // Chart Data
-            let projectNames = [
-                @foreach ($projectRankings as $item)
-                    "{{ $item['project']->name }}",
-                @endforeach
-            ];
-
-            let projectValues = [
-                @foreach ($projectRankings as $item)
-                    {{ $item['allocated'] }},
-                @endforeach
-            ];
-
-            // Chart Options
-            var options = {
-                chart: {
-                    type: 'bar',
-                    height: 350
-                },
-                series: [{
-                    name: 'Allocated',
-                    data: projectValues
-                }],
-                xaxis: {
-                    categories: projectNames
-                },
-                colors: ['#0d6efd']
-            };
-
-            var chart = new ApexCharts(document.querySelector("#projectAllocChart"), options);
-            chart.render();
 
         });
     </script>
