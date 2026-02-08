@@ -227,19 +227,21 @@
         </div>
 
 
-        <!-- PROJECT LINE GRAPHS -->
+        <!-- PROJECT & ACTIVITY LINE GRAPHS -->
         <div class="card shadow-sm border-0 mt-5 mb-4">
             <div class="card-body">
-                <h4 class="fw-bold mb-3">📉 Activity Line Trends Per Project</h4>
+                <h4 class="fw-bold mb-3">📉 Allocation Line Trends</h4>
                 <p class="text-muted">
-                    This graph helps executives compare how activities under the same project progress across the years,
-                    identifying convergence, divergence, and funding behavior over time.
+                    Activity trends within each project, plus sub-activity trends within any selected activity.
+                    Use the dropdowns to drill into sub-activities.
                 </p>
 
                 @foreach ($projectRankings as $index => $item)
                     @php
                         $project = $item['project'];
-                        $projectId = 'projectLineChart_' . $project->id;
+                        $projectChartId = 'projectLineChart_' . $project->id;
+                        $activitySelectId = 'activitySelect_' . $project->id;
+                        $subChartId = 'subLineChart_' . $project->id;
                         $years = range($project->start_year, $project->end_year);
                     @endphp
 
@@ -249,31 +251,51 @@
                         </h5>
                         <small class="text-muted">Project Code: {{ $project->project_id }}</small>
 
-                        <!-- Chart + Download Buttons -->
+                        <!-- Activity-level line chart -->
                         <div class="d-flex justify-content-between align-items-center mt-3">
-                            <div id="{{ $projectId }}" style="height: 350px; width: 100%;"></div>
-
+                            <div id="{{ $projectChartId }}" style="height: 320px; width: 100%;"></div>
                             <div class="ms-3" style="min-width:150px;">
                                 <button class="btn btn-outline-primary btn-sm w-100 mb-2"
-                                    onclick="downloadChartPNG('{{ $projectId }}')">
+                                    onclick="downloadChartPNG('{{ $projectChartId }}')">
                                     <i class="bi bi-file-earmark-image"></i> PNG
                                 </button>
-
                                 <button class="btn btn-outline-secondary btn-sm w-100"
-                                    onclick="downloadChartSVG('{{ $projectId }}')">
+                                    onclick="downloadChartSVG('{{ $projectChartId }}')">
                                     <i class="bi bi-filetype-svg"></i> SVG
                                 </button>
+                            </div>
+                        </div>
+
+                        <!-- Sub-activity line chart (filter by activity) -->
+                        <div class="mt-4">
+                            <div class="d-flex align-items-center mb-2">
+                                <label class="fw-semibold me-2">Sub-activity trends for activity:</label>
+                                <select id="{{ $activitySelectId }}" class="form-select form-select-sm" style="max-width: 320px;">
+                                    @foreach ($project->activities as $activity)
+                                        <option value="{{ $activity->id }}">{{ $activity->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div id="{{ $subChartId }}" style="height: 260px; width: 100%;"></div>
+                                <div class="ms-3" style="min-width:150px;">
+                                    <button class="btn btn-outline-primary btn-sm w-100 mb-2"
+                                        onclick="downloadChartPNG('{{ $subChartId }}')">
+                                        <i class="bi bi-file-earmark-image"></i> PNG
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm w-100"
+                                        onclick="downloadChartSVG('{{ $subChartId }}')">
+                                        <i class="bi bi-filetype-svg"></i> SVG
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Interpretation Summary -->
                         <div class="alert alert-info mt-3">
                             <strong>Interpretation:</strong>
-                            The lines represent allocation trends of each activity within this project.
-                            <br>• If lines converge → activities align in funding levels over time.
-                            <br>• If lines diverge → funding priority shifts across activities.
-                            <br>• Steep upward lines → increased investment in later project years.
-                            <br>• Flat lines → stable or fixed allocations.
+                            Activity chart: compares all activities within this project across years. <br>
+                            Sub-activity chart: pick an activity to see its sub-activities over time.
                         </div>
                     </div>
                 @endforeach
@@ -590,12 +612,10 @@
                 @php
                     $project = $item['project'];
                     $years = range($project->start_year, $project->end_year);
-
-                    // Prepare JS arrays
                     $yearList = json_encode($years);
                 @endphp
 
-                // Build series for each activity
+                // ACTIVITY SERIES
                 let projectSeries_{{ $project->id }} = [
                     @foreach ($project->activities as $activity)
                         {
@@ -609,46 +629,73 @@
                     @endforeach
                 ];
 
-                var projectChartOptions_{{ $project->id }} = {
-                    chart: {
-                        type: 'line',
-                        height: 350,
-                        toolbar: {
-                            show: false
-                        }
-                    },
-                    stroke: {
-                        width: 3,
-                        curve: 'smooth'
-                    },
-                    series: projectSeries_{{ $project->id }},
-                    xaxis: {
-                        categories: {!! $yearList !!},
-                        title: {
-                            text: 'Year'
-                        }
-                    },
-                    yaxis: {
-                        title: {
-                            text: 'Allocated Amount'
+                const projectChart_{{ $project->id }} = new ApexCharts(
+                    document.querySelector("#projectLineChart_{{ $project->id }}"),
+                    {
+                        chart: { type: 'line', height: 320, toolbar: { show: false } },
+                        stroke: { width: 3, curve: 'smooth' },
+                        series: projectSeries_{{ $project->id }},
+                        xaxis: { categories: {!! $yearList !!}, title: { text: 'Year' } },
+                        yaxis: {
+                            title: { text: 'Allocated Amount' },
+                            labels: { formatter: val => val.toLocaleString() }
                         },
-                        labels: {
-                            formatter: val => val.toLocaleString()
-                        }
-                    },
-                    colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1'],
-                    markers: {
-                        size: 5
-                    },
-                    legend: {
-                        position: 'top'
+                        colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1'],
+                        markers: { size: 4 },
+                        legend: { position: 'top' }
                     }
+                );
+                projectChart_{{ $project->id }}.render();
+                registerLineChart('projectLineChart_{{ $project->id }}', projectChart_{{ $project->id }});
+
+                // SUB-ACTIVITY SERIES PER ACTIVITY (precomputed map)
+                const subSeriesMap_{{ $project->id }} = {
+                    @foreach ($project->activities as $activity)
+                        "{{ $activity->id }}": [
+                            @foreach ($activity->subActivities as $sub)
+                                {
+                                    name: "{{ $sub->name }}",
+                                    data: [
+                                        @foreach ($years as $yr)
+                                            {{ $sub->allocations->where('year', $yr)->sum('amount') }},
+                                        @endforeach
+                                    ]
+                                },
+                            @endforeach
+                        ],
+                    @endforeach
                 };
 
-                new ApexCharts(
-                    document.querySelector("#projectLineChart_{{ $project->id }}"),
-                    projectChartOptions_{{ $project->id }}
-                ).render();
+                const subChartEl_{{ $project->id }} = document.querySelector("#subLineChart_{{ $project->id }}");
+                const subChart_{{ $project->id }} = new ApexCharts(
+                    subChartEl_{{ $project->id }},
+                    {
+                        chart: { type: 'line', height: 260, toolbar: { show: false } },
+                        stroke: { width: 3, curve: 'smooth' },
+                        series: subSeriesMap_{{ $project->id }}[Object.keys(subSeriesMap_{{ $project->id }})[0]] || [],
+                        xaxis: { categories: {!! $yearList !!}, title: { text: 'Year' } },
+                        yaxis: {
+                            title: { text: 'Allocated Amount' },
+                            labels: { formatter: val => val.toLocaleString() }
+                        },
+                        colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1'],
+                        markers: { size: 4 },
+                        legend: { position: 'top' },
+                        noData: { text: 'No sub-activity data for this activity' }
+                    }
+                );
+                subChart_{{ $project->id }}.render();
+                registerLineChart('subLineChart_{{ $project->id }}', subChart_{{ $project->id }});
+
+                // Activity selector to swap sub-activity series
+                const selectEl_{{ $project->id }} = document.querySelector('#activitySelect_{{ $project->id }}');
+                if (selectEl_{{ $project->id }}) {
+                    selectEl_{{ $project->id }}.addEventListener('change', (e) => {
+                        const actId = e.target.value;
+                        const series = subSeriesMap_{{ $project->id }}[actId] || [];
+                        subChart_{{ $project->id }}.updateSeries(series);
+                    });
+                }
             @endforeach
 
         });
@@ -706,30 +753,24 @@
 
         // PNG Export
         window.downloadChartPNG = function(chartId) {
-            if (lineCharts[chartId]) {
-                lineCharts[chartId].dataURI().then(({
-                    imgURI
-                }) => {
-                    const link = document.createElement("a");
-                    link.href = imgURI;
-                    link.download = chartId + ".png";
-                    link.click();
-                });
-            }
+            if (!lineCharts[chartId]) return;
+            lineCharts[chartId].dataURI().then(({ imgURI }) => {
+                const link = document.createElement("a");
+                link.href = imgURI;
+                link.download = chartId + ".png";
+                link.click();
+            });
         };
 
         // SVG Export
         window.downloadChartSVG = function(chartId) {
-            if (lineCharts[chartId]) {
-                lineCharts[chartId].dataURI().then(({
-                    svgURI
-                }) => {
-                    const link = document.createElement("a");
-                    link.href = svgURI;
-                    link.download = chartId + ".svg";
-                    link.click();
-                });
-            }
+            if (!lineCharts[chartId]) return;
+            lineCharts[chartId].dataURI().then(({ svgURI }) => {
+                const link = document.createElement("a");
+                link.href = svgURI;
+                link.download = chartId + ".svg";
+                link.click();
+            });
         };
     </script>
 
