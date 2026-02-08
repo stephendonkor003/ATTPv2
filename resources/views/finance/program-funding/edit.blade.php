@@ -32,7 +32,7 @@
 
         <div class="card shadow-sm border-0 mt-3">
             <div class="card-body">
-                <form method="POST" action="{{ route('finance.program-funding.update', $programFunding) }}">
+                <form method="POST" action="{{ route('finance.program-funding.update', $programFunding) }}" enctype="multipart/form-data">
                     @csrf
                     @method('PUT')
 
@@ -241,7 +241,134 @@
                     </div>
                     </div>{{-- End au-alignment-section --}}
 
-                    <div class="alert alert-warning">
+                    {{-- ================= SUPPORTING DOCUMENTS ================= --}}
+                    <h6 class="fw-bold text-primary mb-3 mt-4">
+                        <i class="feather-paperclip me-1"></i> Supporting Documents
+                    </h6>
+
+                    @php
+                        $existingDocsOld = old('existing_documents', []);
+                    @endphp
+
+                    @if ($programFunding->documents->count())
+                        <div class="mb-3">
+                            @foreach ($programFunding->documents as $doc)
+                                @php
+                                    $oldDoc = $existingDocsOld[$doc->id] ?? [];
+                                @endphp
+                                <div class="border rounded p-3 mb-2">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-semibold">Document Type</label>
+                                            <input type="text"
+                                                   name="existing_documents[{{ $doc->id }}][document_type]"
+                                                   class="form-control"
+                                                   value="{{ $oldDoc['document_type'] ?? $doc->document_type }}"
+                                                   required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold">Document Name</label>
+                                            <input type="text"
+                                                   name="existing_documents[{{ $doc->id }}][file_name]"
+                                                   class="form-control"
+                                                   value="{{ $oldDoc['file_name'] ?? $doc->file_name }}"
+                                                   required>
+                                            <small class="text-muted">Current name shown above.</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label fw-semibold">Replace File (optional)</label>
+                                            <input type="file"
+                                                   name="existing_documents[{{ $doc->id }}][file]"
+                                                   class="form-control"
+                                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png">
+                                            <small class="text-muted d-block mt-1">
+                                                <a href="{{ route('finance.program-funding.documents.download', [$programFunding, $doc]) }}"
+                                                   target="_blank">View current file</a>
+                                            </small>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="form-check mt-4">
+                                                <input class="form-check-input"
+                                                       type="checkbox"
+                                                       value="1"
+                                                       id="delete-doc-{{ $doc->id }}"
+                                                       name="existing_documents[{{ $doc->id }}][delete]"
+                                                       {{ isset($oldDoc['delete']) && $oldDoc['delete'] ? 'checked' : '' }}>
+                                                <label class="form-check-label" for="delete-doc-{{ $doc->id }}">
+                                                    Remove
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <p class="text-muted">No supporting documents uploaded yet.</p>
+                    @endif
+
+                    {{-- Add new documents --}}
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-semibold mb-0">Add New Documents</h6>
+                            <button type="button" id="add-document" class="btn btn-outline-primary btn-sm">
+                                <i class="feather-plus me-1"></i> Add Document
+                            </button>
+                        </div>
+
+                        <div id="documents-wrapper">
+                            @php
+                                $oldDocTypes = old('document_types', []);
+                                $oldDocNames = old('document_names', []);
+                            @endphp
+                            @foreach ($oldDocTypes as $idx => $type)
+                                <div class="row g-2 align-items-end mb-2 document-row">
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold">Document Type *</label>
+                                        <select name="document_types[]" class="form-select" required>
+                                            <option value="">-- Select Type --</option>
+                                            <option value="MoU" @selected($type === 'MoU')>MoU</option>
+                                            <option value="Grant Agreement" @selected($type === 'Grant Agreement')>Grant Agreement</option>
+                                            <option value="Approval Letter" @selected($type === 'Approval Letter')>Approval Letter</option>
+                                            <option value="Budget Approval" @selected($type === 'Budget Approval')>Budget Approval</option>
+                                            <option value="Supporting Document" @selected($type === 'Supporting Document')>Supporting Document</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-semibold">Document Name *</label>
+                                        <input type="text"
+                                               name="document_names[]"
+                                               class="form-control"
+                                               value="{{ $oldDocNames[$idx] ?? '' }}"
+                                               required>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-semibold">Upload File *</label>
+                                        <input type="file"
+                                               name="documents[]"
+                                               class="form-control"
+                                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png"
+                                               required>
+                                    </div>
+
+                                    <div class="col-md-1 text-end">
+                                        <button type="button"
+                                                class="btn btn-outline-danger btn-sm remove-document">
+                                            <i class="feather-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <small class="text-muted d-block mt-1">
+                            Leave all fields empty if you do not need to add new files. Re-upload only when replacing a file.
+                        </small>
+                    </div>
+
+                    <div class="alert alert-warning mt-4">
                         Editing is locked once submitted for approval.
                     </div>
 
@@ -318,6 +445,67 @@
             if (continentalCheckbox) {
                 continentalCheckbox.addEventListener('change', toggleMemberStates);
                 toggleMemberStates();
+            }
+
+            // ============ DOCUMENT MANAGEMENT (ADD/REMOVE NEW FILES) ============
+            const docsWrapper = document.getElementById('documents-wrapper');
+            const addDocBtn = document.getElementById('add-document');
+
+            const docRowTemplate = () => `
+                <div class="row g-2 align-items-end mb-2 document-row">
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Document Type *</label>
+                        <select name="document_types[]" class="form-select" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="MoU">MoU</option>
+                            <option value="Grant Agreement">Grant Agreement</option>
+                            <option value="Approval Letter">Approval Letter</option>
+                            <option value="Budget Approval">Budget Approval</option>
+                            <option value="Supporting Document">Supporting Document</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Document Name *</label>
+                        <input type="text"
+                               name="document_names[]"
+                               class="form-control"
+                               placeholder="e.g. Revised Grant Agreement"
+                               required>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Upload File *</label>
+                        <input type="file"
+                               name="documents[]"
+                               class="form-control"
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png"
+                               required>
+                    </div>
+
+                    <div class="col-md-1 text-end">
+                        <button type="button"
+                                class="btn btn-outline-danger btn-sm remove-document">
+                            <i class="feather-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            if (addDocBtn && docsWrapper) {
+                addDocBtn.addEventListener('click', () => {
+                    docsWrapper.insertAdjacentHTML('beforeend', docRowTemplate());
+                });
+
+                docsWrapper.addEventListener('click', (e) => {
+                    const removeBtn = e.target.closest('.remove-document');
+                    if (removeBtn) {
+                        const row = removeBtn.closest('.document-row');
+                        if (row) {
+                            row.remove();
+                        }
+                    }
+                });
             }
         });
     </script>

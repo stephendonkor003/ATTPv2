@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ProgramFundingController extends Controller
 {
@@ -136,23 +137,23 @@ class ProgramFundingController extends Controller
         /* ================= SYNC AU RELATIONSHIPS ================= */
         // Only sync member states if NOT a continental initiative
         if (!$request->boolean('is_continental_initiative') && !empty($request->input('member_state_ids'))) {
-            $funding->memberStates()->sync($request->input('member_state_ids'));
+            $this->syncPivotWithUuids($funding->memberStates(), $request->input('member_state_ids'));
         }
 
         if (!empty($request->input('regional_block_ids'))) {
-            $funding->regionalBlocks()->sync($request->input('regional_block_ids'));
+            $this->syncPivotWithUuids($funding->regionalBlocks(), $request->input('regional_block_ids'));
         }
 
         if (!empty($request->input('aspiration_ids'))) {
-            $funding->aspirations()->sync($request->input('aspiration_ids'));
+            $this->syncPivotWithUuids($funding->aspirations(), $request->input('aspiration_ids'));
         }
 
         if (!empty($request->input('goal_ids'))) {
-            $funding->goals()->sync($request->input('goal_ids'));
+            $this->syncPivotWithUuids($funding->goals(), $request->input('goal_ids'));
         }
 
         if (!empty($request->input('flagship_project_ids'))) {
-            $funding->flagshipProjects()->sync($request->input('flagship_project_ids'));
+            $this->syncPivotWithUuids($funding->flagshipProjects(), $request->input('flagship_project_ids'));
         }
 
         /* ================= SAVE DOCUMENTS ================= */
@@ -350,66 +351,83 @@ public function edit(ProgramFunding $programFunding)
 /* =====================================================
  * UPDATE
  * ===================================================== */
-public function update(Request $request, ProgramFunding $programFunding)
-{
-    $this->assertFundingInScope($programFunding);
+    public function update(Request $request, ProgramFunding $programFunding)
+    {
+        $this->assertFundingInScope($programFunding);
 
-    $validated = $request->validate([
-        'program_name' => 'required|string|max:255',
-        'funder_id' => 'required|exists:myb_funders,id',
-        'governance_node_id' => 'required|exists:myb_governance_nodes,id',
-        'funding_type' => 'required|in:grant,allocation,capital',
-        'approved_amount' => 'required|numeric|min:0',
-        'currency'        => 'required|string|max:10',
-        'start_year'      => 'required|integer|min:2000',
-        'end_year'        => 'required|integer|gte:start_year',
+        $validated = $request->validate([
+            'program_name' => 'required|string|max:255',
+            'funder_id' => 'required|exists:myb_funders,id',
+            'governance_node_id' => 'required|exists:myb_governance_nodes,id',
+            'funding_type' => 'required|in:grant,allocation,capital',
+            'approved_amount' => 'required|numeric|min:0',
+            'currency'        => 'required|string|max:10',
+            'start_year'      => 'required|integer|min:2000',
+            'end_year'        => 'required|integer|gte:start_year',
 
-        // AU Strategic Alignment
-        'is_continental_initiative' => 'nullable|boolean',
-        'member_state_ids'          => 'nullable|array',
-        'member_state_ids.*'        => 'exists:myb_au_member_states,id',
-        'regional_block_ids'        => 'nullable|array',
-        'regional_block_ids.*'      => 'exists:myb_au_regional_blocks,id',
-        'aspiration_ids'            => 'nullable|array',
-        'aspiration_ids.*'          => 'exists:myb_au_aspirations,id',
-        'goal_ids'                  => 'nullable|array',
-        'goal_ids.*'                => 'exists:myb_au_goals,id',
-        'flagship_project_ids'      => 'nullable|array',
-        'flagship_project_ids.*'    => 'exists:myb_au_flagship_projects,id',
-    ]);
+            // AU Strategic Alignment
+            'is_continental_initiative' => 'nullable|boolean',
+            'member_state_ids'          => 'nullable|array',
+            'member_state_ids.*'        => 'exists:myb_au_member_states,id',
+            'regional_block_ids'        => 'nullable|array',
+            'regional_block_ids.*'      => 'exists:myb_au_regional_blocks,id',
+            'aspiration_ids'            => 'nullable|array',
+            'aspiration_ids.*'          => 'exists:myb_au_aspirations,id',
+            'goal_ids'                  => 'nullable|array',
+            'goal_ids.*'                => 'exists:myb_au_goals,id',
+            'flagship_project_ids'      => 'nullable|array',
+            'flagship_project_ids.*'    => 'exists:myb_au_flagship_projects,id',
 
-    $this->assertNodeInScope((int) $validated['governance_node_id']);
+            // Documents (new uploads)
+            'documents'        => 'nullable|array',
+            'documents.*'      => 'file|mimes:pdf,doc,docx,xls,xlsx,jpg,png|max:5242880',
+            'document_types'   => 'nullable|array',
+            'document_types.*' => 'required_with:documents|string|max:100',
+            'document_names'   => 'nullable|array',
+            'document_names.*' => 'required_with:documents|string|max:255',
 
-    // Update basic fields
-    $programFunding->update([
-        'program_name'              => $validated['program_name'],
-        'funder_id'                 => $validated['funder_id'],
-        'governance_node_id'        => $validated['governance_node_id'],
-        'funding_type'              => $validated['funding_type'],
-        'approved_amount'           => $validated['approved_amount'],
-        'currency'                  => $validated['currency'],
-        'start_year'                => $validated['start_year'],
-        'end_year'                  => $validated['end_year'],
-        'is_continental_initiative' => $request->boolean('is_continental_initiative'),
-    ]);
+            // Existing documents (edit/delete)
+            'existing_documents'                 => 'nullable|array',
+            'existing_documents.*.document_type' => 'required_without:existing_documents.*.delete|string|max:255',
+            'existing_documents.*.file_name'     => 'required_without:existing_documents.*.delete|string|max:255',
+            'existing_documents.*.file'          => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,png|max:5242880',
+            'existing_documents.*.delete'        => 'nullable|boolean',
+        ]);
 
-    /* ================= SYNC AU RELATIONSHIPS ================= */
-    // Only sync member states if NOT a continental initiative
-    if ($request->boolean('is_continental_initiative')) {
-        $programFunding->memberStates()->sync([]);
-    } else {
-        $programFunding->memberStates()->sync($request->input('member_state_ids', []));
+        $this->assertNodeInScope((int) $validated['governance_node_id']);
+
+        // Update basic fields
+        $programFunding->update([
+            'program_name'              => $validated['program_name'],
+            'funder_id'                 => $validated['funder_id'],
+            'governance_node_id'        => $validated['governance_node_id'],
+            'funding_type'              => $validated['funding_type'],
+            'approved_amount'           => $validated['approved_amount'],
+            'currency'                  => $validated['currency'],
+            'start_year'                => $validated['start_year'],
+            'end_year'                  => $validated['end_year'],
+            'is_continental_initiative' => $request->boolean('is_continental_initiative'),
+        ]);
+
+        /* ================= SYNC AU RELATIONSHIPS ================= */
+        // Only sync member states if NOT a continental initiative
+        if ($request->boolean('is_continental_initiative')) {
+            $programFunding->memberStates()->sync([]);
+        } else {
+            $this->syncPivotWithUuids($programFunding->memberStates(), $request->input('member_state_ids', []));
+        }
+
+        $this->syncPivotWithUuids($programFunding->regionalBlocks(), $request->input('regional_block_ids', []));
+        $this->syncPivotWithUuids($programFunding->aspirations(), $request->input('aspiration_ids', []));
+        $this->syncPivotWithUuids($programFunding->goals(), $request->input('goal_ids', []));
+        $this->syncPivotWithUuids($programFunding->flagshipProjects(), $request->input('flagship_project_ids', []));
+
+        $this->syncFundingDocuments($programFunding, $request);
+
+        return redirect()
+            ->route('finance.program-funding.show', $programFunding)
+            ->with('success', 'Program funding updated successfully.');
     }
-
-    $programFunding->regionalBlocks()->sync($request->input('regional_block_ids', []));
-    $programFunding->aspirations()->sync($request->input('aspiration_ids', []));
-    $programFunding->goals()->sync($request->input('goal_ids', []));
-    $programFunding->flagshipProjects()->sync($request->input('flagship_project_ids', []));
-
-    return redirect()
-        ->route('finance.program-funding.show', $programFunding)
-        ->with('success', 'Program funding updated successfully.');
-}
 
     public function destroy(ProgramFunding $programFunding)
     {
@@ -471,8 +489,101 @@ public function update(Request $request, ProgramFunding $programFunding)
         }
     }
 
-    // Exact-node scoping only (no descendants).
+    /**
+     * Sync a BelongsToMany relation while populating UUID primary keys
+     * on pivot tables that expect an explicit `id` value.
+     */
+    private function syncPivotWithUuids($relation, array $ids): void
+    {
+        $cleanIds = collect($ids)->filter()->unique()->values();
 
+        if ($cleanIds->isEmpty()) {
+            $relation->sync([]);
+            return;
+        }
 
+        // Preserve existing pivot ids where present; generate new ones otherwise.
+        $existing = DB::table($relation->getTable())
+            ->where($relation->getForeignPivotKeyName(), $relation->getParent()->getKey())
+            ->whereIn($relation->getRelatedPivotKeyName(), $cleanIds)
+            ->pluck('id', $relation->getRelatedPivotKeyName());
+
+        $payload = $cleanIds->mapWithKeys(
+            fn ($id) => [$id => ['id' => (string) ($existing[$id] ?? Str::uuid())]]
+        )->toArray();
+
+        $relation->sync($payload);
+    }
+
+    /**
+     * Update, delete, and add supporting documents for a funding record.
+     */
+    private function syncFundingDocuments(ProgramFunding $programFunding, Request $request): void
+    {
+        $existingDocs = $request->input('existing_documents', []);
+
+        foreach ($existingDocs as $docId => $docData) {
+            /** @var \App\Models\ProgramFundingDocument|null $document */
+            $document = $programFunding->documents()->whereKey($docId)->first();
+            if (!$document) {
+                continue;
+            }
+
+            $markedForDeletion = (bool) ($docData['delete'] ?? false);
+            if ($markedForDeletion) {
+                $this->deleteDocumentFile($document->file_path);
+                $document->delete();
+                continue;
+            }
+
+            $updatePayload = [
+                'document_type' => $docData['document_type'] ?? $document->document_type,
+                'file_name'     => $docData['file_name'] ?? $document->file_name,
+            ];
+
+            if ($request->hasFile("existing_documents.$docId.file")) {
+                $file = $request->file("existing_documents.$docId.file");
+                $this->deleteDocumentFile($document->file_path);
+                $updatePayload['file_path'] = $file->store('program-funding-documents', 'public');
+            }
+
+            $document->update($updatePayload);
+        }
+
+        $files = $request->file('documents', []);
+        $types = $request->input('document_types', []);
+        $names = $request->input('document_names', []);
+
+        foreach ($files ?? [] as $index => $file) {
+            if (!$file) {
+                continue;
+            }
+
+            ProgramFundingDocument::create([
+                'program_funding_id' => $programFunding->id,
+                'document_type'      => $types[$index] ?? 'Supporting Document',
+                'file_name'          => $names[$index] ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                'file_path'          => $file->store('program-funding-documents', 'public'),
+                'uploaded_by'        => Auth::id(),
+            ]);
+        }
+    }
+
+    private function deleteDocumentFile(?string $path): void
+    {
+        if (!$path) {
+            return;
+        }
+
+        foreach (['public', 'local'] as $disk) {
+            try {
+                if (Storage::disk($disk)->exists($path)) {
+                    Storage::disk($disk)->delete($path);
+                }
+            } catch (\Throwable $e) {
+                // Best-effort cleanup.
+            }
+        }
+    }
 
 }
