@@ -213,11 +213,10 @@
                                         <td class="text-center no-export">
                                             <div class="d-flex justify-content-center gap-2">
                                                 @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
-                                                    <button class="btn btn-sm btn-outline-warning" type="button"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#editLevelModal{{ $level->id }}">
+                                                    <a class="btn btn-sm btn-outline-warning"
+                                                        href="{{ route('finance.governance.levels.edit', $level) }}">
                                                         <i class="feather-edit"></i>
-                                                    </button>
+                                                    </a>
                                                 @endcanany
                                                 @canany(['finance.governance_structure.delete', 'finance.governance_structure.manage'])
                                                     <form method="POST"
@@ -239,49 +238,6 @@
                     </div>
                 </div>
 
-                <!-- Edit Level Modals -->
-                @foreach ($levels as $level)
-                    @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
-                        <div class="modal fade" id="editLevelModal{{ $level->id }}" tabindex="-1">
-                            <div class="modal-dialog">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Edit Level: {{ $level->name }}</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <form method="POST" action="{{ route('finance.governance.levels.update', $level) }}">
-                                        @csrf
-                                        @method('PUT')
-                                        <div class="modal-body">
-                                            <div class="row g-3">
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-semibold">Key</label>
-                                                    <input type="text" name="key" class="form-control" value="{{ $level->key }}" required readonly>
-                                                </div>
-                                                <div class="col-md-8">
-                                                    <label class="form-label fw-semibold">Name</label>
-                                                    <input type="text" name="name" class="form-control" value="{{ $level->name }}" required>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-semibold">Sort Order</label>
-                                                    <input type="number" name="sort_order" class="form-control" min="0" step="1" value="{{ $level->sort_order }}" readonly>
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-semibold">Description</label>
-                                                    <input type="text" name="description" class="form-control" value="{{ $level->description }}">
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    @endcanany
-                @endforeach
             </div>
 
             <div class="tab-pane fade" id="nodesTab" role="tabpanel" aria-labelledby="nodes-tab">
@@ -382,11 +338,10 @@
                                         <td class="text-center no-export">
                                             <div class="d-flex justify-content-center gap-2">
                                                 @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
-                                                    <button class="btn btn-sm btn-outline-warning" type="button"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#editNodeModal{{ $node->id }}">
+                                                    <a class="btn btn-sm btn-outline-warning"
+                                                        href="{{ route('finance.governance.nodes.edit', $node) }}">
                                                         <i class="feather-edit"></i>
-                                                    </button>
+                                                    </a>
                                                 @endcanany
                                                 @canany(['finance.governance_structure.delete', 'finance.governance_structure.manage'])
                                                     <form method="POST"
@@ -408,67 +363,6 @@
                     </div>
                 </div>
 
-                <!-- Edit Node Modals -->
-                @foreach ($nodes as $node)
-                    @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
-                        <div class="modal fade" id="editNodeModal{{ $node->id }}" tabindex="-1">
-                            <div class="modal-dialog modal-lg">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Edit Node: {{ $node->name }}</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <form method="POST" action="{{ route('finance.governance.nodes.update', $node) }}">
-                                        @csrf
-                                        @method('PUT')
-                                        <div class="modal-body">
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Level</label>
-                                                    <select name="level_id" class="form-select" required>
-                                                        @foreach ($levels as $level)
-                                                            <option value="{{ $level->id }}" @selected($node->level_id == $level->id)>
-                                                                {{ $level->name }}
-                                                            </option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Status</label>
-                                                    <select name="status" class="form-select" required>
-                                                        <option value="active" @selected($node->status === 'active')>Active</option>
-                                                        <option value="inactive" @selected($node->status === 'inactive')>Inactive</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Name</label>
-                                                    <input type="text" name="name" class="form-control" value="{{ $node->name }}" required>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Code</label>
-                                                    <input type="text" name="code" class="form-control" value="{{ $node->code }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Effective Start</label>
-                                                    <input type="date" name="effective_start" class="form-control"
-                                                        value="{{ optional($node->effective_start)->format('Y-m-d') }}">
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-semibold">Description</label>
-                                                    <textarea name="description" class="form-control" rows="3">{{ $node->description }}</textarea>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    @endcanany
-                @endforeach
             </div>
 
             <div class="tab-pane fade" id="linesTab" role="tabpanel" aria-labelledby="lines-tab">
@@ -585,11 +479,10 @@
                                         <td class="text-center no-export">
                                             <div class="d-flex justify-content-center gap-2">
                                                 @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
-                                                    <button class="btn btn-sm btn-outline-warning" type="button"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#editLineModal{{ $line->id }}">
+                                                    <a class="btn btn-sm btn-outline-warning"
+                                                        href="{{ route('finance.governance.lines.edit', $line) }}">
                                                         <i class="feather-edit"></i>
-                                                    </button>
+                                                    </a>
                                                 @endcanany
                                                 @canany(['finance.governance_structure.delete', 'finance.governance_structure.manage'])
                                                     <form method="POST"
@@ -611,71 +504,6 @@
                     </div>
                 </div>
 
-                <!-- Edit Line Modals -->
-                @foreach ($lines as $line)
-                    @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
-                        <div class="modal fade" id="editLineModal{{ $line->id }}" tabindex="-1">
-                            <div class="modal-dialog modal-lg">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Edit Reporting Line</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <form method="POST" action="{{ route('finance.governance.lines.update', $line) }}">
-                                        @csrf
-                                        @method('PUT')
-                                        <div class="modal-body">
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Child Node</label>
-                                                    <select name="child_node_id" class="form-select" required>
-                                                        @foreach ($nodes as $node)
-                                                            <option value="{{ $node->id }}" @selected($line->child_node_id == $node->id)>
-                                                                {{ $node->name }} ({{ $node->level->name ?? 'Level' }})
-                                                            </option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Parent Node</label>
-                                                    <select name="parent_node_id" class="form-select" required>
-                                                        @foreach ($nodes as $node)
-                                                            <option value="{{ $node->id }}" @selected($line->parent_node_id == $node->id)>
-                                                                {{ $node->name }} ({{ $node->level->name ?? 'Level' }})
-                                                            </option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-semibold">Line Type</label>
-                                                    <select name="line_type" class="form-select" required>
-                                                        <option value="primary" @selected($line->line_type === 'primary')>Primary (Hierarchy)</option>
-                                                        <option value="dotted" @selected($line->line_type === 'dotted')>Dotted (Matrix)</option>
-                                                        <option value="advisory" @selected($line->line_type === 'advisory')>Advisory</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-semibold">Effective Start</label>
-                                                    <input type="date" name="effective_start" class="form-control"
-                                                        value="{{ optional($line->effective_start)->format('Y-m-d') }}">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-semibold">Effective End</label>
-                                                    <input type="date" name="effective_end" class="form-control"
-                                                        value="{{ optional($line->effective_end)->format('Y-m-d') }}">
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    @endcanany
-                @endforeach
             </div>
 
             <div class="tab-pane fade" id="assignmentsTab" role="tabpanel" aria-labelledby="assignments-tab">
@@ -801,11 +629,10 @@
                                         <td class="text-center no-export">
                                             <div class="d-flex justify-content-center gap-2">
                                                 @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
-                                                    <button class="btn btn-sm btn-outline-warning" type="button"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#editAssignmentModal{{ $assignment->id }}">
+                                                    <a class="btn btn-sm btn-outline-warning"
+                                                        href="{{ route('finance.governance.assignments.edit', $assignment) }}">
                                                         <i class="feather-edit"></i>
-                                                    </button>
+                                                    </a>
                                                 @endcanany
                                                 @canany(['finance.governance_structure.delete', 'finance.governance_structure.manage'])
                                                     <form method="POST"
@@ -827,85 +654,6 @@
                     </div>
                 </div>
 
-                <!-- Edit Assignment Modals -->
-                @foreach ($assignments as $assignment)
-                    @canany(['finance.governance_structure.edit', 'finance.governance_structure.manage'])
-                        <div class="modal fade" id="editAssignmentModal{{ $assignment->id }}" tabindex="-1">
-                            <div class="modal-dialog modal-lg">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Edit Assignment</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <form method="POST" action="{{ route('finance.governance.assignments.update', $assignment) }}">
-                                        @csrf
-                                        @method('PUT')
-                                        <div class="modal-body">
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Node</label>
-                                                    <select name="node_id" class="form-select" required>
-                                                        @foreach ($nodes as $node)
-                                                            <option value="{{ $node->id }}" @selected($assignment->node_id == $node->id)>
-                                                                {{ $node->name }} ({{ $node->level->name ?? 'Level' }})
-                                                            </option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Employee</label>
-                                                    <select name="user_id" class="form-select" required>
-                                                        @foreach ($users as $user)
-                                                            <option value="{{ $user->id }}" @selected($assignment->user_id == $user->id)>
-                                                                {{ $user->name }} - {{ $user->email }}
-                                                            </option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-semibold">Role Title</label>
-                                                    <input type="text" name="role_title" class="form-control" value="{{ $assignment->role_title }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <div class="form-check mt-4">
-                                                        <input class="form-check-input" type="checkbox" value="1" name="is_primary"
-                                                            id="editPrimary{{ $assignment->id }}" @checked($assignment->is_primary)>
-                                                        <label class="form-check-label fw-semibold" for="editPrimary{{ $assignment->id }}">
-                                                            Primary Assignment
-                                                        </label>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-semibold">Effective Start</label>
-                                                    <input type="date" name="effective_start" class="form-control"
-                                                        value="{{ optional($assignment->effective_start)->format('Y-m-d') }}">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-semibold">Effective End</label>
-                                                    <input type="date" name="effective_end" class="form-control"
-                                                        value="{{ optional($assignment->effective_end)->format('Y-m-d') }}">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <div class="form-check mt-4">
-                                                        <input class="form-check-input" type="checkbox" value="1" name="notify_user"
-                                                            id="editNotify{{ $assignment->id }}">
-                                                        <label class="form-check-label fw-semibold" for="editNotify{{ $assignment->id }}">
-                                                            Email notification
-                                                        </label>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    @endcanany
-                @endforeach
             </div>
 
             <div class="tab-pane fade" id="organogramTab" role="tabpanel" aria-labelledby="organogram-tab">

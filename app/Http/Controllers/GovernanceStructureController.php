@@ -51,6 +51,33 @@ class GovernanceStructureController extends Controller
         ));
     }
 
+    public function editLevel(GovernanceLevel $level)
+    {
+        return view('finance.governance.levels.edit', compact('level'));
+    }
+
+    public function editNode(GovernanceNode $node)
+    {
+        $levels = GovernanceLevel::orderBy('sort_order')->get();
+
+        return view('finance.governance.nodes.edit', compact('node', 'levels'));
+    }
+
+    public function editLine(GovernanceReportingLine $line)
+    {
+        $nodes = GovernanceNode::with('level')->orderBy('name')->get();
+
+        return view('finance.governance.lines.edit', compact('line', 'nodes'));
+    }
+
+    public function editAssignment(GovernanceNodeAssignment $assignment)
+    {
+        $nodes = GovernanceNode::with('level')->orderBy('name')->get();
+        $users = User::orderBy('name')->get();
+
+        return view('finance.governance.assignments.edit', compact('assignment', 'nodes', 'users'));
+    }
+
     public function storeLevel(Request $request)
     {
         $validated = $request->validate([

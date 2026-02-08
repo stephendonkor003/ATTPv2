@@ -583,6 +583,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.governance_structure.delete')
             ->name('governance.levels.destroy');
 
+        Route::get('governance-structure/levels/{level}/edit', [GovernanceStructureController::class, 'editLevel'])
+            ->middleware('permission:finance.governance_structure.edit')
+            ->name('governance.levels.edit');
+
         Route::post('governance-structure/nodes', [GovernanceStructureController::class, 'storeNode'])
             ->middleware('permission:finance.governance_structure.create')
             ->name('governance.nodes.store');
@@ -594,6 +598,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
         Route::delete('governance-structure/nodes/{node}', [GovernanceStructureController::class, 'destroyNode'])
             ->middleware('permission:finance.governance_structure.delete')
             ->name('governance.nodes.destroy');
+
+        Route::get('governance-structure/nodes/{node}/edit', [GovernanceStructureController::class, 'editNode'])
+            ->middleware('permission:finance.governance_structure.edit')
+            ->name('governance.nodes.edit');
 
         Route::post('governance-structure/lines', [GovernanceStructureController::class, 'storeLine'])
             ->middleware('permission:finance.governance_structure.create')
@@ -607,6 +615,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.governance_structure.delete')
             ->name('governance.lines.destroy');
 
+        Route::get('governance-structure/lines/{line}/edit', [GovernanceStructureController::class, 'editLine'])
+            ->middleware('permission:finance.governance_structure.edit')
+            ->name('governance.lines.edit');
+
         Route::post('governance-structure/assignments', [GovernanceStructureController::class, 'storeAssignment'])
             ->middleware('permission:finance.governance_structure.create')
             ->name('governance.assignments.store');
@@ -618,6 +630,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
         Route::delete('governance-structure/assignments/{assignment}', [GovernanceStructureController::class, 'destroyAssignment'])
             ->middleware('permission:finance.governance_structure.delete')
             ->name('governance.assignments.destroy');
+
+        Route::get('governance-structure/assignments/{assignment}/edit', [GovernanceStructureController::class, 'editAssignment'])
+            ->middleware('permission:finance.governance_structure.edit')
+            ->name('governance.assignments.edit');
 
          /* ===================== DEPARTMENTS ===================== */
 
