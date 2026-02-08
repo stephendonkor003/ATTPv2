@@ -338,11 +338,11 @@
                                         $total = $project->activities->sum(fn($a) => $a->allocations->sum('amount'));
                                     @endphp
 
-                                    <tr class="excel-project-row child-row program-{{ $program->id }} expand-toggle"
-                                        data-target="project-{{ $project->id }}" style="display: none;">
-                                        <td class="fw-bold text-center">{{ $project->project_id }}</td>
-                                        <td class="fw-bold">📂 {{ $project->name }}</td>
-                                        <td class="fw-bold text-end">{{ number_format($budget, 2) }}</td>
+                                <tr class="excel-project-row child-row program-{{ $program->id }} expand-toggle"
+                                    data-target="project-{{ $project->id }}" style="display: none;">
+                                    <td class="fw-bold text-center">{{ $project->project_id }}</td>
+                                    <td class="fw-bold">📂 {{ $project->name }}</td>
+                                    <td class="fw-bold text-end">{{ number_format($budget, 2) }}</td>
                                         <td class="fw-bold text-end">{{ number_format($cff, 2) }}</td>
 
                                         @for ($i = 2; $i <= $maxYears; $i++)
@@ -355,23 +355,25 @@
                                             <td class="text-end">{{ number_format($v, 2) }}</td>
                                         @endfor
 
-                                        <td class="fw-bold text-end">{{ number_format($total, 2) }}</td>
-                                        <td class="toggle-icon text-center">+</td>
-                                    </tr>
+                                    <td class="fw-bold text-end">{{ number_format($total, 2) }}</td>
+                                    <td class="toggle-icon text-center">+</td>
+                                </tr>
 
-                                    <!-- ===== ACTIVITIES LOOP ===== -->
-                                    @foreach ($project->activities as $activity)
-                                        @php
-                                            $aBudget = $activity->totalAllocation();
-                                            $aCFF = $activity->allocations->where('year', $start)->sum('amount');
-                                        @endphp
+                                <!-- ===== ACTIVITIES LOOP ===== -->
+                                @php $activityIndex = 1; @endphp
+                                @foreach ($project->activities as $activity)
+                                    @php
+                                        $aBudget = $activity->totalAllocation();
+                                        $aCFF = $activity->allocations->where('year', $start)->sum('amount');
+                                        $activityDisplayId = $project->project_id . '-' . str_pad($activityIndex, 2, '0', STR_PAD_LEFT);
+                                    @endphp
 
-                                        <tr class="excel-activity-row child-row project-{{ $project->id }} expand-toggle"
-                                            data-target="activity-{{ $activity->id }}" style="display: none;">
-                                            <td class="text-center">{{ $activity->id }}</td>
-                                            <td class="fw-semibold ps-4">🎯 {{ $activity->name }}</td>
-                                            <td class="text-end fw-bold">{{ number_format($aBudget, 2) }}</td>
-                                            <td class="text-end">{{ number_format($aCFF, 2) }}</td>
+                                    <tr class="excel-activity-row child-row project-{{ $project->id }} expand-toggle"
+                                        data-target="activity-{{ $activity->id }}" style="display: none;">
+                                        <td class="text-center fw-bold">{{ $activityDisplayId }}</td>
+                                        <td class="fw-semibold ps-4">🎯 {{ $activity->name }}</td>
+                                        <td class="text-end fw-bold">{{ number_format($aBudget, 2) }}</td>
+                                        <td class="text-end">{{ number_format($aCFF, 2) }}</td>
 
                                             @for ($i = 2; $i <= $maxYears; $i++)
                                                 @php $yr = $start + ($i - 1); @endphp
@@ -380,24 +382,26 @@
                                                 </td>
                                             @endfor
 
-                                            <td class="fw-bold text-end">{{ number_format($aBudget, 2) }}</td>
-                                            <td class="toggle-icon text-center">+</td>
-                                        </tr>
+                                        <td class="fw-bold text-end">{{ number_format($aBudget, 2) }}</td>
+                                        <td class="toggle-icon text-center">+</td>
+                                    </tr>
 
 
-                                        <!-- ===== SUB-ACTIVITIES LOOP ===== -->
-                                        @foreach ($activity->subActivities as $sub)
-                                            @php
-                                                $sTotal = $sub->allocations->sum('amount');
-                                                $sCFF = $sub->allocations->where('year', $start)->sum('amount');
-                                            @endphp
+                                    <!-- ===== SUB-ACTIVITIES LOOP ===== -->
+                                    @php $subIndex = 1; @endphp
+                                    @foreach ($activity->subActivities as $sub)
+                                        @php
+                                            $sTotal = $sub->allocations->sum('amount');
+                                            $sCFF = $sub->allocations->where('year', $start)->sum('amount');
+                                            $subDisplayId = $activityDisplayId . '-' . str_pad($subIndex, 2, '0', STR_PAD_LEFT);
+                                        @endphp
 
-                                            <tr class="excel-sub-row child-row activity-{{ $activity->id }}"
-                                                style="display: none;">
-                                                <td class="text-center">{{ $sub->id }}</td>
-                                                <td class="ps-5">• {{ $sub->name }}</td>
-                                                <td class="text-end fw-bold">{{ number_format($sTotal, 2) }}</td>
-                                                <td class="text-end">{{ number_format($sCFF, 2) }}</td>
+                                        <tr class="excel-sub-row child-row activity-{{ $activity->id }}"
+                                            style="display: none;">
+                                            <td class="text-center">{{ $subDisplayId }}</td>
+                                            <td class="ps-5">• {{ $sub->name }}</td>
+                                            <td class="text-end fw-bold">{{ number_format($sTotal, 2) }}</td>
+                                            <td class="text-end">{{ number_format($sCFF, 2) }}</td>
 
                                                 @for ($i = 2; $i <= $maxYears; $i++)
                                                     @php $yr = $start + ($i - 1); @endphp
@@ -406,14 +410,16 @@
                                                     </td>
                                                 @endfor
 
-                                                <td class="fw-bold text-end">{{ number_format($sTotal, 2) }}</td>
-                                                <td></td>
-                                            </tr>
-                                        @endforeach
+                                            <td class="fw-bold text-end">{{ number_format($sTotal, 2) }}</td>
+                                            <td></td>
+                                        </tr>
+                                        @php $subIndex++; @endphp
                                     @endforeach
+                                    @php $activityIndex++; @endphp
                                 @endforeach
+                            @endforeach
 
-                            </tbody>
+                        </tbody>
 
                         </table>
                     </div>
