@@ -215,15 +215,16 @@
 	                    </div>
 	
 	                    <div class="table-responsive mt-3">
-	                        <table class="table table-sm table-bordered align-middle mb-0">
-	                            <thead class="table-light">
-	                                <tr>
-	                                    <th style="width: 35%;">Resource Category</th>
-	                                    <th>Resource Item</th>
-	                                    <th style="width: 160px;" class="text-end">Price / Amount</th>
-	                                    <th style="width: 80px;" class="text-center">Action</th>
-	                                </tr>
-	                            </thead>
+                            <table class="table table-sm table-bordered align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 28%;">Resource Category</th>
+                                        <th style="width: 28%;">Resource Item</th>
+                                        <th style="width: 28%;">Milestone / Description</th>
+                                        <th style="width: 130px;" class="text-end">Price / Amount</th>
+                                        <th style="width: 80px;" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
 	                            <tbody id="itemsBody"></tbody>
 	                        </table>
 	                    </div>
@@ -595,47 +596,59 @@
 		                updateDistribution();
 		            }
 	
-		            function addItemRow(item = null) {
-		                const tr = document.createElement('tr');
-		                tr.innerHTML = `
-		                    <td>
-		                        <select class="form-select item-category" data-field="resource_category_id" required>
+                        function addItemRow(item = null) {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>
+                                    <select class="form-select item-category" data-field="resource_category_id" required>
 		                            ${categoryOptionsHtml}
 		                        </select>
 		                    </td>
-		                    <td>
-		                        <select class="form-select item-resource" data-field="resource_id" required>
-		                            <option value="">Select Resource</option>
-		                        </select>
-		                    </td>
-		                    <td>
-		                        <input type="number" min="0.01" step="0.01"
-		                            class="form-control text-end item-amount" data-field="amount" required>
-		                    </td>
-		                    <td class="text-center">
-		                        <button type="button" class="btn btn-sm btn-outline-danger remove-item-btn" title="Remove">
-		                            <i class="feather-trash-2"></i>
-		                        </button>
-		                    </td>
-		                `;
-	
-		                itemsBody.appendChild(tr);
-		                renumberItemRows();
-	
-		                const categorySelect = tr.querySelector('.item-category');
-		                const amountInput = tr.querySelector('.item-amount');
-	
-		                if (item && item.resource_category_id) {
-		                    categorySelect.value = item.resource_category_id;
-		                    loadResourcesForRow(tr, item.resource_category_id, item.resource_id || '');
-		                }
-	
-		                if (item && item.amount) {
-		                    amountInput.value = item.amount;
-		                }
-	
-		                setTotalFromItems();
-		            }
+                                    <td>
+                                        <select class="form-select item-resource" data-field="resource_id" required>
+                                            <option value="">Select Resource</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="text"
+                                            class="form-control item-milestone"
+                                            data-field="milestone"
+                                            placeholder="Milestone / description"
+                                            maxlength="255">
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0.01" step="0.01"
+                                            class="form-control text-end item-amount" data-field="amount" required>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-sm btn-outline-danger remove-item-btn" title="Remove">
+                                            <i class="feather-trash-2"></i>
+                                        </button>
+                                    </td>
+                                `;
+
+                            itemsBody.appendChild(tr);
+                            renumberItemRows();
+
+                            const categorySelect = tr.querySelector('.item-category');
+                            const amountInput = tr.querySelector('.item-amount');
+                            const milestoneInput = tr.querySelector('.item-milestone');
+
+                            if (item && item.resource_category_id) {
+                                categorySelect.value = item.resource_category_id;
+                                loadResourcesForRow(tr, item.resource_category_id, item.resource_id || '');
+                            }
+
+                            if (item && item.amount) {
+                                amountInput.value = item.amount;
+                            }
+
+                            if (item && item.milestone) {
+                                milestoneInput.value = item.milestone;
+                            }
+
+                            setTotalFromItems();
+                        }
 	
 		            addItemBtn.addEventListener('click', () => addItemRow());
 	
@@ -656,13 +669,14 @@
 	
 		                const row = removeBtn.closest('tr');
 		                const rows = itemsBody.querySelectorAll('tr');
-		                if (rows.length <= 1) {
-		                    row.querySelector('.item-category').value = '';
-		                    row.querySelector('.item-resource').innerHTML = '<option value="">Select Resource</option>';
-		                    row.querySelector('.item-amount').value = '';
-		                    setTotalFromItems();
-		                    return;
-		                }
+                if (rows.length <= 1) {
+                    row.querySelector('.item-category').value = '';
+                    row.querySelector('.item-resource').innerHTML = '<option value="">Select Resource</option>';
+                    row.querySelector('.item-amount').value = '';
+                    row.querySelector('.item-milestone').value = '';
+                    setTotalFromItems();
+                    return;
+                }
 	
 		                row.remove();
 		                renumberItemRows();

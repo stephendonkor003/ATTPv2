@@ -100,20 +100,22 @@
         <table>
             <tr>
                 <th style="width: 40px;">#</th>
-                <th style="width: 35%;">Category</th>
-                <th>Resource Item</th>
-                <th class="right" style="width: 140px;">Amount</th>
+                <th style="width: 25%;">Category</th>
+                <th style="width: 23%;">Resource Item</th>
+                <th style="width: 30%;">Milestone / Description</th>
+                <th class="right" style="width: 120px;">Amount</th>
             </tr>
             @foreach ($purchaseRequest->items as $item)
                 <tr>
                     <td>{{ $loop->iteration }}</td>
                     <td>{{ $item->resourceCategory?->name ?? 'N/A' }}</td>
                     <td>{{ $item->resource?->name ?? 'N/A' }}</td>
+                    <td>{{ $item->milestone ?? '—' }}</td>
                     <td class="right">{{ $currency }} {{ number_format((float) $item->amount, 2) }}</td>
                 </tr>
             @endforeach
             <tr>
-                <th colspan="3" class="right">Total</th>
+                <th colspan="4" class="right">Total</th>
                 <th class="right">{{ $currency }} {{ number_format((float) $purchaseRequest->total_amount, 2) }}</th>
             </tr>
         </table>

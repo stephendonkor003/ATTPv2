@@ -110,6 +110,7 @@
                                         <th>#</th>
                                         <th>Category</th>
                                         <th>Resource Item</th>
+                                        <th>Milestone / Description</th>
                                         <th class="text-end">Amount</th>
                                     </tr>
                                 </thead>
@@ -119,6 +120,7 @@
                                             <td>{{ $loop->iteration }}</td>
                                             <td>{{ $item->resourceCategory?->name ?? '—' }}</td>
                                             <td>{{ $item->resource?->name ?? '—' }}</td>
+                                            <td>{{ $item->milestone ?? '—' }}</td>
                                             <td class="text-end fw-semibold">
                                                 {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
                                                 {{ number_format((float) $item->amount, 2) }}
@@ -128,7 +130,7 @@
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <th colspan="3" class="text-end">Total</th>
+                                        <th colspan="4" class="text-end">Total</th>
                                         <th class="text-end">
                                             {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
                                             {{ number_format((float) $purchaseRequest->total_amount, 2) }}

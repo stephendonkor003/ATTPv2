@@ -163,6 +163,7 @@
                                     <th style="width: 50px;">#</th>
                                     <th>Category</th>
                                     <th>Resource Item</th>
+                                    <th>Milestone / Description</th>
                                     <th class="text-end" style="width: 160px;">Amount</th>
                                 </tr>
                             </thead>
@@ -172,6 +173,7 @@
                                         <td>{{ $loop->iteration }}</td>
                                         <td>{{ $item->resourceCategory->name ?? '—' }}</td>
                                         <td>{{ $item->resource->name ?? '—' }}</td>
+                                        <td>{{ $item->milestone ?? '—' }}</td>
                                         <td class="text-end fw-semibold">
                                             {{ $commitment->purchaseRequest->currency ?? $commitment->programFunding->program->currency ?? '' }}
                                             {{ number_format((float) $item->amount, 2) }}

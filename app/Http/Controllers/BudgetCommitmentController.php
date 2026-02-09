@@ -84,23 +84,24 @@ class BudgetCommitmentController extends Controller
 	    /* =====================================================
 	     * 1. VALIDATION
 	     * ===================================================== */
-		        $validated = $request->validate([
-			        'program_funding_id'   => 'required|exists:myb_program_fundings,id',
-			        'allocation_level'     => 'required|in:sub_activity',
-			        'commitment_year'      => 'required|integer|min:2000',
-			        'allocation_id'        => 'required|string|exists:myb_sub_activities,id',
-			        'description'          => 'nullable|string|max:5000',
-			        'delivery_date'        => 'required|date|after_or_equal:today',
-		        // Backwards compatible: allow old single-item fields if items[] isn't provided
-		        'resource_category_id' => 'nullable|exists:myb_resource_categories,id',
-		        'resource_id'          => 'nullable|exists:myb_resources,id',
-		        'commitment_amount'    => 'nullable|numeric|min:0.01',
+        $validated = $request->validate([
+            'program_funding_id'   => 'required|exists:myb_program_fundings,id',
+            'allocation_level'     => 'required|in:sub_activity',
+            'commitment_year'      => 'required|integer|min:2000',
+            'allocation_id'        => 'required|string|exists:myb_sub_activities,id',
+            'description'          => 'nullable|string|max:5000',
+            'delivery_date'        => 'required|date|after_or_equal:today',
+        // Backwards compatible: allow old single-item fields if items[] isn't provided
+        'resource_category_id' => 'nullable|exists:myb_resource_categories,id',
+        'resource_id'          => 'nullable|exists:myb_resources,id',
+        'commitment_amount'    => 'nullable|numeric|min:0.01',
 
-		        'items'                => 'nullable|array|min:1',
-		        'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
-		        'items.*.resource_id'          => 'required|exists:myb_resources,id',
-		        'items.*.amount'               => 'required|numeric|min:0.01',
-		    ]);
+        'items'                => 'nullable|array|min:1',
+        'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
+        'items.*.resource_id'          => 'required|exists:myb_resources,id',
+        'items.*.amount'               => 'required|numeric|min:0.01',
+        'items.*.milestone'            => 'nullable|string|max:255',
+    ]);
 
 	    $transactionStarted = false;
 
@@ -159,13 +160,18 @@ class BudgetCommitmentController extends Controller
 		            ]);
 		        }
 
-		        $items = $itemsInput->map(function ($item) {
-		            return [
-		                'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
-		                'resource_id' => (string) ($item['resource_id'] ?? ''),
-		                'amount' => round((float) ($item['amount'] ?? 0), 2),
-		            ];
-		        })->values();
+        $items = $itemsInput->map(function ($item) {
+            $milestone = isset($item['milestone']) && is_string($item['milestone'])
+                ? trim($item['milestone'])
+                : null;
+
+            return [
+                'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
+                'resource_id' => (string) ($item['resource_id'] ?? ''),
+                'amount' => round((float) ($item['amount'] ?? 0), 2),
+                'milestone' => $milestone !== '' ? $milestone : null,
+            ];
+        })->values();
 
 		        $requestedAmount = round((float) $items->sum('amount'), 2);
 		        if ($requestedAmount <= 0) {
@@ -340,14 +346,15 @@ class BudgetCommitmentController extends Controller
 			            'created_by' => Auth::id(),
 			        ]);
 
-		        foreach ($items as $item) {
-		            PurchaseRequestItem::create([
-		                'purchase_request_id' => $purchaseRequest->id,
-		                'resource_category_id' => $item['resource_category_id'],
-		                'resource_id' => $item['resource_id'],
-		                'amount' => $item['amount'],
-		            ]);
-		        }
+        foreach ($items as $item) {
+            PurchaseRequestItem::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'resource_category_id' => $item['resource_category_id'],
+                'resource_id' => $item['resource_id'],
+                'amount' => $item['amount'],
+                'milestone' => $item['milestone'] ?? null,
+            ]);
+        }
 
 		        foreach ($splits as $split) {
 		            BudgetCommitment::create([

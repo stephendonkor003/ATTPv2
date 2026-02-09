@@ -13,6 +13,7 @@ class PurchaseRequestItem extends BaseModel
         'purchase_request_id',
         'resource_category_id',
         'resource_id',
+        'milestone',
         'amount',
     ];
 
@@ -35,4 +36,3 @@ class PurchaseRequestItem extends BaseModel
         return $this->belongsTo(Resource::class, 'resource_id');
     }
 }
-
