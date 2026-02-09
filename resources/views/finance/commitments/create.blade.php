@@ -218,11 +218,11 @@
                             <table class="table table-sm table-bordered align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th style="width: 28%;">Resource Category</th>
-                                        <th style="width: 28%;">Resource Item</th>
+                                        <th style="width: 22%;">Resource Category</th>
+                                        <th style="width: 22%;">Resource Item</th>
                                         <th style="width: 20%;">Milestone / Description</th>
-                                        <th style="width: 16%;">Milestone Date</th>
-                                        <th style="width: 130px;" class="text-end">Price / Amount</th>
+                                        <th style="width: 14%;">Milestone Date</th>
+                                        <th style="width: 170px;" class="text-end">Price / Amount</th>
                                         <th style="width: 80px;" class="text-center">Action</th>
                                     </tr>
                                 </thead>
