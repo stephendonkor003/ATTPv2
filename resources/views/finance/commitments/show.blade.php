@@ -164,6 +164,7 @@
                                     <th>Category</th>
                                     <th>Resource Item</th>
                                     <th>Milestone / Description</th>
+                                    <th>Milestone Date</th>
                                     <th class="text-end" style="width: 160px;">Amount</th>
                                 </tr>
                             </thead>
@@ -174,6 +175,7 @@
                                         <td>{{ $item->resourceCategory->name ?? '—' }}</td>
                                         <td>{{ $item->resource->name ?? '—' }}</td>
                                         <td>{{ $item->milestone ?? '—' }}</td>
+                                        <td>{{ $item->milestone_date?->format('Y-m-d') ?? '—' }}</td>
                                         <td class="text-end fw-semibold">
                                             {{ $commitment->purchaseRequest->currency ?? $commitment->programFunding->program->currency ?? '' }}
                                             {{ number_format((float) $item->amount, 2) }}

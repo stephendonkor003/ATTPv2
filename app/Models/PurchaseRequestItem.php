@@ -14,11 +14,13 @@ class PurchaseRequestItem extends BaseModel
         'resource_category_id',
         'resource_id',
         'milestone',
+        'milestone_date',
         'amount',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'milestone_date' => 'date',
     ];
 
     public function purchaseRequest(): BelongsTo

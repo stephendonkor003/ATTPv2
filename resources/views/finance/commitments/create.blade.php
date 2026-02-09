@@ -220,7 +220,8 @@
                                     <tr>
                                         <th style="width: 28%;">Resource Category</th>
                                         <th style="width: 28%;">Resource Item</th>
-                                        <th style="width: 28%;">Milestone / Description</th>
+                                        <th style="width: 20%;">Milestone / Description</th>
+                                        <th style="width: 16%;">Milestone Date</th>
                                         <th style="width: 130px;" class="text-end">Price / Amount</th>
                                         <th style="width: 80px;" class="text-center">Action</th>
                                     </tr>
@@ -601,26 +602,31 @@
                             tr.innerHTML = `
                                 <td>
                                     <select class="form-select item-category" data-field="resource_category_id" required>
-		                            ${categoryOptionsHtml}
-		                        </select>
-		                    </td>
-                                    <td>
-                                        <select class="form-select item-resource" data-field="resource_id" required>
-                                            <option value="">Select Resource</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <input type="text"
-                                            class="form-control item-milestone"
-                                            data-field="milestone"
-                                            placeholder="Milestone / description"
-                                            maxlength="255">
-                                    </td>
-                                    <td>
-                                        <input type="number" min="0.01" step="0.01"
-                                            class="form-control text-end item-amount" data-field="amount" required>
-                                    </td>
-                                    <td class="text-center">
+                                        ${categoryOptionsHtml}
+                                    </select>
+                                </td>
+                                <td>
+                                    <select class="form-select item-resource" data-field="resource_id" required>
+                                        <option value="">Select Resource</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="text"
+                                        class="form-control item-milestone"
+                                        data-field="milestone"
+                                        placeholder="Milestone / description"
+                                        maxlength="255">
+                                </td>
+                                <td>
+                                    <input type="date"
+                                        class="form-control item-milestone-date"
+                                        data-field="milestone_date">
+                                </td>
+                                <td>
+                                    <input type="number" min="0.01" step="0.01"
+                                        class="form-control text-end item-amount" data-field="amount" required>
+                                </td>
+                                <td class="text-center">
                                         <button type="button" class="btn btn-sm btn-outline-danger remove-item-btn" title="Remove">
                                             <i class="feather-trash-2"></i>
                                         </button>
@@ -633,6 +639,7 @@
                             const categorySelect = tr.querySelector('.item-category');
                             const amountInput = tr.querySelector('.item-amount');
                             const milestoneInput = tr.querySelector('.item-milestone');
+                            const milestoneDateInput = tr.querySelector('.item-milestone-date');
 
                             if (item && item.resource_category_id) {
                                 categorySelect.value = item.resource_category_id;
@@ -645,6 +652,10 @@
 
                             if (item && item.milestone) {
                                 milestoneInput.value = item.milestone;
+                            }
+
+                            if (item && item.milestone_date) {
+                                milestoneDateInput.value = item.milestone_date;
                             }
 
                             setTotalFromItems();
@@ -674,6 +685,7 @@
                     row.querySelector('.item-resource').innerHTML = '<option value="">Select Resource</option>';
                     row.querySelector('.item-amount').value = '';
                     row.querySelector('.item-milestone').value = '';
+                    row.querySelector('.item-milestone-date').value = '';
                     setTotalFromItems();
                     return;
                 }

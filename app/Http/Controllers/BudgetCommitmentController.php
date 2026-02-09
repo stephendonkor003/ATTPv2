@@ -101,6 +101,7 @@ class BudgetCommitmentController extends Controller
         'items.*.resource_id'          => 'required|exists:myb_resources,id',
         'items.*.amount'               => 'required|numeric|min:0.01',
         'items.*.milestone'            => 'nullable|string|max:255',
+        'items.*.milestone_date'       => 'nullable|date',
     ]);
 
 	    $transactionStarted = false;
@@ -164,12 +165,14 @@ class BudgetCommitmentController extends Controller
             $milestone = isset($item['milestone']) && is_string($item['milestone'])
                 ? trim($item['milestone'])
                 : null;
+            $milestoneDate = isset($item['milestone_date']) ? $item['milestone_date'] : null;
 
             return [
                 'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
                 'resource_id' => (string) ($item['resource_id'] ?? ''),
                 'amount' => round((float) ($item['amount'] ?? 0), 2),
                 'milestone' => $milestone !== '' ? $milestone : null,
+                'milestone_date' => $milestoneDate ?: null,
             ];
         })->values();
 
@@ -353,6 +356,7 @@ class BudgetCommitmentController extends Controller
                 'resource_id' => $item['resource_id'],
                 'amount' => $item['amount'],
                 'milestone' => $item['milestone'] ?? null,
+                'milestone_date' => $item['milestone_date'] ?? null,
             ]);
         }
 
