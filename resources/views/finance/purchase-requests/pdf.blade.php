@@ -56,7 +56,7 @@
         <table>
             <tr>
                 <th style="width: 180px;">Program</th>
-                <td>{{ $purchaseRequest->programFunding?->program?->name ?? 'N/A' }}</td>
+                <td>{{ $purchaseRequest->programFunding?->program?->name ?? $purchaseRequest->programFunding?->program_name ?? 'N/A' }}</td>
             </tr>
             <tr>
                 <th>Governance Node</th>

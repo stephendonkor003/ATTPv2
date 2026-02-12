@@ -43,7 +43,7 @@
                         <table class="table table-sm mb-0">
                             <tr>
                                 <th style="width: 200px;">Program</th>
-                                <td>{{ $purchaseRequest->programFunding?->program?->name ?? '—' }}</td>
+                                <td>{{ $purchaseRequest->programFunding?->program?->name ?? $purchaseRequest->programFunding?->program_name ?? '—' }}</td>
                             </tr>
                             <tr>
                                 <th>Governance Node</th>

@@ -40,15 +40,15 @@ class BudgetCommitmentController extends Controller
         abort(403, 'You do not have access to commitments.');
     }
 
-	    $commitments = BudgetCommitment::with([
-	        'programFunding.program',
-	        'resourceCategory',
-	        'resource',
-	        'purchaseRequest',
-	
-	        // eager load concrete models
-	        'programFunding',
-	    ])
+        $commitments = BudgetCommitment::with([
+            'programFunding.program',
+            'resourceCategory',
+            'resource',
+            'purchaseRequest.items',
+
+            // eager load concrete models
+            'programFunding',
+        ])
     ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
         $query->whereIn('governance_node_id', $scopedNodeIds)
             ->whereNotNull('governance_node_id');

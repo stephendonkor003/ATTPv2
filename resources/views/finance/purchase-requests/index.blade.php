@@ -52,7 +52,7 @@
                                 @if ($canViewAll)
                                     <td>{{ $pr->governanceNode?->name ?? '—' }}</td>
                                 @endif
-                                <td>{{ $pr->programFunding?->program?->name ?? '—' }}</td>
+                                <td>{{ $pr->programFunding?->program?->name ?? $pr->programFunding?->program_name ?? '—' }}</td>
                                 <td>{{ $pr->subActivity?->name ?? '—' }}</td>
                                 <td><span class="badge bg-light text-dark">{{ $pr->start_year }}</span></td>
                                 <td>{{ $pr->commitment_date?->format('F j, Y') ?? '—' }}</td>
