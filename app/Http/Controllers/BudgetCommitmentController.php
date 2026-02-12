@@ -451,27 +451,35 @@ class BudgetCommitmentController extends Controller
     public function approve(BudgetCommitment $commitment)
     {
         $this->assertCommitmentInScope($commitment);
-        if ($commitment->status !== self::STATUS_SUBMITTED) {
-            abort(403);
+        if (!in_array($commitment->status, [self::STATUS_SUBMITTED, self::STATUS_DRAFT], true)) {
+            abort(403, 'Only draft or submitted commitments can be approved.');
         }
 
         $commitment->update([
             'status'      => self::STATUS_APPROVED,
             'approved_by'=> Auth::id(),
             'approved_at'=> now(),
+            'rejection_reason' => null,
         ]);
 
         return back()->with('success', 'Commitment approved.');
     }
 
-    public function cancel(BudgetCommitment $commitment)
+    public function cancel(Request $request, BudgetCommitment $commitment)
     {
         $this->assertCommitmentInScope($commitment);
         if ($commitment->status === self::STATUS_APPROVED) {
             abort(403);
         }
 
-        $commitment->update(['status' => self::STATUS_CANCELLED]);
+        $data = $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $commitment->update([
+            'status' => self::STATUS_CANCELLED,
+            'rejection_reason' => $data['reason'],
+        ]);
 
         return back()->with('success', 'Commitment cancelled.');
     }

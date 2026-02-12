@@ -40,6 +40,11 @@
                                         : 'bg-secondary')) }}">
                                 {{ ucfirst($commitment->status) }}
                             </span>
+                            @if($commitment->status === 'cancelled' && $commitment->rejection_reason)
+                                <div class="text-muted small mt-2">
+                                    Reason: {{ $commitment->rejection_reason }}
+                                </div>
+                            @endif
                         </div>
                     </div>
 
@@ -316,7 +321,7 @@
                         @endcan
                     @endif
                     @can('finance.commitments.approve')
-                        @if ($commitment->status === 'submitted')
+                        @if (in_array($commitment->status, ['submitted', 'draft']))
                             <form method="POST" action="{{ route('finance.commitments.approve', $commitment) }}">
                                 @csrf
                                 <button class="btn btn-success">
@@ -329,10 +334,13 @@
                         @if (in_array($commitment->status, ['draft', 'submitted']))
                             <form method="POST" action="{{ route('finance.commitments.cancel', $commitment) }}">
                                 @csrf
-                                <button class="btn btn-danger">
-                                    <i class="feather-x-circle me-1"></i>
-                                    Cancel Commitment
-                                </button>
+                                <div class="input-group">
+                                    <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason for rejection/cancel" required>
+                                    <button class="btn btn-danger">
+                                        <i class="feather-x-circle me-1"></i>
+                                        Cancel / Reject
+                                    </button>
+                                </div>
                             </form>
                         @endif
                     @endcan

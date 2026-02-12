@@ -23,6 +23,7 @@ class BudgetCommitment extends BaseModel
         'commitment_year',
         'status',
         'description',
+        'rejection_reason',
         'created_by',
         'approved_by',
         'approved_at',
