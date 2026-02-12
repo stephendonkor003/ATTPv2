@@ -241,6 +241,30 @@
                 {{-- ===================== ACTIONS ===================== --}}
                 <div class="d-flex flex-wrap gap-2">
 
+                    @can('finance.commitments.edit')
+                        @if ($commitment->status === 'draft')
+                            <a href="{{ route('finance.commitments.edit', $commitment) }}"
+                                class="btn btn-outline-secondary">
+                                <i class="feather-edit-2 me-1"></i>
+                                Edit Commitment
+                            </a>
+                        @endif
+                    @endcan
+
+                    @can('finance.commitments.delete')
+                        @if ($commitment->status === 'draft')
+                            <form method="POST" action="{{ route('finance.commitments.destroy', $commitment) }}"
+                                onsubmit="return confirm('Delete this draft commitment?');">
+                                @csrf
+                                @method('DELETE')
+                                <button class="btn btn-outline-danger">
+                                    <i class="feather-trash-2 me-1"></i>
+                                    Delete
+                                </button>
+                            </form>
+                        @endif
+                    @endcan
+
                     @if ($commitment->status === 'draft')
                         @can('finance.commitments.submit')
                             <form method="POST" action="{{ route('finance.commitments.submit', $commitment) }}">

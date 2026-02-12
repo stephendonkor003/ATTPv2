@@ -1,13 +1,20 @@
 @extends('layouts.app')
 
+@php
+    $isEdit = isset($commitment);
+    $purchaseRequest = $purchaseRequest ?? ($isEdit ? $commitment->purchaseRequest : null);
+    $items = $items ?? [];
+    $defaults = $defaults ?? [];
+@endphp
+
 @section('content')
     <div class="nxl-container">
 
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="page-header">
-            <h4 class="fw-bold">Create Budget Commitment</h4>
+            <h4 class="fw-bold">{{ $isEdit ? 'Edit Budget Commitment' : 'Create Budget Commitment' }}</h4>
             <p class="text-muted mb-0">
-                Commit approved allocations to specific resources
+                {{ $isEdit ? 'Update draft commitment details' : 'Commit approved allocations to specific resources' }}
             </p>
         </div>
 
@@ -26,8 +33,13 @@
             </div>
         @endif
 
-        <form method="POST" action="{{ route('finance.commitments.store') }}" id="commitmentForm">
+        <form method="POST"
+            action="{{ $isEdit ? route('finance.commitments.update', $commitment) : route('finance.commitments.store') }}"
+            id="commitmentForm">
             @csrf
+            @if ($isEdit)
+                @method('PUT')
+            @endif
 
             {{-- ===================== PROGRAM FUNDING ===================== --}}
             <div class="card shadow-sm mb-4">
@@ -42,7 +54,7 @@
                                 <option value="">Select Program Funding</option>
                                 @foreach ($fundings as $funding)
                                     <option value="{{ $funding->id }}"
-                                        {{ old('program_funding_id') == $funding->id ? 'selected' : '' }}>
+                                        {{ old('program_funding_id', $isEdit ? $commitment->program_funding_id : null) == $funding->id ? 'selected' : '' }}>
                                         {{ $funding->program->name ?? $funding->program_name ?? 'Program' }}
                                     </option>
                                 @endforeach
@@ -65,7 +77,8 @@
                     <div class="row">
                         <div class="col-md-4">
                             <label class="form-label">Commitment Ref</label>
-                            <input type="text" id="commitment_ref" class="form-control" readonly>
+                            <input type="text" id="commitment_ref" class="form-control" readonly
+                                value="{{ $isEdit ? ($purchaseRequest->reference_no ?? '—') : '' }}">
                             <small class="text-muted">
                                 System generated (for tracking)
                             </small>
@@ -92,37 +105,37 @@
 	                        </div>
 
 	                        {{-- Project --}}
-	                        <div class="col-md-4 d-none" id="projectWrap">
-	                            <label class="form-label">Project</label>
-	                            <select class="form-select" id="project_id" name="project_id"
-	                                data-old="{{ old('project_id') }}"></select>
-	                        </div>
+                            <div class="col-md-4 d-none" id="projectWrap">
+                                <label class="form-label">Project</label>
+                                <select class="form-select" id="project_id" name="project_id"
+                                data-old="{{ old('project_id', $defaults['project_id'] ?? '') }}"></select>
+                            </div>
 
 	                        {{-- Activity --}}
-	                        <div class="col-md-4 d-none" id="activityWrap">
-	                            <label class="form-label">Activity</label>
-	                            <select class="form-select" id="activity_id" name="activity_id"
-	                                data-old="{{ old('activity_id') }}"></select>
-	                        </div>
+                            <div class="col-md-4 d-none" id="activityWrap">
+                                <label class="form-label">Activity</label>
+                                <select class="form-select" id="activity_id" name="activity_id"
+                                data-old="{{ old('activity_id', $defaults['activity_id'] ?? '') }}"></select>
+                            </div>
 
 	                        {{-- Sub-Activity --}}
-	                        <div class="col-md-4 d-none" id="subActivityWrap">
-	                            <label class="form-label">Sub-Activity</label>
-	                            <select class="form-select" id="sub_activity_id" name="sub_activity_id"
-	                                data-old="{{ old('sub_activity_id', old('allocation_id')) }}"></select>
-	                        </div>
+                            <div class="col-md-4 d-none" id="subActivityWrap">
+                                <label class="form-label">Sub-Activity</label>
+                                <select class="form-select" id="sub_activity_id" name="sub_activity_id"
+                                data-old="{{ old('sub_activity_id', old('allocation_id', $defaults['sub_activity_id'] ?? '')) }}"></select>
+                            </div>
 
 	                        {{-- Year --}}
-	                        <div class="col-md-4 d-none" id="yearWrap">
-	                            <label class="form-label">Start Year</label>
-	                            <select class="form-select @error('commitment_year') is-invalid @enderror" id="commitment_year"
-	                                name="commitment_year" data-old="{{ old('commitment_year') }}" required></select>
-	                            @error('commitment_year')
-	                                <div class="invalid-feedback">{{ $message }}</div>
-	                            @enderror
-	                        </div>
+                            <div class="col-md-4 d-none" id="yearWrap">
+                                <label class="form-label">Start Year</label>
+                                <select class="form-select @error('commitment_year') is-invalid @enderror" id="commitment_year"
+                                name="commitment_year" data-old="{{ old('commitment_year', $defaults['year'] ?? '') }}" required></select>
+                                @error('commitment_year')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
 
-                        <input type="hidden" name="allocation_id" id="allocation_id" value="{{ old('allocation_id') }}">
+                        <input type="hidden" name="allocation_id" id="allocation_id" value="{{ old('allocation_id', $defaults['sub_activity_id'] ?? ($commitment->allocation_id ?? '')) }}">
                     </div>
 
                     {{-- ===================== ALLOCATION PREVIEW ===================== --}}
@@ -190,27 +203,27 @@
 	                        <div class="col-12">
 	                            <label class="form-label">Description (optional)</label>
 	                            <textarea
-	                                name="description"
-	                                id="description"
-	                                rows="3"
-	                                class="form-control @error('description') is-invalid @enderror"
-	                                placeholder="Brief description of this purchase request...">{{ old('description') }}</textarea>
-	                            @error('description')
-	                                <div class="invalid-feedback">{{ $message }}</div>
-	                            @enderror
-	                        </div>
-	
-	                        <div class="col-md-4">
-	                            <label class="form-label">Delivery Date</label>
-	                            <input type="date"
-	                                name="delivery_date"
-	                                id="delivery_date"
-	                                value="{{ old('delivery_date') }}"
-	                                class="form-control @error('delivery_date') is-invalid @enderror"
-	                                required>
-	                            @error('delivery_date')
-	                                <div class="invalid-feedback">{{ $message }}</div>
-	                            @enderror
+                                name="description"
+                                id="description"
+                                rows="3"
+                                class="form-control @error('description') is-invalid @enderror"
+                                placeholder="Brief description of this purchase request...">{{ old('description', $isEdit ? ($commitment->description ?? $purchaseRequest->description ?? '') : '') }}</textarea>
+                            @error('description')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Delivery Date</label>
+                            <input type="date"
+                                name="delivery_date"
+                                id="delivery_date"
+                                value="{{ old('delivery_date', optional($purchaseRequest?->delivery_date)->format('Y-m-d')) }}"
+                                class="form-control @error('delivery_date') is-invalid @enderror"
+                                required>
+                            @error('delivery_date')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
 	                        </div>
 	                    </div>
 	
@@ -235,36 +248,38 @@
 	                            <i class="feather-plus me-1"></i> Add Item
 	                        </button>
 	
-	                        <div style="min-width: 260px;">
-	                            <label class="form-label mb-1">Total Commitment Amount</label>
-	                            <input type="number" step="0.01" id="commitment_amount"
-	                                class="form-control @error('commitment_amount') is-invalid @enderror text-end fw-bold"
-	                                name="commitment_amount" value="{{ old('commitment_amount', 0) }}" readonly>
-	                            <small class="text-muted">Auto-calculated from items</small>
-	                            @error('commitment_amount')
-	                                <div class="invalid-feedback d-block">{{ $message }}</div>
-	                            @enderror
-	                        </div>
+                                <div style="min-width: 260px;">
+                                    <label class="form-label mb-1">Total Commitment Amount</label>
+                                    <input type="number" step="0.01" id="commitment_amount"
+                                        class="form-control @error('commitment_amount') is-invalid @enderror text-end fw-bold"
+                                        name="commitment_amount" value="{{ old('commitment_amount', $isEdit ? ($purchaseRequest->total_amount ?? 0) : 0) }}" readonly>
+                                    <small class="text-muted">Auto-calculated from items</small>
+                                    @error('commitment_amount')
+                                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                                    @enderror
+                                </div>
 	                    </div>
 	                </div>
 	            </div>
 
-	            {{-- ===================== ACTION ===================== --}}
-	            <div class="text-end">
-	                <button class="btn btn-primary px-4" id="saveCommitmentBtn" type="submit">
-	                    <i class="feather-save me-1"></i>
-	                    Save Commitment
-	                </button>
-	            </div>
+            {{-- ===================== ACTION ===================== --}}
+            <div class="text-end">
+                <button class="btn btn-primary px-4" id="saveCommitmentBtn" type="submit">
+                    <i class="feather-save me-1"></i>
+                    {{ $isEdit ? 'Update Commitment' : 'Save Commitment' }}
+                </button>
+            </div>
 
         </form>
     </div>
 
 	    {{-- ===================== SCRIPT ===================== --}}
-	    <script>
-	        document.addEventListener('DOMContentLoaded', () => {
-	            document.getElementById('commitment_ref').value =
-	                'COM-' + Date.now().toString().slice(-6);
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const refInput = document.getElementById('commitment_ref');
+                if (refInput && !refInput.value) {
+                    refInput.value = 'COM-' + Date.now().toString().slice(-6);
+                }
 
 	            const allocationLevel = document.getElementById('allocation_level'); // hidden, always sub_activity
 	            const projectSelect = document.getElementById('project_id');
@@ -695,11 +710,11 @@
 		                setTotalFromItems();
 		            });
 	
-		            function initItemRows() {
-		                const oldItems = @json(old('items', []));
-		                const legacyCategory = @json(old('resource_category_id'));
-		                const legacyResource = @json(old('resource_id'));
-		                const legacyAmount = @json(old('commitment_amount'));
+            function initItemRows() {
+                const oldItems = @json(old('items', $isEdit ? $items : []));
+                const legacyCategory = @json(old('resource_category_id'));
+                const legacyResource = @json(old('resource_id'));
+                const legacyAmount = @json(old('commitment_amount'));
 	
 		                if (Array.isArray(oldItems) && oldItems.length) {
 		                    oldItems.forEach(item => addItemRow(item));

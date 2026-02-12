@@ -136,6 +136,30 @@
                                         title="View Commitment">
                                         <i class="feather-eye"></i>
                                     </a>
+                                    @can('finance.commitments.edit')
+                                        @if ($c->status === 'draft')
+                                            <a href="{{ route('finance.commitments.edit', $c->id) }}"
+                                                class="btn btn-sm btn-outline-secondary"
+                                                title="Edit Commitment">
+                                                <i class="feather-edit-2"></i>
+                                            </a>
+                                        @endif
+                                    @endcan
+                                    @can('finance.commitments.delete')
+                                        @if ($c->status === 'draft')
+                                            <form action="{{ route('finance.commitments.destroy', $c->id) }}"
+                                                method="POST" class="d-inline"
+                                                onsubmit="return confirm('Delete this draft commitment?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit"
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    title="Delete Commitment">
+                                                    <i class="feather-trash-2"></i>
+                                                </button>
+                                            </form>
+                                        @endif
+                                    @endcan
                                 </td>
 
                             </tr>
