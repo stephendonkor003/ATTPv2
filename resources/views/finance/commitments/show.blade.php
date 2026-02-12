@@ -77,18 +77,40 @@
                 {{-- ===================== PROGRAM & FUNDING ===================== --}}
                 <h6 class="fw-bold text-primary mb-3">Program & Funding Context</h6>
 
+                @php
+                    $programName = $commitment->programFunding?->program?->name
+                        ?? $commitment->programFunding?->program_name
+                        ?? '—';
+                    $projectName = $commitment->allocation_level === 'project'
+                        ? \App\Models\Project::find($commitment->allocation_id)?->name
+                        : ($commitment->allocation_level === 'activity'
+                            ? \App\Models\Activity::find($commitment->allocation_id)?->project?->name
+                            : \App\Models\SubActivity::find($commitment->allocation_id)?->activity?->project?->name);
+                    $activityName = $commitment->allocation_level === 'activity'
+                        ? \App\Models\Activity::find($commitment->allocation_id)?->name
+                        : ($commitment->allocation_level === 'sub_activity'
+                            ? \App\Models\SubActivity::find($commitment->allocation_id)?->activity?->name
+                            : null);
+                    $subActivityName = $commitment->allocation_level === 'sub_activity'
+                        ? \App\Models\SubActivity::find($commitment->allocation_id)?->name
+                        : null;
+                @endphp
+
                 <div class="row g-3 mb-4">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <strong>Program</strong><br>
-                        {{ $commitment->programFunding->program->name ?? '—' }}
+                        {{ $programName }}
                     </div>
 
-                    <div class="col-md-6">
-                        <strong>Program Funding (Program)</strong><br>
-                        {{ $commitment->programFunding->program->name ?? '—' }}
+                    <div class="col-md-4">
+                        <strong>Program Funding</strong><br>
+                        {{ $commitment->programFunding?->program_name ?? $programName }}
                     </div>
 
-
+                    <div class="col-md-4">
+                        <strong>Project</strong><br>
+                        {{ $projectName ?? '—' }}
+                    </div>
                 </div>
 
                 <hr>
@@ -97,28 +119,17 @@
                 <h6 class="fw-bold text-warning mb-3">Allocation Details</h6>
 
                 <div class="row g-3 mb-4">
-                    <div class="col-md-12">
-                        <strong>Allocated Item</strong><br>
-
-                        @php
-                            $allocationLabel = null;
-
-                            if ($commitment->allocation_level === 'project') {
-                                $allocationLabel = \App\Models\Project::find($commitment->allocation_id)?->name;
-                            }
-
-                            if ($commitment->allocation_level === 'activity') {
-                                $allocationLabel = \App\Models\Activity::find($commitment->allocation_id)?->name;
-                            }
-
-                            if ($commitment->allocation_level === 'sub_activity') {
-                                $allocationLabel = \App\Models\SubActivity::find($commitment->allocation_id)?->name;
-                            }
-                        @endphp
-
-                        <span class="fw-semibold">
-                            {{ $allocationLabel ?? 'Allocation not found' }}
-                        </span>
+                    <div class="col-md-4">
+                        <strong>Project</strong><br>
+                        {{ $projectName ?? '—' }}
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Activity</strong><br>
+                        {{ $activityName ?? '—' }}
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Sub-Activity</strong><br>
+                        {{ $subActivityName ?? '—' }}
                     </div>
                 </div>
 
