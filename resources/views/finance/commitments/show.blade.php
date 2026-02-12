@@ -320,6 +320,7 @@
                             </form>
                         @endcan
                     @endif
+
                     @can('finance.commitments.approve')
                         @if (in_array($commitment->status, ['submitted', 'draft']))
                             <form method="POST" action="{{ route('finance.commitments.approve', $commitment) }}">
@@ -330,17 +331,17 @@
                                 </button>
                             </form>
                         @endif
+                    @endcan
 
+                    @can('finance.commitments.cancel')
                         @if (in_array($commitment->status, ['draft', 'submitted']))
-                            <form method="POST" action="{{ route('finance.commitments.cancel', $commitment) }}">
+                            <form method="POST" action="{{ route('finance.commitments.cancel', $commitment) }}" class="d-flex flex-wrap gap-2 align-items-center mt-2">
                                 @csrf
-                                <div class="input-group">
-                                    <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason for rejection/cancel" required>
-                                    <button class="btn btn-danger">
-                                        <i class="feather-x-circle me-1"></i>
-                                        Cancel / Reject
-                                    </button>
-                                </div>
+                                <input type="text" name="reason" class="form-control form-control-sm" style="min-width: 220px;" placeholder="Reason for rejection/cancel" required>
+                                <button class="btn btn-danger">
+                                    <i class="feather-x-circle me-1"></i>
+                                    Cancel / Reject
+                                </button>
                             </form>
                         @endif
                     @endcan
