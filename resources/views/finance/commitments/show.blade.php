@@ -27,47 +27,63 @@
                 <div class="row g-3 mb-4">
 
                     <div class="col-md-3">
-                        <strong>Status</strong><br>
-                        <span
-                            class="badge
-                        {{ $commitment->status === 'approved'
-                            ? 'bg-success'
-                            : ($commitment->status === 'submitted'
-                                ? 'bg-warning text-dark'
-                                : ($commitment->status === 'cancelled'
-                                    ? 'bg-danger'
-                                    : 'bg-secondary')) }}">
-                            {{ ucfirst($commitment->status) }}
-                        </span>
+                        <div class="p-3 bg-light border rounded">
+                            <strong>Status</strong><br>
+                            <span
+                                class="badge
+                            {{ $commitment->status === 'approved'
+                                ? 'bg-success'
+                                : ($commitment->status === 'submitted'
+                                    ? 'bg-warning text-dark'
+                                    : ($commitment->status === 'cancelled'
+                                        ? 'bg-danger'
+                                        : 'bg-secondary')) }}">
+                                {{ ucfirst($commitment->status) }}
+                            </span>
+                        </div>
                     </div>
 
                     <div class="col-md-3">
-                        <strong>Commitment Year</strong><br>
-                        <span class="badge bg-light text-dark">
-                            {{ $commitment->commitment_year }}
-                        </span>
+                        <div class="p-3 bg-light border rounded">
+                            <strong>Commitment Year</strong><br>
+                            <span class="badge bg-light text-dark">
+                                {{ $commitment->commitment_year }}
+                            </span>
+                        </div>
                     </div>
 
                     <div class="col-md-3">
-                        <strong>Amount</strong><br>
-                        <span class="fw-bold text-primary">
-                            {{ $commitment->programFunding->program->currency ?? '' }}
-                            {{ number_format($commitment->commitment_amount, 2) }}
-                        </span>
+                        <div class="p-3 bg-light border rounded">
+                            <strong>Amount</strong><br>
+                            <span class="fw-bold text-primary">
+                                {{ $commitment->programFunding->program->currency ?? $commitment->programFunding->program_name ?? '' }}
+                                {{ number_format($commitment->commitment_amount, 2) }}
+                            </span>
+                        </div>
                     </div>
 
+                    <div class="col-md-3">
+                        <div class="p-3 bg-light border rounded">
+                            <strong>Created At</strong><br>
+                            <span class="text-muted">
+                                {{ optional($commitment->created_at)->format('Y-m-d H:i') ?? '—' }}
+                            </span>
+                        </div>
+                    </div>
 
                     <div class="col-md-3">
-                        <strong>Allocation Level</strong><br>
-                        <span
-                            class="badge
-                        {{ $commitment->allocation_level === 'project'
-                            ? 'bg-primary'
-                            : ($commitment->allocation_level === 'activity'
-                                ? 'bg-warning text-dark'
-                                : 'bg-success') }}">
-                            {{ ucfirst(str_replace('_', ' ', $commitment->allocation_level)) }}
-                        </span>
+                        <div class="p-3 bg-light border rounded">
+                            <strong>Allocation Level</strong><br>
+                            <span
+                                class="badge
+                            {{ $commitment->allocation_level === 'project'
+                                ? 'bg-primary'
+                                : ($commitment->allocation_level === 'activity'
+                                    ? 'bg-warning text-dark'
+                                    : 'bg-success') }}">
+                                {{ ucfirst(str_replace('_', ' ', $commitment->allocation_level)) }}
+                            </span>
+                        </div>
                     </div>
 
                 </div>
@@ -98,18 +114,24 @@
 
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
-                        <strong>Program</strong><br>
-                        {{ $programName }}
+                        <div class="p-3 border rounded bg-light">
+                            <strong class="text-uppercase small text-muted">Program</strong><br>
+                            <span class="fw-semibold">{{ $programName }}</span>
+                        </div>
                     </div>
 
                     <div class="col-md-4">
-                        <strong>Program Funding</strong><br>
-                        {{ $commitment->programFunding?->program_name ?? $programName }}
+                        <div class="p-3 border rounded bg-light">
+                            <strong class="text-uppercase small text-muted">Program Funding</strong><br>
+                            <span class="fw-semibold">{{ $commitment->programFunding?->program_name ?? $programName }}</span>
+                        </div>
                     </div>
 
                     <div class="col-md-4">
-                        <strong>Project</strong><br>
-                        {{ $projectName ?? '—' }}
+                        <div class="p-3 border rounded bg-light">
+                            <strong class="text-uppercase small text-muted">Project</strong><br>
+                            <span class="fw-semibold">{{ $projectName ?? '—' }}</span>
+                        </div>
                     </div>
                 </div>
 
@@ -120,16 +142,22 @@
 
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
-                        <strong>Project</strong><br>
-                        {{ $projectName ?? '—' }}
+                        <div class="p-3 border rounded bg-light">
+                            <strong class="text-uppercase small text-muted">Project</strong><br>
+                            <span class="fw-semibold">{{ $projectName ?? '—' }}</span>
+                        </div>
                     </div>
                     <div class="col-md-4">
-                        <strong>Activity</strong><br>
-                        {{ $activityName ?? '—' }}
+                        <div class="p-3 border rounded bg-light">
+                            <strong class="text-uppercase small text-muted">Activity</strong><br>
+                            <span class="fw-semibold">{{ $activityName ?? '—' }}</span>
+                        </div>
                     </div>
                     <div class="col-md-4">
-                        <strong>Sub-Activity</strong><br>
-                        {{ $subActivityName ?? '—' }}
+                        <div class="p-3 border rounded bg-light">
+                            <strong class="text-uppercase small text-muted">Sub-Activity</strong><br>
+                            <span class="fw-semibold">{{ $subActivityName ?? '—' }}</span>
+                        </div>
                     </div>
                 </div>
 
