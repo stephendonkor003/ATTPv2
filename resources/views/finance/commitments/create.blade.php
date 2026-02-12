@@ -280,6 +280,7 @@
                 if (refInput && !refInput.value) {
                     refInput.value = 'COM-' + Date.now().toString().slice(-6);
                 }
+                const existingCommitmentId = @json($isEdit ? ($commitment->id ?? null) : null);
 
 	            const allocationLevel = document.getElementById('allocation_level'); // hidden, always sub_activity
 	            const projectSelect = document.getElementById('project_id');
@@ -434,9 +435,11 @@
 	                    });
 	            }
 
-	            function loadBreakdown(subActivityId) {
-	                const level = allocationLevel.value || 'sub_activity';
-	                fetch(`/finance/commitments/ajax/allocation-breakdown/${level}/${subActivityId}`)
+            function loadBreakdown(subActivityId) {
+                const level = allocationLevel.value || 'sub_activity';
+                const url = `/finance/commitments/ajax/allocation-breakdown/${level}/${subActivityId}` +
+                    (existingCommitmentId ? `?exclude=${existingCommitmentId}` : '');
+                fetch(url)
 	                    .then(r => r.json())
 	                    .then(d => {
 	                        breakdown = Array.isArray(d) ? d : [];
@@ -495,11 +498,11 @@
 	                    }));
 
 	                const totalAllocated = rows.reduce((sum, r) => sum + r.allocated, 0);
-	                const totalRemaining = rows.reduce((sum, r) => sum + Math.max(0, r.remaining), 0);
+                const totalRemaining = rows.reduce((sum, r) => sum + Math.max(0, r.remaining), 0);
 
-	                document.getElementById('allocatedAmount').innerText = formatNumber(totalAllocated);
-	                document.getElementById('remainingAmount').innerText = formatNumber(totalRemaining);
-	                document.getElementById('confirmText').innerText = `Sub-Activity – Start year ${startYear}`;
+                document.getElementById('allocatedAmount').innerText = formatNumber(totalAllocated);
+                document.getElementById('remainingAmount').innerText = formatNumber(totalRemaining);
+                document.getElementById('confirmText').innerText = `Sub-Activity – Start year ${startYear}`;
 
 	                if (amount > totalRemaining) {
 	                    show('distributionWrap');

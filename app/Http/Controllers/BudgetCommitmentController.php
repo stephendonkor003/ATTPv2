@@ -1179,6 +1179,7 @@ class BudgetCommitmentController extends Controller
     public function allocationBreakdown($level, $id)
     {
         $this->assertAllocationInScope($level, $id);
+        $excludeId = request('exclude');
 
         $years = match ($level) {
             'project' => DB::table('myb_project_allocations')
@@ -1216,6 +1217,9 @@ class BudgetCommitmentController extends Controller
                     self::STATUS_SUBMITTED,
                     self::STATUS_APPROVED,
                 ])
+                ->when(request('exclude'), function ($query) {
+                    $query->where('id', '!=', request('exclude'));
+                })
                 ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
@@ -1253,6 +1257,9 @@ class BudgetCommitmentController extends Controller
                 self::STATUS_SUBMITTED,
                 self::STATUS_APPROVED,
             ])
+            ->when($request->exclude, function ($query) use ($request) {
+                $query->where('id', '!=', $request->exclude);
+            })
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
