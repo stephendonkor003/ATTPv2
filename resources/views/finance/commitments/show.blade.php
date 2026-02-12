@@ -310,7 +310,7 @@
                     @endcan
 
                     @if ($commitment->status === 'draft')
-                        @can('finance.commitments.submit')
+                        @canany(['finance.commitments.submit', 'finance.commitments.edit'])
                             <form method="POST" action="{{ route('finance.commitments.submit', $commitment) }}">
                                 @csrf
                                 <button class="btn btn-warning">
@@ -318,10 +318,10 @@
                                     Submit for Approval
                                 </button>
                             </form>
-                        @endcan
+                        @endcanany
                     @endif
 
-                    @can('finance.commitments.approve')
+                    @canany(['finance.commitments.approve', 'finance.commitments.edit'])
                         @if (in_array($commitment->status, ['submitted', 'draft']))
                             <form method="POST" action="{{ route('finance.commitments.approve', $commitment) }}">
                                 @csrf
@@ -331,9 +331,9 @@
                                 </button>
                             </form>
                         @endif
-                    @endcan
+                    @endcanany
 
-                    @can('finance.commitments.cancel')
+                    @canany(['finance.commitments.cancel', 'finance.commitments.edit'])
                         @if (in_array($commitment->status, ['draft', 'submitted']))
                             <form method="POST" action="{{ route('finance.commitments.cancel', $commitment) }}" class="d-flex flex-wrap gap-2 align-items-center mt-2">
                                 @csrf
@@ -344,7 +344,7 @@
                                 </button>
                             </form>
                         @endif
-                    @endcan
+                    @endcanany
                 </div>
 
             </div>
