@@ -70,7 +70,7 @@
 
                                 {{-- Program --}}
                                 <td>
-                                    {{ $c->programFunding->program->name ?? '—' }}
+                                    {{ $c->programFunding->program->name ?? $c->programFunding->program_name ?? '—' }}
                                 </td>
 
                                 {{-- Allocation --}}
