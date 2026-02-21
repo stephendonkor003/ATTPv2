@@ -68,16 +68,18 @@ public function approvedFundings()
                 ->where('status', 'approved');
 }
 
+    public function indicators()
+    {
+        return $this->morphMany(Indicator::class, 'indicatorable');
+    }
 
-
-
-/**
- * Total allocations under this program
- * (projects + activities + sub-activities)
- */
-public function totalAllocatedAmount()
-{
-    return $this->projects->sum(function ($project) {
+    /**
+     * Total allocations under this program
+     * (projects + activities + sub-activities)
+     */
+    public function totalAllocatedAmount()
+    {
+        return $this->projects->sum(function ($project) {
 
         $projectAllocations = $project->allocations->sum('amount');
 

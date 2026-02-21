@@ -1,61 +1,83 @@
 @extends('layouts.app')
-@section('title', 'Projects under ' . ($program->name ?? 'Program'))
+@php($program = $program ?? null)
+@section('title', $program ? 'Projects under ' . ($program->name ?? 'Program') : 'Projects')
 
 @section('content')
 
-    <!-- =======================
-                         PROGRAM INFO MODAL
-                    ======================= -->
-    <div class="modal fade" id="programInfoModal" tabindex="-1" aria-labelledby="programInfoModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0 shadow-lg">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title" id="programInfoModalLabel">
-                        <i class="feather-folder me-2"></i> Program Information
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p><strong>Program Name:</strong> {{ $program->name }}</p>
-                    <p><strong>Sector:</strong> {{ $program->sector->name ?? 'N/A' }}</p>
-                    <p><strong>Description:</strong></p>
-                    <p class="text-muted">{{ $program->description ?? 'No description provided.' }}</p>
-                    <hr>
-                    <p class="mb-0">
-                        <strong>Created On:</strong>
-                        {{ $program->created_at ? $program->created_at->format('d M, Y') : 'N/A' }}
-                    </p>
-                    <p>
-                        <strong>Total Projects:</strong> {{ $program->projects->count() }}
-                    </p>
-
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="feather-x-circle me-1"></i> Close
-                    </button>
+    @if($program)
+        <!-- =======================
+                             PROGRAM INFO MODAL
+                        ======================= -->
+        <div class="modal fade" id="programInfoModal" tabindex="-1" aria-labelledby="programInfoModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="programInfoModalLabel">
+                            <i class="feather-folder me-2"></i> Program Information
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>Program Name:</strong> {{ $program->name }}</p>
+                        <p><strong>Sector:</strong> {{ $program->sector->name ?? 'N/A' }}</p>
+                        <p><strong>Description:</strong></p>
+                        <p class="text-muted">{{ $program->description ?? 'No description provided.' }}</p>
+                        <hr>
+                        <p class="mb-0">
+                            <strong>Created On:</strong>
+                            {{ $program->created_at ? $program->created_at->format('d M, Y') : 'N/A' }}
+                        </p>
+                        <p>
+                            <strong>Total Projects:</strong> {{ $program->projects->count() }}
+                        </p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                            <i class="feather-x-circle me-1"></i> Close
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    @endif
     <main class="nxl-container">
         <div class="nxl-content">
+
+            @push('styles')
+                <style>
+                    .program-hero {
+                        background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 45%, #7c3aed 100%);
+                        color: #fff;
+                        border-radius: 18px;
+                        padding: 18px 22px;
+                        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.25);
+                    }
+                    .program-hero .badge-soft { background: rgba(255, 255, 255, 0.18); color: #fff; border: 1px solid rgba(255,255,255,0.25); }
+                    .pill { border-radius: 999px; padding: 6px 12px; font-weight: 600; }
+                    .pill-info { background: #e0f2fe; color: #075985; }
+                </style>
+            @endpush
 
             <!-- =======================
                          PAGE HEADER
                     ======================= -->
-            <div class="page-header d-flex justify-content-between align-items-center mb-4">
+            <div class="program-hero mb-4 d-flex justify-content-between align-items-start flex-wrap gap-3">
                 <div>
-                    <h4 class="mb-1">
-                        <i class="feather-folder me-2 text-success"></i>
-                        Projects under {{ $program->name }}
-                    </h4>
-                    <p class="text-muted mb-0">
-                        Manage all projects created within the <strong>{{ $program->name }}</strong> portfolio.
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge badge-soft">Budget · Projects</span>
+                        <span class="pill pill-info">{{ $program ? 'Within program' : 'All programs' }}</span>
+                    </div>
+                    <h4 class="mb-1">Projects Overview</h4>
+                    <p class="mb-0" style="opacity:0.9;">
+                        @if($program)
+                            Manage every project under <strong>{{ $program->name }}</strong>, including budgets and timelines.
+                        @else
+                            Manage all budget projects across programs with quick actions and insights.
+                        @endif
                     </p>
                 </div>
-                <a href="{{ route('projects.create') }}" class="btn btn-success">
-                    <i class="feather-plus-circle me-1"></i> Add Project
+                <a href="{{ route('budget.projects.create') }}" class="btn btn-light text-primary border-0 shadow-sm">
+                    <i class="bi bi-plus-circle me-1"></i> New Project
                 </a>
             </div>
 
@@ -85,58 +107,15 @@
                             <i class="feather-list me-2 text-primary"></i> Total Projects:
                             <span class="text-dark">{{ $projects->count() }}</span>
                         </h6>
-                        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal"
-                            data-bs-target="#programInfoModal">
-                            <i class="feather-info me-1"></i> Program Details
-                        </button>
+                        @if($program)
+                            <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal"
+                                data-bs-target="#programInfoModal">
+                                <i class="feather-info me-1"></i> Program Details
+                            </button>
+                        @endif
                     </div>
 
-                    <x-data-table
-                        id="projectsTable"
-                        :config="[
-                            'order' => [[1, 'asc']],
-                            'pageLength' => 25,
-                            'lengthMenu' => [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
-                            'dom' => 'Bfrtip',
-                            'buttons' => [
-                                [
-                                    'extend' => 'copy',
-                                    'text' => '<i class=\"feather-copy\"></i> Copy',
-                                    'className' => 'btn btn-sm btn-secondary'
-                                ],
-                                [
-                                    'extend' => 'excel',
-                                    'text' => '<i class=\"feather-file\"></i> Excel',
-                                    'className' => 'btn btn-sm btn-success',
-                                    'exportOptions' => ['columns' => ':visible:not(:last-child)']
-                                ],
-                                [
-                                    'extend' => 'pdf',
-                                    'text' => '<i class=\"feather-file-text\"></i> PDF',
-                                    'className' => 'btn btn-sm btn-danger',
-                                    'exportOptions' => ['columns' => ':visible:not(:last-child)']
-                                ],
-                                [
-                                    'extend' => 'print',
-                                    'text' => '<i class=\"feather-printer\"></i> Print',
-                                    'className' => 'btn btn-sm btn-info',
-                                    'exportOptions' => ['columns' => ':visible:not(:last-child)']
-                                ],
-                                [
-                                    'extend' => 'colvis',
-                                    'text' => '<i class=\"feather-eye\"></i> Columns',
-                                    'className' => 'btn btn-sm btn-primary'
-                                ]
-                            ],
-                            'columnDefs' => [
-                                ['orderable' => false, 'targets' => [0, -1]],
-                                ['searchable' => false, 'targets' => [0, -1]],
-                                ['width' => '50px', 'targets' => 0],
-                                ['width' => '120px', 'targets' => 1],
-                                ['width' => '120px', 'targets' => -1]
-                            ]
-                        ]"
-                    >
+                    <x-data-table id="projectsTable">
                         <thead class="table-light">
                             <tr>
                                 <th>#</th>
@@ -168,15 +147,15 @@
                                     </td>
                                     <td>{{ $project->created_at->format('d M, Y') }}</td>
                                     <td class="text-center">
-                                        <a href="{{ route('projects.show', $project->id) }}"
+                                        <a href="{{ route('budget.projects.show', $project->id) }}"
                                             class="btn btn-sm btn-outline-info" title="View Details">
                                             <i class="feather-eye"></i>
                                         </a>
-                                        <a href="{{ route('projects.edit', $project->id) }}"
+                                        <a href="{{ route('budget.projects.edit', $project->id) }}"
                                             class="btn btn-sm btn-outline-warning" title="Edit Project">
                                             <i class="feather-edit"></i>
                                         </a>
-                                        <form action="{{ route('projects.destroy', $project->id) }}" method="POST"
+                                        <form action="{{ route('budget.projects.destroy', $project->id) }}" method="POST"
                                             class="d-inline">
                                             @csrf
                                             @method('DELETE')

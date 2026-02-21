@@ -59,6 +59,12 @@ class Project extends BaseModel
         return $this->hasMany(Activity::class, 'project_id');
     }
 
+    // A Project has many Indicators (polymorphic)
+    public function indicators()
+    {
+        return $this->morphMany(Indicator::class, 'indicatorable');
+    }
+
     // A Project has many Activity Allocations (via activities)
     public function activityAllocations()
     {

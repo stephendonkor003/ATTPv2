@@ -2,18 +2,34 @@
 @section('title', 'Programs')
 
 @section('content')
+    <style>
+        .program-hero {
+            background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 45%, #7c3aed 100%);
+            color: #fff;
+            border-radius: 18px;
+            padding: 18px 22px;
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.25);
+        }
+        .program-hero .badge-soft { background: rgba(255, 255, 255, 0.18); color: #fff; border: 1px solid rgba(255,255,255,0.25); }
+        .pill { border-radius: 999px; padding: 6px 12px; font-weight: 600; }
+        .pill-info { background: #e0f2fe; color: #075985; }
+    </style>
     <main class="nxl-container">
         <div class="nxl-content">
 
             <!-- Page Header -->
-            <div class="page-header d-flex justify-content-between align-items-center mb-4">
+            <div class="program-hero mb-4 d-flex justify-content-between align-items-start flex-wrap gap-3">
                 <div>
-                    <h4 class="mb-1">Programs</h4>
-                    <p class="text-muted mb-0">List of all programs created under various sectors.</p>
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge badge-soft">Budget · Programs</span>
+                        <span class="pill pill-info">Portfolio view</span>
+                    </div>
+                    <h4 class="mb-1">Programs Overview</h4>
+                    <p class="mb-0" style="opacity:0.9;">Browse and manage every program, sector alignment, and their projects.</p>
                 </div>
                 @can('program.create')
-                    <a href="{{ route('budget.programs.create') }}" class="btn btn-success">
-                        <i class="feather-plus-circle me-1"></i> New Program
+                    <a href="{{ route('budget.programs.create') }}" class="btn btn-light text-primary border-0 shadow-sm">
+                        <i class="bi bi-plus-circle me-1"></i> New Program
                     </a>
                 @endcan
             </div>

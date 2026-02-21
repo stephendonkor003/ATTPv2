@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace Database\Seeders;
 
@@ -25,7 +25,7 @@ class DatabaseSeeder extends Seeder
     // }
 
     public function run(): void
-{
+    {
         $this->call([
             RoleSeeder::class,
             PermissionSeeder::class,
@@ -40,11 +40,11 @@ class DatabaseSeeder extends Seeder
             AssignPartnerPermissionsSeeder::class,
             ProcurementStructureSeeder::class,
             ProcurementPermissionsSeeder::class,
+            MEConfigurationSeeder::class,
             ResourceDataSeeder::class,
             LegacyProcurementSeeder::class,
             LegacyEvaluationSeeder::class,
             ProgramPlanSheetSeeder::class,
         ]);
-}
-
+    }
 }

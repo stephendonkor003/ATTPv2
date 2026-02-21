@@ -11,7 +11,7 @@
                     <h4 class="mb-1">{{ $project->name }}</h4>
                     <p class="text-muted mb-0">Detailed view and yearly allocations for this project.</p>
                 </div>
-                <a href="{{ route('projects.index', $project->program_id) }}" class="btn btn-outline-secondary">
+                <a href="{{ route('budget.projects.index') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left-circle me-1"></i> Back to Projects
                 </a>
             </div>
@@ -40,21 +40,71 @@
                 </div>
             </div>
 
+            <!-- Program Indicators -->
+            @if ($project->program && $project->program->indicators && $project->program->indicators->count() > 0)
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="bi bi-bullseye me-2"></i> Program Indicators
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2">
+                            @foreach ($project->program->indicators as $indicator)
+                                <div class="col-md-6">
+                                    <div class="p-3 border border-light rounded bg-light-shade">
+                                        <p class="fw-semibold mb-1">{{ $indicator->name }}</p>
+                                        <small class="text-muted">Created:
+                                            {{ $indicator->created_at ? $indicator->created_at->format('d M, Y') : 'N/A' }}</small>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            <!-- Project Indicators -->
+            @if ($project->indicators && $project->indicators->count() > 0)
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="bi bi-target me-2"></i> Project Indicators
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            @foreach ($project->indicators as $indicator)
+                                <div class="col-md-6">
+                                    <div class="indicator-card p-3" style="--stripe:#2563eb;">
+                                        <div class="d-flex align-items-center gap-2 mb-2">
+                                            <span class="indicator-chip">{{ $indicator->name }}</span>
+                                        </div>
+                                        <small class="text-muted">Created:
+                                            {{ $indicator->created_at ? $indicator->created_at->format('d M, Y') : 'N/A' }}</small>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            @endif
+
             <!-- Allocations -->
             <div class="card shadow-sm">
                 <div class="card-header bg-light">
                     <h5 class="mb-0">Yearly Budget Allocations</h5>
                 </div>
                 <div class="card-body">
-                    <form action="{{ route('projects.allocations.update', $project->id) }}" method="POST">
+                    <form action="{{ route('budget.projects.allocations.update', $project->id) }}" method="POST">
                         @csrf
 
                         <div class="row g-3 align-items-center">
                             @foreach ($project->budgetAllocations as $alloc)
                                 <div class="col-md-3">
                                     <label class="form-label fw-semibold">Year {{ $alloc->year_number }}</label>
-                                    <input type="number" name="allocations[{{ $alloc->year_number }}]" class="form-control"
-                                        step="0.01" min="0" value="{{ $alloc->amount }}">
+                                    <input type="number" name="allocations[{{ $alloc->year_number }}]"
+                                        class="form-control" step="0.01" min="0" value="{{ $alloc->amount }}">
                                 </div>
                             @endforeach
                         </div>

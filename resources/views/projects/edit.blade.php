@@ -89,19 +89,26 @@
 
                             {{-- EXPECTED OUTCOME --}}
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Expected Outcome Type <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold">Expected Outcome Type <span
+                                        class="text-danger">*</span></label>
                                 <select name="expected_outcome_type" id="expectedOutcomeType" class="form-select" required>
                                     <option value="">-- Select Type --</option>
-                                    <option value="percentage" {{ old('expected_outcome_type', $project->expected_outcome_type) === 'percentage' ? 'selected' : '' }}>Percentage</option>
-                                    <option value="text" {{ old('expected_outcome_type', $project->expected_outcome_type) === 'text' ? 'selected' : '' }}>Text</option>
+                                    <option value="percentage"
+                                        {{ old('expected_outcome_type', $project->expected_outcome_type) === 'percentage' ? 'selected' : '' }}>
+                                        Percentage</option>
+                                    <option value="text"
+                                        {{ old('expected_outcome_type', $project->expected_outcome_type) === 'text' ? 'selected' : '' }}>
+                                        Text</option>
                                 </select>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Expected Outcome <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold">Expected Outcome <span
+                                        class="text-danger">*</span></label>
                                 <div id="expectedOutcomePercentage" style="display:none;">
                                     <div class="input-group">
-                                        <input type="number" name="expected_outcome_percentage" class="form-control" min="0" max="100" step="0.01"
+                                        <input type="number" name="expected_outcome_percentage" class="form-control"
+                                            min="0" max="100" step="0.01"
                                             value="{{ old('expected_outcome_percentage', $project->expected_outcome_type === 'percentage' ? $project->expected_outcome_value : '') }}">
                                         <span class="input-group-text">%</span>
                                     </div>
@@ -155,8 +162,8 @@
                                         <td>{{ $alloc->actual_year }}</td>
                                         <td>
                                             <input type="number" class="form-control alloc-input"
-                                                name="allocations[{{ $alloc->actual_year }}]" step="0.01" min="0"
-                                                value="{{ $alloc->amount }}">
+                                                name="allocations[{{ $alloc->actual_year }}]" step="0.01"
+                                                min="0" value="{{ $alloc->amount }}">
                                         </td>
                                     </tr>
                                 @endforeach
@@ -164,6 +171,48 @@
                             </tbody>
                         </table>
 
+                    </div>
+                </div>
+
+                {{-- INDICATORS CARD --}}
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Indicators</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">Manage project indicators under each program indicator.</p>
+                        <div id="indicatorsByProgramSection">
+                            @if ($project->program && $project->program->indicators && $project->program->indicators->count() > 0)
+                                @php
+                                    $projectIndicatorsByProgramId = $project->indicators->groupBy(function ($ind) {
+                                        // For now, we'll store program_indicator_id in a custom field
+    // Since we don't have it yet, we'll just group them together
+                                        return null;
+                                    });
+                                @endphp
+                                @foreach ($project->program->indicators as $programInd)
+                                    <div class="card border-primary mb-4">
+                                        <div class="card-header bg-light-primary">
+                                            <h6 class="mb-0"><i class="bi bi-bullseye me-2"></i>{{ $programInd->name }}
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="text-muted small mb-3">Add project-specific indicators under this
+                                                program indicator:</p>
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-primary mb-3 add-project-indicator-btn"
+                                                data-program-indicator-id="{{ $programInd->id }}">
+                                                <i class="bi bi-plus-circle me-1"></i> Add Project Indicator
+                                            </button>
+                                            <div id="project-indicators-{{ $programInd->id }}"
+                                                class="project-indicators-list"></div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            @else
+                                <p class="text-muted small">This program has no indicators.</p>
+                            @endif
+                        </div>
                     </div>
                 </div>
 
@@ -180,8 +229,8 @@
     {{-- ============= SMART JS ENGINE ============= --}}
     <script>
         /* ---------------------------------------------------------
-           GLOBAL REFERENCES
-        --------------------------------------------------------- */
+                           GLOBAL REFERENCES
+                        --------------------------------------------------------- */
         let totalBudgetInput = document.getElementById("totalBudget");
         let totalBudgetLabel = document.getElementById("totalBudgetLabel");
 
@@ -237,19 +286,19 @@
                 let previousVal = oldValues[year] ?? 0;
 
                 allocTableBody.innerHTML += `
-            <tr>
-                <td>${year}</td>
-                <td>
-                    <input type="number"
-                           class="form-control alloc-input"
-                           name="allocations[${year}]"
-                           data-actual="${year}"
-                           data-yearnum="${rowNumber}"
-                           min="0" step="0.01"
-                           value="${previousVal}">
-                </td>
-            </tr>
-        `;
+                <tr>
+                    <td>${year}</td>
+                    <td>
+                        <input type="number"
+                               class="form-control alloc-input"
+                               name="allocations[${year}]"
+                               data-actual="${year}"
+                               data-yearnum="${rowNumber}"
+                               min="0" step="0.01"
+                               value="${previousVal}">
+                    </td>
+                </tr>
+            `;
 
                 rowNumber++;
             }
@@ -343,39 +392,39 @@
 
             for (let y = start; y <= end; y++) {
                 rows += `
-            <tr>
-                <td>${y}</td>
-                <td><input type="number" class="form-control percent-field" data-year="${y}" min="0" max="100"></td>
-            </tr>
-        `;
+                <tr>
+                    <td>${y}</td>
+                    <td><input type="number" class="form-control percent-field" data-year="${y}" min="0" max="100"></td>
+                </tr>
+            `;
                 count++;
             }
 
             let modal = `
-        <div class="modal fade" id="percentModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Distribute Using Percentages</h5>
-                        <button class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
+            <div class="modal fade" id="percentModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Distribute Using Percentages</h5>
+                            <button class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
 
-                    <div class="modal-body">
-                        <table class="table table-bordered">
-                            <thead><tr><th>Year</th><th>%</th></tr></thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                        <div class="alert alert-info">Total must equal 100%.</div>
-                    </div>
+                        <div class="modal-body">
+                            <table class="table table-bordered">
+                                <thead><tr><th>Year</th><th>%</th></tr></thead>
+                                <tbody>${rows}</tbody>
+                            </table>
+                            <div class="alert alert-info">Total must equal 100%.</div>
+                        </div>
 
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button class="btn btn-primary" onclick="applyPercent()">Apply</button>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button class="btn btn-primary" onclick="applyPercent()">Apply</button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    `;
+        `;
 
             document.body.insertAdjacentHTML("beforeend", modal);
             new bootstrap.Modal(document.getElementById("percentModal")).show();
@@ -401,7 +450,7 @@
 
                 let amount = (budget * percent) / 100;
 
-                let target = document.querySelector(`input[name="allocations[${year}]"]`);
+                let target = document.querySelector(`input[name="allocations[${year}]"] `);
                 if (target) {
                     target.value = amount.toFixed(2);
                     target.classList.add("ai-blink");
@@ -422,6 +471,150 @@
         }
 
         toggleExpectedOutcome();
+
+        // === Hierarchical Project Indicators Management ===
+        const indicatorLevels = @json($indicatorLevels ?? []);
+        const indicatorUnits = @json($indicatorUnits ?? []);
+        const reportingFrequencies = @json($reportingFrequencies ?? []);
+        const baselineTypes = [
+            { value: 'year', label: 'Year' },
+            { value: 'quarter', label: 'Quarter' },
+            { value: 'month', label: 'Month' },
+            { value: 'day', label: 'Day' },
+        ];
+        const programIndicators = @json($project->program?->indicators ?? []);
+        const existingIndicators = @json($project->indicators ?? []);
+
+        const projectIndicatorCounters = {};
+
+        function h(str = '') {
+            return String(str ?? '').replace(/[&<>\"']/g, (ch) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
+
+        function optionList(list, selected, labelFn) {
+            const sel = selected ?? '';
+            return list.map(item => {
+                const value = item.value ?? item.id ?? '';
+                const label = labelFn ? labelFn(item) : (item.label ?? item.name ?? value);
+                const isSelected = String(value) === String(sel) ? 'selected' : '';
+                return `<option value="${h(value)}" ${isSelected}>${h(label)}</option>`;
+            }).join('');
+        }
+
+        function addProjectIndicator(programIndicatorId, data = {}) {
+            if (!projectIndicatorCounters[programIndicatorId]) {
+                projectIndicatorCounters[programIndicatorId] = 0;
+            }
+
+            const idx = projectIndicatorCounters[programIndicatorId]++;
+            const listDiv = document.getElementById(`project-indicators-${programIndicatorId}`);
+            if (!listDiv) return;
+
+            const row = document.createElement('div');
+            row.className = 'card mb-2 p-3 project-indicator-row';
+            row.innerHTML = `
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label">Project Indicator <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][name]"
+                               value="${h(data.name)}" placeholder="Enter indicator name" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Baseline Year</label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][baseline_year]"
+                               value="${h(data.baseline_year)}" placeholder="e.g., 2026 or 2026-Q1">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Baseline Type</label>
+                        <select class="form-select" name="indicators[${programIndicatorId}][project_indicators][${idx}][baseline_type]">
+                            <option value="">Select</option>
+                            ${optionList(baselineTypes, data.baseline_type || 'year')}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Indicator Level</label>
+                        <select class="form-select" name="indicators[${programIndicatorId}][project_indicators][${idx}][indicator_level_id]">
+                            <option value="">Select Level</option>
+                            ${optionList(indicatorLevels, data.indicator_level_id)}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Unit</label>
+                        <select class="form-select" name="indicators[${programIndicatorId}][project_indicators][${idx}][unit_id]">
+                            <option value="">Select Unit</option>
+                            ${optionList(indicatorUnits, data.unit_id, (u) => u.symbol ? `${u.name} (${u.symbol})` : u.name)}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Reporting Frequency</label>
+                        <select class="form-select" name="indicators[${programIndicatorId}][project_indicators][${idx}][frequency_of_reporting_id]">
+                            <option value="">Select</option>
+                            ${optionList(reportingFrequencies, data.frequency_of_reporting_id)}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Responsible Party</label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][responsible_party]"
+                               value="${h(data.responsible_party)}" placeholder="Who reports?">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Primary Source</label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][primary_source]"
+                               value="${h(data.primary_source)}" placeholder="e.g., DHIS2, survey">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Methodology</label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][methodology]"
+                               value="${h(data.methodology)}" placeholder="How is it measured?">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][notes]" rows="2"
+                                  placeholder="Additional notes">${h(data.notes)}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Definitions</label>
+                        <textarea class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][definitions]" rows="2"
+                                  placeholder="Definitions and terms">${h(data.definitions)}</textarea>
+                    </div>
+                    <div class="col-md-12 text-end">
+                        <button type="button" class="btn btn-sm btn-danger remove-project-indicator" title="Remove indicator">
+                            <i class="bi bi-trash"></i> Remove Indicator
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            row.querySelector('.remove-project-indicator').addEventListener('click', function(e) {
+                e.preventDefault();
+                row.remove();
+            });
+
+            listDiv.appendChild(row);
+        }
+
+        // Attach event listeners to add buttons
+        document.querySelectorAll('.add-project-indicator-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                addProjectIndicator(this.dataset.programIndicatorId);
+            });
+        });
+
+        // Pre-populate existing indicators by their parent program indicator
+        if (existingIndicators && existingIndicators.length > 0) {
+            existingIndicators.forEach((indicator) => {
+                let programIndId = indicator.parent_indicator_id;
+                if (!programIndId && programIndicators.length > 0) {
+                    programIndId = programIndicators[0].id; // fallback if old data lacks parent
+                }
+                if (programIndId) {
+                    addProjectIndicator(programIndId, indicator);
+                }
+            });
+        }
     </script>
 
     <style>

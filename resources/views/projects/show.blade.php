@@ -87,6 +87,109 @@
                 </div>
             </div>
 
+            <!-- INDICATORS SECTION -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Indicators</h5>
+                </div>
+                <div class="card-body">
+
+                    <!-- Program Indicators -->
+                    @if ($project->program && $project->program->indicators && $project->program->indicators->count() > 0)
+                        <h6 class="fw-semibold mb-3">Program Indicators</h6>
+                        <div class="row g-2 mb-4">
+                            @foreach ($project->program->indicators as $indicator)
+                                <div class="col-md-6">
+                                    <div class="p-3 border border-light rounded bg-light">
+                                        <p class="fw-semibold mb-0"><i
+                                                class="bi bi-bullseye me-2"></i>{{ $indicator->name }}</p>
+                                        <ul class="list-unstyled small text-muted mb-1">
+                                            @if ($indicator->baseline_year)
+                                                <li>Baseline: {{ $indicator->baseline_year }} ({{ $indicator->baseline_type ?? 'year' }})</li>
+                                            @endif
+                                            @if ($indicator->baseline_value !== null)
+                                                <li>Baseline Value: {{ rtrim(rtrim(number_format($indicator->baseline_value, 2), '0'), '.') }}
+                                                    @if ($indicator->unit)
+                                                        {{ $indicator->unit->symbol ?? $indicator->unit->name }}
+                                                    @endif
+                                                </li>
+                                            @endif
+                                            @if ($indicator->level)
+                                                <li>Level: {{ $indicator->level->name }}</li>
+                                            @endif
+                                            @if ($indicator->unit)
+                                                <li>Unit: {{ $indicator->unit->name }}{{ $indicator->unit->symbol ? ' (' . $indicator->unit->symbol . ')' : '' }}</li>
+                                            @endif
+                                            @if ($indicator->frequency)
+                                                <li>Reporting: {{ $indicator->frequency->name }}</li>
+                                            @endif
+                                        </ul>
+                                        <small class="text-muted d-block mt-1">Created:
+                                            {{ $indicator->created_at ? $indicator->created_at->format('d M, Y') : 'N/A' }}</small>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                        <hr class="my-3">
+                    @endif
+
+                    <!-- Project Indicators -->
+                    @if ($project->indicators && $project->indicators->count() > 0)
+                        <h6 class="fw-semibold mb-3">Project Indicators</h6>
+                        <div class="row g-2">
+                            @foreach ($project->indicators as $indicator)
+                                <div class="col-md-6">
+                                    <div class="p-3 border border-light rounded bg-light">
+                                        <p class="fw-semibold mb-0">
+                                            <i class="bi bi-target me-2"></i>{{ $indicator->name }}
+                                        </p>
+                                        <ul class="list-unstyled small text-muted mb-1">
+                                            @if ($indicator->baseline_year)
+                                                <li>Baseline: {{ $indicator->baseline_year }} ({{ $indicator->baseline_type ?? 'year' }})</li>
+                                            @endif
+                                            @if ($indicator->parentIndicator)
+                                                <li>Parent: {{ $indicator->parentIndicator->name }}</li>
+                                            @endif
+                                            @if ($indicator->baseline_value !== null)
+                                                <li>Baseline Value: {{ rtrim(rtrim(number_format($indicator->baseline_value, 2), '0'), '.') }}
+                                                    @if ($indicator->unit)
+                                                        {{ $indicator->unit->symbol ?? $indicator->unit->name }}
+                                                    @endif
+                                                </li>
+                                            @endif
+                                            @if ($indicator->level)
+                                                <li>Level: {{ $indicator->level->name }}</li>
+                                            @endif
+                                            @if ($indicator->unit)
+                                                <li>Unit: {{ $indicator->unit->name }}{{ $indicator->unit->symbol ? ' (' . $indicator->unit->symbol . ')' : '' }}</li>
+                                            @endif
+                                            @if ($indicator->frequency)
+                                                <li>Reporting: {{ $indicator->frequency->name }}</li>
+                                            @endif
+                                            @if ($indicator->responsible_party)
+                                                <li>Responsible: {{ $indicator->responsible_party }}</li>
+                                            @endif
+                                            @if ($indicator->primary_source)
+                                                <li>Source: {{ $indicator->primary_source }}</li>
+                                            @endif
+                                        </ul>
+                                        <small class="text-muted d-block mt-1">Created:
+                                            {{ $indicator->created_at ? $indicator->created_at->format('d M, Y') : 'N/A' }}</small>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        @if (!($project->program && $project->program->indicators && $project->program->indicators->count() > 0))
+                            <p class="text-muted">No indicators defined for this project.</p>
+                        @else
+                            <p class="text-muted">No project-specific indicators defined.</p>
+                        @endif
+                    @endif
+
+                </div>
+            </div>
+
             <!-- ALLOCATION CHARTS -->
             <div class="row g-4 mb-4">
                 <div class="col-md-6">
@@ -200,8 +303,8 @@
 
     <script>
         /* -----------------------------------------------
-                                           PREPARE CHART DATA
-                                        ------------------------------------------------*/
+                                               PREPARE CHART DATA
+                                            ------------------------------------------------*/
         let years = @json($project->allocations->pluck('actual_year'));
         let amounts = @json($project->allocations->pluck('amount'));
 

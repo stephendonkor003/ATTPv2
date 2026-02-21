@@ -1,4 +1,4 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Create Project')
 
@@ -51,7 +51,7 @@
                                     @foreach ($programs as $p)
                                         <option value="{{ $p->id }}" data-start="{{ $p->start_year }}"
                                             data-end="{{ $p->end_year }}" data-currency="{{ $p->currency }}">
-                                            {{ $p->program_id }} — {{ $p->name }}
+                                            {{ $p->program_id }} â€” {{ $p->name }}
                                         </option>
                                     @endforeach
                                 </select>
@@ -103,19 +103,26 @@
 
                             <!-- EXPECTED OUTCOME -->
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Expected Outcome Type <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold">Expected Outcome Type <span
+                                        class="text-danger">*</span></label>
                                 <select name="expected_outcome_type" id="expectedOutcomeType" class="form-select" required>
                                     <option value="">-- Select Type --</option>
-                                    <option value="percentage" {{ old('expected_outcome_type') === 'percentage' ? 'selected' : '' }}>Percentage</option>
-                                    <option value="text" {{ old('expected_outcome_type') === 'text' ? 'selected' : '' }}>Text</option>
+                                    <option value="percentage"
+                                        {{ old('expected_outcome_type') === 'percentage' ? 'selected' : '' }}>Percentage
+                                    </option>
+                                    <option value="text" {{ old('expected_outcome_type') === 'text' ? 'selected' : '' }}>
+                                        Text</option>
                                 </select>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Expected Outcome <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold">Expected Outcome <span
+                                        class="text-danger">*</span></label>
                                 <div id="expectedOutcomePercentage" style="display:none;">
                                     <div class="input-group">
-                                        <input type="number" name="expected_outcome_percentage" class="form-control" min="0" max="100" step="0.01" placeholder="e.g. 0" value="{{ old('expected_outcome_percentage') }}">
+                                        <input type="number" name="expected_outcome_percentage" class="form-control"
+                                            min="0" max="100" step="0.01" placeholder="e.g. 0"
+                                            value="{{ old('expected_outcome_percentage') }}">
                                         <span class="input-group-text">%</span>
                                     </div>
                                 </div>
@@ -158,6 +165,20 @@
                                 Remaining: <strong id="remainingValue">0.00</strong>
                             </div>
 
+                        </div>
+                    </div>
+                </div>
+
+                <!-- INDICATORS CARD -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Indicators</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">Select a program to set up project indicators under each program
+                            indicator.</p>
+                        <div id="indicatorsByProgramSection">
+                            <p class="text-muted small">No program selected yet.</p>
                         </div>
                     </div>
                 </div>
@@ -251,17 +272,17 @@
 
             for (let year = s; year <= e; year++) {
                 tableBody.innerHTML += `
-                <tr>
-                    <td>${year}</td>
-                    <td>
-                        <input type="number" min="0" step="0.01"
-                               class="form-control allocInput"
-                               name="allocations[${year}]"
-                               data-year="${year}"
-                               value="0">
-                    </td>
-                </tr>
-            `;
+                    <tr>
+                        <td>${year}</td>
+                        <td>
+                            <input type="number" min="0" step="0.01"
+                                   class="form-control allocInput"
+                                   name="allocations[${year}]"
+                                   data-year="${year}"
+                                   value="0">
+                        </td>
+                    </tr>
+                `;
             }
 
             allocSection.style.display = "block";
@@ -339,6 +360,253 @@
         }
 
         toggleExpectedOutcome();
+
+        // === Hierarchical Indicators Management ===
+        const programsWithIndicators = @json($programsWithIndicators ?? []);
+        const indicatorLevels = @json($indicatorLevels ?? []);
+        const indicatorUnits = @json($indicatorUnits ?? []);
+        const reportingFrequencies = @json($reportingFrequencies ?? []);
+        const baselineTypes = [
+            { value: 'year', label: 'Year' },
+            { value: 'quarter', label: 'Quarter' },
+            { value: 'month', label: 'Month' },
+            { value: 'week', label: 'Week' },
+            { value: 'day', label: 'Day' },
+        ];
+
+        const projectIndicatorCounters = {};
+
+        function h(str = '') {
+            return String(str ?? '').replace(/[&<>\"']/g, (ch) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
+
+        function optionList(list, selected, labelFn) {
+            const sel = selected ?? '';
+            return list.map(item => {
+                const value = item.value ?? item.id ?? '';
+                const label = labelFn ? labelFn(item) : (item.label ?? item.name ?? value);
+                const isSelected = String(value) === String(sel) ? 'selected' : '';
+                return `<option value="${h(value)}" ${isSelected}>${h(label)}</option>`;
+            }).join('');
+        }
+
+        function updateBaselinePlaceholder(idx, type) {
+            const field = document.querySelector(`input.baseline-period[data-idx="${idx}"]`);
+            if (!field) return;
+            switch (type) {
+                case 'day':
+                    field.type = 'date';
+                    field.placeholder = 'YYYY-MM-DD';
+                    break;
+                case 'month':
+                    field.type = 'month';
+                    field.placeholder = 'YYYY-MM';
+                    break;
+                case 'quarter':
+                    field.type = 'text';
+                    field.placeholder = 'YYYY-Q1';
+                    break;
+                case 'week':
+                    field.type = 'week';
+                    field.placeholder = 'YYYY-W01';
+                    break;
+                default:
+                    field.type = 'number';
+                    field.placeholder = 'YYYY';
+            }
+        }
+
+        function updateBaselineUnit(idx) {
+            const unitSelect = document.querySelector(`select[name="indicators[${idx}][unit_id]"]`) ||
+                document.querySelector(`select[name$="${idx}][unit_id]"]`);
+            const badge = document.querySelector(`.baseline-unit-label[data-idx="${idx}"]`);
+            if (!badge) return;
+            const selected = indicatorUnits.find(u => String(u.id) === String(unitSelect?.value));
+            badge.textContent = selected ? (selected.symbol ? selected.symbol : selected.name) : '—';
+        }
+
+        function updateBaselinePlaceholder(idx, type) {
+            const field = document.querySelector(`input.baseline-period[data-idx="${idx}"]`);
+            if (!field) return;
+            switch (type) {
+                case 'day':
+                    field.type = 'date';
+                    field.placeholder = 'YYYY-MM-DD';
+                    break;
+                case 'month':
+                    field.type = 'month';
+                    field.placeholder = 'YYYY-MM';
+                    break;
+                case 'quarter':
+                    field.type = 'text';
+                    field.placeholder = 'YYYY-Q1';
+                    break;
+                default:
+                    field.type = 'number';
+                    field.placeholder = 'YYYY';
+            }
+        }
+
+        function updateBaselineUnit(idx) {
+            const unitSelect = document.querySelector(`select[name*="[unit_id]"][name$="${idx}][unit_id]"]`) ||
+                document.querySelector(`select[data-idx="${idx}"].baseline-unit-select`);
+            const badge = document.querySelector(`.baseline-unit-label[data-idx="${idx}"]`);
+            if (!badge) return;
+            const selected = indicatorUnits.find(u => String(u.id) === String(unitSelect?.value));
+            badge.textContent = selected ? (selected.symbol ? selected.symbol : selected.name) : '—';
+        }
+
+        function addProjectIndicator(programIndicatorId, data = {}) {
+            if (!projectIndicatorCounters[programIndicatorId]) {
+                projectIndicatorCounters[programIndicatorId] = 0;
+            }
+
+            const idx = projectIndicatorCounters[programIndicatorId]++;
+            const listDiv = document.getElementById(`project-indicators-${programIndicatorId}`);
+            if (!listDiv) return;
+
+            const row = document.createElement('div');
+            row.className = 'card mb-2 p-3 project-indicator-row';
+            row.innerHTML = `
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label">Project Indicator <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][name]"
+                               value="${h(data.name)}" placeholder="Enter indicator name" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Baseline Period</label>
+                        <input type="text" class="form-control baseline-period" data-idx="${programIndicatorId}_${idx}" name="indicators[${programIndicatorId}][project_indicators][${idx}][baseline_year]"
+                               value="${h(data.baseline_year)}" placeholder="YYYY">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Baseline Type</label>
+                        <select class="form-select baseline-type" data-idx="${programIndicatorId}_${idx}" name="indicators[${programIndicatorId}][project_indicators][${idx}][baseline_type]">
+                            <option value="">Select</option>
+                            ${optionList(baselineTypes, data.baseline_type || 'year')}
+                        </select>
+                    </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Baseline Value</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" class="form-control baseline-value" data-idx="${programIndicatorId}_${idx}"
+                                           name="indicators[${programIndicatorId}][project_indicators][${idx}][baseline_value]" value="${h(data.baseline_value)}" placeholder="0.00">
+                                    <span class="input-group-text baseline-unit-label" data-idx="${programIndicatorId}_${idx}">—</span>
+                                </div>
+                            </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Indicator Level</label>
+                        <select class="form-select" name="indicators[${programIndicatorId}][project_indicators][${idx}][indicator_level_id]">
+                            <option value="">Select Level</option>
+                            ${optionList(indicatorLevels, data.indicator_level_id)}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Unit</label>
+                        <select class="form-select" name="indicators[${programIndicatorId}][project_indicators][${idx}][unit_id]">
+                            <option value="">Select Unit</option>
+                            ${optionList(indicatorUnits, data.unit_id, (u) => u.symbol ? `${u.name} (${u.symbol})` : u.name)}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Reporting Frequency</label>
+                        <select class="form-select" name="indicators[${programIndicatorId}][project_indicators][${idx}][frequency_of_reporting_id]">
+                            <option value="">Select</option>
+                            ${optionList(reportingFrequencies, data.frequency_of_reporting_id)}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Responsible Party</label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][responsible_party]"
+                               value="${h(data.responsible_party)}" placeholder="Who reports?">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Primary Source</label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][primary_source]"
+                               value="${h(data.primary_source)}" placeholder="e.g., DHIS2, survey">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Methodology</label>
+                        <input type="text" class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][methodology]"
+                               value="${h(data.methodology)}" placeholder="How is it measured?">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][notes]" rows="2"
+                                  placeholder="Additional notes">${h(data.notes)}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Definitions</label>
+                        <textarea class="form-control" name="indicators[${programIndicatorId}][project_indicators][${idx}][definitions]" rows="2"
+                                  placeholder="Definitions and terms">${h(data.definitions)}</textarea>
+                    </div>
+                    <div class="col-md-12 text-end">
+                        <button type="button" class="btn btn-sm btn-danger remove-project-indicator" title="Remove indicator">
+                            <i class="bi bi-trash"></i> Remove Indicator
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            row.querySelector('.remove-project-indicator').addEventListener('click', function(e) {
+                e.preventDefault();
+                row.remove();
+            });
+
+            listDiv.appendChild(row);
+        }
+
+        function renderProgramIndicators(programId) {
+            const section = document.getElementById('indicatorsByProgramSection');
+            const program = programsWithIndicators.find(p => String(p.id) === String(programId));
+
+            // reset counters
+            Object.keys(projectIndicatorCounters).forEach(key => delete projectIndicatorCounters[key]);
+
+            if (!program) {
+                section.innerHTML = '<p class="text-muted small">No program selected yet.</p>';
+                return;
+            }
+
+            if (!program.indicators || program.indicators.length === 0) {
+                section.innerHTML = '<p class="text-muted small">This program has no indicators.</p>';
+                return;
+            }
+
+            let html = '';
+            program.indicators.forEach((programInd) => {
+                html += `
+                    <div class="card border-primary mb-4">
+                        <div class="card-header bg-light-primary d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bi bi-bullseye me-2"></i>${h(programInd.name)}</h6>
+                            <button type="button" class="btn btn-sm btn-outline-primary add-project-indicator-btn" data-program-indicator-id="${programInd.id}">
+                                <i class="bi bi-plus-circle me-1"></i> Add Project Indicator
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-2">Capture project-level indicator details (baseline, unit, frequency, sources).</p>
+                            <div id="project-indicators-${programInd.id}" class="project-indicators-list"></div>
+                        </div>
+                    </div>
+                `;
+            });
+            section.innerHTML = html;
+
+            document.querySelectorAll('.add-project-indicator-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    addProjectIndicator(this.dataset.programIndicatorId);
+                });
+            });
+        }
+
+        // Attach listener after helper is defined
+        programSelect.addEventListener('change', () => renderProgramIndicators(programSelect.value));
+        if (programSelect.value) {
+            renderProgramIndicators(programSelect.value);
+        }
     </script>
 
 @endsection

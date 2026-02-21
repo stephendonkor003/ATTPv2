@@ -128,7 +128,8 @@
 
 
                 {{-- ================= BUDGET EXECUTION ================= --}}
-	                @canany(['finance.commitments.view', 'finance.purchase_requests.view', 'finance.resources.view', 'finance.executions.view'])
+                @canany(['finance.commitments.view', 'finance.purchase_requests.view', 'finance.resources.view',
+                    'finance.executions.view'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.budget_execution') }}</label>
                     </li>
@@ -140,42 +141,42 @@
                             <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
                         </a>
 
-	                        <ul class="nxl-submenu">
-	                            @can('finance.commitments.view')
-	                                <li class="nxl-item">
-	                                    <a href="{{ route('finance.commitments.index') }}" class="nxl-link">
-	                                        <i class="feather-edit me-2"></i> {{ __('admin.budget_commitments') }}
-	                                    </a>
-	                                </li>
-	                            @endcan
-	
-		                            @can('finance.purchase_requests.view')
-		                                <li class="nxl-item">
-		                                    <a href="{{ route('finance.purchase-requests.index') }}" class="nxl-link">
-		                                        <i class="feather-file-text me-2"></i> {{ __('admin.purchase_requests') }}
-		                                    </a>
-		                                </li>
-                                        <li class="nxl-item">
-                                            <a href="{{ route('procurement.invoices.index') }}" class="nxl-link">
-                                                <i class="feather-file-text me-2"></i> Vendor Invoices
-                                            </a>
-                                        </li>
-                                        <li class="nxl-item">
-                                            <a href="{{ route('procurement.purchase-orders.index') }}" class="nxl-link">
-                                                <i class="feather-clipboard me-2"></i> Purchase Orders
-                                            </a>
-                                        </li>
-                                        <li class="nxl-item">
-                                            <a href="{{ route('procurement.disbursements.index') }}" class="nxl-link">
-                                                <i class="feather-dollar-sign me-2"></i> Disbursements
-                                            </a>
-                                        </li>
-		                            @endcan
+                        <ul class="nxl-submenu">
+                            @can('finance.commitments.view')
+                                <li class="nxl-item">
+                                    <a href="{{ route('finance.commitments.index') }}" class="nxl-link">
+                                        <i class="feather-edit me-2"></i> {{ __('admin.budget_commitments') }}
+                                    </a>
+                                </li>
+                            @endcan
 
-	                            @can('finance.resources.view')
-	                                <li class="nxl-item">
-	                                    <a href="{{ route('finance.resources.categories.index') }}" class="nxl-link">
-	                                        <i class="feather-folder me-2"></i> {{ __('admin.resource_categories') }}
+                            @can('finance.purchase_requests.view')
+                                <li class="nxl-item">
+                                    <a href="{{ route('finance.purchase-requests.index') }}" class="nxl-link">
+                                        <i class="feather-file-text me-2"></i> {{ __('admin.purchase_requests') }}
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.invoices.index') }}" class="nxl-link">
+                                        <i class="feather-file-text me-2"></i> Vendor Invoices
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.purchase-orders.index') }}" class="nxl-link">
+                                        <i class="feather-clipboard me-2"></i> Purchase Orders
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('procurement.disbursements.index') }}" class="nxl-link">
+                                        <i class="feather-dollar-sign me-2"></i> Disbursements
+                                    </a>
+                                </li>
+                            @endcan
+
+                            @can('finance.resources.view')
+                                <li class="nxl-item">
+                                    <a href="{{ route('finance.resources.categories.index') }}" class="nxl-link">
+                                        <i class="feather-folder me-2"></i> {{ __('admin.resource_categories') }}
                                     </a>
                                 </li>
 
@@ -296,6 +297,52 @@
                         </ul>
                     </li>
                 @endcanany
+
+
+                {{-- ======================================================
+                    | MONITORING & EVALUATION
+                    ====================================================== --}}
+                <li class="nxl-item nxl-caption">
+                    <label>{{ __('Monitoring & Evaluation') }}</label>
+                </li>
+
+                <li class="nxl-item nxl-hasmenu">
+                    <a href="javascript:void(0);" class="nxl-link">
+                        <span class="nxl-micon"><i class="feather-target"></i></span>
+                        <span class="nxl-mtext">M&E Configuration</span>
+                        <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                    </a>
+
+                    <ul class="nxl-submenu">
+                        <li class="nxl-item">
+                            <a href="{{ route('budget.me-configuration.indicator-levels.index') }}" class="nxl-link">
+                                <i class="feather-layers me-2"></i> Indicator Levels
+                            </a>
+                        </li>
+
+                        <li class="nxl-item">
+                            <a href="{{ route('budget.me-configuration.frequencies.index') }}" class="nxl-link">
+                                <i class="feather-clock me-2"></i> Reporting Frequencies
+                            </a>
+                        </li>
+
+                        <li class="nxl-item">
+                            <a href="{{ route('budget.me-configuration.units.index') }}" class="nxl-link">
+                                <i class="feather-sliders me-2"></i> Indicator Units
+                            </a>
+                        </li>
+                        <li class="nxl-item">
+                            <a href="{{ route('budget.me-configuration.definitions.index') }}" class="nxl-link">
+                                <i class="feather-file-text me-2"></i> Definitions / Formulas
+                            </a>
+                        </li>
+                        <li class="nxl-item">
+                            <a href="{{ route('budget.me-configuration.methodologies.index') }}" class="nxl-link">
+                                <i class="feather-book-open me-2"></i> Methodologies
+                            </a>
+                        </li>
+                    </ul>
+                </li>
 
 
                 {{-- ======================================================

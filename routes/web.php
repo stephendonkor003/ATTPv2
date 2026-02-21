@@ -99,6 +99,7 @@ use App\Http\Controllers\{
 	    PurchaseRequestController,
 	    BudgetReportController,
 	    ProjectBudgetController,
+	    MeConfigurationController,
 	};
 
 /*
@@ -899,6 +900,100 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::delete('projects/{project}', [ProjectController::class, 'destroy'])
             ->middleware('permission:project.delete')
             ->name('projects.destroy');
+
+
+        /* =====================================================
+         | M&E CONFIGURATION
+         ===================================================== */
+
+        // Indicator Levels
+        Route::get('me/indicator-levels', [MeConfigurationController::class, 'indicatorLevelsIndex'])
+            ->name('me-configuration.indicator-levels.index');
+
+        Route::get('me/indicator-levels/create', [MeConfigurationController::class, 'indicatorLevelsCreate'])
+            ->name('me-configuration.indicator-levels.create');
+
+        Route::post('me/indicator-levels', [MeConfigurationController::class, 'indicatorLevelsStore'])
+            ->name('me-configuration.indicator-levels.store');
+
+        Route::get('me/indicator-levels/{level}/edit', [MeConfigurationController::class, 'indicatorLevelsEdit'])
+            ->name('me-configuration.indicator-levels.edit');
+
+        Route::put('me/indicator-levels/{level}', [MeConfigurationController::class, 'indicatorLevelsUpdate'])
+            ->name('me-configuration.indicator-levels.update');
+
+        Route::delete('me/indicator-levels/{level}', [MeConfigurationController::class, 'indicatorLevelsDestroy'])
+            ->name('me-configuration.indicator-levels.destroy');
+
+        // Reporting Frequencies
+        Route::get('me/frequencies', [MeConfigurationController::class, 'frequenciesIndex'])
+            ->name('me-configuration.frequencies.index');
+
+        Route::get('me/frequencies/create', [MeConfigurationController::class, 'frequenciesCreate'])
+            ->name('me-configuration.frequencies.create');
+
+        Route::post('me/frequencies', [MeConfigurationController::class, 'frequenciesStore'])
+            ->name('me-configuration.frequencies.store');
+
+        Route::get('me/frequencies/{frequency}/edit', [MeConfigurationController::class, 'frequenciesEdit'])
+            ->name('me-configuration.frequencies.edit');
+
+        Route::put('me/frequencies/{frequency}', [MeConfigurationController::class, 'frequenciesUpdate'])
+            ->name('me-configuration.frequencies.update');
+
+        Route::delete('me/frequencies/{frequency}', [MeConfigurationController::class, 'frequenciesDestroy'])
+            ->name('me-configuration.frequencies.destroy');
+
+        // Indicator Units
+        Route::get('me/units', [MeConfigurationController::class, 'unitsIndex'])
+            ->name('me-configuration.units.index');
+
+        Route::get('me/units/create', [MeConfigurationController::class, 'unitsCreate'])
+            ->name('me-configuration.units.create');
+
+        Route::post('me/units', [MeConfigurationController::class, 'unitsStore'])
+            ->name('me-configuration.units.store');
+
+        Route::get('me/units/{unit}/edit', [MeConfigurationController::class, 'unitsEdit'])
+            ->name('me-configuration.units.edit');
+
+        Route::put('me/units/{unit}', [MeConfigurationController::class, 'unitsUpdate'])
+            ->name('me-configuration.units.update');
+
+        Route::delete('me/units/{unit}', [MeConfigurationController::class, 'unitsDestroy'])
+            ->name('me-configuration.units.destroy');
+
+        // Definitions / Formulas
+        Route::get('me/definitions', [MeConfigurationController::class, 'definitionsIndex'])
+            ->name('me-configuration.definitions.index');
+
+        // Methodologies (placeholder)
+        Route::get('me/methodologies', [MeConfigurationController::class, 'methodologiesIndex'])
+            ->name('me-configuration.methodologies.index');
+        Route::get('me/methodologies/create', [MeConfigurationController::class, 'methodologiesCreate'])
+            ->name('me-configuration.methodologies.create');
+        Route::post('me/methodologies', [MeConfigurationController::class, 'methodologiesStore'])
+            ->name('me-configuration.methodologies.store');
+        Route::get('me/methodologies/{methodology}/edit', [MeConfigurationController::class, 'methodologiesEdit'])
+            ->name('me-configuration.methodologies.edit');
+        Route::put('me/methodologies/{methodology}', [MeConfigurationController::class, 'methodologiesUpdate'])
+            ->name('me-configuration.methodologies.update');
+        Route::delete('me/methodologies/{methodology}', [MeConfigurationController::class, 'methodologiesDestroy'])
+            ->name('me-configuration.methodologies.destroy');
+
+        // Definitions CRUD
+        Route::get('me/definitions', [MeConfigurationController::class, 'definitionsIndex'])
+            ->name('me-configuration.definitions.index');
+        Route::get('me/definitions/create', [MeConfigurationController::class, 'definitionsCreate'])
+            ->name('me-configuration.definitions.create');
+        Route::post('me/definitions', [MeConfigurationController::class, 'definitionsStore'])
+            ->name('me-configuration.definitions.store');
+        Route::get('me/definitions/{definition}/edit', [MeConfigurationController::class, 'definitionsEdit'])
+            ->name('me-configuration.definitions.edit');
+        Route::put('me/definitions/{definition}', [MeConfigurationController::class, 'definitionsUpdate'])
+            ->name('me-configuration.definitions.update');
+        Route::delete('me/definitions/{definition}', [MeConfigurationController::class, 'definitionsDestroy'])
+            ->name('me-configuration.definitions.destroy');
 
 
         /* =====================================================

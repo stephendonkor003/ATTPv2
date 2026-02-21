@@ -55,6 +55,76 @@
                 </div>
             </div>
 
+            <!-- Indicators Section -->
+            @if ($program->indicators && $program->indicators->count() > 0)
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="bi bi-bullseye me-2"></i> Indicators
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            @foreach ($program->indicators as $indicator)
+                                @php
+                                    $resp = [];
+                                    if ($indicator->responsible_party) {
+                                        $resp = json_decode($indicator->responsible_party, true) ?? [];
+                                        if (!is_array($resp)) { $resp = [$indicator->responsible_party]; }
+                                    }
+                                    $psType = 'manual'; $psDetail = '';
+                                    if ($indicator->primary_source && str_contains($indicator->primary_source, ':')) {
+                                        [$psType, $psDetail] = explode(':', $indicator->primary_source, 2);
+                                    } elseif ($indicator->primary_source) {
+                                        $psDetail = $indicator->primary_source;
+                                    }
+                                @endphp
+                                <div class="col-md-6">
+                                    <div class="p-3 border rounded indicator-card" style="--stripe:#2563eb;">
+                                        <div class="d-flex align-items-center gap-2 mb-2">
+                                            <span class="indicator-chip">{{ $indicator->name }}</span>
+                                            @if ($indicator->level)
+                                                <span class="badge bg-light text-primary border">{{ $indicator->level->name }}</span>
+                                            @endif
+                                        </div>
+                                        <ul class="list-unstyled small text-muted mb-2">
+                                            @if ($indicator->baseline_year)
+                                                <li>Baseline: {{ $indicator->baseline_year }} ({{ $indicator->baseline_type ?? 'year' }})</li>
+                                            @endif
+                                            @if ($indicator->baseline_value !== null)
+                                                <li>Baseline Value: {{ rtrim(rtrim(number_format($indicator->baseline_value, 2), '0'), '.') }}
+                                                    @if ($indicator->unit)
+                                                        {{ $indicator->unit->symbol ?? $indicator->unit->name }}
+                                                    @endif
+                                                </li>
+                                            @endif
+                                            @if ($indicator->frequency)
+                                                <li>Reporting: {{ $indicator->frequency->name }}</li>
+                                            @endif
+                                            @if (!empty($resp))
+                                                <li>Responsible:
+                                                    @foreach ($resp as $id)
+                                                        <span class="badge bg-primary-subtle text-primary border">{{ $id }}</span>
+                                                    @endforeach
+                                                </li>
+                                            @endif
+                                            @if ($psDetail)
+                                                <li>Source: {{ ucfirst($psType) }} — {{ $psDetail }}</li>
+                                            @endif
+                                            @if ($indicator->definitions)
+                                                <li>Definition: {{ Str::limit($indicator->definitions, 120) }}</li>
+                                            @endif
+                                        </ul>
+                                        <small class="text-muted">Created:
+                                            {{ $indicator->created_at ? $indicator->created_at->format('d M, Y') : 'N/A' }}</small>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            @endif
+
             <!-- Projects under this program -->
             <div class="card shadow-sm">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
