@@ -122,8 +122,8 @@
                 'icon' => 'shield',
                 'color' => '#0ea5e9',
                 'links' => [
-                    ['label' => 'Setup', 'route' => 'governance.index'],
-                    ['label' => 'Funding Partners', 'route' => 'funders.index'],
+                    ['label' => 'Setup', 'route' => 'finance.governance.index'],
+                    ['label' => 'Funding Partners', 'route' => 'finance.funders.index'],
                 ],
             ],
             [
@@ -172,8 +172,8 @@
                 'icon' => 'users',
                 'color' => '#10b981',
                 'links' => [
-                    ['label' => 'Positions', 'route' => 'positions.index'],
-                    ['label' => 'Recruitment', 'route' => 'vacancies.index'],
+                    ['label' => 'Positions', 'route' => 'hr.positions.index'],
+                    ['label' => 'Recruitment', 'route' => 'hr.vacancies.index'],
                 ],
             ],
             [
@@ -229,8 +229,8 @@
                 'icon' => 'user-check',
                 'color' => '#10b981',
                 'links' => [
-                    ['label' => 'Users', 'route' => 'users.index'],
-                    ['label' => 'Roles', 'route' => 'roles.index'],
+                    ['label' => 'Users', 'route' => 'system.users.index'],
+                    ['label' => 'Roles', 'route' => 'system.roles.index'],
                 ],
             ],
         ];
@@ -278,7 +278,7 @@
                         <a class="quick-link" href="{{ route('budget.me.indicators.report.excel') }}"><i class="feather-download text-info"></i>M&E Report (Excel)</a>
                         <a class="quick-link" href="{{ route('budget.me.indicators.report.pdf') }}"><i class="feather-file-text text-danger"></i>M&E Report (PDF)</a>
                         <a class="quick-link" href="{{ route('vendors.index') }}"><i class="feather-briefcase text-warning"></i>Vendors</a>
-                        <a class="quick-link" href="{{ route('users.index') }}"><i class="feather-users text-info"></i>Users</a>
+                        <a class="quick-link" href="{{ route('system.users.index') }}"><i class="feather-users text-info"></i>Users</a>
                     </div>
                 </div>
             </div>
