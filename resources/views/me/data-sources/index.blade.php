@@ -279,6 +279,7 @@
                                 <th>Responses</th>
                                 <th>Created</th>
                                 <th>Status</th>
+                                <th>Share</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -298,10 +299,25 @@
                                             <span class="ds-pill secondary"><i class="feather-pause"></i> Inactive</span>
                                         @endif
                                     </td>
+                                    <td>
+                                        @php
+                                            $publicUrl = route('public.me.indicators.surveys.show', ['token' => $survey->public_token]);
+                                        @endphp
+                                        <div class="d-flex flex-wrap gap-1">
+                                            <a href="{{ $publicUrl }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                <i class="feather-external-link me-1"></i> Open
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary js-copy-survey-link"
+                                                data-link="{{ $publicUrl }}">
+                                                <i class="feather-clipboard me-1"></i> Copy Link
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Share on WhatsApp / social / email.</small>
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-3">No surveys configured yet.</td>
+                                    <td colspan="7" class="text-center text-muted py-3">No surveys configured yet.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -586,6 +602,30 @@
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const copyButtons = document.querySelectorAll('.js-copy-survey-link');
+            copyButtons.forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const link = btn.dataset.link || '';
+                    if (!link) {
+                        return;
+                    }
+                    const original = btn.innerHTML;
+                    try {
+                        await navigator.clipboard.writeText(link);
+                        btn.classList.remove('btn-outline-secondary');
+                        btn.classList.add('btn-success');
+                        btn.innerHTML = '<i class="feather-check me-1"></i> Copied';
+                        setTimeout(() => {
+                            btn.classList.add('btn-outline-secondary');
+                            btn.classList.remove('btn-success');
+                            btn.innerHTML = original;
+                        }, 1800);
+                    } catch (error) {
+                        window.prompt('Copy survey link:', link);
+                    }
+                });
+            });
+
             const defaultCandidates = {
                 actual_value: ['actual_value', 'actual', 'value', 'result', 'score', 'calculated_value'],
                 period_label: ['period_label', 'period', 'reporting_period', 'month', 'quarter', 'year'],
