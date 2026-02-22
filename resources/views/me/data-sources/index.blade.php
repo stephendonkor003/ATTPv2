@@ -231,12 +231,15 @@
 
         {{-- Surveys & Responses --}}
         <div class="card shadow-sm mb-3">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h6 class="mb-0 fw-semibold">Surveys & Responses</h6>
-                    <small class="text-muted">Survey links generated from indicators and their collected responses.</small>
+                    <small class="text-muted d-block">Survey links generated from indicators and their collected responses.</small>
                 </div>
-                <div class="d-flex gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary js-copy-all-survey-links">
+                        <i class="feather-clipboard me-1"></i> Copy All Links
+                    </button>
                     <a class="btn btn-sm btn-outline-primary" href="{{ route('budget.me.data-sources.surveys.export', ['format' => 'csv']) }}">
                         <i class="feather-download me-1"></i> Export CSV
                     </a>
@@ -311,6 +314,10 @@
                                                 data-link="{{ $publicUrl }}">
                                                 <i class="feather-clipboard me-1"></i> Copy Link
                                             </button>
+                                            <a class="btn btn-sm btn-outline-success"
+                                                href="https://wa.me/?text={{ urlencode($publicUrl) }}" target="_blank" rel="noopener">
+                                                <i class="feather-share-2 me-1"></i> Share
+                                            </a>
                                         </div>
                                         <small class="text-muted">Share on WhatsApp / social / email.</small>
                                     </td>
@@ -602,6 +609,31 @@
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const copyAllBtn = document.querySelector('.js-copy-all-survey-links');
+            if (copyAllBtn) {
+                copyAllBtn.addEventListener('click', async () => {
+                    const links = Array.from(document.querySelectorAll('.js-copy-survey-link'))
+                        .map((btn) => btn.dataset.link)
+                        .filter((link) => !!link);
+                    const bundle = links.join('\n');
+                    if (!bundle) return;
+                    const original = copyAllBtn.innerHTML;
+                    try {
+                        await navigator.clipboard.writeText(bundle);
+                        copyAllBtn.classList.remove('btn-outline-secondary');
+                        copyAllBtn.classList.add('btn-success');
+                        copyAllBtn.innerHTML = '<i class="feather-check me-1"></i> Copied';
+                        setTimeout(() => {
+                            copyAllBtn.classList.add('btn-outline-secondary');
+                            copyAllBtn.classList.remove('btn-success');
+                            copyAllBtn.innerHTML = original;
+                        }, 1800);
+                    } catch (error) {
+                        window.prompt('Copy survey links:', bundle);
+                    }
+                });
+            }
+
             const copyButtons = document.querySelectorAll('.js-copy-survey-link');
             copyButtons.forEach((btn) => {
                 btn.addEventListener('click', async () => {
