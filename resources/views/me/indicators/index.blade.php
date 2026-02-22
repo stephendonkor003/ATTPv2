@@ -492,6 +492,12 @@
 
                 $baselineValueRaw = (string) old('baseline_value', $editingIndicator->baseline_value ?? '');
                 $binaryBaselineSelection = $baselineValueRaw === '1' ? '1' : ($baselineValueRaw === '0' ? '0' : '');
+
+                $indicatorSurveyConfig = (array) ($editingIndicator->survey_config ?? []);
+                $indicatorSurveyEnabled = old('survey_public_enabled', data_get($indicatorSurveyConfig, 'enabled', true));
+                $indicatorSurveyTitle = old('survey_title', data_get($indicatorSurveyConfig, 'title', ($editingIndicator->name ?? 'Public Survey')));
+                $indicatorSurveyIntro = old('survey_intro', data_get($indicatorSurveyConfig, 'intro', ''));
+                $indicatorSurveyQuestionsJson = old('survey_questions_json', json_encode(data_get($indicatorSurveyConfig, 'questions', [])));
             @endphp
 
             <div class="row g-4">
@@ -662,7 +668,7 @@
 
                                     <div class="col-md-12">
                                         <label class="form-label">Methodology</label>
-                                        <select name="methodology" class="form-select">
+                                        <select name="methodology" id="methodologySelect" class="form-select">
                                             <option value="">Select Methodology</option>
                                             @if ($methodologyValue !== '' && !$methodologyExists)
                                                 <option value="{{ $methodologyValue }}" selected>
@@ -675,6 +681,50 @@
                                                 </option>
                                             @endforeach
                                         </select>
+                                    </div>
+
+                                    {{-- Survey Builder (visible when methodology contains "survey") --}}
+                                    <div class="col-12 {{ str_contains(strtolower($methodologyValue), 'survey') ? '' : 'd-none' }}" id="indicatorSurveyBlock">
+                                        <div class="border rounded p-3 bg-light-subtle">
+                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                                <div>
+                                                    <div class="fw-semibold mb-1">Public Survey</div>
+                                                    <small class="text-muted">Enable and design the survey respondents will fill for this indicator.</small>
+                                                </div>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="indicatorSurveyEnabled"
+                                                        name="survey_public_enabled" value="1" {{ $indicatorSurveyEnabled ? 'checked' : '' }}>
+                                                    <label class="form-check-label" for="indicatorSurveyEnabled">Enable</label>
+                                                </div>
+                                            </div>
+
+                                            <div id="indicatorSurveyPanel" class="{{ $indicatorSurveyEnabled ? '' : 'd-none' }}">
+                                                <div class="row g-2 mb-2">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Survey Title</label>
+                                                        <input type="text" class="form-control" id="indicatorSurveyTitle"
+                                                            name="survey_title" value="{{ $indicatorSurveyTitle }}" placeholder="Public survey title">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">Intro / Instructions</label>
+                                                        <input type="text" class="form-control" id="indicatorSurveyIntro"
+                                                            name="survey_intro" value="{{ $indicatorSurveyIntro }}" placeholder="Short intro for respondents">
+                                                    </div>
+                                                </div>
+
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <h6 class="mb-0">Survey Questions</h6>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" id="addIndicatorSurveyQuestionBtn">
+                                                        <i class="feather-plus me-1"></i> Add Question
+                                                    </button>
+                                                </div>
+
+                                                <input type="hidden" id="indicatorSurveyQuestionsJson" name="survey_questions_json"
+                                                    value="{{ $indicatorSurveyQuestionsJson }}">
+                                                <div id="indicatorSurveyQuestionsContainer" class="d-grid gap-2"></div>
+                                                <small class="text-muted d-block mt-2">Supported: text, textarea, number, email, date, select, radio, checkbox.</small>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div class="col-md-12">
@@ -1303,6 +1353,197 @@
             const definitionSelect = document.getElementById('definitionSelect');
             const definitionCustom = document.getElementById('definitionCustom');
             const definitionHint = document.getElementById('definitionHint');
+            const methodologySelect = document.getElementById('methodologySelect');
+
+            // Survey builder elements
+            const surveyBlock = document.getElementById('indicatorSurveyBlock');
+            const surveyEnabled = document.getElementById('indicatorSurveyEnabled');
+            const surveyPanel = document.getElementById('indicatorSurveyPanel');
+            const surveyTitle = document.getElementById('indicatorSurveyTitle');
+            const surveyIntro = document.getElementById('indicatorSurveyIntro');
+            const questionsJsonInput = document.getElementById('indicatorSurveyQuestionsJson');
+            const questionsContainer = document.getElementById('indicatorSurveyQuestionsContainer');
+            const addQuestionBtn = document.getElementById('addIndicatorSurveyQuestionBtn');
+
+            let surveyQuestions = [];
+            try {
+                const parsed = JSON.parse(questionsJsonInput?.value || '[]');
+                if (Array.isArray(parsed)) {
+                    surveyQuestions = parsed;
+                }
+            } catch (_) {
+                surveyQuestions = [];
+            }
+
+            const questionTypes = [
+                {value: 'text', label: 'Text'},
+                {value: 'textarea', label: 'Long Text'},
+                {value: 'number', label: 'Number'},
+                {value: 'email', label: 'Email'},
+                {value: 'date', label: 'Date'},
+                {value: 'select', label: 'Dropdown'},
+                {value: 'radio', label: 'Single Choice'},
+                {value: 'checkbox', label: 'Multi Choice'},
+            ];
+
+            function normalizeOptions(raw) {
+                return (raw || [])
+                    .map((item) => (item || '').toString().trim())
+                    .filter((item, index, array) => item !== '' && array.indexOf(item) === index);
+            }
+
+            function escapeHtml(value) {
+                return (value || '')
+                    .replaceAll('&', '&amp;')
+                    .replaceAll('<', '&lt;')
+                    .replaceAll('>', '&gt;')
+                    .replaceAll('"', '&quot;')
+                    .replaceAll("'", '&#039;');
+            }
+
+            function renderSurveyQuestions() {
+                if (!questionsContainer) return;
+                questionsContainer.innerHTML = '';
+                if (!surveyQuestions.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'text-muted small border rounded p-3 bg-white';
+                    empty.textContent = 'No questions yet. Add at least one question.';
+                    questionsContainer.appendChild(empty);
+                    return;
+                }
+                surveyQuestions.forEach((q, idx) => {
+                    const card = document.createElement('div');
+                    card.className = 'survey-question-card';
+                    const optionBlockVisible = ['select', 'radio', 'checkbox'].includes(q.type);
+                    const optionsText = (q.options || []).join('\\n');
+                    card.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong>Question ${idx + 1}</strong>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-remove="${idx}">
+                                <i class="feather-trash-2"></i>
+                            </button>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label">Question Label</label>
+                                <input type="text" class="form-control form-control-sm" data-label="${idx}" value="${escapeHtml(q.label || '')}" placeholder="Shown to respondents">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Input Type</label>
+                                <select class="form-select form-select-sm" data-type="${idx}">
+                                    ${questionTypes.map((type) => `<option value="${type.value}" ${type.value === q.type ? 'selected' : ''}>${type.label}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label d-block">Required</label>
+                                <div class="form-check form-switch mt-1">
+                                    <input class="form-check-input" type="checkbox" data-required="${idx}" ${q.required ? 'checked' : ''}>
+                                    <label class="form-check-label">Mandatory</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Help Text (Optional)</label>
+                                <input type="text" class="form-control form-control-sm" data-hint="${idx}" value="${escapeHtml(q.hint || '')}" placeholder="Helper text under the question">
+                            </div>
+                            <div class="col-12 ${optionBlockVisible ? '' : 'd-none'}" data-options-wrap="${idx}">
+                                <label class="form-label">Options (one per line)</label>
+                                <textarea class="form-control form-control-sm" rows="3" data-options="${idx}" placeholder="Option 1&#10;Option 2">${escapeHtml(optionsText)}</textarea>
+                            </div>
+                        </div>
+                    `;
+                    questionsContainer.appendChild(card);
+                });
+            }
+
+            function syncSurveyQuestionsFromDom() {
+                if (!questionsContainer) return;
+                surveyQuestions = surveyQuestions.map((q, idx) => {
+                    const label = form.querySelector(`[data-label="${idx}"]`)?.value || '';
+                    const type = form.querySelector(`[data-type="${idx}"]`)?.value || 'text';
+                    const required = !!form.querySelector(`[data-required="${idx}"]`)?.checked;
+                    const hint = form.querySelector(`[data-hint="${idx}"]`)?.value || '';
+                    const optionsRaw = (form.querySelector(`[data-options="${idx}"]`)?.value || '').split('\\n');
+                    return {
+                        label: label.trim(),
+                        type: type.trim(),
+                        required,
+                        hint: hint.trim(),
+                        options: ['select', 'radio', 'checkbox'].includes(type) ? normalizeOptions(optionsRaw) : [],
+                    };
+                });
+                if (questionsJsonInput) {
+                    questionsJsonInput.value = JSON.stringify(surveyQuestions);
+                }
+            }
+
+            function applySurveyVisibility() {
+                const isSurvey = (methodologySelect?.value || '').toLowerCase().includes('survey');
+                if (!surveyBlock) return;
+
+                if (!isSurvey) {
+                    surveyBlock.classList.add('d-none');
+                    if (questionsJsonInput) questionsJsonInput.value = '[]';
+                    surveyQuestions = [];
+                    renderSurveyQuestions();
+                    if (surveyEnabled) surveyEnabled.checked = false;
+                    if (surveyPanel) surveyPanel.classList.add('d-none');
+                    return;
+                }
+
+                surveyBlock.classList.remove('d-none');
+                if (surveyEnabled && surveyEnabled.checked) {
+                    surveyPanel?.classList.remove('d-none');
+                    if (surveyQuestions.length === 0) {
+                        surveyQuestions.push({label: '', type: 'text', required: true, hint: '', options: []});
+                    }
+                    renderSurveyQuestions();
+                    syncSurveyQuestionsFromDom();
+                } else {
+                    surveyPanel?.classList.add('d-none');
+                }
+            }
+
+            addQuestionBtn?.addEventListener('click', () => {
+                surveyQuestions.push({label: '', type: 'text', required: true, hint: '', options: []});
+                renderSurveyQuestions();
+                syncSurveyQuestionsFromDom();
+            });
+
+            questionsContainer?.addEventListener('input', (event) => {
+                const target = event.target;
+                if (target?.matches('[data-type]')) {
+                    const idx = Number(target.getAttribute('data-type'));
+                    const wrap = questionsContainer.querySelector(`[data-options-wrap="${idx}"]`);
+                    if (wrap) {
+                        wrap.classList.toggle('d-none', !['select', 'radio', 'checkbox'].includes(target.value));
+                    }
+                }
+                syncSurveyQuestionsFromDom();
+            });
+
+            questionsContainer?.addEventListener('click', (event) => {
+                const trigger = event.target.closest('[data-remove]');
+                if (!trigger) return;
+                const idx = Number(trigger.getAttribute('data-remove'));
+                surveyQuestions.splice(idx, 1);
+                renderSurveyQuestions();
+                syncSurveyQuestionsFromDom();
+            });
+
+            surveyEnabled?.addEventListener('change', () => {
+                if (!surveyPanel) return;
+                const on = surveyEnabled.checked;
+                surveyPanel.classList.toggle('d-none', !on);
+                if (on && surveyQuestions.length === 0) {
+                    surveyQuestions.push({label: '', type: 'text', required: true, hint: '', options: []});
+                }
+                renderSurveyQuestions();
+                syncSurveyQuestionsFromDom();
+            });
+
+            methodologySelect?.addEventListener('change', () => {
+                applySurveyVisibility();
+            });
 
             document.querySelectorAll('.checkbox-multiselect-target').forEach((select, index) => {
                 if (select.dataset.enhanced === '1' || !window.CheckboxMultiSelect) {
@@ -1551,6 +1792,10 @@
             updatePrimarySourceUI();
             updateDataSourceTemplateLink();
             updateDefinitionHint();
+
+            // Init survey block
+            applySurveyVisibility();
+            renderSurveyQuestions();
         });
     </script>
 @endpush
