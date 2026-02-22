@@ -41,7 +41,8 @@
                         <tr>
                             <th class="ps-4">Name</th>
                             <th>Code</th>
-                            <th>Days</th>
+                            <th>Interval</th>
+                            <th>Approx. Days</th>
                             <th>Description</th>
                             <th>Sort</th>
                             <th>Status</th>
@@ -53,7 +54,8 @@
                             <tr>
                                 <td class="ps-4 fw-semibold">{{ $frequency->name }}</td>
                                 <td>{{ $frequency->code }}</td>
-                                <td>{{ $frequency->frequency_in_days ?? '?' }}</td>
+                                <td>{{ $frequency->intervalDisplay() }}</td>
+                                <td>{{ is_null($frequency->frequency_in_days) ? '—' : $frequency->frequency_in_days }}</td>
                                 <td>{{ $frequency->description ?? '?' }}</td>
                                 <td>{{ $frequency->sort_order }}</td>
                                 <td>
@@ -81,7 +83,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">No frequencies found.</td>
+                                <td colspan="8" class="text-center text-muted py-4">No frequencies found.</td>
                             </tr>
                         @endforelse
                     </tbody>

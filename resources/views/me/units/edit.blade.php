@@ -35,10 +35,8 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Sort Order</label>
-                        <input type="number" name="sort_order" min="0"
-                               class="form-control @error('sort_order') is-invalid @enderror"
-                               value="{{ old('sort_order', $unit->sort_order) }}">
-                        @error('sort_order')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <input type="text" class="form-control" value="{{ $unit->sort_order }}" readonly>
+                        <small class="text-muted">Sort order is managed automatically by the system.</small>
                     </div>
 
                     <div class="col-12">

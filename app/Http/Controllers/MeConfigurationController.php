@@ -8,6 +8,8 @@ use App\Models\IndicatorUnit;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorDefinition;
 use App\Models\IndicatorDefinitionVariable;
+use App\Models\Indicator;
+use App\Models\IndicatorSurveyLink;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
@@ -90,19 +92,39 @@ class MeConfigurationController extends Controller
 
     public function frequenciesCreate()
     {
-        return view('me.frequencies.create');
+        $intervalOptions = ReportingFrequency::intervalOptions();
+        return view('me.frequencies.create', compact('intervalOptions'));
     }
 
     public function frequenciesStore(Request $request)
     {
+        $allowedIntervalUnits = implode(',', array_keys(ReportingFrequency::intervalOptions()));
         $validated = $request->validate([
             'name' => 'required|string|unique:me_reporting_frequencies',
             'code' => 'required|string|unique:me_reporting_frequencies',
-            'frequency_in_days' => 'nullable|integer|min:1',
+            'interval_unit' => 'required|in:' . $allowedIntervalUnits,
+            'interval_value' => [
+                'nullable',
+                'integer',
+                'min:1',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if ((string) $request->input('interval_unit') !== 'once' && empty($value)) {
+                        $fail('Interval value is required unless interval unit is Once.');
+                    }
+                },
+            ],
             'description' => 'nullable|string',
             'sort_order' => 'nullable|integer|min:0',
             'is_active' => 'nullable|boolean',
         ]);
+
+        [$intervalUnit, $intervalValue, $frequencyInDays] = $this->normalizeFrequencyInterval(
+            (string) $validated['interval_unit'],
+            isset($validated['interval_value']) ? (int) $validated['interval_value'] : null
+        );
+        $validated['interval_unit'] = $intervalUnit;
+        $validated['interval_value'] = $intervalValue;
+        $validated['frequency_in_days'] = $frequencyInDays;
 
         $validated['created_by'] = auth()->id();
         $validated['is_active'] = $request->has('is_active');
@@ -116,19 +138,39 @@ class MeConfigurationController extends Controller
 
     public function frequenciesEdit(ReportingFrequency $frequency)
     {
-        return view('me.frequencies.edit', compact('frequency'));
+        $intervalOptions = ReportingFrequency::intervalOptions();
+        return view('me.frequencies.edit', compact('frequency', 'intervalOptions'));
     }
 
     public function frequenciesUpdate(Request $request, ReportingFrequency $frequency)
     {
+        $allowedIntervalUnits = implode(',', array_keys(ReportingFrequency::intervalOptions()));
         $validated = $request->validate([
             'name' => 'required|string|unique:me_reporting_frequencies,name,' . $frequency->id,
             'code' => 'required|string|unique:me_reporting_frequencies,code,' . $frequency->id,
-            'frequency_in_days' => 'nullable|integer|min:1',
+            'interval_unit' => 'required|in:' . $allowedIntervalUnits,
+            'interval_value' => [
+                'nullable',
+                'integer',
+                'min:1',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if ((string) $request->input('interval_unit') !== 'once' && empty($value)) {
+                        $fail('Interval value is required unless interval unit is Once.');
+                    }
+                },
+            ],
             'description' => 'nullable|string',
             'sort_order' => 'nullable|integer|min:0',
             'is_active' => 'nullable|boolean',
         ]);
+
+        [$intervalUnit, $intervalValue, $frequencyInDays] = $this->normalizeFrequencyInterval(
+            (string) $validated['interval_unit'],
+            isset($validated['interval_value']) ? (int) $validated['interval_value'] : null
+        );
+        $validated['interval_unit'] = $intervalUnit;
+        $validated['interval_value'] = $intervalValue;
+        $validated['frequency_in_days'] = $frequencyInDays;
 
         $validated['is_active'] = $request->has('is_active');
         $frequency->update($validated);
@@ -142,6 +184,33 @@ class MeConfigurationController extends Controller
         $frequency->delete();
         return redirect()->route('budget.me-configuration.frequencies.index')
             ->with('success', 'Reporting Frequency deleted successfully');
+    }
+
+    protected function normalizeFrequencyInterval(string $intervalUnit, ?int $intervalValue): array
+    {
+        $allowedUnits = array_keys(ReportingFrequency::intervalOptions());
+        if (!in_array($intervalUnit, $allowedUnits, true)) {
+            $intervalUnit = 'day';
+        }
+
+        if ($intervalUnit === 'once') {
+            return ['once', null, null];
+        }
+
+        $value = ($intervalValue && $intervalValue > 0) ? $intervalValue : 1;
+
+        $frequencyInDays = match ($intervalUnit) {
+            'second', 'minute', 'hour' => null,
+            'day' => $value,
+            'week' => $value * 7,
+            'month' => $value * 30,
+            'quarterly' => $value * 90,
+            'year', 'annual' => $value * 365,
+            'quinquennial' => $value * (365 * 5),
+            default => null,
+        };
+
+        return [$intervalUnit, $value, $frequencyInDays];
     }
 
     // ===== Indicator Units =====
@@ -163,13 +232,12 @@ class MeConfigurationController extends Controller
             'name' => 'required|string|unique:me_indicator_units',
             'symbol' => 'nullable|string|max:20',
             'description' => 'nullable|string',
-            'sort_order' => 'nullable|integer|min:0',
             'is_active' => 'nullable|boolean',
         ]);
 
         $validated['created_by'] = auth()->id();
         $validated['is_active'] = $request->has('is_active');
-        $validated['sort_order'] = $validated['sort_order'] ?? 0;
+        $validated['sort_order'] = ((int) IndicatorUnit::max('sort_order')) + 1;
 
         IndicatorUnit::create($validated);
 
@@ -188,7 +256,6 @@ class MeConfigurationController extends Controller
             'name' => 'required|string|unique:me_indicator_units,name,' . $unit->id,
             'symbol' => 'nullable|string|max:20',
             'description' => 'nullable|string',
-            'sort_order' => 'nullable|integer|min:0',
             'is_active' => 'nullable|boolean',
         ]);
 
@@ -334,10 +401,30 @@ class MeConfigurationController extends Controller
             'description' => 'nullable|string',
             'steps' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'survey_public_enabled' => 'nullable|boolean',
+            'survey_title' => 'nullable|string|max:255',
+            'survey_intro' => 'nullable|string|max:2000',
+            'survey_questions_json' => 'nullable|string',
         ]);
 
+        $surveyQuestions = $this->parseSurveyQuestions((string) $request->input('survey_questions_json', ''));
+        if ($this->isSurveyMethodologyName((string) $validated['name']) && empty($surveyQuestions)) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'survey_questions_json' => 'Add at least one survey question when methodology name is Survey.',
+                ]);
+        }
+
+        $validated['metadata'] = $this->buildMethodologyMetadata(
+            (string) $validated['name'],
+            $request,
+            [],
+            $surveyQuestions
+        );
         $validated['is_active'] = $request->has('is_active');
         $validated['created_by'] = auth()->id();
+        $validated['updated_by'] = auth()->id();
 
         IndicatorMethodology::create($validated);
 
@@ -352,15 +439,59 @@ class MeConfigurationController extends Controller
 
     public function methodologiesUpdate(Request $request, IndicatorMethodology $methodology)
     {
+        $previousName = (string) $methodology->name;
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'steps' => 'nullable|string',
             'is_active' => 'nullable|boolean',
+            'survey_public_enabled' => 'nullable|boolean',
+            'survey_title' => 'nullable|string|max:255',
+            'survey_intro' => 'nullable|string|max:2000',
+            'survey_questions_json' => 'nullable|string',
         ]);
 
+        $surveyQuestions = $this->parseSurveyQuestions((string) $request->input('survey_questions_json', ''));
+        if ($this->isSurveyMethodologyName((string) $validated['name']) && empty($surveyQuestions)) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'survey_questions_json' => 'Add at least one survey question when methodology name is Survey.',
+                ]);
+        }
+
+        $validated['metadata'] = $this->buildMethodologyMetadata(
+            (string) $validated['name'],
+            $request,
+            (array) ($methodology->metadata ?? []),
+            $surveyQuestions
+        );
         $validated['is_active'] = $request->has('is_active');
+        $validated['updated_by'] = auth()->id();
         $methodology->update($validated);
+
+        $newName = (string) $validated['name'];
+        if (strtolower(trim($previousName)) !== strtolower(trim($newName))) {
+            Indicator::query()
+                ->whereRaw('LOWER(TRIM(methodology)) = ?', [strtolower(trim($previousName))])
+                ->update(['methodology' => $newName]);
+        }
+
+        $surveyMeta = (array) data_get($validated['metadata'], 'survey', []);
+        $surveyEnabled = (bool) ($surveyMeta['enabled'] ?? false);
+        $questionCount = collect($surveyMeta['questions'] ?? [])
+            ->filter(fn ($question) => is_array($question) && trim((string) ($question['label'] ?? '')) !== '')
+            ->count();
+
+        if (!$surveyEnabled || $questionCount === 0) {
+            IndicatorSurveyLink::query()
+                ->where('methodology_id', $methodology->id)
+                ->update([
+                    'is_active' => false,
+                    'updated_by' => auth()->id(),
+                ]);
+        }
 
         return redirect()->route('budget.me-configuration.methodologies.index')
             ->with('success', 'Methodology updated successfully');
@@ -371,5 +502,76 @@ class MeConfigurationController extends Controller
         $methodology->delete();
         return redirect()->route('budget.me-configuration.methodologies.index')
             ->with('success', 'Methodology deleted successfully');
+    }
+
+    protected function isSurveyMethodologyName(string $name): bool
+    {
+        return str_contains(strtolower(trim($name)), 'survey');
+    }
+
+    protected function buildMethodologyMetadata(
+        string $name,
+        Request $request,
+        array $existingMetadata = [],
+        array $surveyQuestions = []
+    ): array {
+        $metadata = $existingMetadata;
+
+        if (!$this->isSurveyMethodologyName($name)) {
+            unset($metadata['survey']);
+            return $metadata;
+        }
+
+        $defaultTitle = trim($name) !== '' ? trim($name) . ' Public Survey' : 'Public Survey';
+        $metadata['survey'] = [
+            'enabled' => $request->boolean('survey_public_enabled', true),
+            'title' => trim((string) $request->input('survey_title', $defaultTitle)),
+            'intro' => trim((string) $request->input('survey_intro', '')),
+            'questions' => $surveyQuestions,
+            'updated_at' => now()->toDateTimeString(),
+        ];
+
+        return $metadata;
+    }
+
+    protected function parseSurveyQuestions(string $rawJson): array
+    {
+        $decoded = json_decode($rawJson, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $allowedTypes = ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'checkbox'];
+
+        return collect($decoded)
+            ->map(function ($question) use ($allowedTypes) {
+                if (!is_array($question)) {
+                    return null;
+                }
+
+                $label = trim((string) ($question['label'] ?? ''));
+                $type = strtolower(trim((string) ($question['type'] ?? 'text')));
+                if ($label === '' || !in_array($type, $allowedTypes, true)) {
+                    return null;
+                }
+
+                $options = collect($question['options'] ?? [])
+                    ->filter(fn ($option) => is_scalar($option) && trim((string) $option) !== '')
+                    ->map(fn ($option) => trim((string) $option))
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return [
+                    'label' => $label,
+                    'type' => $type,
+                    'required' => (bool) ($question['required'] ?? false),
+                    'options' => in_array($type, ['select', 'radio', 'checkbox'], true) ? $options : [],
+                    'hint' => trim((string) ($question['hint'] ?? '')),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 }

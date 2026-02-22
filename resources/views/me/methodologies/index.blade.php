@@ -25,15 +25,31 @@
                     <tr>
                         <th class="ps-4">Name</th>
                         <th>Description</th>
+                        <th>Survey Engine</th>
                         <th>Status</th>
                         <th class="text-end pe-4">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($methodologies as $item)
+                        @php
+                            $surveyMeta = (array) data_get($item->metadata, 'survey', []);
+                            $surveyQuestionsCount = collect($surveyMeta['questions'] ?? [])
+                                ->filter(fn($question) => is_array($question) && trim((string) ($question['label'] ?? '')) !== '')
+                                ->count();
+                            $surveyEnabled = (bool) data_get($surveyMeta, 'enabled', false) && $surveyQuestionsCount > 0;
+                        @endphp
                         <tr>
                             <td class="ps-4 fw-semibold">{{ $item->name }}</td>
                             <td>{{ $item->description ?? '—' }}</td>
+                            <td>
+                                @if($surveyEnabled)
+                                    <span class="badge bg-primary">Enabled</span>
+                                    <small class="text-muted d-block">{{ $surveyQuestionsCount }} question{{ $surveyQuestionsCount === 1 ? '' : 's' }}</small>
+                                @else
+                                    <span class="text-muted">Not Configured</span>
+                                @endif
+                            </td>
                             <td><span class="badge {{ $item->is_active ? 'bg-success' : 'bg-secondary' }}">{{ $item->is_active ? 'Active' : 'Inactive' }}</span></td>
                             <td class="text-end pe-4">
                                 <div class="d-inline-flex gap-1">
@@ -46,7 +62,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="text-center text-muted py-4">No methodologies found.</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted py-4">No methodologies found.</td></tr>
                     @endforelse
                 </tbody>
             </table>

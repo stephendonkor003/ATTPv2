@@ -290,12 +290,12 @@
         @endif
 
         {{-- ===== PROCUREMENT DETAILS ===== --}}
-        <div class="card">
-            <h3>Procurement Details</h3>
+            <div class="card">
+                <h3>Procurement Details</h3>
 
-            <div style="margin-top:1rem; line-height:1.7;">
-                {!! nl2br(e($procurement->description ?? '')) !!}
-            </div>
+                <div style="margin-top:1rem; line-height:1.7;">
+                    {!! nl2br(e(strip_tags($procurement->description ?? ''))) !!}
+                </div>
 
 
             {{-- <div class="meta-grid">

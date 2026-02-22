@@ -5,17 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Sector;
 use App\Models\Program;
 use App\Models\ProgramFunding;
-use App\Models\Indicator;
-use App\Models\IndicatorLevel;
-use App\Models\ReportingFrequency;
-use App\Models\IndicatorUnit;
-use App\Models\IndicatorMethodology;
-use App\Models\IndicatorDefinition;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
-use App\Jobs\IndicatorReminderJob;
 
 class ProgramController extends Controller
 {
@@ -39,43 +31,6 @@ class ProgramController extends Controller
 
         $this->middleware('permission:program.delete')
             ->only(['destroy']);
-    }
-
-    protected function methodologyLabel($id): ?string
-    {
-        if (!$id) {
-            return null;
-        }
-        return IndicatorMethodology::find($id)?->name;
-    }
-
-    protected function definitionLabel($id, $fallback = null): ?string
-    {
-        if ($id) {
-            return IndicatorDefinition::find($id)?->name;
-        }
-        return $fallback;
-    }
-
-    protected function packResponsible(array $userIds): ?string
-    {
-        $userIds = array_filter($userIds);
-        return empty($userIds) ? null : json_encode(array_values($userIds));
-    }
-
-    protected function unpackResponsible(?string $json): array
-    {
-        if (!$json) return [];
-        $decoded = json_decode($json, true);
-        return is_array($decoded) ? $decoded : [];
-    }
-
-    protected function packPrimarySource(array $data): ?string
-    {
-        $type = $data['primary_source_type'] ?? null;
-        $detail = $data['primary_source_detail'] ?? null;
-        if (!$type && !$detail) return null;
-        return trim(($type ?: 'manual') . ':' . ($detail ?? ''));
     }
 
 
@@ -109,26 +64,10 @@ class ProgramController extends Controller
         $approvedPrograms = $this->approvedProgramNames();
         $approvedProgramFunding = $this->approvedProgramFundingMap();
 
-        // M&E Configuration data
-        $indicatorLevels = IndicatorLevel::active()->ordered()->get();
-        $reportingFrequencies = ReportingFrequency::active()->ordered()->get();
-        $indicatorUnits = IndicatorUnit::active()->ordered()->get();
-        $indicatorMethodologies = IndicatorMethodology::orderBy('name')->get();
-        $indicatorDefinitions = IndicatorDefinition::orderBy('name')->get();
-        $responsibleUsers = User::where('governance_node_id', Auth::user()?->governance_node_id)
-            ->orderBy('name')
-            ->get();
-
         return view('budget.programs.create', compact(
             'sectors',
             'approvedPrograms',
-            'approvedProgramFunding',
-            'indicatorLevels',
-            'reportingFrequencies',
-            'indicatorUnits',
-            'indicatorMethodologies',
-            'indicatorDefinitions',
-            'responsibleUsers'
+            'approvedProgramFunding'
         ));
     }
 
@@ -148,22 +87,6 @@ class ProgramController extends Controller
             'start_year'  => 'required|integer|min:1900|max:2100',
             'end_year'    => 'required|integer|min:1900|max:2100|gte:start_year',
             'description' => 'nullable|string',
-            'indicators' => 'nullable|array',
-            'indicators.*.name' => 'required_with:indicators|string|max:255',
-            'indicators.*.baseline_year' => 'nullable|string|max:50',
-            'indicators.*.baseline_type' => 'nullable|in:year,month,quarter,week,day',
-            'indicators.*.baseline_value' => 'nullable|numeric',
-            'indicators.*.indicator_level_id' => 'nullable|exists:me_indicator_levels,id',
-            'indicators.*.methodology_id' => 'nullable|exists:indicator_methodologies,id',
-            'indicators.*.notes' => 'nullable|string',
-            'indicators.*.responsible_user_ids' => 'nullable|array',
-            'indicators.*.responsible_user_ids.*' => 'exists:users,id',
-            'indicators.*.frequency_of_reporting_id' => 'nullable|exists:me_reporting_frequencies,id',
-            'indicators.*.unit_id' => 'nullable|exists:me_indicator_units,id',
-            'indicators.*.primary_source_type' => 'nullable|in:external,file,manual',
-            'indicators.*.primary_source_detail' => 'nullable|string|max:255',
-            'indicators.*.definition_id' => 'nullable|exists:indicator_definitions,id',
-            'indicators.*.definitions' => 'nullable|string',
         ]);
 
         DB::beginTransaction();
@@ -217,35 +140,6 @@ class ProgramController extends Controller
                 'governance_node_id' => $validated['governance_node_id'],
             ]);
 
-            // Persist indicators if provided
-            if (!empty($validated['indicators'])) {
-                foreach ($validated['indicators'] as $ind) {
-                    try {
-                        $indicator = Indicator::create([
-                            'indicatorable_type' => Program::class,
-                            'indicatorable_id' => $program->id,
-                            'name' => $ind['name'] ?? null,
-                            'baseline_year' => $ind['baseline_year'] ?? null,
-                            'baseline_type' => $ind['baseline_type'] ?? 'year',
-                            'baseline_value' => $ind['baseline_value'] ?? null,
-                            'indicator_level_id' => $ind['indicator_level_id'] ?? null,
-                            'methodology' => $this->methodologyLabel($ind['methodology_id'] ?? null),
-                            'notes' => $ind['notes'] ?? null,
-                            'responsible_party' => $this->packResponsible($ind['responsible_user_ids'] ?? []),
-                            'frequency_of_reporting_id' => $ind['frequency_of_reporting_id'] ?? null,
-                            'unit_id' => $ind['unit_id'] ?? null,
-                            'primary_source' => $this->packPrimarySource($ind),
-                            'definitions' => $this->definitionLabel($ind['definition_id'] ?? null, $ind['definitions'] ?? null),
-                            'created_by' => auth()->id(),
-                        ]);
-                        // queue reminder email (initial dispatch)
-                        IndicatorReminderJob::dispatch($indicator->id);
-                    } catch (\Throwable $e) {
-                        // swallow per-indicator errors to avoid blocking whole save
-                    }
-                }
-            }
-
             DB::commit();
 
             return redirect()
@@ -287,29 +181,12 @@ class ProgramController extends Controller
         $sectors = $this->availableSectors();
         $approvedPrograms = $this->approvedProgramNames($program->name);
         $approvedProgramFunding = $this->approvedProgramFundingMap($program->name, $program);
-        $program->load('indicators');
-
-        // M&E Configuration data
-        $indicatorLevels = IndicatorLevel::active()->ordered()->get();
-        $reportingFrequencies = ReportingFrequency::active()->ordered()->get();
-        $indicatorUnits = IndicatorUnit::active()->ordered()->get();
-        $indicatorMethodologies = IndicatorMethodology::orderBy('name')->get();
-        $indicatorDefinitions = IndicatorDefinition::orderBy('name')->get();
-        $responsibleUsers = User::where('governance_node_id', Auth::user()?->governance_node_id)
-            ->orderBy('name')
-            ->get();
 
         return view('budget.programs.edit', compact(
             'program',
             'sectors',
             'approvedPrograms',
-            'approvedProgramFunding',
-            'indicatorLevels',
-            'reportingFrequencies',
-            'indicatorUnits',
-            'indicatorMethodologies',
-            'indicatorDefinitions',
-            'responsibleUsers'
+            'approvedProgramFunding'
         ));
     }
 
@@ -329,23 +206,6 @@ class ProgramController extends Controller
             'start_year'  => 'required|integer|min:1900|max:2100',
             'end_year'    => 'required|integer|min:1900|max:2100|gte:start_year',
             'description' => 'nullable|string',
-            'indicators' => 'nullable|array',
-            'indicators.*.id' => 'nullable|exists:myb_indicators,id',
-            'indicators.*.name' => 'required_with:indicators|string|max:255',
-            'indicators.*.baseline_year' => 'nullable|string|max:50',
-            'indicators.*.baseline_type' => 'nullable|in:year,month,quarter,week,day',
-            'indicators.*.baseline_value' => 'nullable|numeric',
-            'indicators.*.indicator_level_id' => 'nullable|exists:me_indicator_levels,id',
-            'indicators.*.methodology_id' => 'nullable|exists:indicator_methodologies,id',
-            'indicators.*.notes' => 'nullable|string',
-            'indicators.*.responsible_user_ids' => 'nullable|array',
-            'indicators.*.responsible_user_ids.*' => 'exists:users,id',
-            'indicators.*.frequency_of_reporting_id' => 'nullable|exists:me_reporting_frequencies,id',
-            'indicators.*.unit_id' => 'nullable|exists:me_indicator_units,id',
-            'indicators.*.primary_source_type' => 'nullable|in:external,file,manual',
-            'indicators.*.primary_source_detail' => 'nullable|string|max:255',
-            'indicators.*.definition_id' => 'nullable|exists:indicator_definitions,id',
-            'indicators.*.definitions' => 'nullable|string',
         ]);
 
         $this->assertSectorInScope((int) $validated['sector_id']);
@@ -392,37 +252,6 @@ class ProgramController extends Controller
             'total_years' => $validated['total_years'],
             'updated_by' => $validated['updated_by'],
         ]);
-
-        // Handle indicators update: delete old ones and add new ones
-        if (isset($validated['indicators'])) {
-            $program->indicators()->delete();
-            if (!empty($validated['indicators'])) {
-                foreach ($validated['indicators'] as $ind) {
-                    try {
-                        $indicator = Indicator::create([
-                            'indicatorable_type' => Program::class,
-                            'indicatorable_id' => $program->id,
-                            'name' => $ind['name'] ?? null,
-                            'baseline_year' => $ind['baseline_year'] ?? null,
-                            'baseline_type' => $ind['baseline_type'] ?? 'year',
-                            'baseline_value' => $ind['baseline_value'] ?? null,
-                            'indicator_level_id' => $ind['indicator_level_id'] ?? null,
-                            'methodology' => $this->methodologyLabel($ind['methodology_id'] ?? null),
-                            'notes' => $ind['notes'] ?? null,
-                            'responsible_party' => $this->packResponsible($ind['responsible_user_ids'] ?? []),
-                            'frequency_of_reporting_id' => $ind['frequency_of_reporting_id'] ?? null,
-                            'unit_id' => $ind['unit_id'] ?? null,
-                            'primary_source' => $this->packPrimarySource($ind),
-                            'definitions' => $this->definitionLabel($ind['definition_id'] ?? null, $ind['definitions'] ?? null),
-                            'created_by' => auth()->id(),
-                        ]);
-                        IndicatorReminderJob::dispatch($indicator->id);
-                    } catch (\Throwable $e) {
-                        // swallow per-indicator errors
-                    }
-                }
-            }
-        }
 
         return redirect()
             ->route('budget.programs.index')

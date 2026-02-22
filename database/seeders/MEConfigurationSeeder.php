@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 namespace Database\Seeders;
 
@@ -35,10 +35,17 @@ class MEConfigurationSeeder extends Seeder
         }
 
         $frequencies = [
-            ['name' => 'Monthly', 'code' => 'MONTHLY', 'frequency_in_days' => 30],
-            ['name' => 'Quarterly', 'code' => 'QUARTERLY', 'frequency_in_days' => 90],
-            ['name' => 'Bi-Annual', 'code' => 'BI_ANNUAL', 'frequency_in_days' => 182],
-            ['name' => 'Annual', 'code' => 'ANNUAL', 'frequency_in_days' => 365],
+            ['name' => 'Second', 'code' => 'SECOND', 'interval_unit' => 'second', 'interval_value' => 1, 'frequency_in_days' => null],
+            ['name' => 'Minute', 'code' => 'MINUTE', 'interval_unit' => 'minute', 'interval_value' => 1, 'frequency_in_days' => null],
+            ['name' => 'Hour', 'code' => 'HOUR', 'interval_unit' => 'hour', 'interval_value' => 1, 'frequency_in_days' => null],
+            ['name' => 'Day', 'code' => 'DAY', 'interval_unit' => 'day', 'interval_value' => 1, 'frequency_in_days' => 1],
+            ['name' => 'Week', 'code' => 'WEEK', 'interval_unit' => 'week', 'interval_value' => 1, 'frequency_in_days' => 7],
+            ['name' => 'Month', 'code' => 'MONTH', 'interval_unit' => 'month', 'interval_value' => 1, 'frequency_in_days' => 30],
+            ['name' => 'Quarterly', 'code' => 'QUARTERLY', 'interval_unit' => 'quarterly', 'interval_value' => 1, 'frequency_in_days' => 90],
+            ['name' => 'Year', 'code' => 'YEAR', 'interval_unit' => 'year', 'interval_value' => 1, 'frequency_in_days' => 365],
+            ['name' => 'Annual', 'code' => 'ANNUAL', 'interval_unit' => 'annual', 'interval_value' => 1, 'frequency_in_days' => 365],
+            ['name' => 'Quinquennial', 'code' => 'QUINQUENNIAL', 'interval_unit' => 'quinquennial', 'interval_value' => 1, 'frequency_in_days' => 1825],
+            ['name' => 'Once', 'code' => 'ONCE', 'interval_unit' => 'once', 'interval_value' => null, 'frequency_in_days' => null],
         ];
 
         foreach ($frequencies as $order => $freq) {
@@ -46,6 +53,8 @@ class MEConfigurationSeeder extends Seeder
                 ['code' => $freq['code']],
                 [
                     'name' => $freq['name'],
+                    'interval_unit' => $freq['interval_unit'],
+                    'interval_value' => $freq['interval_value'],
                     'frequency_in_days' => $freq['frequency_in_days'],
                     'sort_order' => $order,
                     'is_active' => true,

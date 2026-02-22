@@ -1,399 +1,317 @@
 @extends('layouts.app')
-
 @section('title', 'Dashboard')
 
+@push('styles')
+    <style>
+        .dash-hero {
+            background-image:
+                linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(14, 165, 233, 0.78) 60%, rgba(16, 185, 129, 0.62) 100%),
+                url('https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=1600&q=80');
+            background-size: cover;
+            background-position: center;
+            color: #f8fafc;
+            border-radius: 18px;
+            box-shadow: 0 16px 36px rgba(15, 23, 42, 0.25);
+            overflow: hidden;
+        }
+
+        .dash-hero h4 {
+            color: #f8fafc;
+        }
+
+        .dash-hero p {
+            color: rgba(248, 250, 252, 0.9);
+        }
+
+        .dash-hero .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.18);
+            color: #e2f3ff;
+            font-weight: 600;
+            font-size: 0.82rem;
+        }
+
+        .module-card {
+            position: relative;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+            overflow: hidden;
+        }
+
+        .module-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.35), transparent 40%),
+                radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.22), transparent 35%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .module-card:hover::before {
+            opacity: 1;
+        }
+
+        .module-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+        }
+
+        .module-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #0f172a;
+            font-size: 1.2rem;
+            background: #e2e8f0;
+        }
+
+        .quick-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            font-weight: 600;
+            color: #0f172a;
+            text-decoration: none;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .quick-link:hover {
+            background: #e0f2fe;
+            border-color: #bae6fd;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: #0ea5e9;
+            color: #f8fafc;
+            font-weight: 600;
+            font-size: 0.86rem;
+        }
+
+        .subtext {
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+    </style>
+@endpush
+
 @section('content')
+    @php
+        $modules = [
+            [
+                'title' => 'Governance',
+                'desc' => 'Configure governance structure and funding partners.',
+                'icon' => 'shield',
+                'color' => '#0ea5e9',
+                'links' => [
+                    ['label' => 'Setup', 'route' => 'finance.governance.index'],
+                    ['label' => 'Funding Partners', 'route' => 'finance.funders.index'],
+                ],
+            ],
+            [
+                'title' => 'Budget Structure',
+                'desc' => 'Manage sectors, programs, projects, activities, and sub-activities.',
+                'icon' => 'grid',
+                'color' => '#22c55e',
+                'links' => [
+                    ['label' => 'Programs', 'route' => 'budget.programs.index'],
+                    ['label' => 'Projects', 'route' => 'budget.projects.index'],
+                ],
+            ],
+            [
+                'title' => 'Budget Execution',
+                'desc' => 'Commitments, purchase requests, and resource tracking.',
+                'icon' => 'activity',
+                'color' => '#f59e0b',
+                'links' => [
+                    ['label' => 'Commitments', 'route' => 'finance.commitments.index'],
+                    ['label' => 'Purchase Requests', 'route' => 'finance.purchase-requests.index'],
+                ],
+            ],
+            [
+                'title' => 'Reports & Oversight',
+                'desc' => 'Dashboards, summaries, and executive reporting.',
+                'icon' => 'bar-chart-2',
+                'color' => '#6366f1',
+                'links' => [
+                    ['label' => 'Reports', 'route' => 'budget.reports.index'],
+                    ['label' => 'Summary', 'route' => 'budget.summary.dashboard'],
+                ],
+            ],
+            [
+                'title' => 'Monitoring & Evaluation',
+                'desc' => 'Central hub for indicators, frequencies, units, and definitions.',
+                'icon' => 'target',
+                'color' => '#0ea5e9',
+                'links' => [
+                    ['label' => 'Indicators', 'route' => 'budget.me.indicators.index'],
+                    ['label' => 'Frequencies', 'route' => 'budget.me-configuration.frequencies.index'],
+                ],
+            ],
+            [
+                'title' => 'Human Resource',
+                'desc' => 'Positions, recruitment, and HR analytics.',
+                'icon' => 'users',
+                'color' => '#10b981',
+                'links' => [
+                    ['label' => 'Positions', 'route' => 'hr.positions.index'],
+                    ['label' => 'Recruitment', 'route' => 'hr.vacancies.index'],
+                ],
+            ],
+            [
+                'title' => 'Vendors Management',
+                'desc' => 'Vendor directory, categories, and negotiations.',
+                'icon' => 'briefcase',
+                'color' => '#0f172a',
+                'links' => [
+                    ['label' => 'Vendors', 'route' => 'vendors.index'],
+                    ['label' => 'Categories', 'route' => 'vendors.categories.index'],
+                ],
+            ],
+            [
+                'title' => 'Prescreening Engine',
+                'desc' => 'Templates, assignments, and submissions oversight.',
+                'icon' => 'check-square',
+                'color' => '#ec4899',
+                'links' => [
+                    ['label' => 'Templates', 'route' => 'prescreening.templates.index'],
+                    ['label' => 'Submissions', 'route' => 'prescreening.submissions.index'],
+                ],
+            ],
+            [
+                'title' => 'Data Source & Cleaning',
+                'desc' => 'Bridge templates, sync status, and raw data review.',
+                'icon' => 'database',
+                'color' => '#0ea5e9',
+                'links' => [
+                    ['label' => 'Data Sources', 'route' => 'budget.me.data-sources.index'],
+                ],
+            ],
+            [
+                'title' => 'Site Visits',
+                'desc' => 'Plan, approve, and report on site engagements.',
+                'icon' => 'map-pin',
+                'color' => '#22d3ee',
+                'links' => [
+                    ['label' => 'All Visits', 'route' => 'site-visits.index'],
+                ],
+            ],
+            [
+                'title' => 'Audit',
+                'desc' => 'System audit trails and security visibility.',
+                'icon' => 'activity',
+                'color' => '#f97316',
+                'links' => [
+                    ['label' => 'Audit Log', 'route' => 'system.audit.index'],
+                ],
+            ],
+            [
+                'title' => 'User Management',
+                'desc' => 'Manage users, roles, and permissions.',
+                'icon' => 'user-check',
+                'color' => '#10b981',
+                'links' => [
+                    ['label' => 'Users', 'route' => 'system.users.index'],
+                    ['label' => 'Roles', 'route' => 'system.roles.index'],
+                ],
+            ],
+        ];
+    @endphp
+
     <main class="nxl-container">
         <div class="nxl-content">
-            <!-- Page Header -->
-            <div class="page-header">
-                <div class="page-header-left d-flex align-items-center">
-                    <div class="page-header-title">
-                        <h5 class="m-b-10">ATTP Portal Dashboard</h5>
-                    </div>
-                </div>
-                <div class="page-header-right ms-auto text-end">
-                    <div class="d-flex align-items-center">
-                        <div class="me-3 text-muted small">
-                            Welcome, <strong>{{ Auth::user()->name }}</strong>
+
+            <div class="card dash-hero mb-4">
+                <div class="card-body p-4 d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-3">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="chip"><i class="feather-cpu"></i> ATTP Portal</span>
+                            <span class="chip"><i class="feather-activity"></i> Operational Hub</span>
                         </div>
+                        <h4 class="mb-2">Enterprise Operations & M&E Command Center</h4>
+                        <p class="mb-0" style="color: rgba(248, 250, 252, 0.88);">
+                            Navigate core modules, launch quick actions, and keep oversight on procurement,
+                            budgeting, M&E, data sources, and governance—now in one consolidated view.
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <div class="pill mb-2">
+                            <i class="feather-user"></i>
+                            <span>Welcome, {{ Auth::user()->name }}</span>
+                        </div>
+                        <div class="subtext text-white-50">Role: {{ ucfirst(str_replace('_', ' ', Auth::user()->user_type ?? 'user')) }}</div>
                     </div>
                 </div>
             </div>
 
-            <br>
-
-            {{-- Admin Dashboard --}}
-            @if (Auth::user()->user_type === 'admin')
-                <!-- Admin cards + charts -->
-                <div class="row g-3 mb-4">
-                    <div class="col-md-4">
-                        <div class="card text-center shadow-sm">
-                            <div class="card-body">
-                                <i class="feather-users fs-3 text-primary"></i>
-                                <h6 class="mt-3 fw-bold">Total Applicants</h6>
-                                <p class="fs-5">{{ $totalApplicants }}</p>
-                            </div>
-                        </div>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-primary-subtle text-primary fw-semibold">Quick Links</span>
+                        <span class="text-muted small">Jump to common actions</span>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card text-center shadow-sm">
-                            <div class="card-body">
-                                <i class="feather-globe fs-3 text-info"></i>
-                                <h6 class="mt-3 fw-bold">Countries Participating</h6>
-                                <p class="fs-5">{{ $countriesCount }}</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card text-center shadow-sm">
-                            <div class="card-body">
-                                <i class="feather-check-circle fs-3 text-success"></i>
-                                <h6 class="mt-3 fw-bold">Reviewed Applications</h6>
-                                <p class="fs-5">{{ $reviewedApplicants }}</p>
-                            </div>
-                        </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="quick-link" href="{{ route('budget.projects.create') }}"><i class="feather-plus-circle text-primary"></i>New Project</a>
+                        <a class="quick-link" href="{{ route('budget.me.indicators.index') }}"><i class="feather-target text-danger"></i>Indicators Hub</a>
+                        <a class="quick-link" href="{{ route('budget.me-configuration.indicator-levels.index') }}"><i class="feather-layers text-success"></i>Indicator Levels</a>
+                        <a class="quick-link" href="{{ route('budget.me-configuration.frequencies.index') }}"><i class="feather-clock text-primary"></i>Frequencies</a>
+                        <a class="quick-link" href="{{ route('budget.me-configuration.units.index') }}"><i class="feather-sliders text-warning"></i>Indicator Units</a>
+                        <a class="quick-link" href="{{ route('budget.me.data-sources.index') }}"><i class="feather-database text-success"></i>Data Sources</a>
+                        <a class="quick-link" href="{{ route('budget.me.indicators.report.excel') }}"><i class="feather-download text-info"></i>M&E Report (Excel)</a>
+                        <a class="quick-link" href="{{ route('budget.me.indicators.report.pdf') }}"><i class="feather-file-text text-danger"></i>M&E Report (PDF)</a>
+                        <a class="quick-link" href="{{ route('vendors.index') }}"><i class="feather-briefcase text-warning"></i>Vendors</a>
+                        <a class="quick-link" href="{{ route('system.users.index') }}"><i class="feather-users text-info"></i>Users</a>
                     </div>
                 </div>
+            </div>
 
-                <!-- Charts -->
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h6 class="mb-0">Applications Trend (Last 7 Days)</h6>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="applicationsChart" height="100"></canvas>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0">Applicants by Country</h6>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="countryChart" height="100"></canvas>
-                    </div>
-                </div>
-
-                {{-- Applicant Dashboard --}}
-            @elseif(Auth::user()->user_type === 'applicant')
-                <div class="card shadow-sm">
-                    <div class="card-body">
-                        <h5 class="fw-bold text-primary">Welcome to the Think Tank Initiative</h5>
-                        <p>
-                            The African Think Tank Project is dedicated to empowering policy research organizations
-                            and innovation hubs across Africa. As an applicant, you're part of a growing network of
-                            institutions committed to shaping Africa’s development agenda through evidence-based research,
-                            collaboration, and innovation.
-                        </p>
-                        <p class="text-danger fw-semibold">
-                            Please note: You have until <strong>August 22, 2025</strong> to edit or update your application.
-                        </p>
-                        <div class="mt-3">
-                            <h6 class="text-muted">Time remaining:</h6>
-                            <div id="countdown" style="font-size: 1.5rem; font-weight: bold;"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <script>
-                    const deadline = new Date("August 22, 2025 23:59:59").getTime();
-                    const timer = setInterval(function() {
-                        const now = new Date().getTime();
-                        const distance = deadline - now;
-
-                        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-                        if (distance < 0) {
-                            clearInterval(timer);
-                            document.getElementById("countdown").innerHTML = "Deadline Passed";
-                        } else {
-                            document.getElementById("countdown").innerHTML =
-                                `${days}d ${hours}h ${minutes}m ${seconds}s`;
-                        }
-                    }, 1000);
-                </script>
-
-                {{-- Financial Evaluator Dashboard --}}
-                {{-- Financial Evaluator Dashboard --}}
-                {{-- Financial Evaluator Dashboard --}}
-            @elseif(Auth::user()->user_type === 'financial_evaluator' || Auth::user()->user_type === 'evaluator')
-                <style>
-                    /* Same height for video & images */
-                    #africaVideo,
-                    #aspirationCarousel .carousel-img {
-                        height: 300px;
-                        /* adjust height as needed */
-                        object-fit: cover;
-                        /* crop instead of stretch */
-                        border-radius: 8px;
-                    }
-
-                    /* Dark overlay */
-                    .carousel-overlay {
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background: rgba(0, 0, 0, 0.5);
-                        /* semi-dark layer */
-                        border-radius: 8px;
-                    }
-
-                    /* Centered caption text */
-                    .carousel-caption-center {
-                        position: absolute;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        font-size: 1rem;
-                        font-weight: bold;
-                        color: #fff;
-                        text-align: center;
-                        padding: 0 10px;
-                        text-shadow: 0 2px 5px rgba(0, 0, 0, 0.8);
-                    }
-                </style>
-
-                <div class="row g-3 mb-4">
-                    <!-- Africa Aspirations Video -->
-                    <div class="col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-body">
-                                <h6 class="fw-bold text-success">The Africa We Want</h6>
-                                <video id="africaVideo" class="w-100 rounded mb-2" autoplay muted loop playsinline controls>
-                                    <source src="{{ asset('assets/images/Agenda2063.mp4') }}" type="video/mp4">
-                                    Your browser does not support the video tag.
-                                </video>
-                                <p class="small text-muted">
-                                    This platform empowers Africa’s journey towards <strong>Agenda 2063</strong> —
-                                    <em>The Africa We Want</em>.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Image Carousel -->
-                    <div class="col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-body">
-                                <h6 class="fw-bold text-primary text-center">Agenda 2063 Aspirations</h6>
-
-                                <div id="aspirationCarousel" class="carousel slide" data-bs-ride="carousel">
-                                    <div class="carousel-inner">
-                                        <div class="carousel-item active position-relative">
-                                            <img src="{{ asset('assets/images/Aspiration1.png') }}"
-                                                class="d-block w-100 carousel-img" alt="Aspiration 1">
-                                            <div class="carousel-overlay"></div>
-                                            <div class="carousel-caption-center">
-                                                A prosperous Africa based on inclusive growth and sustainable development.
-                                            </div>
-                                        </div>
-                                        <div class="carousel-item position-relative">
-                                            <img src="{{ asset('assets/images/Aspiration2.png') }}"
-                                                class="d-block w-100 carousel-img" alt="Aspiration 2">
-                                            <div class="carousel-overlay"></div>
-                                            <div class="carousel-caption-center">
-                                                An integrated continent, politically united, and based on the ideals of
-                                                Pan-Africanism.
-                                            </div>
-                                        </div>
-                                        <div class="carousel-item position-relative">
-                                            <img src="{{ asset('assets/images/Aspiration3.png') }}"
-                                                class="d-block w-100 carousel-img" alt="Aspiration 3">
-                                            <div class="carousel-overlay"></div>
-                                            <div class="carousel-caption-center">
-                                                An Africa of good governance, democracy, respect for human rights, justice
-                                                and the rule of law.
-                                            </div>
-                                        </div>
-                                        <div class="carousel-item position-relative">
-                                            <img src="{{ asset('assets/images/Aspiration4.png') }}"
-                                                class="d-block w-100 carousel-img" alt="Aspiration 4">
-                                            <div class="carousel-overlay"></div>
-                                            <div class="carousel-caption-center">
-                                                A peaceful and secure Africa.
-                                            </div>
-                                        </div>
-                                        <div class="carousel-item position-relative">
-                                            <img src="{{ asset('assets/images/Aspiration5.png') }}"
-                                                class="d-block w-100 carousel-img" alt="Aspiration 5">
-                                            <div class="carousel-overlay"></div>
-                                            <div class="carousel-caption-center">
-                                                An Africa with a strong cultural identity, common heritage, values and
-                                                ethics.
-                                            </div>
-                                        </div>
-                                        <div class="carousel-item position-relative">
-                                            <img src="{{ asset('assets/images/Aspiration6.png') }}"
-                                                class="d-block w-100 carousel-img" alt="Aspiration 6">
-                                            <div class="carousel-overlay"></div>
-                                            <div class="carousel-caption-center">
-                                                An Africa whose development is people-driven, especially by its women and
-                                                youth.
-                                            </div>
-                                        </div>
-                                        <div class="carousel-item position-relative">
-                                            <img src="{{ asset('assets/images/Aspiration7.png') }}"
-                                                class="d-block w-100 carousel-img" alt="Aspiration 7">
-                                            <div class="carousel-overlay"></div>
-                                            <div class="carousel-caption-center">
-                                                Africa as a strong, united, resilient and influential global player and
-                                                partner.
-                                            </div>
-                                        </div>
+            <div class="row g-3">
+                @foreach ($modules as $module)
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="card module-card h-100"
+                            style="background: linear-gradient(150deg, {{ $module['color'] }}1a 0%, #ffffff 68%); border-color: {{ $module['color'] }}2e;">
+                            <div class="card-body d-flex flex-column gap-3">
+                                <div class="d-flex align-items-start gap-3">
+                                    <span class="module-icon"
+                                        style="background: linear-gradient(145deg, {{ $module['color'] }}2e 0%, {{ $module['color'] }}4d 100%); color: #0f172a;">
+                                        <i class="feather-{{ $module['icon'] }}"></i>
+                                    </span>
+                                    <div>
+                                        <h6 class="mb-1">{{ $module['title'] }}</h6>
+                                        <p class="subtext mb-0">{{ $module['desc'] }}</p>
                                     </div>
-
-                                    <!-- Controls -->
-                                    <button class="carousel-control-prev" type="button"
-                                        data-bs-target="#aspirationCarousel" data-bs-slide="prev">
-                                        <span class="carousel-control-prev-icon"></span>
-                                    </button>
-                                    <button class="carousel-control-next" type="button"
-                                        data-bs-target="#aspirationCarousel" data-bs-slide="next">
-                                        <span class="carousel-control-next-icon"></span>
-                                    </button>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    @foreach ($module['links'] as $link)
+                                        <a class="quick-link" href="{{ route($link['route']) }}">
+                                            <i class="feather-arrow-up-right text-primary"></i>{{ $link['label'] }}
+                                        </a>
+                                    @endforeach
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- Typing Effect -->
-                <div class="card shadow-sm mt-4">
-                    <div class="card-body text-center">
-                        <h6 class="fw-bold text-primary">Aspirations of Agenda 2063</h6>
-                        <p id="aspirationText" class="fs-5 fw-semibold text-dark"></p>
-                    </div>
-                </div>
-
-                <script>
-                    document.addEventListener("DOMContentLoaded", function() {
-                        const aspirations = [
-                            "A prosperous Africa based on inclusive growth and sustainable development.",
-                            "An integrated continent, politically united, and based on the ideals of Pan-Africanism.",
-                            "An Africa of good governance, democracy, respect for human rights, justice and the rule of law.",
-                            "A peaceful and secure Africa.",
-                            "An Africa with a strong cultural identity, common heritage, values and ethics.",
-                            "An Africa whose development is people-driven, especially by its women and youth.",
-                            "Africa as a strong, united, resilient and influential global player and partner."
-                        ];
-
-                        let index = 0;
-                        let charIndex = 0;
-                        const typingSpeed = 60;
-                        const pauseBetween = 2000;
-                        const element = document.getElementById("aspirationText");
-
-                        function typeWriter() {
-                            if (charIndex < aspirations[index].length) {
-                                element.textContent += aspirations[index].charAt(charIndex);
-                                charIndex++;
-                                setTimeout(typeWriter, typingSpeed);
-                            } else {
-                                setTimeout(() => {
-                                    element.textContent = "";
-                                    charIndex = 0;
-                                    index = (index + 1) % aspirations.length;
-                                    typeWriter();
-                                }, pauseBetween);
-                            }
-                        }
-
-                        typeWriter();
-                    });
-                </script>
-            @endif
-
-
-
+                @endforeach
+            </div>
 
         </div>
     </main>
-
-    {{-- Admin-only charts --}}
-    @if (Auth::user()->user_type === 'admin')
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script>
-            const ctx = document.getElementById('applicationsChart').getContext('2d');
-            const chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: {!! json_encode($applicationDates) !!},
-                    datasets: [{
-                        label: 'Applications',
-                        data: {!! json_encode($applicationCounts) !!},
-                        borderColor: '#3e95cd',
-                        backgroundColor: 'rgba(62, 149, 205, 0.4)',
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false
-                        }
-                    },
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Date'
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'No. of Applications'
-                            },
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-
-            const ctx2 = document.getElementById('countryChart').getContext('2d');
-            const chart2 = new Chart(ctx2, {
-                type: 'bar',
-                data: {
-                    labels: {!! json_encode(\App\Models\Applicant::select('country')->groupBy('country')->pluck('country')) !!},
-                    datasets: [{
-                        label: 'Applicants',
-                        data: {!! json_encode(\App\Models\Applicant::selectRaw('count(*) as count')->groupBy('country')->pluck('count')) !!},
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                        borderColor: '#4bc0c0',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Applicants'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Country'
-                            }
-                        }
-                    }
-                }
-            });
-        </script>
-    @endif
 @endsection

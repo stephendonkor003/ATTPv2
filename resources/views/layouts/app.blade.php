@@ -81,6 +81,135 @@
         body.modal-open .main-wrapper {
             filter: none !important;
         }
+
+        /* Header info chips */
+        .attp-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #0ea5e9 0%, #10b981 100%);
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 0.78rem;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+            border: 1px solid rgba(15, 23, 42, 0.06);
+        }
+
+        .attp-chip.muted {
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        .attp-chip .label {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        .attp-chip i {
+            color: #0f172a;
+        }
+
+        /* Unified Data Source-style header for all pages using .page-header */
+        .content .page-header {
+            position: relative !important;
+            top: auto !important;
+            right: auto !important;
+            left: auto !important;
+            min-height: 0 !important;
+            width: 100% !important;
+            border: 0 !important;
+            border-radius: 16px !important;
+            padding: 1rem 1.15rem !important;
+            margin: 0 0 1rem 0 !important;
+            background: linear-gradient(130deg, #0f172a 0%, #0f766e 55%, #0ea5e9 100%) !important;
+            color: #f8fafc !important;
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.2) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 0.75rem !important;
+            flex-wrap: wrap !important;
+        }
+
+        .content .page-header .page-header-left,
+        .content .page-header .page-header-right,
+        .content .page-header .page-header-title,
+        .content .page-header .page-block {
+            color: #f8fafc !important;
+            width: auto !important;
+            max-width: 100%;
+        }
+
+        .content .page-header h1,
+        .content .page-header h2,
+        .content .page-header h3,
+        .content .page-header h4,
+        .content .page-header h5,
+        .content .page-header h6 {
+            color: #f8fafc !important;
+            margin-bottom: 0 !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.01em;
+            border-right: 0 !important;
+            padding-right: 0 !important;
+            margin-right: 0 !important;
+        }
+
+        .content .page-header p,
+        .content .page-header small,
+        .content .page-header .small,
+        .content .page-header .text-muted,
+        .content .page-header .subtitle,
+        .content .page-header .page-header-subtitle {
+            color: rgba(248, 250, 252, 0.9) !important;
+        }
+
+        .content .page-header .breadcrumb,
+        .content .page-header .breadcrumb .breadcrumb-item,
+        .content .page-header .breadcrumb .breadcrumb-item a {
+            color: rgba(248, 250, 252, 0.9) !important;
+        }
+
+        .content .page-header a:not(.btn) {
+            color: #e0f2fe !important;
+        }
+
+        .content .page-header .btn-outline-primary,
+        .content .page-header .btn-outline-secondary,
+        .content .page-header .btn-outline-success,
+        .content .page-header .btn-outline-dark,
+        .content .page-header .btn-light {
+            border-color: rgba(248, 250, 252, 0.52) !important;
+            color: #f8fafc !important;
+            background: rgba(248, 250, 252, 0.12) !important;
+        }
+
+        .content .page-header .btn-outline-primary:hover,
+        .content .page-header .btn-outline-secondary:hover,
+        .content .page-header .btn-outline-success:hover,
+        .content .page-header .btn-outline-dark:hover,
+        .content .page-header .btn-light:hover {
+            border-color: rgba(248, 250, 252, 0.8) !important;
+            color: #0f172a !important;
+            background: #f8fafc !important;
+        }
+
+        .content .page-header .badge.bg-light,
+        .content .page-header .badge.text-dark {
+            background: rgba(248, 250, 252, 0.2) !important;
+            color: #f8fafc !important;
+            border: 1px solid rgba(248, 250, 252, 0.35) !important;
+        }
+
+        @media (max-width: 768px) {
+            .content .page-header {
+                border-radius: 12px !important;
+                padding: 0.9rem !important;
+            }
+        }
+
     </style>
 </head>
 

@@ -27,4 +27,14 @@ class IndicatorMethodology extends BaseModel
     {
         return $this->hasMany(IndicatorDefinition::class, 'methodology_id');
     }
+
+    public function surveyLinks()
+    {
+        return $this->hasMany(IndicatorSurveyLink::class, 'methodology_id');
+    }
+
+    public function surveyResponses()
+    {
+        return $this->hasMany(IndicatorSurveyResponse::class, 'methodology_id');
+    }
 }

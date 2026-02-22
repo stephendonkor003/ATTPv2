@@ -100,6 +100,10 @@ use App\Http\Controllers\{
 	    BudgetReportController,
 	    ProjectBudgetController,
 	    MeConfigurationController,
+        MeIndicatorController,
+        MeDataSourceController,
+        IndicatorSurveyController,
+        PublicIndicatorSurveyController,
 	};
 
 /*
@@ -897,6 +901,10 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:project.edit')
             ->name('projects.update');
 
+        Route::post('projects/{project}/allocations', [ProjectController::class, 'updateAllocations'])
+            ->middleware('permission:project.edit')
+            ->name('projects.allocations.update');
+
         Route::delete('projects/{project}', [ProjectController::class, 'destroy'])
             ->middleware('permission:project.delete')
             ->name('projects.destroy');
@@ -905,6 +913,46 @@ Route::middleware(['auth', 'not.funding.partner'])
         /* =====================================================
          | M&E CONFIGURATION
          ===================================================== */
+
+        // Indicators (centralized setup page)
+        Route::get('me/indicators', [MeIndicatorController::class, 'index'])
+            ->name('me.indicators.index');
+        Route::post('me/indicators', [MeIndicatorController::class, 'store'])
+            ->name('me.indicators.store');
+        Route::put('me/indicators/{indicator}', [MeIndicatorController::class, 'update'])
+            ->name('me.indicators.update');
+        Route::delete('me/indicators/{indicator}', [MeIndicatorController::class, 'destroy'])
+            ->name('me.indicators.destroy');
+        Route::get('me/indicators/report/excel', [MeIndicatorController::class, 'exportManagementExcel'])
+            ->name('me.indicators.report.excel');
+        Route::get('me/indicators/report/pdf', [MeIndicatorController::class, 'exportManagementPdf'])
+            ->name('me.indicators.report.pdf');
+        Route::post('me/indicators/{indicator}/survey-link', [IndicatorSurveyController::class, 'generateLink'])
+            ->name('me.indicators.survey-link.generate');
+        Route::get('me/indicators/{indicator}/survey-responses', [IndicatorSurveyController::class, 'responses'])
+            ->name('me.indicators.survey-responses');
+
+        // Data Source Controller
+        Route::get('me/data-sources', [MeDataSourceController::class, 'index'])
+            ->name('me.data-sources.index');
+        Route::get('me/data-sources/surveys/export', [MeDataSourceController::class, 'exportSurveys'])
+            ->name('me.data-sources.surveys.export');
+        Route::get('me/data-sources/surveys/{surveyLink}', [MeDataSourceController::class, 'showSurvey'])
+            ->name('me.data-sources.surveys.show');
+        Route::get('me/data-sources/surveys/{surveyLink}/export', [MeDataSourceController::class, 'exportSurvey'])
+            ->name('me.data-sources.surveys.single-export');
+        Route::get('me/data-sources/template/bridge', [MeDataSourceController::class, 'downloadGenericTemplate'])
+            ->name('me.data-sources.template.generic');
+        Route::post('me/data-sources/sync-all', [MeDataSourceController::class, 'manualSyncAll'])
+            ->name('me.data-sources.sync-all');
+        Route::post('me/data-sources/{indicator}/sync', [MeDataSourceController::class, 'manualSync'])
+            ->name('me.data-sources.sync');
+        Route::post('me/data-sources/{indicator}/columns-preview', [MeDataSourceController::class, 'previewColumns'])
+            ->name('me.data-sources.columns-preview');
+        Route::get('me/data-sources/{indicator}/template', [MeDataSourceController::class, 'downloadTemplate'])
+            ->name('me.data-sources.template.download');
+        Route::get('me/data-sources/{indicator}/raw-data', [MeDataSourceController::class, 'rawData'])
+            ->name('me.data-sources.raw-data');
 
         // Indicator Levels
         Route::get('me/indicator-levels', [MeConfigurationController::class, 'indicatorLevelsIndex'])
@@ -1713,6 +1761,13 @@ Route::prefix('public/procurement')->group(function () {
         ->middleware('throttle:20,1')
         ->name('public.procurement.apply');
 
+});
+
+Route::prefix('public/me/indicator-surveys')->name('public.me.indicators.surveys.')->group(function () {
+    Route::get('/{token}', [PublicIndicatorSurveyController::class, 'show'])
+        ->name('show');
+    Route::post('/{token}', [PublicIndicatorSurveyController::class, 'submit'])
+        ->name('submit');
 });
 
 

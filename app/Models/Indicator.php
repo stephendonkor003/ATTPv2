@@ -74,4 +74,26 @@ class Indicator extends BaseModel
     {
         return $this->hasMany(IndicatorResult::class);
     }
+
+    public function surveyLink()
+    {
+        return $this->hasOne(IndicatorSurveyLink::class, 'indicator_id')
+            ->where('is_active', true);
+    }
+
+    public function surveyResponses()
+    {
+        return $this->hasMany(IndicatorSurveyResponse::class, 'indicator_id');
+    }
+
+    public function dataSourceSyncLogs()
+    {
+        return $this->hasMany(IndicatorDataSourceSyncLog::class, 'indicator_id');
+    }
+
+    public function latestDataSourceSyncLog()
+    {
+        return $this->hasOne(IndicatorDataSourceSyncLog::class, 'indicator_id')
+            ->latestOfMany('synced_at');
+    }
 }

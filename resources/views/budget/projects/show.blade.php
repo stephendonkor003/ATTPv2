@@ -30,11 +30,11 @@
                         </div>
                         <div class="col-md-4">
                             <p class="fw-semibold text-muted mb-1">Duration (Years)</p>
-                            <p>{{ $project->duration_years }}</p>
+                            <p>{{ $project->total_years ?? $project->duration_years }}</p>
                         </div>
                         <div class="col-md-12">
                             <p class="fw-semibold text-muted mb-1">Description</p>
-                            <p>{{ $project->description ?? '—' }}</p>
+                            <p>{{ $project->description ?? '-' }}</p>
                         </div>
                     </div>
                 </div>
@@ -100,10 +100,10 @@
                         @csrf
 
                         <div class="row g-3 align-items-center">
-                            @foreach ($project->budgetAllocations as $alloc)
+                            @foreach ($project->allocations->sortBy('year') as $alloc)
                                 <div class="col-md-3">
-                                    <label class="form-label fw-semibold">Year {{ $alloc->year_number }}</label>
-                                    <input type="number" name="allocations[{{ $alloc->year_number }}]"
+                                    <label class="form-label fw-semibold">Year {{ $alloc->year }}</label>
+                                    <input type="number" name="allocations[{{ $alloc->year }}]"
                                         class="form-control" step="0.01" min="0" value="{{ $alloc->amount }}">
                                 </div>
                             @endforeach
@@ -123,3 +123,5 @@
         </div>
     </main>
 @endsection
+
+

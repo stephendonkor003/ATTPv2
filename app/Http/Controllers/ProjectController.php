@@ -5,14 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\ProjectAllocation;
-use App\Models\Indicator;
-use App\Models\IndicatorLevel;
-use App\Models\ReportingFrequency;
-use App\Models\IndicatorUnit;
 use App\Models\Sector;
-use App\Models\IndicatorMethodology;
-use App\Models\IndicatorDefinition;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -66,33 +59,11 @@ class ProjectController extends Controller
      */
     public function create()
     {
-        $programs = $this->availablePrograms();
-        $programsWithIndicators = Program::with('indicators')->get();
-
         $sectors = Sector::with(['programs:id,name,sector_id'])
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $indicatorLevels = IndicatorLevel::active()->ordered()->get(['id', 'name']);
-        $indicatorUnits = IndicatorUnit::active()->ordered()->get(['id', 'name', 'symbol']);
-        $reportingFrequencies = ReportingFrequency::active()->ordered()->get(['id', 'name']);
-        $indicatorMethodologies = IndicatorMethodology::orderBy('name')->get(['id', 'name']);
-        $indicatorDefinitions = IndicatorDefinition::orderBy('name')->get(['id', 'name']);
-        $responsibleUsers = User::where('governance_node_id', Auth::user()?->governance_node_id)
-            ->orderBy('name')
-            ->get(['id', 'name', 'email']);
-
-        return view('budget.projects.create', compact(
-            'programs',
-            'programsWithIndicators',
-            'sectors',
-            'indicatorLevels',
-            'indicatorUnits',
-            'reportingFrequencies',
-            'indicatorMethodologies',
-            'indicatorDefinitions',
-            'responsibleUsers'
-        ));
+        return view('budget.projects.create', compact('sectors'));
     }
 
     /**
@@ -112,23 +83,6 @@ class ProjectController extends Controller
         'description'  => 'nullable|string',
         'allocations'  => 'required|array',
             'allocations.*'=> 'numeric|min:0',
-            'indicators'   => 'nullable|array',
-            'indicators.*.project_indicators' => 'nullable|array',
-            'indicators.*.project_indicators.*.name' => 'nullable|string|max:255',
-            'indicators.*.project_indicators.*.baseline_year' => 'nullable|string|max:50',
-            'indicators.*.project_indicators.*.baseline_type' => 'nullable|in:year,month,quarter,week,day',
-            'indicators.*.project_indicators.*.baseline_value' => 'nullable|numeric',
-            'indicators.*.project_indicators.*.indicator_level_id' => 'nullable|exists:me_indicator_levels,id',
-            'indicators.*.project_indicators.*.methodology_id' => 'nullable|exists:me_indicator_methodologies,id',
-            'indicators.*.project_indicators.*.notes' => 'nullable|string',
-            'indicators.*.project_indicators.*.responsible_user_ids' => 'nullable|array',
-            'indicators.*.project_indicators.*.responsible_user_ids.*' => 'exists:users,id',
-            'indicators.*.project_indicators.*.frequency_of_reporting_id' => 'nullable|exists:me_reporting_frequencies,id',
-            'indicators.*.project_indicators.*.unit_id' => 'nullable|exists:me_indicator_units,id',
-            'indicators.*.project_indicators.*.primary_source_type' => 'nullable|in:manual,external,file',
-            'indicators.*.project_indicators.*.primary_source_detail' => 'nullable|string|max:255',
-            'indicators.*.project_indicators.*.definitions' => 'nullable|string',
-            'indicators.*.project_indicators.*.definition_id' => 'nullable|exists:me_indicator_definitions,id',
         ]);
 
     DB::beginTransaction();
@@ -211,54 +165,6 @@ class ProjectController extends Controller
             $yearNumber++;
         }
 
-        // Save Indicators (nested under program indicators)
-        if (isset($request->indicators) && is_array($request->indicators)) {
-            foreach ($request->indicators as $programIndicatorId => $programIndData) {
-                if (is_array($programIndData) && isset($programIndData['project_indicators'])) {
-                    foreach ($programIndData['project_indicators'] as $projIndData) {
-                        if (isset($projIndData['name']) && !empty($projIndData['name'])) {
-                            $methodologyName = null;
-                            if (!empty($projIndData['methodology_id'])) {
-                                $methodologyName = optional(IndicatorMethodology::find($projIndData['methodology_id']))->name;
-                            }
-                            $definitionName = null;
-                            if (!empty($projIndData['definition_id'])) {
-                                $definitionName = optional(IndicatorDefinition::find($projIndData['definition_id']))->name;
-                            }
-                            $responsibleUsersStr = null;
-                            if (!empty($projIndData['responsible_user_ids']) && is_array($projIndData['responsible_user_ids'])) {
-                                $responsibles = User::whereIn('id', $projIndData['responsible_user_ids'])->pluck('name')->toArray();
-                                $responsibleUsersStr = implode(', ', $responsibles);
-                            }
-                            $primarySource = $projIndData['primary_source'] ?? null;
-                            if (!empty($projIndData['primary_source_type']) || !empty($projIndData['primary_source_detail'])) {
-                                $primarySource = trim(($projIndData['primary_source_type'] ?? '') . ': ' . ($projIndData['primary_source_detail'] ?? ''));
-                            }
-
-                            Indicator::create([
-                                'indicatorable_type' => Project::class,
-                                'indicatorable_id' => $project->id,
-                                'parent_indicator_id' => $programIndicatorId ?: null,
-                                'name' => $projIndData['name'],
-                                'baseline_year' => $projIndData['baseline_year'] ?? null,
-                                'baseline_type' => $projIndData['baseline_type'] ?? 'year',
-                                'baseline_value' => $projIndData['baseline_value'] ?? null,
-                                'indicator_level_id' => $projIndData['indicator_level_id'] ?? null,
-                                'methodology' => $methodologyName ?? ($projIndData['methodology'] ?? null),
-                                'notes' => $projIndData['notes'] ?? null,
-                                'responsible_party' => $responsibleUsersStr ?? ($projIndData['responsible_party'] ?? null),
-                                'frequency_of_reporting_id' => $projIndData['frequency_of_reporting_id'] ?? null,
-                                'unit_id' => $projIndData['unit_id'] ?? null,
-                                'primary_source' => $primarySource,
-                                'definitions' => $projIndData['definitions'] ?? $definitionName ?? null,
-                                'created_by' => auth()->id(),
-                            ]);
-                        }
-                    }
-                }
-            }
-        }
-
         DB::commit();
         return redirect()->route('budget.projects.index')->with('success', 'Project created successfully.');
 
@@ -294,19 +200,13 @@ class ProjectController extends Controller
      */
     public function edit($id)
     {
-        $project  = Project::with('allocations', 'indicators', 'program.indicators')->findOrFail($id);
+        $project  = Project::with('allocations', 'program')->findOrFail($id);
         $this->assertProjectInScope($project);
         $programs = $this->availablePrograms();
-        $indicatorLevels = IndicatorLevel::active()->ordered()->get(['id', 'name']);
-        $indicatorUnits = IndicatorUnit::active()->ordered()->get(['id', 'name', 'symbol']);
-        $reportingFrequencies = ReportingFrequency::active()->ordered()->get(['id', 'name']);
 
         return view('budget.projects.edit', compact(
             'project',
-            'programs',
-            'indicatorLevels',
-            'indicatorUnits',
-            'reportingFrequencies'
+            'programs'
         ));
     }
 
@@ -331,20 +231,8 @@ public function update(Request $request, $id)
         'end_year'     => 'required|integer|gte:start_year',
         'total_budget' => 'required|numeric|min:0',
         'description'  => 'nullable|string',
-        'indicators'   => 'nullable|array',
-        'indicators.*.project_indicators' => 'nullable|array',
-        'indicators.*.project_indicators.*.name' => 'nullable|string|max:255',
-        'indicators.*.project_indicators.*.baseline_year' => 'nullable|string|max:50',
-        'indicators.*.project_indicators.*.baseline_type' => 'nullable|in:year,month,quarter,week,day',
-        'indicators.*.project_indicators.*.baseline_value' => 'nullable|numeric',
-        'indicators.*.project_indicators.*.indicator_level_id' => 'nullable|exists:me_indicator_levels,id',
-        'indicators.*.project_indicators.*.methodology' => 'nullable|string',
-        'indicators.*.project_indicators.*.notes' => 'nullable|string',
-        'indicators.*.project_indicators.*.responsible_party' => 'nullable|string|max:255',
-        'indicators.*.project_indicators.*.frequency_of_reporting_id' => 'nullable|exists:me_reporting_frequencies,id',
-        'indicators.*.project_indicators.*.unit_id' => 'nullable|exists:me_indicator_units,id',
-        'indicators.*.project_indicators.*.primary_source' => 'nullable|string|max:255',
-        'indicators.*.project_indicators.*.definitions' => 'nullable|string',
+        'allocations'  => 'nullable|array',
+        'allocations.*'=> 'nullable|numeric|min:0',
     ]);
 
     // Validate years inside program range
@@ -371,8 +259,34 @@ public function update(Request $request, $id)
         if (($existingTotal + (float) $request->total_budget) > $program->total_budget) {
             return back()
                 ->withErrors(['total_budget' => 'This program has only ' . ($program->currency ?? '') . ' ' . number_format(max($remaining, 0), 2) . ' remaining. Please lower the project budget.'])
-                ->withInput();
+            ->withInput();
         }
+    }
+
+    $allocations = $this->normalizeProjectAllocations(
+        $project,
+        (array) $request->input('allocations', [])
+    );
+
+    if (empty($allocations)) {
+        $allocations = $this->buildEvenAllocations(
+            (int) $request->start_year,
+            (int) $request->end_year,
+            (float) $request->total_budget
+        );
+    }
+
+    if (empty($allocations)) {
+        return back()->with('error', 'Unable to determine yearly allocations for this project.')->withInput();
+    }
+
+    $allocationTotal = round(array_sum($allocations), 2);
+    if ($allocationTotal - (float) $request->total_budget > 0.01) {
+        return back()
+            ->withErrors([
+                'total_budget' => 'Yearly allocations (' . number_format($allocationTotal, 2) . ') exceed total budget (' . number_format((float) $request->total_budget, 2) . ').'
+            ])
+            ->withInput();
     }
 
     DB::beginTransaction();
@@ -407,54 +321,7 @@ public function update(Request $request, $id)
             'governance_node_id' => $program->governance_node_id,
         ]);
 
-        // Remove old allocations
-        ProjectAllocation::where('project_id', $project->id)->delete();
-
-        // Insert updated allocations
-        foreach ($request->allocations as $year => $amount) {
-            $yearNumber = $year - $project->start_year + 1;
-
-            ProjectAllocation::create([
-                'project_id'   => $project->id,
-                'year'         => $year,
-                'year_number'  => $yearNumber,
-                'actual_year'  => $year,
-                'amount'       => $amount ?? 0,
-            ]);
-        }
-
-        // Handle Indicators (nested under program indicators)
-        if (isset($request->indicators)) {
-            $project->indicators()->delete();
-            if (is_array($request->indicators) && !empty($request->indicators)) {
-                foreach ($request->indicators as $programIndicatorId => $programIndData) {
-                    if (is_array($programIndData) && isset($programIndData['project_indicators'])) {
-                        foreach ($programIndData['project_indicators'] as $projIndData) {
-                            if (isset($projIndData['name']) && !empty($projIndData['name'])) {
-                                Indicator::create([
-                                    'indicatorable_type' => Project::class,
-                                    'indicatorable_id' => $project->id,
-                                'parent_indicator_id' => $programIndicatorId ?: null,
-                                'name' => $projIndData['name'],
-                                'baseline_year' => $projIndData['baseline_year'] ?? null,
-                                'baseline_type' => $projIndData['baseline_type'] ?? 'year',
-                                'baseline_value' => $projIndData['baseline_value'] ?? null,
-                                'indicator_level_id' => $projIndData['indicator_level_id'] ?? null,
-                                    'methodology' => $projIndData['methodology'] ?? null,
-                                    'notes' => $projIndData['notes'] ?? null,
-                                    'responsible_party' => $projIndData['responsible_party'] ?? null,
-                                    'frequency_of_reporting_id' => $projIndData['frequency_of_reporting_id'] ?? null,
-                                    'unit_id' => $projIndData['unit_id'] ?? null,
-                                    'primary_source' => $projIndData['primary_source'] ?? null,
-                                    'definitions' => $projIndData['definitions'] ?? null,
-                                    'created_by' => auth()->id(),
-                                ]);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        $this->persistProjectAllocations($project, $allocations);
 
         DB::commit();
         return redirect()->route('budget.projects.index')->with('success', 'Project updated successfully.');
@@ -464,6 +331,44 @@ public function update(Request $request, $id)
         return back()->with('error', 'Error: ' . $e->getMessage())->withInput();
     }
 }
+
+    public function updateAllocations(Request $request, $id)
+    {
+        $request->validate([
+            'allocations' => 'required|array|min:1',
+            'allocations.*' => 'required|numeric|min:0',
+        ]);
+
+        $project = Project::findOrFail($id);
+        $this->assertProjectInScope($project);
+
+        $allocations = $this->normalizeProjectAllocations(
+            $project,
+            (array) $request->input('allocations', [])
+        );
+
+        if (empty($allocations)) {
+            return back()->with('error', 'No valid allocation years were provided.');
+        }
+
+        $allocationTotal = round(array_sum($allocations), 2);
+        if ($allocationTotal - (float) $project->total_budget > 0.01) {
+            return back()->withErrors([
+                'allocations' => 'Allocations total (' . number_format($allocationTotal, 2) . ') cannot exceed project budget (' . number_format((float) $project->total_budget, 2) . ').',
+            ]);
+        }
+
+        DB::beginTransaction();
+        try {
+            $this->persistProjectAllocations($project, $allocations);
+            DB::commit();
+
+            return back()->with('success', 'Project allocations updated successfully.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return back()->with('error', 'Unable to update allocations: ' . $e->getMessage());
+        }
+    }
 
     /**
      * Delete project
@@ -476,6 +381,28 @@ public function update(Request $request, $id)
         DB::beginTransaction();
 
         try {
+            $project->load('activities.subActivities.allocations', 'activities.allocations');
+
+            // Remove descendants first.
+            foreach ($project->activities as $activity) {
+                foreach ($activity->subActivities as $subActivity) {
+                    $subActivity->allocations()->delete();
+                    \App\Models\Indicator::where('indicatorable_type', \App\Models\SubActivity::class)
+                        ->where('indicatorable_id', $subActivity->id)
+                        ->delete();
+                    $subActivity->delete();
+                }
+
+                $activity->allocations()->delete();
+                \App\Models\Indicator::where('indicatorable_type', \App\Models\Activity::class)
+                    ->where('indicatorable_id', $activity->id)
+                    ->delete();
+                $activity->delete();
+            }
+
+            \App\Models\Indicator::where('indicatorable_type', \App\Models\Project::class)
+                ->where('indicatorable_id', $project->id)
+                ->delete();
 
             ProjectAllocation::where('project_id', $id)->delete();
             $project->delete();
@@ -528,6 +455,92 @@ public function update(Request $request, $id)
             'yearlyTrend',
             'topProjects'
         ));
+    }
+
+    private function normalizeProjectAllocations(Project $project, array $rawAllocations): array
+    {
+        $normalized = [];
+        $startYear = (int) $project->start_year;
+        $endYear = (int) $project->end_year;
+        $yearCount = max((int) ($project->total_years ?? 0), 1);
+
+        foreach ($rawAllocations as $yearKey => $amount) {
+            if ($amount === null || $amount === '' || !is_numeric($amount)) {
+                continue;
+            }
+
+            $inputYear = (int) $yearKey;
+            $actualYear = null;
+
+            if ($inputYear >= $startYear && $inputYear <= $endYear) {
+                $actualYear = $inputYear;
+            } elseif ($inputYear >= 1 && $inputYear <= $yearCount) {
+                $actualYear = $startYear + $inputYear - 1;
+            }
+
+            if ($actualYear === null) {
+                continue;
+            }
+
+            $normalized[$actualYear] = round((float) $amount, 2);
+        }
+
+        ksort($normalized);
+
+        return $normalized;
+    }
+
+    private function buildEvenAllocations(int $startYear, int $endYear, float $totalBudget): array
+    {
+        if ($endYear < $startYear) {
+            return [];
+        }
+
+        $years = range($startYear, $endYear);
+        $count = count($years);
+        if ($count === 0) {
+            return [];
+        }
+
+        $allocations = [];
+        $baseAmount = floor(($totalBudget / $count) * 100) / 100;
+
+        foreach ($years as $year) {
+            $allocations[$year] = $baseAmount;
+        }
+
+        $difference = round($totalBudget - array_sum($allocations), 2);
+        $lastYear = end($years);
+        $allocations[$lastYear] = round(($allocations[$lastYear] ?? 0) + $difference, 2);
+
+        return $allocations;
+    }
+
+    private function persistProjectAllocations(Project $project, array $allocations): void
+    {
+        $years = array_keys($allocations);
+
+        if (!empty($years)) {
+            ProjectAllocation::where('project_id', $project->id)
+                ->whereNotIn('year', $years)
+                ->delete();
+        }
+
+        foreach ($allocations as $year => $amount) {
+            $yearNumber = ((int) $year - (int) $project->start_year) + 1;
+
+            ProjectAllocation::updateOrCreate(
+                [
+                    'project_id' => $project->id,
+                    'year' => $year,
+                ],
+                [
+                    'year_number' => $yearNumber,
+                    'actual_year' => $year,
+                    'amount' => $amount ?? 0,
+                ]
+            );
+        }
     }
 
     private function scopedNodeIds(): ?array

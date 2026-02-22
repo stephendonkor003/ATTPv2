@@ -15,6 +15,10 @@
 
         <div class="card shadow-sm border-0">
             <div class="card-body">
+                @php
+                    $resolvedIntervalUnit = old('interval_unit', $frequency->resolvedIntervalUnit());
+                    $resolvedIntervalValue = old('interval_value', $frequency->resolvedIntervalValue());
+                @endphp
                 <form action="{{ route('budget.me-configuration.frequencies.update', $frequency) }}" method="POST" class="row g-3">
                     @csrf
                     @method('PUT')
@@ -34,11 +38,27 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Frequency in Days</label>
-                        <input type="number" name="frequency_in_days" min="1"
-                               class="form-control @error('frequency_in_days') is-invalid @enderror"
-                               value="{{ old('frequency_in_days', $frequency->frequency_in_days) }}">
-                        @error('frequency_in_days')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <label class="form-label">Interval Unit <span class="text-danger">*</span></label>
+                        <select name="interval_unit" id="intervalUnitSelect"
+                            class="form-select @error('interval_unit') is-invalid @enderror" required>
+                            @foreach ($intervalOptions as $value => $label)
+                                <option value="{{ $value }}" @selected($resolvedIntervalUnit === $value)>
+                                    {{ $label }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('interval_unit')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-md-6" id="intervalValueWrap">
+                        <label class="form-label">Interval Value</label>
+                        <input type="number" name="interval_value" id="intervalValueInput" min="1"
+                               class="form-control @error('interval_value') is-invalid @enderror"
+                               value="{{ $resolvedIntervalValue }}">
+                        <small class="text-muted" id="intervalValueHint">
+                            Example: 1 = every selected unit, 2 = every two selected units.
+                        </small>
+                        @error('interval_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
                     <div class="col-md-6">
@@ -72,3 +92,48 @@
         </div>
     </div>
 @endsection
+
+@push('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const unitSelect = document.getElementById('intervalUnitSelect');
+        const valueWrap = document.getElementById('intervalValueWrap');
+        const valueInput = document.getElementById('intervalValueInput');
+        const hint = document.getElementById('intervalValueHint');
+
+        if (!unitSelect || !valueWrap || !valueInput || !hint) {
+            return;
+        }
+
+        const fixedUnits = ['quarterly', 'year', 'annual', 'quinquennial'];
+
+        function applyIntervalMode() {
+            const unit = unitSelect.value;
+            const isOnce = unit === 'once';
+            const isFixed = fixedUnits.includes(unit);
+
+            valueWrap.classList.toggle('d-none', isOnce);
+            valueInput.disabled = isOnce;
+
+            if (isOnce) {
+                valueInput.value = '';
+                hint.textContent = 'Once does not require an interval value.';
+                return;
+            }
+
+            if (!valueInput.value || Number(valueInput.value) < 1) {
+                valueInput.value = '1';
+            }
+
+            if (isFixed) {
+                hint.textContent = 'Use 1 for standard ' + unit + ' reporting.';
+            } else {
+                hint.textContent = 'Example: 1 = every selected unit, 2 = every two selected units.';
+            }
+        }
+
+        unitSelect.addEventListener('change', applyIntervalMode);
+        applyIntervalMode();
+    });
+</script>
+@endpush

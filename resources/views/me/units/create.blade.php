@@ -34,10 +34,8 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Sort Order</label>
-                        <input type="number" name="sort_order" min="0"
-                               class="form-control @error('sort_order') is-invalid @enderror"
-                               value="{{ old('sort_order', 0) }}">
-                        @error('sort_order')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <input type="text" class="form-control" value="Automatic (set on save)" readonly>
+                        <small class="text-muted">Sort order is managed automatically by the system.</small>
                     </div>
 
                     <div class="col-12">

@@ -1,14 +1,36 @@
-<nav class="nxl-navigation">
-    <div class="navbar-wrapper">
-        <div class="m-header">
+<nav class="nxl-navigation" style="background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #e0f2fe 100%);">
+    <div class="navbar-wrapper" style="background: transparent;">
+        {{-- <div class="m-header">
             <a href="#" class="b-brand">
                 <!-- ========   change your logo hear   ============ -->
                 <img src="{{ asset('assets/agenda_2063_logo.png') }}" alt="" class="logo logo-lg">
                 <img src="{{ asset('assets/agenda_2063_logo.png') }}" alt="" class="logo logo-sm">
             </a>
-        </div>
+        </div> --}}
 
         <div class="navbar-content">
+            <div class="px-3 pt-3">
+                <div class="card border-0 shadow-sm position-relative overflow-hidden"
+                    style="background: linear-gradient(135deg, #0f172a 0%, #0ea5e9 50%, #10b981 100%); color:#f8fafc; border-radius:14px;">
+                    <div style="position:absolute; inset:0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15), transparent 45%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.18), transparent 40%);"></div>
+                    <div class="card-body py-3 d-flex align-items-center gap-3 position-relative">
+                        <span class="module-icon" style="background: rgba(255,255,255,0.18); color:#f8fafc;">
+                            <i class="feather-cpu"></i>
+                        </span>
+                        <div class="flex-grow-1">
+                            <div class="fw-bold">ATTP Control Center</div>
+                            <div class="small text-white-50">Operations & Oversight</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <div class="d-flex align-items-center px-3 py-2 rounded-3 shadow-sm"
+                        style="background: linear-gradient(120deg, #0ea5e9 0%, #6366f1 100%); color:#f8fafc;">
+                        <i class="feather-star me-2"></i>
+                        <span id="au-aspiration-ticker" class="small" style="line-height:1.3;">Loading aspiration...</span>
+                    </div>
+                </div>
+            </div>
             <ul class="nxl-navbar">
 
                 {{-- ================= DASHBOARD ================= --}}
@@ -315,6 +337,18 @@
 
                     <ul class="nxl-submenu">
                         <li class="nxl-item">
+                            <a href="{{ route('budget.me.indicators.index') }}" class="nxl-link">
+                                <i class="feather-target me-2"></i> Indicators
+                            </a>
+                        </li>
+
+                        <li class="nxl-item">
+                            <a href="{{ route('budget.me.data-sources.index') }}" class="nxl-link">
+                                <i class="feather-database me-2"></i> Data Source Controller
+                            </a>
+                        </li>
+
+                        <li class="nxl-item">
                             <a href="{{ route('budget.me-configuration.indicator-levels.index') }}" class="nxl-link">
                                 <i class="feather-layers me-2"></i> Indicator Levels
                             </a>
@@ -413,7 +447,7 @@
                     {{-- ================= PROCUREMENT SETTINGS ================= --}}
                     @canany(['procurement.settings.manage', 'procurement.view_all'])
                         <li class="nxl-item nxl-hasmenu">
-                            <a href="javascript:void(0);" class="nxl-link">
+                            {{-- <a href="javascript:void(0);" class="nxl-link">
                                 <span class="nxl-micon">
                                     <i class="feather-settings"></i>
                                 </span>
@@ -421,7 +455,7 @@
                                 <span class="nxl-arrow">
                                     <i class="feather-chevron-right"></i>
                                 </span>
-                            </a>
+                            </a> --}}
 
                             <ul class="nxl-submenu">
                                 <li class="nxl-item">
@@ -976,3 +1010,25 @@
         </div>
     </div>
 </nav>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const aspirationEl = document.getElementById('au-aspiration-ticker');
+        const aspirations = [
+            'A prosperous Africa based on inclusive growth and sustainable development.',
+            'An integrated continent, politically united, based on Pan-African ideals.',
+            'An Africa of good governance, democracy, respect for human rights, justice and rule of law.',
+            'A peaceful and secure Africa.',
+            'An Africa with a strong cultural identity, common heritage, values and ethics.',
+            'An Africa whose development is people-driven, especially by women and youth.',
+            'Africa as a strong, united, resilient and influential global player and partner.'
+        ];
+        let idx = 0;
+        const rotate = () => {
+            if (aspirationEl) aspirationEl.textContent = aspirations[idx];
+            idx = (idx + 1) % aspirations.length;
+        };
+        rotate();
+        setInterval(rotate, 5000);
+    });
+</script>

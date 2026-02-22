@@ -3,12 +3,23 @@
 @section('title', $program ? 'Projects under ' . ($program->name ?? 'Program') : 'Projects')
 
 @section('content')
+    <style>
+        .project-chip {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 0.22rem 0.62rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            border: 1px solid rgba(248, 250, 252, 0.38);
+            background: rgba(248, 250, 252, 0.18);
+            color: #f8fafc;
+        }
+    </style>
 
-    @if($program)
-        <!-- =======================
-                             PROGRAM INFO MODAL
-                        ======================= -->
-        <div class="modal fade" id="programInfoModal" tabindex="-1" aria-labelledby="programInfoModalLabel" aria-hidden="true">
+    @if ($program)
+        <div class="modal fade" id="programInfoModal" tabindex="-1" aria-labelledby="programInfoModalLabel"
+            aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content border-0 shadow-lg">
                     <div class="modal-header bg-success text-white">
@@ -27,9 +38,7 @@
                             <strong>Created On:</strong>
                             {{ $program->created_at ? $program->created_at->format('d M, Y') : 'N/A' }}
                         </p>
-                        <p>
-                            <strong>Total Projects:</strong> {{ $program->projects->count() }}
-                        </p>
+                        <p><strong>Total Projects:</strong> {{ $program->projects->count() }}</p>
                     </div>
                     <div class="modal-footer">
                         <button class="btn btn-outline-secondary" data-bs-dismiss="modal">
@@ -40,50 +49,33 @@
             </div>
         </div>
     @endif
+
     <main class="nxl-container">
         <div class="nxl-content">
-
-            @push('styles')
-                <style>
-                    .program-hero {
-                        background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 45%, #7c3aed 100%);
-                        color: #fff;
-                        border-radius: 18px;
-                        padding: 18px 22px;
-                        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.25);
-                    }
-                    .program-hero .badge-soft { background: rgba(255, 255, 255, 0.18); color: #fff; border: 1px solid rgba(255,255,255,0.25); }
-                    .pill { border-radius: 999px; padding: 6px 12px; font-weight: 600; }
-                    .pill-info { background: #e0f2fe; color: #075985; }
-                </style>
-            @endpush
-
-            <!-- =======================
-                         PAGE HEADER
-                    ======================= -->
-            <div class="program-hero mb-4 d-flex justify-content-between align-items-start flex-wrap gap-3">
-                <div>
+            <div class="page-header">
+                <div class="page-header-left">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="badge badge-soft">Budget · Projects</span>
-                        <span class="pill pill-info">{{ $program ? 'Within program' : 'All programs' }}</span>
+                        <span class="project-chip">Budget - Projects</span>
+                        <span class="project-chip">{{ $program ? 'Within Program' : 'All Programs' }}</span>
                     </div>
-                    <h4 class="mb-1">Projects Overview</h4>
-                    <p class="mb-0" style="opacity:0.9;">
-                        @if($program)
+                    <h5 class="m-b-10">Projects Overview</h5>
+                    <p class="mb-0">
+                        @if ($program)
                             Manage every project under <strong>{{ $program->name }}</strong>, including budgets and timelines.
                         @else
                             Manage all budget projects across programs with quick actions and insights.
                         @endif
                     </p>
                 </div>
-                <a href="{{ route('budget.projects.create') }}" class="btn btn-light text-primary border-0 shadow-sm">
-                    <i class="bi bi-plus-circle me-1"></i> New Project
-                </a>
+                <div class="page-header-right ms-auto">
+                    @can('project.create')
+                        <a href="{{ route('budget.projects.create') }}" class="btn btn-light text-primary border-0 shadow-sm">
+                            <i class="bi bi-plus-circle me-1"></i> New Project
+                        </a>
+                    @endcan
+                </div>
             </div>
 
-            <!-- =======================
-                         ALERT MESSAGES
-                    ======================= -->
             @if (session('success'))
                 <div class="alert alert-success alert-dismissible fade show">
                     <i class="feather-check-circle me-2"></i> {{ session('success') }}
@@ -97,9 +89,6 @@
                 </div>
             @endif
 
-            <!-- =======================
-                         PROJECTS TABLE
-                    ======================= -->
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -107,7 +96,7 @@
                             <i class="feather-list me-2 text-primary"></i> Total Projects:
                             <span class="text-dark">{{ $projects->count() }}</span>
                         </h6>
-                        @if($program)
+                        @if ($program)
                             <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal"
                                 data-bs-target="#programInfoModal">
                                 <i class="feather-info me-1"></i> Program Details
@@ -142,29 +131,35 @@
                                     <td>{{ number_format($project->total_budget, 2) }}</td>
                                     <td>
                                         <span class="badge bg-secondary">
-                                            {{ $project->duration_years }}
+                                            {{ $project->total_years ?? $project->duration_years }}
                                         </span>
                                     </td>
                                     <td>{{ $project->created_at->format('d M, Y') }}</td>
                                     <td class="text-center">
-                                        <a href="{{ route('budget.projects.show', $project->id) }}"
-                                            class="btn btn-sm btn-outline-info" title="View Details">
-                                            <i class="feather-eye"></i>
-                                        </a>
-                                        <a href="{{ route('budget.projects.edit', $project->id) }}"
-                                            class="btn btn-sm btn-outline-warning" title="Edit Project">
-                                            <i class="feather-edit"></i>
-                                        </a>
-                                        <form action="{{ route('budget.projects.destroy', $project->id) }}" method="POST"
-                                            class="d-inline">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                onclick="return confirm('Are you sure you want to delete this project?')"
-                                                title="Delete Project">
-                                                <i class="feather-trash-2"></i>
-                                            </button>
-                                        </form>
+                                        @can('project.view')
+                                            <a href="{{ route('budget.projects.show', $project->id) }}"
+                                                class="btn btn-sm btn-outline-info" title="View Details">
+                                                <i class="feather-eye"></i>
+                                            </a>
+                                        @endcan
+                                        @can('project.edit')
+                                            <a href="{{ route('budget.projects.edit', $project->id) }}"
+                                                class="btn btn-sm btn-outline-warning" title="Edit Project">
+                                                <i class="feather-edit"></i>
+                                            </a>
+                                        @endcan
+                                        @can('project.delete')
+                                            <form action="{{ route('budget.projects.destroy', $project->id) }}" method="POST"
+                                                class="d-inline">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                    onclick="return confirm('Are you sure you want to delete this project?')"
+                                                    title="Delete Project">
+                                                    <i class="feather-trash-2"></i>
+                                                </button>
+                                            </form>
+                                        @endcan
                                     </td>
                                 </tr>
                             @empty
@@ -179,7 +174,6 @@
                     </x-data-table>
                 </div>
             </div>
-
         </div>
     </main>
 @endsection

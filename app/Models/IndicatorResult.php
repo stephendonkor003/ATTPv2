@@ -41,4 +41,9 @@ class IndicatorResult extends BaseModel
     {
         return $this->belongsTo(IndicatorUnit::class, 'unit_id');
     }
+
+    public function collectedByUser()
+    {
+        return $this->belongsTo(User::class, 'collected_by');
+    }
 }
