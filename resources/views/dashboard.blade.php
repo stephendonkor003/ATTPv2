@@ -52,6 +52,8 @@
                 radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.22), transparent 35%);
             opacity: 0;
             transition: opacity 0.2s ease;
+            pointer-events: none;
+            z-index: 1;
         }
 
         .module-card:hover::before {
@@ -61,6 +63,8 @@
         .module-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+            position: relative;
+            z-index: 1;
         }
 
         .module-icon {
@@ -87,6 +91,8 @@
             color: #0f172a;
             text-decoration: none;
             transition: background 0.15s ease, border-color 0.15s ease;
+            position: relative;
+            z-index: 2;
         }
 
         .quick-link:hover {
@@ -284,32 +290,320 @@
             </div>
 
             <div class="row g-3">
-                @foreach ($modules as $module)
-                    <div class="col-12 col-md-6 col-xl-4">
-                        <div class="card module-card h-100"
-                            style="background: linear-gradient(150deg, {{ $module['color'] }}1a 0%, #ffffff 68%); border-color: {{ $module['color'] }}2e;">
-                            <div class="card-body d-flex flex-column gap-3">
-                                <div class="d-flex align-items-start gap-3">
-                                    <span class="module-icon"
-                                        style="background: linear-gradient(145deg, {{ $module['color'] }}2e 0%, {{ $module['color'] }}4d 100%); color: #0f172a;">
-                                        <i class="feather-{{ $module['icon'] }}"></i>
-                                    </span>
-                                    <div>
-                                        <h6 class="mb-1">{{ $module['title'] }}</h6>
-                                        <p class="subtext mb-0">{{ $module['desc'] }}</p>
-                                    </div>
+                {{-- Governance --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #0ea5e91a 0%, #ffffff 68%); border-color: #0ea5e92e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #0ea5e92e 0%, #0ea5e94d 100%); color: #0f172a;">
+                                    <i class="feather-shield"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Governance</h6>
+                                    <p class="subtext mb-0">Configure governance structure and funding partners.</p>
                                 </div>
-                                <div class="d-flex flex-wrap gap-2">
-                                    @foreach ($module['links'] as $link)
-                        <a class="quick-link" href="{{ route($link['route']) }}">
-                            <i class="feather-arrow-up-right text-primary"></i>{{ $link['label'] }}
-                        </a>
-                                    @endforeach
-                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('finance.governance.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Setup
+                                </a>
+                                <a class="quick-link" href="{{ route('finance.funders.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Funding Partners
+                                </a>
                             </div>
                         </div>
                     </div>
-                @endforeach
+                </div>
+
+                {{-- Budget Structure --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #22c55e1a 0%, #ffffff 68%); border-color: #22c55e2e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #22c55e2e 0%, #22c55e4d 100%); color: #0f172a;">
+                                    <i class="feather-grid"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Budget Structure</h6>
+                                    <p class="subtext mb-0">Manage sectors, programs, and projects.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('budget.programs.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Programs
+                                </a>
+                                <a class="quick-link" href="{{ route('budget.projects.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Projects
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Budget Execution --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #f59e0b1a 0%, #ffffff 68%); border-color: #f59e0b2e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #f59e0b2e 0%, #f59e0b4d 100%); color: #0f172a;">
+                                    <i class="feather-activity"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Budget Execution</h6>
+                                    <p class="subtext mb-0">Commitments, purchase requests, and resources.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('finance.commitments.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Commitments
+                                </a>
+                                <a class="quick-link" href="{{ route('finance.purchase-requests.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Purchase Requests
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Reports & Oversight --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #6366f11a 0%, #ffffff 68%); border-color: #6366f12e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #6366f12e 0%, #6366f14d 100%); color: #0f172a;">
+                                    <i class="feather-bar-chart-2"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Reports & Oversight</h6>
+                                    <p class="subtext mb-0">Dashboards, summaries, and executive reporting.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('budget.reports.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Reports
+                                </a>
+                                <a class="quick-link" href="{{ route('budget.summary.dashboard') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Summary
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Monitoring & Evaluation --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #0ea5e91a 0%, #ffffff 68%); border-color: #0ea5e92e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #0ea5e92e 0%, #0ea5e94d 100%); color: #0f172a;">
+                                    <i class="feather-target"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Monitoring & Evaluation</h6>
+                                    <p class="subtext mb-0">Indicators, frequencies, and survey links.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('budget.me.indicators.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Indicators
+                                </a>
+                                <a class="quick-link" href="{{ route('budget.me-configuration.frequencies.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Frequencies
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Human Resource --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #10b9811a 0%, #ffffff 68%); border-color: #10b9812e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #10b9812e 0%, #10b9814d 100%); color: #0f172a;">
+                                    <i class="feather-users"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Human Resource</h6>
+                                    <p class="subtext mb-0">Positions, recruitment, and HR analytics.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('hr.positions.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Positions
+                                </a>
+                                <a class="quick-link" href="{{ route('hr.vacancies.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Recruitment
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Vendors --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #0f172a1a 0%, #ffffff 68%); border-color: #0f172a2e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #0f172a2e 0%, #0f172a4d 100%); color: #0f172a;">
+                                    <i class="feather-briefcase"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Vendors Management</h6>
+                                    <p class="subtext mb-0">Vendor directory, categories, and negotiations.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('vendors.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Vendors
+                                </a>
+                                <a class="quick-link" href="{{ route('vendors.categories.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Categories
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Prescreening --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #ec48991a 0%, #ffffff 68%); border-color: #ec48992e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #ec48992e 0%, #ec48994d 100%); color: #0f172a;">
+                                    <i class="feather-check-square"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Prescreening Engine</h6>
+                                    <p class="subtext mb-0">Templates, assignments, and submissions oversight.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('prescreening.templates.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Templates
+                                </a>
+                                <a class="quick-link" href="{{ route('prescreening.submissions.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Submissions
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Data Sources --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #0ea5e91a 0%, #ffffff 68%); border-color: #0ea5e92e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #0ea5e92e 0%, #0ea5e94d 100%); color: #0f172a;">
+                                    <i class="feather-database"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Data Source & Cleaning</h6>
+                                    <p class="subtext mb-0">Bridge templates, sync status, and raw data review.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('budget.me.data-sources.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Data Sources
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Site Visits --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #22d3ee1a 0%, #ffffff 68%); border-color: #22d3ee2e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #22d3ee2e 0%, #22d3ee4d 100%); color: #0f172a;">
+                                    <i class="feather-map-pin"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Site Visits</h6>
+                                    <p class="subtext mb-0">Plan, approve, and report on site engagements.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('site-visits.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>All Visits
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Audit --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #f973161a 0%, #ffffff 68%); border-color: #f973162e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #f973162e 0%, #f973164d 100%); color: #0f172a;">
+                                    <i class="feather-activity"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">Audit</h6>
+                                    <p class="subtext mb-0">System audit trails and security visibility.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('system.audit.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Audit Log
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- User Management --}}
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card module-card h-100"
+                        style="background: linear-gradient(150deg, #10b9811a 0%, #ffffff 68%); border-color: #10b9812e;">
+                        <div class="card-body d-flex flex-column gap-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="module-icon"
+                                    style="background: linear-gradient(145deg, #10b9812e 0%, #10b9814d 100%); color: #0f172a;">
+                                    <i class="feather-user-check"></i>
+                                </span>
+                                <div>
+                                    <h6 class="mb-1">User Management</h6>
+                                    <p class="subtext mb-0">Manage users, roles, and permissions.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="quick-link" href="{{ route('system.users.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Users
+                                </a>
+                                <a class="quick-link" href="{{ route('system.roles.index') }}">
+                                    <i class="feather-arrow-up-right text-primary"></i>Roles
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
         </div>
