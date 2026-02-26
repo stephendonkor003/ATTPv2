@@ -33,6 +33,18 @@
             </div>
             <ul class="nxl-navbar">
 
+                @if (auth()->check() && auth()->user()->user_type === 'member_state' && auth()->user()->can('member_state.treaties.view'))
+                    <li class="nxl-item nxl-caption">
+                        <label>Member State</label>
+                    </li>
+                    <li class="nxl-item">
+                        <a href="{{ route('member-state.treaties.index') }}" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-file-text"></i></span>
+                            <span class="nxl-mtext">Treaties & Agreements</span>
+                        </a>
+                    </li>
+                @endif
+
                 {{-- ================= DASHBOARD ================= --}}
                 @can('dashboard.access')
                     <li class="nxl-item nxl-caption">
@@ -935,7 +947,7 @@
 
                 {{-- ================= AU MASTER DATA ================= --}}
                 @canany(['settings.au_master_data.view', 'settings.au_master_data.create',
-                    'settings.au_master_data.edit'])
+                    'settings.au_master_data.edit', 'treaties.view', 'treaties.create', 'treaties.edit'])
                     <li class="nxl-item nxl-caption">
                         <label>AU Master Data</label>
                     </li>
@@ -948,7 +960,8 @@
                         </a>
 
                         <ul class="nxl-submenu">
-                            @can('settings.au_master_data.view')
+                            @canany(['settings.au_master_data.view', 'treaties.view'])
+                                @can('settings.au_master_data.view')
                                 <li class="nxl-item">
                                     <a href="{{ route('settings.au.member-states.index') }}" class="nxl-link">
                                         <i class="feather-flag me-2"></i> Member States
@@ -978,7 +991,15 @@
                                         <i class="feather-award me-2"></i> Flagship Projects
                                     </a>
                                 </li>
-                            @endcan
+                                @endcan
+                                @can('treaties.view')
+                                    <li class="nxl-item">
+                                        <a href="{{ route('settings.au.treaties.index') }}" class="nxl-link">
+                                            <i class="feather-file-text me-2"></i> Treaties & Agreements
+                                        </a>
+                                    </li>
+                                @endcan
+                            @endcanany
                         </ul>
                     </li>
                 @endcanany

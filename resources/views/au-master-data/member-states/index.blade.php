@@ -26,10 +26,11 @@
 
             <div class="card shadow-sm border-0">
                 <div class="card-body">
-                    <x-data-table id="memberStatesTable" :config="['order' => [[3, 'asc']], 'pageLength' => 25]">
+                    <x-data-table id="memberStatesTable" :config="['order' => [[4, 'asc']], 'pageLength' => 25]">
                         <thead class="table-light">
                             <tr>
                                 <th width="60">#</th>
+                                <th width="70">Flag</th>
                                 <th>Name</th>
                                 <th>ISO Code</th>
                                 <th width="80">Order</th>
@@ -41,6 +42,14 @@
                             @foreach ($memberStates as $state)
                                 <tr>
                                     <td>{{ $loop->iteration }}</td>
+                                    <td>
+                                        @if ($state->flag_url)
+                                            <img src="{{ $state->flag_url }}" alt="{{ $state->name }} flag"
+                                                style="width: 42px; height: 28px; object-fit: cover; border:1px solid #d1d5db; border-radius:4px;">
+                                        @else
+                                            <span class="text-muted">-</span>
+                                        @endif
+                                    </td>
                                     <td>{{ $state->name }}</td>
                                     <td>
                                         @if ($state->code)

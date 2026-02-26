@@ -19,6 +19,7 @@ class RoleSeeder extends Seeder
             'Auditor',
             'Prescreening Evaluator',
             'Evaluation Evaluator',
+            'Member State Focal Point',
         ];
 
         foreach ($roles as $role) {

@@ -41,6 +41,7 @@ class User extends Authenticatable
         'payment_address',
         'is_disabled',
         'disabled_at',
+        'disabled_until',
         'disabled_reason',
         'is_blacklisted',
         'blacklisted_at',
@@ -50,6 +51,7 @@ class User extends Authenticatable
         'otp_verified_at',
         'role_id',
         'governance_node_id',
+        'member_state_id',
     ];
 
     /**
@@ -73,6 +75,7 @@ class User extends Authenticatable
             'otp_verified_at'       => 'datetime',
             'is_disabled'           => 'boolean',
             'disabled_at'           => 'datetime',
+            'disabled_until'        => 'datetime',
             'is_blacklisted'        => 'boolean',
             'blacklisted_at'        => 'datetime',
         ];
@@ -131,6 +134,11 @@ class User extends Authenticatable
         return $this->belongsTo(GovernanceNode::class, 'governance_node_id');
     }
 
+    public function memberState()
+    {
+        return $this->belongsTo(AuMemberState::class, 'member_state_id');
+    }
+
     /**
      * Funding partner portal relationship
      */
@@ -182,6 +190,20 @@ class User extends Authenticatable
     public function isFundingPartner(): bool
     {
         return $this->user_type === 'funding_partner';
+    }
+
+    public function hasActiveLoginBlock(): bool
+    {
+        if (!$this->is_disabled) {
+            return false;
+        }
+
+        // No end date means permanent block.
+        if (!$this->disabled_until) {
+            return true;
+        }
+
+        return $this->disabled_until->isFuture();
     }
 
     /* =====================================================

@@ -381,11 +381,24 @@
         }
 
         /* Map Container */
-        #africa-map {
+        .africa-map-canvas {
             width: 100%;
             height: 550px;
             border-radius: 12px;
             background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+        }
+
+        .treaty-controls {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.75rem;
+            align-items: end;
+            margin-bottom: 1rem;
+        }
+
+        .treaty-controls .meta {
+            color: #6b7280;
+            font-size: 0.88rem;
         }
 
         .map-legend {
@@ -893,6 +906,10 @@
                 padding: 0.8rem 1rem;
                 font-size: 0.85rem;
             }
+
+            .treaty-controls {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -1096,6 +1113,7 @@
             <div class="tabs">
                 <div class="tab-buttons">
                     <button class="tab-button active" data-tab="map">Interactive Map</button>
+                    <button class="tab-button" data-tab="treaties">Treaties</button>
                     <button class="tab-button" data-tab="partners">Funding Partners</button>
                     <button class="tab-button" data-tab="regions">Regional Analysis</button>
                     <button class="tab-button" data-tab="agenda">Agenda 2063</button>
@@ -1107,13 +1125,14 @@
                 <div class="tab-content active" id="map-tab">
                     <h2 style="color: var(--wine); margin-bottom: 1rem;">Africa Impact Map</h2>
                     <p style="margin-bottom: 1.5rem; color: #666;">
-                        Learn more about how the ATTP - Africa Think Tank Platform is transforming the African continent.
+                        Learn more about how the ATTP - Africa Think Tank Platform is transforming the African
+                        continent.
                         @if ($summary['continental_programs'] > 0)
                             <span class="continental-badge">{{ $summary['continental_programs'] }} Continental
                                 Initiative(s)</span>
                         @endif
                     </p>
-                    <div id="africa-map"></div>
+                    <div id="africa-map" class="africa-map-canvas"></div>
                     <p id="africa-map-status" style="margin: 0.75rem 0 0; color: #666; font-size: 0.9rem;">
                         Loading Africa shapefiles...
                     </p>
@@ -1173,6 +1192,45 @@
                             </table>
                         </div>
                     @endif
+                </div>
+
+                <!-- Treaties Tab -->
+                <div class="tab-content" id="treaties-tab">
+                    <h2 style="color: var(--wine); margin-bottom: 1rem;">Treaties and Agreements Map</h2>
+                    <p style="margin-bottom: 1rem; color: #666;">
+                        Explore how AU member states are progressing on treaty signature and ratification.
+                    </p>
+
+                    <div class="treaty-controls">
+                        <div>
+                            <label for="treaty-selector" class="form-label fw-semibold mb-1">Select Treaty</label>
+                            <select id="treaty-selector" class="form-select">
+                                <option value="">All Treaties (Combined View)</option>
+                                @foreach ($treatiesData as $treaty)
+                                    <option value="{{ $treaty['id'] }}">
+                                        {{ $treaty['short_title'] ?: $treaty['title'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div class="meta" id="treaty-selector-meta">Showing combined treaty status across all
+                                records.</div>
+                        </div>
+                    </div>
+
+                    <div id="treaties-map" class="africa-map-canvas"></div>
+                    <p id="treaties-map-status" style="margin: 0.75rem 0 0; color: #666; font-size: 0.9rem;">
+                        Loading treaty map...
+                    </p>
+                    <div class="map-legend">
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#0f766e;"></span>Original Submitted</span>
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#2e7d32;"></span>Ratified</span>
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#f59e0b;"></span>Signed (Not Ratified)</span>
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#d1d5db;"></span>No Recorded Action</span>
+                    </div>
                 </div>
 
                 <!-- Partners Tab -->
@@ -1509,6 +1567,46 @@
         const trendData = @json($trendData);
         const summary = @json($summary);
         const shapeFiles = @json($shapeFiles);
+        const treatiesData = @json($treatiesData ?? []);
+
+        // Initialize maps (using local Africa shapefiles)
+        const map = L.map('africa-map', {
+            center: [0, 20],
+            zoom: 3,
+            minZoom: 3,
+            maxZoom: 8,
+            scrollWheelZoom: true,
+            zoomControl: true,
+            attributionControl: false
+        });
+        const africaLayerGroup = L.featureGroup().addTo(map);
+        const mapStatusEl = document.getElementById('africa-map-status');
+        const treatiesMap = L.map('treaties-map', {
+            center: [0, 20],
+            zoom: 3,
+            minZoom: 3,
+            maxZoom: 8,
+            scrollWheelZoom: true,
+            zoomControl: true,
+            attributionControl: false
+        });
+        const treatiesLayerGroup = L.featureGroup().addTo(treatiesMap);
+        const treatiesMapStatusEl = document.getElementById('treaties-map-status');
+        const treatySelectorEl = document.getElementById('treaty-selector');
+        const treatySelectorMetaEl = document.getElementById('treaty-selector-meta');
+        let activeTreatyId = treatySelectorEl ? treatySelectorEl.value : '';
+
+        function setMapStatus(message) {
+            if (mapStatusEl) {
+                mapStatusEl.textContent = message;
+            }
+        }
+
+        function setTreatiesMapStatus(message) {
+            if (treatiesMapStatusEl) {
+                treatiesMapStatusEl.textContent = message;
+            }
+        }
 
         // Tab switching
         document.querySelectorAll('.tab-button').forEach(button => {
@@ -1521,31 +1619,20 @@
                 this.classList.add('active');
                 document.getElementById(tab + '-tab').classList.add('active');
 
+                if (tab === 'map') {
+                    setTimeout(() => map.invalidateSize(), 120);
+                }
+
+                if (tab === 'treaties') {
+                    setTimeout(() => treatiesMap.invalidateSize(), 120);
+                }
+
                 // Initialize charts when trends tab is shown
                 if (tab === 'trends') {
                     initializeCharts();
                 }
             });
         });
-
-        // Initialize the map (using local Africa shapefiles)
-        const map = L.map('africa-map', {
-            center: [0, 20],
-            zoom: 3,
-            minZoom: 3,
-            maxZoom: 8,
-            scrollWheelZoom: true,
-            zoomControl: true,
-            attributionControl: false
-        });
-        const africaLayerGroup = L.featureGroup().addTo(map);
-        const mapStatusEl = document.getElementById('africa-map-status');
-
-        function setMapStatus(message) {
-            if (mapStatusEl) {
-                mapStatusEl.textContent = message;
-            }
-        }
 
         function normalizeCountryName(name) {
             const input = (name || '').toString();
@@ -1678,6 +1765,128 @@
             return codeMappingByName[normalized] || null;
         }
 
+        const defaultTreatyStatus = {
+            is_signed: false,
+            is_ratified: false,
+            is_original_submitted: false,
+            signed_at: null,
+            ratified_at: null,
+            original_submitted_at: null
+        };
+
+        function buildTreatyStatusIndex(treatyRows) {
+            const index = {};
+            (Array.isArray(treatyRows) ? treatyRows : []).forEach((entry) => {
+                const rawCode = (entry.country_code || '').toString().toUpperCase();
+                let code = rawCode;
+                if (!code || !countryGeoData[code]) {
+                    const resolvedByName = resolveCountryCode(entry.country_name || '');
+                    code = resolvedByName ? resolvedByName.toUpperCase() : code;
+                }
+                if (!code) {
+                    return;
+                }
+                index[code] = {
+                    is_signed: !!entry.is_signed,
+                    is_ratified: !!entry.is_ratified,
+                    is_original_submitted: !!entry.is_original_submitted,
+                    signed_at: entry.signed_at || null,
+                    ratified_at: entry.ratified_at || null,
+                    original_submitted_at: entry.original_submitted_at || null
+                };
+            });
+            return index;
+        }
+
+        const combinedTreatyStatusIndex = (function() {
+            const merged = {};
+            (Array.isArray(treatiesData) ? treatiesData : []).forEach((treaty) => {
+                const treatyIndex = buildTreatyStatusIndex(treaty.statuses || []);
+                Object.keys(treatyIndex).forEach((countryCode) => {
+                    const current = merged[countryCode] || {
+                        is_signed: false,
+                        is_ratified: false,
+                        is_original_submitted: false,
+                        signed_at: null,
+                        ratified_at: null,
+                        original_submitted_at: null
+                    };
+                    const incoming = treatyIndex[countryCode];
+                    merged[countryCode] = {
+                        is_signed: current.is_signed || incoming.is_signed,
+                        is_ratified: current.is_ratified || incoming.is_ratified,
+                        is_original_submitted: current.is_original_submitted || incoming
+                            .is_original_submitted,
+                        signed_at: current.signed_at || incoming.signed_at,
+                        ratified_at: current.ratified_at || incoming.ratified_at,
+                        original_submitted_at: current.original_submitted_at || incoming
+                            .original_submitted_at
+                    };
+                });
+            });
+            return merged;
+        })();
+
+        const treatyStatusIndexesById = (Array.isArray(treatiesData) ? treatiesData : []).reduce((lookup, treaty) => {
+            lookup[treaty.id] = buildTreatyStatusIndex(treaty.statuses || []);
+            return lookup;
+        }, {});
+
+        function getSelectedTreaty() {
+            if (!activeTreatyId) {
+                return null;
+            }
+            return (Array.isArray(treatiesData) ? treatiesData : []).find((treaty) => treaty.id === activeTreatyId) || null;
+        }
+
+        function getTreatyStatusForCountry(countryName) {
+            const code = resolveCountryCode(countryName);
+            if (!code) {
+                return defaultTreatyStatus;
+            }
+
+            const normalizedCode = code.toUpperCase();
+            if (activeTreatyId && treatyStatusIndexesById[activeTreatyId]) {
+                return treatyStatusIndexesById[activeTreatyId][normalizedCode] || defaultTreatyStatus;
+            }
+
+            return combinedTreatyStatusIndex[normalizedCode] || defaultTreatyStatus;
+        }
+
+        function getTreatyFillColor(countryName) {
+            const status = getTreatyStatusForCountry(countryName);
+            if (status.is_original_submitted) {
+                return '#0f766e';
+            }
+            if (status.is_ratified) {
+                return '#2e7d32';
+            }
+            if (status.is_signed) {
+                return '#f59e0b';
+            }
+            return '#d1d5db';
+        }
+
+        function refreshTreatySelectorMeta() {
+            if (!treatySelectorMetaEl) {
+                return;
+            }
+
+            const selectedTreaty = getSelectedTreaty();
+            if (!selectedTreaty) {
+                const signedCount = Object.values(combinedTreatyStatusIndex).filter((row) => row.is_signed).length;
+                const ratifiedCount = Object.values(combinedTreatyStatusIndex).filter((row) => row.is_ratified).length;
+                const originalSubmittedCount = Object.values(combinedTreatyStatusIndex).filter((row) => row
+                    .is_original_submitted).length;
+                treatySelectorMetaEl.textContent =
+                    `Combined view: ${signedCount} signed, ${ratifiedCount} ratified, ${originalSubmittedCount} original submissions.`;
+                return;
+            }
+
+            treatySelectorMetaEl.textContent =
+                `${selectedTreaty.title}: ${selectedTreaty.signed_count} signed, ${selectedTreaty.ratified_count} ratified, ${selectedTreaty.original_submitted_count || 0} original submissions.`;
+        }
+
         function normalizeRegionalAbbreviation(abbreviation) {
             return (abbreviation || '').toString().toUpperCase().replace(/[^A-Z]/g, '');
         }
@@ -1784,7 +1993,8 @@
                 return maxByRegion;
             }
 
-            const regionKey = resolveRegionKeyFromName(payload.name) || resolveRegionKeyFromData(payload) || 'unknown';
+            const regionKey = resolveRegionKeyFromName(payload.name) || resolveRegionKeyFromData(payload) ||
+                'unknown';
             const directFunding = Number(payload.direct_funding || 0);
             maxByRegion[regionKey] = Math.max(maxByRegion[regionKey] || 0, directFunding);
             return maxByRegion;
@@ -1889,6 +2099,94 @@
             };
         }
 
+        function getTreatyDefaultStyle(countryName) {
+            return {
+                fillColor: getTreatyFillColor(countryName),
+                weight: 1.4,
+                opacity: 1,
+                color: '#ffffff',
+                fillOpacity: 0.9
+            };
+        }
+
+        function treatyStatusLabel(status) {
+            if (status.is_original_submitted) {
+                return 'Original Submitted to AU Legal';
+            }
+            if (status.is_ratified) {
+                return 'Ratified';
+            }
+            if (status.is_signed) {
+                return 'Signed';
+            }
+            return 'No recorded action';
+        }
+
+        function highlightTreatyFeature(e) {
+            const layer = e.target;
+            const countryName = layer._countryName || 'Country';
+            const treatyStatus = getTreatyStatusForCountry(countryName);
+            const selectedTreaty = getSelectedTreaty();
+            const treatyTitle = selectedTreaty ? selectedTreaty.title : 'Combined Treaties View';
+
+            layer.setStyle({
+                weight: 3,
+                color: '#111827',
+                fillOpacity: 0.95
+            });
+
+            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                layer.bringToFront();
+            }
+
+            const popupContent = `
+                <div class="popup-content">
+                    <div class="popup-country">${countryName}</div>
+                    <div class="popup-stat">
+                        <span>Treaty Scope:</span>
+                        <span>${treatyTitle}</span>
+                    </div>
+                    <div class="popup-stat">
+                        <span>Status:</span>
+                        <span>${treatyStatusLabel(treatyStatus)}</span>
+                    </div>
+                    <div class="popup-stat">
+                        <span>Signed On:</span>
+                        <span>${treatyStatus.signed_at || '—'}</span>
+                    </div>
+                    <div class="popup-stat">
+                        <span>Ratified On:</span>
+                        <span>${treatyStatus.ratified_at || '—'}</span>
+                    </div>
+                    <div class="popup-stat">
+                        <span>Original Submitted:</span>
+                        <span>${treatyStatus.original_submitted_at || '—'}</span>
+                    </div>
+                </div>
+            `;
+            layer.bindPopup(popupContent).openPopup();
+        }
+
+        function resetTreatyHighlight(e) {
+            const layer = e.target;
+            layer.setStyle(getTreatyDefaultStyle(layer._countryName));
+            layer.closePopup();
+        }
+
+        function refreshTreatyMapStyles() {
+            treatiesLayerGroup.eachLayer(function(layer) {
+                if (typeof layer.eachLayer === 'function') {
+                    layer.eachLayer(function(childLayer) {
+                        if (childLayer && childLayer._countryName && typeof childLayer.setStyle ===
+                            'function') {
+                            childLayer.setStyle(getTreatyDefaultStyle(childLayer._countryName));
+                        }
+                    });
+                }
+            });
+            refreshTreatySelectorMeta();
+        }
+
         function highlightFeature(e) {
             const layer = e.target;
             const countryName = layer._countryName || 'Country';
@@ -1976,21 +2274,48 @@
             }).addTo(africaLayerGroup);
         }
 
+        function addShapeToTreatiesMap(rawShape, shapeUrl) {
+            const featureCollection = toFeatureCollection(rawShape);
+
+            if (!featureCollection.features.length) {
+                return;
+            }
+
+            L.geoJSON(featureCollection, {
+                style: function(feature) {
+                    const countryName = getCountryNameFromFeature(feature, shapeUrl);
+                    return getTreatyDefaultStyle(countryName);
+                },
+                onEachFeature: function(feature, layer) {
+                    const countryName = getCountryNameFromFeature(feature, shapeUrl);
+                    layer._countryName = countryName;
+                    layer.on({
+                        mouseover: highlightTreatyFeature,
+                        mouseout: resetTreatyHighlight
+                    });
+                }
+            }).addTo(treatiesLayerGroup);
+        }
+
         function loadAfricaShapefiles() {
             if (!shapeFiles.length) {
                 setMapStatus('No shapefiles found in public/assets/Africa.');
+                setTreatiesMapStatus('No shapefiles found in public/assets/Africa.');
                 return;
             }
 
             setMapStatus(`Loading ${shapeFiles.length} shapefiles...`);
+            setTreatiesMapStatus(`Loading ${shapeFiles.length} shapefiles...`);
             let loaded = 0;
 
             const loaders = shapeFiles.map(function(shapeUrl) {
                 return shp(shapeUrl)
                     .then(function(rawShape) {
                         addShapeToMap(rawShape, shapeUrl);
+                        addShapeToTreatiesMap(rawShape, shapeUrl);
                         loaded += 1;
                         setMapStatus(`Loaded ${loaded}/${shapeFiles.length} shapefiles...`);
+                        setTreatiesMapStatus(`Loaded ${loaded}/${shapeFiles.length} shapefiles...`);
                     })
                     .catch(function(error) {
                         throw {
@@ -2007,7 +2332,8 @@
 
                 failed.forEach(function(result) {
                     if (result.reason && result.reason.shapeUrl) {
-                        console.warn('Failed to load shapefile:', result.reason.shapeUrl, result.reason.error);
+                        console.warn('Failed to load shapefile:', result.reason.shapeUrl, result.reason
+                            .error);
                     } else {
                         console.warn('Failed to load shapefile:', result.reason);
                     }
@@ -2020,15 +2346,36 @@
                     });
                 }
 
+                if (treatiesLayerGroup.getLayers().length > 0) {
+                    treatiesMap.fitBounds(treatiesLayerGroup.getBounds(), {
+                        padding: [30, 30],
+                        maxZoom: 4
+                    });
+                }
+
+                refreshTreatyMapStyles();
+
                 if (failed.length > 0) {
                     setMapStatus(`Map loaded with ${failed.length} shapefile(s) skipped due to read errors.`);
+                    setTreatiesMapStatus(
+                        `Map loaded with ${failed.length} shapefile(s) skipped due to read errors.`);
                 } else {
                     setMapStatus('Africa map loaded.');
+                    setTreatiesMapStatus('Treaties map loaded.');
                 }
             });
         }
 
         loadAfricaShapefiles();
+
+        if (treatySelectorEl) {
+            treatySelectorEl.addEventListener('change', function() {
+                activeTreatyId = this.value || '';
+                refreshTreatyMapStyles();
+            });
+        }
+
+        refreshTreatySelectorMeta();
 
         // Filter functions
         function selectAll(type) {
@@ -2221,6 +2568,11 @@
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
             applyFilters();
+            refreshTreatySelectorMeta();
+            setTimeout(() => {
+                map.invalidateSize();
+                treatiesMap.invalidateSize();
+            }, 150);
 
             // Initialize Countries DataTable
             if ($('#countriesTable').length) {

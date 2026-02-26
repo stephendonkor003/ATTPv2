@@ -142,6 +142,17 @@ class PermissionSeeder extends Seeder
 
             // System Audit
             ['name' => 'system.audit.view', 'module' => 'system', 'description' => 'View system activity audit logs'],
+
+            // Treaties & Agreements
+            ['name' => 'treaties.view', 'module' => 'AU Master Data', 'description' => 'View treaties and agreements'],
+            ['name' => 'treaties.create', 'module' => 'AU Master Data', 'description' => 'Create treaties and agreements'],
+            ['name' => 'treaties.edit', 'module' => 'AU Master Data', 'description' => 'Edit treaties and member-state status'],
+            ['name' => 'treaties.delete', 'module' => 'AU Master Data', 'description' => 'Delete treaties and agreements'],
+
+            // Member State Treaty Portal (strict RBAC)
+            ['name' => 'member_state.treaties.view', 'module' => 'Member State Portal', 'description' => 'View own member-state treaties workspace'],
+            ['name' => 'member_state.treaties.update', 'module' => 'Member State Portal', 'description' => 'Sign, ratify, and submit original treaty documents'],
+            ['name' => 'member_state.treaties.documents.download', 'module' => 'Member State Portal', 'description' => 'Download own treaty status documents and treaty supporting documents'],
         ];
 
         foreach ($permissions as $permission) {

@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\Permission;
 use App\Models\GovernanceNode;
 use App\Models\GovernanceReportingLine;
+use App\Models\AuMemberState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -25,7 +26,7 @@ class UserAccessController extends Controller
         $scopedNodeIds = $this->scopedNodeIds();
 
         return view('system.users.index', [
-            'users' => User::with(['role.permissions', 'governanceNode'])
+            'users' => User::with(['role.permissions', 'governanceNode', 'memberState'])
                 ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds);
                 })
@@ -42,8 +43,9 @@ class UserAccessController extends Controller
     {
         $roles = Role::orderBy('name')->get();
         $nodes = $this->availableNodes();
+        $memberStates = AuMemberState::ordered()->get();
 
-        return view('system.users.create', compact('roles', 'nodes'));
+        return view('system.users.create', compact('roles', 'nodes', 'memberStates'));
     }
 
     public function store(Request $request)
@@ -52,10 +54,14 @@ class UserAccessController extends Controller
             'name'    => 'required|string|max:255',
             'email'   => 'required|email|unique:users,email',
             'role_id' => 'required|exists:roles,id',
-            'governance_node_id' => 'required|exists:myb_governance_nodes,id',
+            'user_type' => 'required|in:staff,member_state',
+            'governance_node_id' => 'nullable|required_unless:user_type,member_state|exists:myb_governance_nodes,id',
+            'member_state_id' => 'nullable|required_if:user_type,member_state|exists:myb_au_member_states,id',
         ]);
 
-        $this->assertNodeInScope((int) $request->governance_node_id);
+        if ($request->filled('governance_node_id')) {
+            $this->assertNodeInScope((int) $request->governance_node_id);
+        }
 
         $plainPassword = str()->random(10);
 
@@ -64,8 +70,9 @@ class UserAccessController extends Controller
             'email'                => $request->email,
             'password'             => Hash::make($plainPassword),
             'role_id'              => $request->role_id,
-            'governance_node_id'   => $request->governance_node_id,
-            'user_type'            => 'staff',
+            'governance_node_id'   => $request->input('governance_node_id'),
+            'member_state_id'      => $request->input('member_state_id'),
+            'user_type'            => $request->user_type,
             'must_change_password' => true,
         ]);
 
@@ -86,8 +93,9 @@ class UserAccessController extends Controller
         $this->assertUserInScope($user);
         $roles = Role::orderBy('name')->get();
         $nodes = $this->availableNodes();
+        $memberStates = AuMemberState::ordered()->get();
 
-        return view('system.users.edit', compact('user', 'roles', 'nodes'));
+        return view('system.users.edit', compact('user', 'roles', 'nodes', 'memberStates'));
     }
 
     public function update(Request $request, User $user)
@@ -102,16 +110,22 @@ class UserAccessController extends Controller
             'name'    => 'required|string|max:255',
             'email'   => 'required|email|unique:users,email,' . $user->id,
             'role_id' => 'required|exists:roles,id',
-            'governance_node_id' => 'required|exists:myb_governance_nodes,id',
+            'user_type' => 'required|in:staff,member_state',
+            'governance_node_id' => 'nullable|required_unless:user_type,member_state|exists:myb_governance_nodes,id',
+            'member_state_id' => 'nullable|required_if:user_type,member_state|exists:myb_au_member_states,id',
         ]);
 
-        $this->assertNodeInScope((int) $request->governance_node_id);
+        if ($request->filled('governance_node_id')) {
+            $this->assertNodeInScope((int) $request->governance_node_id);
+        }
 
         $user->update([
             'name'    => $request->name,
             'email'   => $request->email,
             'role_id' => $request->role_id,
-            'governance_node_id' => $request->governance_node_id,
+            'user_type' => $request->user_type,
+            'governance_node_id' => $request->input('governance_node_id'),
+            'member_state_id' => $request->input('member_state_id'),
         ]);
 
         return redirect()
@@ -164,6 +178,76 @@ class UserAccessController extends Controller
         );
 
         return back()->with('success', 'Password reset and emailed successfully.');
+    }
+
+    public function blockLogin(Request $request, User $user)
+    {
+        if ($user->id === auth()->id()) {
+            return back()->with('error', 'You cannot block your own login.');
+        }
+
+        if ($user->isAdmin() || $user->isSuperAdmin()) {
+            return back()->with('error', 'Super Admin login cannot be blocked.');
+        }
+
+        $this->assertUserInScope($user);
+
+        $validated = $request->validate([
+            'block_type' => 'required|in:temporary,permanent',
+            'duration_value' => 'nullable|required_if:block_type,temporary|integer|min:1|max:3650',
+            'duration_unit' => 'nullable|required_if:block_type,temporary|in:minutes,hours,days,weeks,months',
+            'reason' => 'nullable|string|max:255',
+        ]);
+
+        $disabledUntil = null;
+        if ($validated['block_type'] === 'temporary') {
+            $duration = (int) $validated['duration_value'];
+            $disabledUntil = match ($validated['duration_unit']) {
+                'minutes' => now()->addMinutes($duration),
+                'hours' => now()->addHours($duration),
+                'days' => now()->addDays($duration),
+                'weeks' => now()->addWeeks($duration),
+                'months' => now()->addMonths($duration),
+            };
+        }
+
+        $reason = trim((string) ($validated['reason'] ?? ''));
+        if ($reason === '') {
+            $reason = $validated['block_type'] === 'temporary'
+                ? 'Temporarily blocked by user management.'
+                : 'Permanently blocked by user management.';
+        }
+
+        $user->update([
+            'is_disabled' => true,
+            'disabled_at' => now(),
+            'disabled_until' => $disabledUntil,
+            'disabled_reason' => $reason,
+        ]);
+
+        $statusMessage = $disabledUntil
+            ? 'User login blocked temporarily until ' . $disabledUntil->format('d M Y H:i') . '.'
+            : 'User login blocked permanently.';
+
+        return back()->with('success', $statusMessage);
+    }
+
+    public function unblockLogin(User $user)
+    {
+        if ($user->isAdmin() || $user->isSuperAdmin()) {
+            return back()->with('error', 'Super Admin login is always allowed.');
+        }
+
+        $this->assertUserInScope($user);
+
+        $user->update([
+            'is_disabled' => false,
+            'disabled_at' => null,
+            'disabled_until' => null,
+            'disabled_reason' => null,
+        ]);
+
+        return back()->with('success', 'User login unblocked successfully.');
     }
 
     /* ======================================================

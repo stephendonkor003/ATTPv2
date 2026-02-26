@@ -225,6 +225,12 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
         Route::post('/{user}/reset-password', [UserAccessController::class, 'resetPassword'])
             ->name('reset-password');
 
+        Route::post('/{user}/block-login', [UserAccessController::class, 'blockLogin'])
+            ->name('block-login');
+
+        Route::post('/{user}/unblock-login', [UserAccessController::class, 'unblockLogin'])
+            ->name('unblock-login');
+
 
             Route::get('/{user}/permissions', [UserAccessController::class, 'permissions'])
                 ->name('permissions');
@@ -2496,7 +2502,12 @@ use App\Http\Controllers\AuMasterData\{
     AuRegionalBlockController,
     AuAspirationController,
     AuGoalController,
-    AuFlagshipProjectController
+    AuFlagshipProjectController,
+    TreatyController
+};
+use App\Http\Controllers\Treaty\{
+    MemberStateTreatyController,
+    TreatyDocumentController
 };
 
 Route::middleware(['auth', 'not.funding.partner'])
@@ -2524,10 +2535,39 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::resource('flagship-projects', AuFlagshipProjectController::class)
             ->except(['show']);
 
+        // Treaties & Agreements
+        Route::resource('treaties', TreatyController::class);
+        Route::post('treaties/{treaty}/member-state-statuses', [TreatyController::class, 'syncMemberStateStatuses'])
+            ->name('treaties.member-state-statuses.sync');
+
         // AJAX: Get goals by aspiration IDs
         Route::get('goals/by-aspiration', [AuGoalController::class, 'byAspiration'])
             ->name('goals.by-aspiration');
     });
+
+Route::middleware(['auth', 'member.state'])
+    ->prefix('member-state/treaties')
+    ->name('member-state.treaties.')
+    ->group(function () {
+        Route::get('/', [MemberStateTreatyController::class, 'index'])
+            ->middleware('permission:member_state.treaties.view')
+            ->name('index');
+        Route::post('/{treaty}/status', [MemberStateTreatyController::class, 'updateStatus'])
+            ->middleware('permission:member_state.treaties.update')
+            ->name('status.update');
+        Route::post('/{treaty}/resend-proof-service-email', [MemberStateTreatyController::class, 'resendProofServiceEmail'])
+            ->middleware('permission:member_state.treaties.update')
+            ->name('status.resend-proof-email');
+    });
+
+Route::middleware(['auth'])
+    ->get('/treaty-statuses/{treatyStatus}/documents/{type}', [TreatyDocumentController::class, 'download'])
+    ->whereIn('type', ['signed', 'ratified', 'original'])
+    ->name('treaty-statuses.documents.download');
+
+Route::middleware(['auth'])
+    ->get('/treaties/supporting-documents/{supportingDocument}/download', [TreatyDocumentController::class, 'downloadSupportingDocument'])
+    ->name('treaties.supporting-documents.download');
 
 
 /*

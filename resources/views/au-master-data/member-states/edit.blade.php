@@ -17,7 +17,8 @@
 
             <div class="card shadow-sm border-0">
                 <div class="card-body">
-                    <form action="{{ route('settings.au.member-states.update', $memberState->id) }}" method="POST">
+                    <form action="{{ route('settings.au.member-states.update', $memberState->id) }}" method="POST"
+                        enctype="multipart/form-data">
                         @csrf
                         @method('PUT')
 
@@ -58,6 +59,25 @@
                                 @error('sort_order')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Flag Image</label>
+                                <input type="file" name="flag_image"
+                                    class="form-control @error('flag_image') is-invalid @enderror"
+                                    accept="image/*">
+                                <small class="text-muted">Upload a new image to replace the current flag.</small>
+                                @error('flag_image')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+
+                                @if ($memberState->flag_url)
+                                    <div class="mt-2 d-flex align-items-center gap-2">
+                                        <img src="{{ $memberState->flag_url }}" alt="{{ $memberState->name }} flag"
+                                            style="width: 46px; height: 32px; object-fit: cover; border: 1px solid #d1d5db; border-radius: 4px;">
+                                        <small class="text-muted">Current flag</small>
+                                    </div>
+                                @endif
                             </div>
 
                             <div class="col-md-6">

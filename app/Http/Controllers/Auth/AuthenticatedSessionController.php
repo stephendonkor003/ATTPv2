@@ -41,14 +41,29 @@ class AuthenticatedSessionController extends Controller
                 return redirect()->route('login')
                     ->withErrors(['email' => 'Your vendor account has been blacklisted. Please contact the administrator.']);
             }
+        }
 
-            if ($user->is_disabled) {
+        if ($user->is_disabled) {
+            // Auto-release temporary blocks that already expired.
+            if ($user->disabled_until && $user->disabled_until->isPast()) {
+                $user->update([
+                    'is_disabled' => false,
+                    'disabled_at' => null,
+                    'disabled_until' => null,
+                    'disabled_reason' => null,
+                ]);
+                $user->refresh();
+            } else {
                 Auth::guard('web')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
 
+                $until = optional($user->disabled_until)->format('d M Y H:i');
+                $message = $until
+                    ? 'Your account is temporarily blocked until ' . $until . '. Please contact the administrator.'
+                    : 'Your account has been blocked. Please contact the administrator.';
                 return redirect()->route('login')
-                    ->withErrors(['email' => 'Your vendor account has been disabled. Please contact the administrator.']);
+                    ->withErrors(['email' => $message]);
             }
         }
 
@@ -81,6 +96,11 @@ class AuthenticatedSessionController extends Controller
         // Redirect vendors to their portal
         if ($user->user_type === 'vendor') {
             return redirect()->intended(route('vendor.dashboard', absolute: false));
+        }
+
+        // Redirect member states to treaty workspace
+        if ($user->user_type === 'member_state') {
+            return redirect()->intended(route('member-state.treaties.index', absolute: false));
         }
 
         // Default redirect to admin dashboard for all other users

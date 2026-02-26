@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AuMemberState extends BaseModel
 {
@@ -16,6 +17,7 @@ class AuMemberState extends BaseModel
         'name',
         'code',
         'code_alpha2',
+        'flag_path',
         'is_active',
         'sort_order',
     ];
@@ -41,6 +43,11 @@ class AuMemberState extends BaseModel
         return $query->orderBy('sort_order')->orderBy('name');
     }
 
+    public function getFlagUrlAttribute(): ?string
+    {
+        return $this->flag_path ? asset($this->flag_path) : null;
+    }
+
     /**
      * Program fundings that benefit this member state.
      */
@@ -52,5 +59,31 @@ class AuMemberState extends BaseModel
             'member_state_id',
             'program_funding_id'
         )->withTimestamps();
+    }
+
+    /**
+     * Treaty status records for this member state.
+     */
+    public function treatyStatuses(): HasMany
+    {
+        return $this->hasMany(TreatyMemberStateStatus::class, 'member_state_id');
+    }
+
+    /**
+     * Treaties linked to this member state.
+     */
+    public function treaties(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Treaty::class,
+            'myb_treaty_member_state_statuses',
+            'member_state_id',
+            'treaty_id'
+        )->withPivot([
+            'is_signed',
+            'signed_at',
+            'is_ratified',
+            'ratified_at',
+        ])->withTimestamps();
     }
 }

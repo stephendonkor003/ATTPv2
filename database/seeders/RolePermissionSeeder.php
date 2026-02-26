@@ -90,5 +90,15 @@ class RolePermissionSeeder extends Seeder
                     'evaluations.evaluate',
                 ])->pluck('id')
             );
+
+        // Member State Focal Point
+        Role::where('name', 'Member State Focal Point')->first()
+            ->permissions()->sync(
+                Permission::whereIn('name', [
+                    'member_state.treaties.view',
+                    'member_state.treaties.update',
+                    'member_state.treaties.documents.download',
+                ])->pluck('id')
+            );
     }
 }

@@ -17,7 +17,7 @@
 
             <div class="card shadow-sm border-0">
                 <div class="card-body">
-                    <form action="{{ route('settings.au.member-states.store') }}" method="POST">
+                    <form action="{{ route('settings.au.member-states.store') }}" method="POST" enctype="multipart/form-data">
                         @csrf
 
                         <div class="row g-4">
@@ -55,6 +55,17 @@
                                     class="form-control @error('sort_order') is-invalid @enderror"
                                     value="{{ old('sort_order', 0) }}" min="0">
                                 @error('sort_order')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Flag Image</label>
+                                <input type="file" name="flag_image"
+                                    class="form-control @error('flag_image') is-invalid @enderror"
+                                    accept="image/*">
+                                <small class="text-muted">Upload any flag image format (JPG, PNG, WEBP, SVG, GIF).</small>
+                                @error('flag_image')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
                             </div>

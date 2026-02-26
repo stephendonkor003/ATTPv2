@@ -9,10 +9,12 @@ use App\Models\AuRegionalBlock;
 use App\Models\AuAspiration;
 use App\Models\AuGoal;
 use App\Models\AuFlagshipProject;
+use App\Models\Treaty;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Schema;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class ImpactMapController extends Controller
@@ -67,6 +69,9 @@ class ImpactMapController extends Controller
         // Shape files for Africa base map
         $shapeFiles = $this->getAfricaShapeFiles();
 
+        // Treaties and agreements data for the additional map tab
+        $treatiesData = $this->getTreatiesData();
+
         return view('impact-map', compact(
             'summary',
             'filterOptions',
@@ -78,7 +83,8 @@ class ImpactMapController extends Controller
             'fundingByFlagship',
             'trendData',
             'countryGeoData',
-            'shapeFiles'
+            'shapeFiles',
+            'treatiesData'
         ));
     }
 
@@ -747,6 +753,60 @@ class ImpactMapController extends Controller
         }
 
         return $query->get();
+    }
+
+    /**
+     * Build treaty status data for the impact map treaties tab.
+     */
+    private function getTreatiesData(): array
+    {
+        if (!Schema::hasTable('myb_treaties') || !Schema::hasTable('myb_treaty_member_state_statuses')) {
+            return [];
+        }
+
+        return Treaty::query()
+            ->whereIn('status', ['active', 'draft'])
+            ->with(['memberStateStatuses.memberState'])
+            ->orderByDesc('adoption_date')
+            ->orderBy('title')
+            ->get()
+            ->map(function ($treaty) {
+                $statusRows = $treaty->memberStateStatuses
+                    ->filter(fn($row) => $row->memberState)
+                    ->map(function ($row) {
+                        $codeAlpha2 = strtoupper((string) ($row->memberState->code_alpha2 ?? ''));
+                        $codeFallback = strtoupper((string) ($row->memberState->code ?? ''));
+                        $countryCode = $codeAlpha2 !== '' ? $codeAlpha2 : $codeFallback;
+
+                        return [
+                            'country_code' => $countryCode,
+                            'country_name' => $row->memberState->name,
+                            'is_signed' => (bool) $row->is_signed,
+                            'is_ratified' => (bool) $row->is_ratified,
+                            'is_original_submitted' => (bool) $row->is_original_submitted,
+                            'signed_at' => optional($row->signed_at)->toDateString(),
+                            'ratified_at' => optional($row->ratified_at)->toDateString(),
+                            'original_submitted_at' => optional($row->original_submitted_at)->toDateString(),
+                        ];
+                    })
+                    ->values()
+                    ->all();
+
+                return [
+                    'id' => $treaty->id,
+                    'title' => $treaty->title,
+                    'short_title' => $treaty->short_title,
+                    'reference_code' => $treaty->reference_code,
+                    'status' => $treaty->status,
+                    'adoption_date' => optional($treaty->adoption_date)->toDateString(),
+                    'signed_count' => collect($statusRows)->where('is_signed', true)->count(),
+                    'ratified_count' => collect($statusRows)->where('is_ratified', true)->count(),
+                    'original_submitted_count' => collect($statusRows)->where('is_original_submitted', true)->count(),
+                    'statuses' => $statusRows,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**

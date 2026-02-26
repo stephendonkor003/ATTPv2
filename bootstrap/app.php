@@ -7,6 +7,7 @@ use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\EnsureFundingPartner;
 use App\Http\Middleware\EnsureNotFundingPartner;
+use App\Http\Middleware\EnsureMemberState;
 use App\Http\Middleware\EnsurePasswordNotExpired;
 use App\Http\Middleware\EnsureOtpVerified;
 
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => CheckPermission::class,
             'funding.partner' => EnsureFundingPartner::class,
             'not.funding.partner' => EnsureNotFundingPartner::class,
+            'member.state' => EnsureMemberState::class,
             'password.not.expired' => EnsurePasswordNotExpired::class,
             'otp.verified' => EnsureOtpVerified::class,
         ]);
