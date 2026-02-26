@@ -15,6 +15,8 @@ class IndicatorSurveyController extends Controller
     public function __construct()
     {
         $this->middleware(['auth', 'not.funding.partner']);
+        $this->middleware('permission:me.configuration.manage')->only(['generateLink']);
+        $this->middleware('permission:me.configuration.view')->only(['responses']);
     }
 
     public function generateLink(Indicator $indicator): RedirectResponse

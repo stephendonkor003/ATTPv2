@@ -30,6 +30,20 @@ class MeDataSourceController extends Controller
     public function __construct()
     {
         $this->middleware(['auth', 'not.funding.partner']);
+        $this->middleware('permission:me.configuration.view')->only([
+            'index',
+            'downloadGenericTemplate',
+            'downloadTemplate',
+            'exportSurveys',
+            'showSurvey',
+            'exportSurvey',
+            'rawData',
+        ]);
+        $this->middleware('permission:me.configuration.manage')->only([
+            'previewColumns',
+            'manualSync',
+            'manualSyncAll',
+        ]);
     }
 
     public function index(Request $request)

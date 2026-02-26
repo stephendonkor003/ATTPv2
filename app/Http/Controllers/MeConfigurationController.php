@@ -19,7 +19,20 @@ class MeConfigurationController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
-        // Add proper M&E admin role check if needed
+        $this->middleware('permission:me.configuration.view')->only([
+            'indicatorLevelsIndex',
+            'frequenciesIndex',
+            'unitsIndex',
+            'definitionsIndex',
+            'methodologiesIndex',
+        ]);
+        $this->middleware('permission:me.configuration.manage')->except([
+            'indicatorLevelsIndex',
+            'frequenciesIndex',
+            'unitsIndex',
+            'definitionsIndex',
+            'methodologiesIndex',
+        ]);
     }
 
     // ===== Indicator Levels =====

@@ -27,6 +27,16 @@ class MeIndicatorController extends Controller
     public function __construct()
     {
         $this->middleware(['auth', 'not.funding.partner']);
+        $this->middleware('permission:me.configuration.view')->only([
+            'index',
+            'exportManagementExcel',
+            'exportManagementPdf',
+        ]);
+        $this->middleware('permission:me.configuration.manage')->only([
+            'store',
+            'update',
+            'destroy',
+        ]);
     }
 
     public function index(Request $request)

@@ -112,6 +112,10 @@ class PermissionSeeder extends Seeder
             ['name' => 'project.report', 'module' => 'Budget', 'description' => 'View project reports'],
             ['name' => 'activity.report', 'module' => 'Budget', 'description' => 'View activity reports'],
 
+            // Monitoring & Evaluation (M&E)
+            ['name' => 'me.configuration.view', 'module' => 'M&E', 'description' => 'View M&E configuration, indicators, and data-source dashboards'],
+            ['name' => 'me.configuration.manage', 'module' => 'M&E', 'description' => 'Create, update, delete, and sync M&E configuration and indicator data'],
+
             // Evaluations
             ['name' => 'evaluations.manage', 'module' => 'evaluations', 'description' => 'Manage evaluations and assignments'],
             ['name' => 'evaluations.evaluate', 'module' => 'evaluations', 'description' => 'Evaluate submissions'],
