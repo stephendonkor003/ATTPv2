@@ -5,6 +5,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\EnsureFundingPartner;
 use App\Http\Middleware\EnsureNotFundingPartner;
 use App\Http\Middleware\EnsureMemberState;
@@ -32,9 +33,14 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Register SetLocale middleware to web group
         $middleware->web(append: [
+            SecurityHeaders::class,
             SetLocale::class,
             EnsurePasswordNotExpired::class,
             EnsureOtpVerified::class,
+        ]);
+
+        $middleware->api(append: [
+            SecurityHeaders::class,
         ]);
 
     })

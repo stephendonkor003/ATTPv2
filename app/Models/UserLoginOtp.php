@@ -73,13 +73,18 @@ class UserLoginOtp extends BaseModel
     /**
      * Verify OTP code for a user
      */
-    public static function verifyCode(User $user, string $code): bool
+    public static function verifyCode(User $user, string $code, ?string $sessionId = null): bool
     {
-        $otp = self::where('user_id', $user->id)
+        $query = self::where('user_id', $user->id)
             ->where('otp_code', $code)
             ->whereNull('verified_at')
-            ->where('expires_at', '>', now())
-            ->first();
+            ->where('expires_at', '>', now());
+
+        if ($sessionId) {
+            $query->where('session_id', $sessionId);
+        }
+
+        $otp = $query->first();
 
         if (!$otp) {
             return false;

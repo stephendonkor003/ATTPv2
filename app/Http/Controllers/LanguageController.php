@@ -42,8 +42,8 @@ class LanguageController extends Controller
         // Store in session
         $request->session()->put('locale', $locale);
 
-        // Set cookie for 30 days
-        Cookie::queue('preferred_locale', $locale, 43200); // 30 days in minutes
+        // Set cookie for 30 days with explicit security attributes.
+        $this->queuePreferredLocaleCookie($locale);
 
         // Return appropriate response
         if ($request->expectsJson()) {
@@ -75,6 +75,21 @@ class LanguageController extends Controller
         ];
 
         return $languages[$locale] ?? $locale;
+    }
+
+    protected function queuePreferredLocaleCookie(string $locale): void
+    {
+        Cookie::queue(cookie()->make(
+            'preferred_locale',
+            $locale,
+            43200,
+            config('session.path', '/'),
+            config('session.domain'),
+            (bool) config('session.secure', false),
+            true,
+            false,
+            config('session.same_site', 'lax')
+        ));
     }
 
     /**

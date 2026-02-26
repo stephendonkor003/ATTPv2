@@ -29,6 +29,11 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
         $request->session()->regenerate();
+        $request->session()->forget([
+            'otp_verified',
+            'otp_verified_at',
+            'otp_verified_user_id',
+        ]);
 
         $user = Auth::user();
 
@@ -129,6 +134,7 @@ class AuthenticatedSessionController extends Controller
         // Clear OTP verification status from session
         $request->session()->forget('otp_verified');
         $request->session()->forget('otp_verified_at');
+        $request->session()->forget('otp_verified_user_id');
 
         Auth::guard('web')->logout();
 

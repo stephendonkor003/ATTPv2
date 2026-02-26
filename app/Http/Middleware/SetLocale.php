@@ -36,8 +36,8 @@ class SetLocale
         $finalLocale = App::getLocale();
         $request->session()->put('locale', $finalLocale);
 
-        // Set cookie for 30 days
-        Cookie::queue('preferred_locale', $finalLocale, 43200); // 30 days in minutes
+        // Set cookie for 30 days with explicit security attributes.
+        $this->queuePreferredLocaleCookie($finalLocale);
 
         return $response;
     }
@@ -118,5 +118,20 @@ class SetLocale
         }
 
         return null;
+    }
+
+    protected function queuePreferredLocaleCookie(string $locale): void
+    {
+        Cookie::queue(cookie()->make(
+            'preferred_locale',
+            $locale,
+            43200,
+            config('session.path', '/'),
+            config('session.domain'),
+            (bool) config('session.secure', false),
+            true,
+            false,
+            config('session.same_site', 'lax')
+        ));
     }
 }

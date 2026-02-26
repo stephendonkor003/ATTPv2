@@ -907,46 +907,6 @@
 
 
 
-                {{-- ================= SYSTEM MANAGEMENT ================= --}}
-                @canany(['users.manage', 'roles.manage', 'permissions.manage', 'system.audit.view'])
-                    <li class="nxl-item nxl-caption">
-                        <label>{{ __('admin.users_security') }}</label>
-                    </li>
-
-                    @can('roles.manage')
-                        <li class="nxl-item">
-                            <a href="{{ route('system.roles.index') }}" class="nxl-link">
-                                <i class="feather-shield me-2"></i> Roles Management
-                            </a>
-                        </li>
-                    @endcan
-
-                    @can('permissions.manage')
-                        <li class="nxl-item">
-                            <a href="{{ route('system.permissions.index') }}" class="nxl-link">
-                                <i class="feather-lock me-2"></i> Permissions
-                            </a>
-                        </li>
-                    @endcan
-
-                    @can('users.manage')
-                        <li class="nxl-item">
-                            <a href="{{ route('system.users.index') }}" class="nxl-link">
-                                <i class="feather-users me-2"></i> Users
-                            </a>
-                        </li>
-                    @endcan
-
-                    @can('system.audit.view')
-                        <li class="nxl-item">
-                            <a href="{{ route('system.audit.index') }}" class="nxl-link">
-                                <i class="feather-activity me-2"></i> System Audit
-                            </a>
-                        </li>
-                    @endcan
-                @endcanany
-
-
                 {{-- ================= AU MASTER DATA ================= --}}
                 @canany(['settings.au_master_data.view', 'settings.au_master_data.create',
                     'settings.au_master_data.edit', 'treaties.view', 'treaties.create', 'treaties.edit'])
@@ -1004,6 +964,46 @@
                             @endcanany
                         </ul>
                     </li>
+                @endcanany
+
+
+                {{-- ================= SYSTEM MANAGEMENT ================= --}}
+                @canany(['users.manage', 'roles.manage', 'permissions.manage', 'system.audit.view'])
+                    <li class="nxl-item nxl-caption">
+                        <label>{{ __('admin.users_security') }}</label>
+                    </li>
+
+                    @can('roles.manage')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.roles.index') }}" class="nxl-link">
+                                <i class="feather-shield me-2"></i> Roles Management
+                            </a>
+                        </li>
+                    @endcan
+
+                    @can('permissions.manage')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.permissions.index') }}" class="nxl-link">
+                                <i class="feather-lock me-2"></i> Permissions
+                            </a>
+                        </li>
+                    @endcan
+
+                    @can('users.manage')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.users.index') }}" class="nxl-link">
+                                <i class="feather-users me-2"></i> Users
+                            </a>
+                        </li>
+                    @endcan
+
+                    @can('system.audit.view')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.audit.index') }}" class="nxl-link">
+                                <i class="feather-activity me-2"></i> System Audit
+                            </a>
+                        </li>
+                    @endcan
                 @endcanany
 
 

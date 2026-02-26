@@ -168,8 +168,8 @@ class SecurityController extends Controller
             ]);
         }
 
-        // Verify the OTP
-        if (!UserLoginOtp::verifyCode($user, $request->otp_code)) {
+        // Verify the OTP and bind it to the current browser session.
+        if (!UserLoginOtp::verifyCode($user, $request->otp_code, $request->session()->getId())) {
             RateLimiter::hit($throttleKey, 600); // 10 minutes
             return back()->withErrors([
                 'otp_code' => 'The verification code is invalid or has expired. Please request a new code.',
@@ -180,6 +180,12 @@ class SecurityController extends Controller
 
         // Mark OTP as verified for the session
         $user->markOtpAsVerified();
+        $request->session()->regenerate();
+        $request->session()->put([
+            'otp_verified' => true,
+            'otp_verified_at' => now()->toIso8601String(),
+            'otp_verified_user_id' => (string) $user->id,
+        ]);
 
         // Log the activity
         Log::info('OTP verification successful', [

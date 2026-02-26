@@ -33,7 +33,8 @@ class TreatyProofServiceCodesMail extends Mailable
             ?: 'Member State';
 
         $subjectPrefix = $this->isResend ? '[Resent] ' : '';
-        $subject = $subjectPrefix . 'Treaty Proof-of-Service Codes - ' . $memberStateName;
+        $reference = $this->treaty->reference_code ?: 'No Ref';
+        $subject = $subjectPrefix . 'Treaty Proof-of-Service Codes (' . $reference . ') - ' . $memberStateName;
 
         return $this->subject($subject)
             ->view('emails.treaties.proof-service-codes')

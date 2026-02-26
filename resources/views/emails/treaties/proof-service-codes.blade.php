@@ -1,64 +1,68 @@
-<!DOCTYPE html>
-<html>
+@extends('emails.layouts.base')
 
-<head>
-    <meta charset="UTF-8">
-    <title>Treaty Proof-of-Service Codes</title>
-</head>
+@section('content')
+    <h2 style="margin-bottom: 14px;">Treaty Proof-of-Service Notification</h2>
 
-<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 32px;">
-    <div style="max-width: 720px; margin: auto; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-        <div style="background-color: #0f766e; padding: 20px; text-align: center; color: #ffffff;">
-            <h2 style="margin: 0;">Treaty Proof-of-Service Codes</h2>
+    @if ($isResend)
+        <div class="alert alert-info">
+            <strong>Resent Notice:</strong> This email was resent from the member state portal because legal confirmation is still pending.
         </div>
+    @endif
 
-        <div style="padding: 24px; color: #1f2937; background-color: #ffffff;">
-            @if ($isResend)
-                <p style="margin-top: 0;"><strong>This is a resend request from the member state portal.</strong></p>
-            @endif
+    <p>
+        AU Legal Directorate,
+    </p>
+    <p>
+        Please review the submitted proof-of-service details below and validate each code before final completion.
+    </p>
 
-            <p><strong>Member State:</strong> {{ $memberStateName }}</p>
-            <p><strong>Treaty:</strong> {{ $treaty->title }}</p>
-            <p><strong>Reference:</strong> {{ $treaty->reference_code ?: 'N/A' }}</p>
-
-            <div style="margin: 20px 0; padding: 16px; border: 1px solid #d1d5db; border-radius: 8px; background: #f9fafb;">
-                <h4 style="margin-top: 0; margin-bottom: 10px;">Codes Submitted for Legal Verification</h4>
-
-                @if ($status->signed_service_code)
-                    <p style="margin: 6px 0;">
-                        <strong>Signed Code:</strong>
-                        <span style="font-family: 'Courier New', monospace;">{{ $status->signed_service_code }}</span>
-                        @if ($status->signed_service_code_verified_at)
-                            <span style="color: #065f46;">(Already verified)</span>
-                        @endif
-                    </p>
-                @endif
-
-                @if ($status->ratified_service_code)
-                    <p style="margin: 6px 0;">
-                        <strong>Ratified Code:</strong>
-                        <span style="font-family: 'Courier New', monospace;">{{ $status->ratified_service_code }}</span>
-                        @if ($status->ratified_service_code_verified_at)
-                            <span style="color: #065f46;">(Already verified)</span>
-                        @endif
-                    </p>
-                @endif
-            </div>
-
-            <p style="margin-bottom: 16px;">
-                Please validate these codes in the AU treaty matrix before marking final completion of original submission.
-            </p>
-
-            <a href="{{ $reviewUrl }}"
-                style="display: inline-block; padding: 10px 14px; border-radius: 6px; background: #0f766e; color: #ffffff; text-decoration: none;">
-                Open Treaty Review
-            </a>
-        </div>
-
-        <div style="background-color: #0f766e; color: #ffffff; text-align: center; padding: 12px;">
-            Africa Think Tank Platform - African Union Commission
-        </div>
+    <div class="info-list">
+        <p style="margin: 0 0 8px 0;"><strong>Member State:</strong> {{ $memberStateName }}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Treaty Title:</strong> {{ $treaty->title }}</p>
+        <p style="margin: 0;"><strong>Treaty Reference:</strong> {{ $treaty->reference_code ?: 'N/A' }}</p>
     </div>
-</body>
 
-</html>
+    @if ($status->signed_service_code)
+        <div style="border: 1px solid #dbeafe; background: #eff6ff; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+            <p style="margin: 0 0 6px 0; color: #1e40af;"><strong>Signed Service Code</strong></p>
+            <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #1e3a8a;">
+                {{ $status->signed_service_code }}
+            </p>
+            @if ($status->signed_service_code_verified_at)
+                <p style="margin: 8px 0 0 0; color: #065f46; font-size: 13px;">
+                    Verified on {{ $status->signed_service_code_verified_at->format('d M Y, H:i') }}.
+                </p>
+            @else
+                <p style="margin: 8px 0 0 0; color: #92400e; font-size: 13px;">
+                    Pending legal confirmation.
+                </p>
+            @endif
+        </div>
+    @endif
+
+    @if ($status->ratified_service_code)
+        <div style="border: 1px solid #dcfce7; background: #f0fdf4; border-radius: 10px; padding: 16px; margin-bottom: 18px;">
+            <p style="margin: 0 0 6px 0; color: #166534;"><strong>Ratified Service Code</strong></p>
+            <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #14532d;">
+                {{ $status->ratified_service_code }}
+            </p>
+            @if ($status->ratified_service_code_verified_at)
+                <p style="margin: 8px 0 0 0; color: #065f46; font-size: 13px;">
+                    Verified on {{ $status->ratified_service_code_verified_at->format('d M Y, H:i') }}.
+                </p>
+            @else
+                <p style="margin: 8px 0 0 0; color: #92400e; font-size: 13px;">
+                    Pending legal confirmation.
+                </p>
+            @endif
+        </div>
+    @endif
+
+    <a href="{{ $reviewUrl }}" class="btn">Open Treaty Review</a>
+
+    <div class="divider"></div>
+
+    <p style="font-size: 14px; color: #6b7280;">
+        This message was generated by the ATTP-Africa treaty workflow. Confirmation should be completed only after the codes match the submission records.
+    </p>
+@endsection
