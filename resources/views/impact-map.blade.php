@@ -388,6 +388,29 @@
             background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
         }
 
+        .map-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem 1rem;
+            margin-top: 0.75rem;
+            font-size: 0.82rem;
+            color: #374151;
+        }
+
+        .map-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .map-legend-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            flex-shrink: 0;
+        }
+
         /* Charts Grid */
         .charts-grid {
             display: grid;
@@ -913,32 +936,32 @@
     <!-- Summary Cards -->
     <div class="summary-grid">
         <div class="summary-card">
-            <div class="icon">💰</div>
+            <div class="icon">&#x1F4B0;</div>
             <div class="value">USD {{ number_format($summary['total_funding'] / 1000000, 1) }}M</div>
             <div class="label">Total Funding</div>
         </div>
         <div class="summary-card">
-            <div class="icon">📊</div>
+            <div class="icon">&#x1F4CA;</div>
             <div class="value">{{ $summary['total_programs'] }}</div>
             <div class="label">Active Programs</div>
         </div>
         <div class="summary-card">
-            <div class="icon">🤝</div>
+            <div class="icon">&#x1F91D;</div>
             <div class="value">{{ $summary['total_partners'] }}</div>
             <div class="label">Funding Partners</div>
         </div>
         <div class="summary-card">
-            <div class="icon">🌍</div>
+            <div class="icon">&#x1F30D;</div>
             <div class="value">{{ $summary['total_countries'] }}</div>
             <div class="label">Countries Reached</div>
         </div>
         <div class="summary-card">
-            <div class="icon">🏛️</div>
+            <div class="icon">&#x1F3DB;</div>
             <div class="value">{{ $summary['total_regions'] }}</div>
             <div class="label">Regional Blocks</div>
         </div>
         <div class="summary-card">
-            <div class="icon">🎯</div>
+            <div class="icon">&#x1F3AF;</div>
             <div class="value">{{ $summary['total_aspirations'] }}</div>
             <div class="label">Agenda 2063 Aspirations</div>
         </div>
@@ -964,14 +987,14 @@
                     <div class="filter-checkbox continental-filter">
                         <input type="checkbox" id="filter-continental" value="continental" class="filter-scope" checked>
                         <label for="filter-continental">
-                            <span class="scope-badge continental">🌍</span>
+                            <span class="scope-badge continental">&#x1F30D;</span>
                             Continental Initiatives (All 55 States)
                         </label>
                     </div>
                     <div class="filter-checkbox targeted-filter">
                         <input type="checkbox" id="filter-targeted" value="targeted" class="filter-scope" checked>
                         <label for="filter-targeted">
-                            <span class="scope-badge targeted">🎯</span>
+                            <span class="scope-badge targeted">&#x1F3AF;</span>
                             Targeted Programs (Specific Countries)
                         </label>
                     </div>
@@ -1060,10 +1083,10 @@
             <div class="download-section">
                 <h4>Download Reports</h4>
                 <a href="{{ route('impact.download.pdf') }}" class="download-btn pdf" id="download-pdf">
-                    <span>📄</span> Download PDF Report
+                    <span>&#x1F4C4;</span> Download PDF Report
                 </a>
                 <a href="{{ route('impact.download.excel') }}" class="download-btn excel" id="download-excel">
-                    <span>📊</span> Download Excel/CSV
+                    <span>&#x1F4CA;</span> Download Excel/CSV
                 </a>
             </div>
         </aside>
@@ -1084,13 +1107,30 @@
                 <div class="tab-content active" id="map-tab">
                     <h2 style="color: var(--wine); margin-bottom: 1rem;">Africa Impact Map</h2>
                     <p style="margin-bottom: 1.5rem; color: #666;">
-                        Hover over countries to view funding details. Countries with programs are highlighted.
+                        Learn more about how the ATTP - Africa Think Tank Platform is transforming the African continent.
                         @if ($summary['continental_programs'] > 0)
                             <span class="continental-badge">{{ $summary['continental_programs'] }} Continental
                                 Initiative(s)</span>
                         @endif
                     </p>
                     <div id="africa-map"></div>
+                    <p id="africa-map-status" style="margin: 0.75rem 0 0; color: #666; font-size: 0.9rem;">
+                        Loading Africa shapefiles...
+                    </p>
+                    <div class="map-legend">
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#2e7d32;"></span>West Africa</span>
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#1565c0;"></span>East Africa</span>
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#ef6c00;"></span>Central Africa</span>
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#b7791f;"></span>North Africa</span>
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#0f766e;"></span>Southern Africa</span>
+                        <span class="map-legend-item"><span class="map-legend-swatch"
+                                style="background:#7d2d3d;"></span>Islands</span>
+                    </div>
 
                     <!-- Top Countries Table with DataTable -->
                     @if (count($fundingByCountry) > 0)
@@ -1418,7 +1458,7 @@
     <div class="modal-overlay" id="success-modal">
         <div class="success-modal">
             <button class="modal-close" onclick="closeModal()">&times;</button>
-            <div class="modal-icon">✅</div>
+            <div class="modal-icon">&#x2705;</div>
             <h2 class="modal-title">Request Submitted!</h2>
             <p class="modal-message">
                 Thank you for reaching out. We've received your request and will respond within 2-3 business days.
@@ -1453,6 +1493,7 @@
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/shpjs@6.2.0/dist/shp.min.js"></script>
 
     <!-- jQuery & DataTables JS -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
@@ -1467,6 +1508,7 @@
         const fundingByRegion = @json($fundingByRegion);
         const trendData = @json($trendData);
         const summary = @json($summary);
+        const shapeFiles = @json($shapeFiles);
 
         // Tab switching
         document.querySelectorAll('.tab-button').forEach(button => {
@@ -1486,7 +1528,7 @@
             });
         });
 
-        // Initialize the map
+        // Initialize the map (using local Africa shapefiles)
         const map = L.map('africa-map', {
             center: [0, 20],
             zoom: 3,
@@ -1496,189 +1538,497 @@
             zoomControl: true,
             attributionControl: false
         });
+        const africaLayerGroup = L.featureGroup().addTo(map);
+        const mapStatusEl = document.getElementById('africa-map-status');
 
-        let geojsonLayer;
+        function setMapStatus(message) {
+            if (mapStatusEl) {
+                mapStatusEl.textContent = message;
+            }
+        }
 
-        // Fetch and display Africa map
-        fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
-            .then(response => response.json())
-            .then(data => {
-                const africanCountries = [
-                    'Algeria', 'Angola', 'Benin', 'Botswana', 'Burkina Faso', 'Burundi',
-                    'Cameroon', 'Cape Verde', 'Cabo Verde', 'Central African Republic', 'Chad', 'Comoros',
-                    'Democratic Republic of the Congo', 'Republic of the Congo', 'Djibouti',
-                    'Egypt', 'Equatorial Guinea', 'Eritrea', 'Ethiopia', 'Gabon', 'Gambia',
-                    'Ghana', 'Guinea', 'Guinea-Bissau', 'Ivory Coast', "Côte d'Ivoire", 'Kenya', 'Lesotho',
-                    'Liberia', 'Libya', 'Madagascar', 'Malawi', 'Mali', 'Mauritania',
-                    'Mauritius', 'Morocco', 'Mozambique', 'Namibia', 'Niger', 'Nigeria',
-                    'Rwanda', 'Sao Tome and Principe', 'Senegal', 'Seychelles', 'Sierra Leone',
-                    'Somalia', 'South Africa', 'South Sudan', 'Sudan', 'Eswatini', 'Tanzania',
-                    'Togo', 'Tunisia', 'Uganda', 'Zambia', 'Zimbabwe'
-                ];
+        function normalizeCountryName(name) {
+            const input = (name || '').toString();
+            const normalized = typeof input.normalize === 'function' ? input.normalize('NFD') : input;
+            return normalized
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[\u2019']/g, '')
+                .replace(/[^a-zA-Z0-9 ]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        }
 
-                const africaGeoJSON = {
-                    type: "FeatureCollection",
-                    features: data.features.filter(feature => {
-                        const countryName = feature.properties.name || feature.properties.NAME;
-                        return africanCountries.some(african =>
-                            countryName && countryName.toLowerCase().includes(african.toLowerCase())
-                        );
-                    })
-                };
+        const aliasToCode = {
+            'cabo verde': 'CV',
+            'cape verde': 'CV',
+            'ivory coast': 'CI',
+            'cote divoire': 'CI',
+            'c te divoire': 'CI',
+            'swaziland': 'SZ',
+            'eswatini': 'SZ',
+            'sao tome and principe': 'ST',
+            'sao tome principe': 'ST',
+            'democratic republic of congo': 'CD',
+            'democratic republic of the congo': 'CD',
+            'dr congo': 'CD',
+            'drc': 'CD',
+            'republic of congo': 'CG',
+            'congo republic': 'CG',
+            'congo brazzaville': 'CG'
+        };
 
-                addGeoJSONToMap(africaGeoJSON);
+        const regionBaseColors = {
+            west: '#2e7d32',
+            east: '#1565c0',
+            central: '#ef6c00',
+            north: '#b7791f',
+            south: '#0f766e',
+            islands: '#7d2d3d',
+            unknown: '#9ca3af'
+        };
+
+        const regionDisplayNames = {
+            west: 'West Africa',
+            east: 'East Africa',
+            central: 'Central Africa',
+            north: 'North Africa',
+            south: 'Southern Africa',
+            islands: 'Islands'
+        };
+
+        const regionalBlockToRegionKey = {
+            ECOWAS: 'west',
+            ECCAS: 'central',
+            EAC: 'east',
+            IGAD: 'east',
+            SADC: 'south',
+            UMA: 'north',
+            COMESA: 'east',
+            CENSAD: 'north'
+        };
+
+        const regionCountryGroups = {
+            west: [
+                'Benin', 'Burkina Faso', 'Cote d\'Ivoire', 'Ivory Coast', 'Gambia', 'Ghana', 'Guinea',
+                'Guinea-Bissau', 'Liberia', 'Mali', 'Mauritania', 'Niger', 'Nigeria', 'Senegal',
+                'Sierra Leone', 'Togo'
+            ],
+            east: [
+                'Burundi', 'Djibouti', 'Eritrea', 'Ethiopia', 'Kenya', 'Rwanda', 'Somalia', 'South Sudan',
+                'Sudan', 'Tanzania', 'Uganda'
+            ],
+            central: [
+                'Cameroon', 'Central African Republic', 'Chad', 'Congo', 'Republic of Congo',
+                'Democratic Republic of the Congo', 'Equatorial Guinea', 'Gabon'
+            ],
+            north: [
+                'Algeria', 'Egypt', 'Libya', 'Morocco', 'Tunisia', 'Western Sahara',
+                'Sahrawi Arab Democratic Republic'
+            ],
+            south: [
+                'Angola', 'Botswana', 'Eswatini', 'Swaziland', 'Lesotho', 'Malawi', 'Mozambique', 'Namibia',
+                'South Africa', 'Zambia', 'Zimbabwe'
+            ]
+        };
+
+        const islandCountries = new Set([
+            'cabo verde',
+            'cape verde',
+            'comoros',
+            'madagascar',
+            'mauritius',
+            'seychelles',
+            'sao tome and principe',
+            'sao tome principe',
+            'mayotte',
+            'reunion',
+            'french southern territories'
+        ]);
+
+        const countryRegionLookup = {};
+
+        Object.entries(regionCountryGroups).forEach(([regionKey, countries]) => {
+            countries.forEach((country) => {
+                countryRegionLookup[normalizeCountryName(country)] = regionKey;
             });
+        });
 
-        function addGeoJSONToMap(africaGeoJSON) {
-            // Country code mapping for matching
-            const codeMapping = {
-                'Algeria': 'DZ',
-                'Angola': 'AO',
-                'Benin': 'BJ',
-                'Botswana': 'BW',
-                'Burkina Faso': 'BF',
-                'Burundi': 'BI',
-                'Cameroon': 'CM',
-                'Cape Verde': 'CV',
-                'Cabo Verde': 'CV',
-                'Central African Republic': 'CF',
-                'Chad': 'TD',
-                'Comoros': 'KM',
-                'Democratic Republic of the Congo': 'CD',
-                'Republic of the Congo': 'CG',
-                'Djibouti': 'DJ',
-                'Egypt': 'EG',
-                'Equatorial Guinea': 'GQ',
-                'Eritrea': 'ER',
-                'Ethiopia': 'ET',
-                'Gabon': 'GA',
-                'Gambia': 'GM',
-                'Ghana': 'GH',
-                'Guinea': 'GN',
-                'Guinea-Bissau': 'GW',
-                'Ivory Coast': 'CI',
-                "Côte d'Ivoire": 'CI',
-                'Kenya': 'KE',
-                'Lesotho': 'LS',
-                'Liberia': 'LR',
-                'Libya': 'LY',
-                'Madagascar': 'MG',
-                'Malawi': 'MW',
-                'Mali': 'ML',
-                'Mauritania': 'MR',
-                'Mauritius': 'MU',
-                'Morocco': 'MA',
-                'Mozambique': 'MZ',
-                'Namibia': 'NA',
-                'Niger': 'NE',
-                'Nigeria': 'NG',
-                'Rwanda': 'RW',
-                'Sao Tome and Principe': 'ST',
-                'Senegal': 'SN',
-                'Seychelles': 'SC',
-                'Sierra Leone': 'SL',
-                'Somalia': 'SO',
-                'South Africa': 'ZA',
-                'South Sudan': 'SS',
-                'Sudan': 'SD',
-                'Eswatini': 'SZ',
-                'Tanzania': 'TZ',
-                'Togo': 'TG',
-                'Tunisia': 'TN',
-                'Uganda': 'UG',
-                'Zambia': 'ZM',
-                'Zimbabwe': 'ZW'
-            };
+        islandCountries.forEach((country) => {
+            countryRegionLookup[country] = 'islands';
+        });
 
-            function getCountryData(countryName) {
-                const code = codeMapping[countryName];
-                if (code && countryGeoData[code]) {
-                    return countryGeoData[code];
-                }
+        const codeMappingByName = Object.entries(countryGeoData).reduce((lookup, entry) => {
+            const code = entry[0];
+            const payload = entry[1];
+            if (payload && payload.name) {
+                lookup[normalizeCountryName(payload.name)] = code;
+            }
+            return lookup;
+        }, {});
+
+        function resolveCountryCode(countryName) {
+            const normalized = normalizeCountryName(countryName);
+            if (!normalized) {
+                return null;
+            }
+            if (aliasToCode[normalized]) {
+                return aliasToCode[normalized];
+            }
+            return codeMappingByName[normalized] || null;
+        }
+
+        function normalizeRegionalAbbreviation(abbreviation) {
+            return (abbreviation || '').toString().toUpperCase().replace(/[^A-Z]/g, '');
+        }
+
+        function resolveRegionKeyFromName(countryName) {
+            const normalized = normalizeCountryName(countryName);
+            if (!normalized) {
                 return null;
             }
 
-            function style(feature) {
-                const countryName = feature.properties.name || feature.properties.NAME;
-                const data = getCountryData(countryName);
-                const hasFunding = data && data.total_funding > 0;
+            return countryRegionLookup[normalized] || null;
+        }
 
-                return {
-                    fillColor: hasFunding ? '#a70d53' : '#d1d5db',
-                    weight: 2,
-                    opacity: 1,
-                    color: '#ffffff',
-                    fillOpacity: hasFunding ? 0.85 : 0.5
-                };
+        function resolveRegionKeyFromData(countryData) {
+            if (!countryData || !Array.isArray(countryData.regions)) {
+                return null;
             }
 
-            function highlightFeature(e) {
-                const layer = e.target;
-                const countryName = layer.feature.properties.name || layer.feature.properties.NAME;
-                const data = getCountryData(countryName);
-
-                layer.setStyle({
-                    weight: 3,
-                    color: '#fbbc05',
-                    fillColor: '#fbbc05',
-                    fillOpacity: 0.9
-                });
-
-                layer.bringToFront();
-
-                if (data && data.total_funding > 0) {
-                    const popupContent = `
-                        <div class="popup-content">
-                            <div class="popup-country">${countryName}</div>
-                            <div class="popup-stat">
-                                <span>Direct Funding:</span>
-                                <span style="color: #10b981; font-weight: 600;">$${(data.direct_funding / 1000000).toFixed(2)}M</span>
-                            </div>
-                            <div class="popup-stat">
-                                <span>Continental Share:</span>
-                                <span>$${(data.continental_funding / 1000000).toFixed(2)}M</span>
-                            </div>
-                            <div class="popup-stat">
-                                <span>Total Programs:</span>
-                                <span>${data.total_programs}</span>
-                            </div>
-                            <div class="popup-stat">
-                                <span>Partners:</span>
-                                <span>${data.partners.length}</span>
-                            </div>
-                        </div>
-                    `;
-                    layer.bindPopup(popupContent).openPopup();
-                } else {
-                    layer.bindPopup(`
-                        <div class="popup-content">
-                            <div class="popup-country">${countryName}</div>
-                            <p style="color: #999;">No direct program funding yet.</p>
-                        </div>
-                    `).openPopup();
+            for (const abbreviation of countryData.regions) {
+                const normalizedAbbreviation = normalizeRegionalAbbreviation(abbreviation);
+                if (regionalBlockToRegionKey[normalizedAbbreviation]) {
+                    return regionalBlockToRegionKey[normalizedAbbreviation];
                 }
             }
 
-            function resetHighlight(e) {
-                geojsonLayer.resetStyle(e.target);
-                e.target.closePopup();
+            return null;
+        }
+
+        function getCountryData(countryName) {
+            const code = resolveCountryCode(countryName);
+            if (code && countryGeoData[code]) {
+                return countryGeoData[code];
+            }
+            return null;
+        }
+
+        function resolveRegionKey(countryName) {
+            const fromName = resolveRegionKeyFromName(countryName);
+            if (fromName) {
+                return fromName;
             }
 
-            geojsonLayer = L.geoJSON(africaGeoJSON, {
-                style: style,
-                onEachFeature: (feature, layer) => {
+            const fromData = resolveRegionKeyFromData(getCountryData(countryName));
+            if (fromData) {
+                return fromData;
+            }
+
+            return 'unknown';
+        }
+
+        function getRegionDisplayName(countryName) {
+            const regionKey = resolveRegionKey(countryName);
+            return regionDisplayNames[regionKey] || 'Unclassified';
+        }
+
+        function getCountryShadeSeed(countryName) {
+            const normalized = normalizeCountryName(countryName);
+            let hash = 0;
+
+            for (let i = 0; i < normalized.length; i += 1) {
+                hash = (hash * 31 + normalized.charCodeAt(i)) % 2147483647;
+            }
+
+            return hash;
+        }
+
+        function hexToRgb(hexColor) {
+            const cleanHex = (hexColor || '').replace('#', '');
+            const hex = cleanHex.length === 3 ? cleanHex.split('').map((ch) => ch + ch).join('') : cleanHex;
+
+            if (hex.length !== 6) {
+                return {
+                    r: 156,
+                    g: 163,
+                    b: 175
+                };
+            }
+
+            return {
+                r: parseInt(hex.substring(0, 2), 16),
+                g: parseInt(hex.substring(2, 4), 16),
+                b: parseInt(hex.substring(4, 6), 16)
+            };
+        }
+
+        function rgbToHex(r, g, b) {
+            const toHex = (value) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        }
+
+        function blendWithWhite(baseHex, ratioToWhite) {
+            const ratio = Math.max(0, Math.min(1, ratioToWhite));
+            const base = hexToRgb(baseHex);
+            const mixed = {
+                r: base.r + (255 - base.r) * ratio,
+                g: base.g + (255 - base.g) * ratio,
+                b: base.b + (255 - base.b) * ratio
+            };
+            return rgbToHex(mixed.r, mixed.g, mixed.b);
+        }
+
+        const regionDirectFundingMax = Object.values(countryGeoData).reduce((maxByRegion, payload) => {
+            if (!payload || !payload.name) {
+                return maxByRegion;
+            }
+
+            const regionKey = resolveRegionKeyFromName(payload.name) || resolveRegionKeyFromData(payload) || 'unknown';
+            const directFunding = Number(payload.direct_funding || 0);
+            maxByRegion[regionKey] = Math.max(maxByRegion[regionKey] || 0, directFunding);
+            return maxByRegion;
+        }, {});
+
+        function getCountryFillColor(countryName) {
+            const regionKey = resolveRegionKey(countryName);
+            const baseColor = regionBaseColors[regionKey] || regionBaseColors.unknown;
+
+            if (regionKey === 'islands') {
+                const islandVariation = 0.14 + (getCountryShadeSeed(countryName) % 5) * 0.04;
+                return blendWithWhite(baseColor, islandVariation);
+            }
+
+            const countryData = getCountryData(countryName);
+            const maxDirectInRegion = Number(regionDirectFundingMax[regionKey] || 0);
+            let fadeRatio = 0.55;
+
+            if (countryData && Number(countryData.direct_funding || 0) > 0 && maxDirectInRegion > 0) {
+                const intensity = Math.min(1, Number(countryData.direct_funding) / maxDirectInRegion);
+                fadeRatio = 0.2 + (1 - intensity) * 0.42;
+            } else if (countryData && Number(countryData.total_funding || 0) > 0) {
+                fadeRatio = 0.5;
+            } else {
+                fadeRatio = 0.62;
+            }
+
+            const variation = ((getCountryShadeSeed(countryName) % 5) - 2) * 0.015;
+            return blendWithWhite(baseColor, Math.max(0.12, Math.min(0.72, fadeRatio + variation)));
+        }
+
+        function getCountryNameFromFeature(feature, sourceUrl) {
+            const properties = feature && feature.properties ? feature.properties : {};
+            const propertyName = properties.NAME || properties.ADMIN || properties.COUNTRY || properties.name;
+
+            if (propertyName) {
+                return propertyName;
+            }
+
+            const fileName = decodeURIComponent((sourceUrl.split('/').pop() || '').replace(/\.shp$/i, ''));
+            return fileName || 'Country';
+        }
+
+        function toFeatureCollection(raw) {
+            if (!raw) {
+                return {
+                    type: 'FeatureCollection',
+                    features: []
+                };
+            }
+
+            if (raw.type === 'FeatureCollection') {
+                return raw;
+            }
+
+            if (raw.type === 'Feature') {
+                return {
+                    type: 'FeatureCollection',
+                    features: [raw]
+                };
+            }
+
+            if (Array.isArray(raw)) {
+                const combined = [];
+                raw.forEach(function(item) {
+                    const collection = toFeatureCollection(item);
+                    combined.push(...collection.features);
+                });
+
+                return {
+                    type: 'FeatureCollection',
+                    features: combined
+                };
+            }
+
+            if (typeof raw === 'object') {
+                const combined = [];
+                Object.keys(raw).forEach(function(key) {
+                    const collection = toFeatureCollection(raw[key]);
+                    combined.push(...collection.features);
+                });
+
+                return {
+                    type: 'FeatureCollection',
+                    features: combined
+                };
+            }
+
+            return {
+                type: 'FeatureCollection',
+                features: []
+            };
+        }
+
+        function getDefaultStyle(countryName) {
+            return {
+                fillColor: getCountryFillColor(countryName),
+                weight: 1.5,
+                opacity: 1,
+                color: '#ffffff',
+                fillOpacity: 0.9
+            };
+        }
+
+        function highlightFeature(e) {
+            const layer = e.target;
+            const countryName = layer._countryName || 'Country';
+            const data = getCountryData(countryName);
+            const regionName = getRegionDisplayName(countryName);
+
+            layer.setStyle({
+                weight: 3,
+                color: '#fbbc05',
+                fillColor: '#fbbc05',
+                fillOpacity: 0.9
+            });
+
+            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                layer.bringToFront();
+            }
+
+            if (data && data.total_funding > 0) {
+                const popupContent = `
+                    <div class="popup-content">
+                        <div class="popup-country">${countryName}</div>
+                        <div class="popup-stat">
+                            <span>Regional Block:</span>
+                            <span>${regionName}</span>
+                        </div>
+                        <div class="popup-stat">
+                            <span>Direct Funding:</span>
+                            <span style="color: #10b981; font-weight: 600;">$${(data.direct_funding / 1000000).toFixed(2)}M</span>
+                        </div>
+                        <div class="popup-stat">
+                            <span>Continental Share:</span>
+                            <span>$${(data.continental_funding / 1000000).toFixed(2)}M</span>
+                        </div>
+                        <div class="popup-stat">
+                            <span>Total Programs:</span>
+                            <span>${data.total_programs}</span>
+                        </div>
+                        <div class="popup-stat">
+                            <span>Partners:</span>
+                            <span>${data.partners.length}</span>
+                        </div>
+                    </div>
+                `;
+                layer.bindPopup(popupContent).openPopup();
+            } else {
+                layer.bindPopup(`
+                    <div class="popup-content">
+                        <div class="popup-country">${countryName}</div>
+                        <div class="popup-stat">
+                            <span>Regional Block:</span>
+                            <span>${regionName}</span>
+                        </div>
+                        <p style="color: #999;">No direct program funding yet.</p>
+                    </div>
+                `).openPopup();
+            }
+        }
+
+        function resetHighlight(e) {
+            const layer = e.target;
+            layer.setStyle(getDefaultStyle(layer._countryName));
+            layer.closePopup();
+        }
+
+        function addShapeToMap(rawShape, shapeUrl) {
+            const featureCollection = toFeatureCollection(rawShape);
+
+            if (!featureCollection.features.length) {
+                return;
+            }
+
+            L.geoJSON(featureCollection, {
+                style: function(feature) {
+                    const countryName = getCountryNameFromFeature(feature, shapeUrl);
+                    return getDefaultStyle(countryName);
+                },
+                onEachFeature: function(feature, layer) {
+                    const countryName = getCountryNameFromFeature(feature, shapeUrl);
+                    layer._countryName = countryName;
                     layer.on({
                         mouseover: highlightFeature,
                         mouseout: resetHighlight
                     });
                 }
-            }).addTo(map);
+            }).addTo(africaLayerGroup);
+        }
 
-            map.fitBounds(geojsonLayer.getBounds(), {
-                padding: [30, 30],
-                maxZoom: 4
+        function loadAfricaShapefiles() {
+            if (!shapeFiles.length) {
+                setMapStatus('No shapefiles found in public/assets/Africa.');
+                return;
+            }
+
+            setMapStatus(`Loading ${shapeFiles.length} shapefiles...`);
+            let loaded = 0;
+
+            const loaders = shapeFiles.map(function(shapeUrl) {
+                return shp(shapeUrl)
+                    .then(function(rawShape) {
+                        addShapeToMap(rawShape, shapeUrl);
+                        loaded += 1;
+                        setMapStatus(`Loaded ${loaded}/${shapeFiles.length} shapefiles...`);
+                    })
+                    .catch(function(error) {
+                        throw {
+                            shapeUrl: shapeUrl,
+                            error: error
+                        };
+                    });
+            });
+
+            Promise.allSettled(loaders).then(function(results) {
+                const failed = results.filter(function(result) {
+                    return result.status === 'rejected';
+                });
+
+                failed.forEach(function(result) {
+                    if (result.reason && result.reason.shapeUrl) {
+                        console.warn('Failed to load shapefile:', result.reason.shapeUrl, result.reason.error);
+                    } else {
+                        console.warn('Failed to load shapefile:', result.reason);
+                    }
+                });
+
+                if (africaLayerGroup.getLayers().length > 0) {
+                    map.fitBounds(africaLayerGroup.getBounds(), {
+                        padding: [30, 30],
+                        maxZoom: 4
+                    });
+                }
+
+                if (failed.length > 0) {
+                    setMapStatus(`Map loaded with ${failed.length} shapefile(s) skipped due to read errors.`);
+                } else {
+                    setMapStatus('Africa map loaded.');
+                }
             });
         }
+
+        loadAfricaShapefiles();
 
         // Filter functions
         function selectAll(type) {

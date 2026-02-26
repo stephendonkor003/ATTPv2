@@ -10,6 +10,7 @@ use App\Models\AuAspiration;
 use App\Models\AuGoal;
 use App\Models\AuFlagshipProject;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Response;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -63,6 +64,9 @@ class ImpactMapController extends Controller
         // Get country GeoJSON data with funding info
         $countryGeoData = $this->getCountryGeoData($fundings);
 
+        // Shape files for Africa base map
+        $shapeFiles = $this->getAfricaShapeFiles();
+
         return view('impact-map', compact(
             'summary',
             'filterOptions',
@@ -73,7 +77,8 @@ class ImpactMapController extends Controller
             'fundingByGoal',
             'fundingByFlagship',
             'trendData',
-            'countryGeoData'
+            'countryGeoData',
+            'shapeFiles'
         ));
     }
 
@@ -742,5 +747,30 @@ class ImpactMapController extends Controller
         }
 
         return $query->get();
+    }
+
+    /**
+     * Get available Africa shapefiles from public assets.
+     */
+    private function getAfricaShapeFiles(): array
+    {
+        $africaPath = public_path('assets/Africa');
+
+        if (!File::exists($africaPath)) {
+            return [];
+        }
+
+        return collect(File::files($africaPath))
+            ->filter(function ($file) {
+                return strtolower($file->getExtension()) === 'shp';
+            })
+            ->sortBy(function ($file) {
+                return $file->getFilename();
+            })
+            ->map(function ($file) {
+                return asset('assets/Africa/' . rawurlencode($file->getFilename()));
+            })
+            ->values()
+            ->all();
     }
 }

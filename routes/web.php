@@ -2179,6 +2179,7 @@ Route::middleware(['auth', 'not.funding.partner'])
 
 Route::get('/', [LandingPageController::class, 'index'])->name('landing.index');
 Route::get('/contact', [LandingPageController::class, 'contact'])->name('landing.contact');
+Route::get('/african-map', [LandingPageController::class, 'africanMap'])->name('landing.african_map');
 Route::post('/impact-map/request-information', [LandingPageController::class, 'submitInformationRequest'])
     ->middleware('throttle:20,1')
     ->name('impact.request');

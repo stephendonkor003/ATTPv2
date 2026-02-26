@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\Category;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 
 class LandingPageController extends Controller
 {
@@ -35,6 +36,29 @@ class LandingPageController extends Controller
     public function contact()
     {
         return view('contact');
+    }
+
+    public function africanMap()
+    {
+        $africaPath = public_path('assets/Africa');
+        $shapeFiles = [];
+
+        if (File::exists($africaPath)) {
+            $shapeFiles = collect(File::files($africaPath))
+                ->filter(function ($file) {
+                    return strtolower($file->getExtension()) === 'shp';
+                })
+                ->sortBy(function ($file) {
+                    return $file->getFilename();
+                })
+                ->map(function ($file) {
+                    return asset('assets/Africa/' . rawurlencode($file->getFilename()));
+                })
+                ->values()
+                ->all();
+        }
+
+        return view('african-map', compact('shapeFiles'));
     }
 
     public function impactMap()
