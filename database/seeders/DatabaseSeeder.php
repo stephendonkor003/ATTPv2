@@ -42,6 +42,7 @@ class DatabaseSeeder extends Seeder
             ProcurementPermissionsSeeder::class,
             MEConfigurationSeeder::class,
             TreatySeeder::class,
+            TreatyConstitutiveActStatusSeeder::class,
             ResourceDataSeeder::class,
             LegacyProcurementSeeder::class,
             LegacyEvaluationSeeder::class,
