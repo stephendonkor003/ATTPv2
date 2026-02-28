@@ -86,4 +86,24 @@ class AuMemberState extends BaseModel
             'ratified_at',
         ])->withTimestamps();
     }
+
+    public function nationalDataEntries(): HasMany
+    {
+        return $this->hasMany(MemberStateNationalData::class, 'member_state_id');
+    }
+
+    public function communications(): HasMany
+    {
+        return $this->hasMany(MemberStateCommunication::class, 'member_state_id');
+    }
+
+    public function questions(): HasMany
+    {
+        return $this->hasMany(MemberStateQuestion::class, 'member_state_id');
+    }
+
+    public function commodityTrends(): HasMany
+    {
+        return $this->hasMany(MemberStateCommodityTrend::class, 'member_state_id');
+    }
 }

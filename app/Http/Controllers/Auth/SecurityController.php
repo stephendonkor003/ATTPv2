@@ -109,6 +109,11 @@ class SecurityController extends Controller
                 ->with('success', 'Your password has been updated successfully. Your account is now active.');
         }
 
+        if ($user->user_type === 'member_state') {
+            return redirect()->intended(route('member-state.dashboard'))
+                ->with('success', 'Your password has been updated successfully. Your account is now active.');
+        }
+
         return redirect()->intended(route('dashboard'))
             ->with('success', 'Your password has been updated successfully. Your account is now active.');
     }
@@ -202,6 +207,11 @@ class SecurityController extends Controller
 
         if ($user->user_type === 'vendor') {
             return redirect()->intended(route('vendor.dashboard'))
+                ->with('success', 'Identity verified successfully. Welcome back!');
+        }
+
+        if ($user->user_type === 'member_state') {
+            return redirect()->intended(route('member-state.dashboard'))
                 ->with('success', 'Identity verified successfully. Welcome back!');
         }
 

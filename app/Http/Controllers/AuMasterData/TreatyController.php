@@ -3,13 +3,18 @@
 namespace App\Http\Controllers\AuMasterData;
 
 use App\Http\Controllers\Controller;
+use App\Mail\TreatyCodeVerificationUpdateMail;
 use App\Models\AuMemberState;
 use App\Models\Treaty;
 use App\Models\TreatyMemberStateStatus;
 use App\Models\TreatySupportingDocument;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Collection;
 
 class TreatyController extends Controller
 {
@@ -51,6 +56,11 @@ class TreatyController extends Controller
             'short_title' => 'nullable|string|max:120',
             'reference_code' => 'nullable|string|max:80|unique:myb_treaties,reference_code',
             'description' => 'nullable|string',
+            'overview' => 'nullable|string',
+            'key_provisions' => 'nullable|string',
+            'implementation_framework' => 'nullable|string',
+            'monitoring_and_reporting' => 'nullable|string',
+            'read_more_url' => 'nullable|url|max:2048',
             'adoption_date' => 'nullable|date',
             'entry_into_force_date' => 'nullable|date|after_or_equal:adoption_date',
             'status' => 'required|in:draft,active,archived',
@@ -72,6 +82,11 @@ class TreatyController extends Controller
                 'short_title' => $validated['short_title'] ?? null,
                 'reference_code' => $validated['reference_code'] ?? null,
                 'description' => $validated['description'] ?? null,
+                'overview' => $validated['overview'] ?? null,
+                'key_provisions' => $validated['key_provisions'] ?? null,
+                'implementation_framework' => $validated['implementation_framework'] ?? null,
+                'monitoring_and_reporting' => $validated['monitoring_and_reporting'] ?? null,
+                'read_more_url' => $validated['read_more_url'] ?? null,
                 'adoption_date' => $validated['adoption_date'] ?? null,
                 'entry_into_force_date' => $validated['entry_into_force_date'] ?? null,
                 'status' => $validated['status'],
@@ -118,6 +133,11 @@ class TreatyController extends Controller
             'short_title' => 'nullable|string|max:120',
             'reference_code' => 'nullable|string|max:80|unique:myb_treaties,reference_code,' . $treaty->id,
             'description' => 'nullable|string',
+            'overview' => 'nullable|string',
+            'key_provisions' => 'nullable|string',
+            'implementation_framework' => 'nullable|string',
+            'monitoring_and_reporting' => 'nullable|string',
+            'read_more_url' => 'nullable|url|max:2048',
             'adoption_date' => 'nullable|date',
             'entry_into_force_date' => 'nullable|date|after_or_equal:adoption_date',
             'status' => 'required|in:draft,active,archived',
@@ -139,6 +159,11 @@ class TreatyController extends Controller
                 'short_title' => $validated['short_title'] ?? null,
                 'reference_code' => $validated['reference_code'] ?? null,
                 'description' => $validated['description'] ?? null,
+                'overview' => $validated['overview'] ?? null,
+                'key_provisions' => $validated['key_provisions'] ?? null,
+                'implementation_framework' => $validated['implementation_framework'] ?? null,
+                'monitoring_and_reporting' => $validated['monitoring_and_reporting'] ?? null,
+                'read_more_url' => $validated['read_more_url'] ?? null,
                 'adoption_date' => $validated['adoption_date'] ?? null,
                 'entry_into_force_date' => $validated['entry_into_force_date'] ?? null,
                 'status' => $validated['status'],
@@ -188,14 +213,17 @@ class TreatyController extends Controller
         $memberStateIds = AuMemberState::pluck('id')->all();
         $memberStateNames = AuMemberState::whereIn('id', $memberStateIds)->pluck('name', 'id');
         $existingRecords = $treaty->memberStateStatuses()->get()->keyBy('member_state_id');
-        $currentUserId = auth()->id();
+        $currentUser = auth()->user();
+        $currentUserId = $currentUser?->id;
         $verificationBlocked = [];
+        $notificationFailures = [];
 
         foreach ($memberStateIds as $memberStateId) {
             $requestedStatus = $statusInput[$memberStateId] ?? 'none';
             $record = $existingRecords->get($memberStateId);
             $enteredSignedCode = $this->normalizeServiceCode($signedProofCodeInput[$memberStateId] ?? null);
             $enteredRatifiedCode = $this->normalizeServiceCode($ratifiedProofCodeInput[$memberStateId] ?? null);
+            $stateName = (string) ($memberStateNames[$memberStateId] ?? 'Member State');
 
             if ($requestedStatus === 'none') {
                 if ($record) {
@@ -212,6 +240,8 @@ class TreatyController extends Controller
             }
 
             $record->updated_by = $currentUserId;
+            $wasSignedVerified = !empty($record->signed_service_code_verified_at);
+            $wasRatifiedVerified = !empty($record->ratified_service_code_verified_at);
 
             if ($requestedStatus === 'signed') {
                 if (!$record->is_signed) {
@@ -222,8 +252,6 @@ class TreatyController extends Controller
                 $record->is_signed = true;
                 $record->signed_service_code = $record->signed_service_code
                     ?: TreatyMemberStateStatus::generateUniqueServiceCode('signed_service_code');
-                $record->signed_service_code_verified_at = null;
-                $record->signed_service_code_verified_by_user_id = null;
                 $record->is_ratified = false;
                 $record->ratified_at = null;
                 $record->ratified_by_user_id = null;
@@ -255,8 +283,6 @@ class TreatyController extends Controller
                 $record->is_ratified = true;
                 $record->ratified_service_code = $record->ratified_service_code
                     ?: TreatyMemberStateStatus::generateUniqueServiceCode('ratified_service_code');
-                $record->ratified_service_code_verified_at = null;
-                $record->ratified_service_code_verified_by_user_id = null;
                 $record->is_original_submitted = false;
                 $record->original_submitted_at = null;
                 $record->original_submitted_by_user_id = null;
@@ -283,42 +309,150 @@ class TreatyController extends Controller
                 $record->is_ratified = true;
                 $record->ratified_service_code = $record->ratified_service_code
                     ?: TreatyMemberStateStatus::generateUniqueServiceCode('ratified_service_code');
+            }
 
-                $stateName = (string) ($memberStateNames[$memberStateId] ?? 'Member State');
-                $storedSignedCode = $this->normalizeServiceCode($record->signed_service_code ?? null);
-                $storedRatifiedCode = $this->normalizeServiceCode($record->ratified_service_code ?? null);
+            $storedSignedCode = $this->normalizeServiceCode($record->signed_service_code ?? null);
+            $storedRatifiedCode = $this->normalizeServiceCode($record->ratified_service_code ?? null);
 
+            if ($record->is_signed && $enteredSignedCode !== null) {
+                if ($storedSignedCode !== null && $enteredSignedCode === $storedSignedCode) {
+                    $record->signed_service_code_verified_at = now();
+                    $record->signed_service_code_verified_by_user_id = $currentUserId;
+                } else {
+                    $record->signed_service_code_verified_at = null;
+                    $record->signed_service_code_verified_by_user_id = null;
+                    $verificationBlocked[] = "{$stateName}: signed proof-of-service code mismatch.";
+                }
+            }
+
+            if ($record->is_ratified && $enteredRatifiedCode !== null) {
+                if ($storedRatifiedCode !== null && $enteredRatifiedCode === $storedRatifiedCode) {
+                    $record->ratified_service_code_verified_at = now();
+                    $record->ratified_service_code_verified_by_user_id = $currentUserId;
+                } else {
+                    $record->ratified_service_code_verified_at = null;
+                    $record->ratified_service_code_verified_by_user_id = null;
+                    $verificationBlocked[] = "{$stateName}: ratified proof-of-service code mismatch.";
+                }
+            }
+
+            if ($requestedStatus === 'original_submitted') {
                 if (empty($record->original_document_path)) {
                     $record->is_original_submitted = false;
                     $verificationBlocked[] = "{$stateName}: original submission document is missing.";
                 } elseif ($record->hasVerifiedProofOfService()) {
                     $record->is_original_submitted = true;
-                } elseif (
-                    $enteredSignedCode !== null &&
-                    $enteredRatifiedCode !== null &&
-                    $enteredSignedCode === $storedSignedCode &&
-                    $enteredRatifiedCode === $storedRatifiedCode
-                ) {
-                    $record->signed_service_code_verified_at = now();
-                    $record->signed_service_code_verified_by_user_id = $currentUserId;
-                    $record->ratified_service_code_verified_at = now();
-                    $record->ratified_service_code_verified_by_user_id = $currentUserId;
-                    $record->is_original_submitted = true;
                 } else {
                     $record->is_original_submitted = false;
-                    $verificationBlocked[] = "{$stateName}: legal proof-of-service code mismatch (or codes not entered).";
+                    $verificationBlocked[] = "{$stateName}: signed/ratified code verification is still pending.";
                 }
             }
 
             $record->save();
+
+            if (!$wasSignedVerified && !empty($record->signed_service_code_verified_at)) {
+                $emailSent = $this->sendCodeVerificationNotification(
+                    $treaty,
+                    $record,
+                    'signed',
+                    $stateName,
+                    $currentUser
+                );
+
+                if (!$emailSent) {
+                    $notificationFailures[] = "{$stateName} (signed code verification)";
+                }
+            }
+
+            if (!$wasRatifiedVerified && !empty($record->ratified_service_code_verified_at)) {
+                $emailSent = $this->sendCodeVerificationNotification(
+                    $treaty,
+                    $record,
+                    'ratified',
+                    $stateName,
+                    $currentUser
+                );
+
+                if (!$emailSent) {
+                    $notificationFailures[] = "{$stateName} (ratified code verification)";
+                }
+            }
         }
 
         $response = back()->with('success', 'Member-state treaty statuses updated successfully.');
+        $warningMessages = [];
         if (!empty($verificationBlocked)) {
-            $response->with('warning', 'Not completed for: ' . implode(' | ', $verificationBlocked));
+            $warningMessages[] = 'Not completed for: ' . implode(' | ', $verificationBlocked);
+        }
+        if (!empty($notificationFailures)) {
+            $warningMessages[] = 'Verification email not sent for: ' . implode(' | ', $notificationFailures);
+        }
+        if (!empty($warningMessages)) {
+            $response->with('warning', implode(' ', $warningMessages));
         }
 
         return $response;
+    }
+
+    private function sendCodeVerificationNotification(
+        Treaty $treaty,
+        TreatyMemberStateStatus $status,
+        string $codeType,
+        string $memberStateName,
+        ?User $actor = null
+    ): bool {
+        $recipientEmails = $this->resolveCodeVerificationRecipientEmails((string) $status->member_state_id);
+        if ($recipientEmails->isEmpty()) {
+            return false;
+        }
+
+        try {
+            $status->loadMissing('memberState');
+            Mail::to($recipientEmails->all())
+                ->send(new TreatyCodeVerificationUpdateMail($treaty, $status, $codeType, $memberStateName, $actor));
+            return true;
+        } catch (\Throwable $exception) {
+            Log::error('Failed to send treaty code verification notification email.', [
+                'treaty_id' => $treaty->id,
+                'member_state_id' => $status->member_state_id,
+                'code_type' => $codeType,
+                'error' => $exception->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    private function resolveCodeVerificationRecipientEmails(string $memberStateId): Collection
+    {
+        $memberStateEmails = User::query()
+            ->where('user_type', 'member_state')
+            ->where('member_state_id', $memberStateId)
+            ->whereNotNull('email')
+            ->pluck('email');
+
+        $systemRecipientEmails = User::query()
+            ->whereNotNull('email')
+            ->where(function ($query) {
+                $query->whereNull('user_type')
+                    ->orWhere('user_type', '!=', 'member_state');
+            })
+            ->where(function ($query) {
+                $query->whereHas('permissions', function ($permissionQuery) {
+                    $permissionQuery->where('name', 'treaties.edit');
+                })->orWhereHas('role.permissions', function ($permissionQuery) {
+                    $permissionQuery->where('name', 'treaties.edit');
+                })->orWhereHas('role', function ($roleQuery) {
+                    $roleQuery->where('name', 'System Admin');
+                });
+            })
+            ->pluck('email');
+
+        return $memberStateEmails
+            ->merge($systemRecipientEmails)
+            ->map(fn ($email) => strtolower(trim((string) $email)))
+            ->filter()
+            ->unique()
+            ->values();
     }
 
     private function storeSupportingDocuments(Request $request, Treaty $treaty): void

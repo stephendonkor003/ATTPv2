@@ -56,6 +56,7 @@ class RolePermissionSeeder extends Seeder
             'budget.reports.view',
             'budget.summary.view',
             'hr.analytics.view',
+            'national_data.review',
         ]);
 
         // Prescreening Evaluator
@@ -70,6 +71,16 @@ class RolePermissionSeeder extends Seeder
             'evaluations.evaluate',
             'me.configuration.view',
             'me.configuration.manage',
+        ]);
+
+        // Communications Officer
+        $this->syncRolePermissionsByNames('Communications Officer', [
+            'communications.view',
+            'communications.respond',
+            'questions.view',
+            'questions.respond',
+            'national_data.review',
+            'national_data.approve',
         ]);
 
         // Member State Focal Point

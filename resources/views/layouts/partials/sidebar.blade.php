@@ -1,3 +1,76 @@
+@php
+    $sidebarUser = auth()->user();
+    $isMemberStateSidebarUser = $sidebarUser && $sidebarUser->user_type === 'member_state';
+    $sidebarMemberState = $isMemberStateSidebarUser ? $sidebarUser->memberState : null;
+    $sidebarMemberStateFlag = $sidebarMemberState?->flag_url ?: asset('assets/images/au.png');
+@endphp
+
+<style>
+    .ms-sidebar-hero {
+        background: linear-gradient(130deg, #0f172a 0%, #0f766e 48%, #0ea5e9 100%);
+        color: #f8fafc;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.24);
+    }
+
+    .ms-sidebar-hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 15% 15%, rgba(255, 255, 255, 0.22), transparent 38%);
+        pointer-events: none;
+    }
+
+    .ms-sidebar-hero .hero-body {
+        position: relative;
+        z-index: 1;
+    }
+
+    .ms-flag-wave-wrap {
+        width: 68px;
+        height: 44px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.32);
+        box-shadow: 0 8px 16px rgba(2, 6, 23, 0.26);
+        background: #0f172a;
+    }
+
+    .ms-flag-wave {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform-origin: left center;
+        animation: memberFlagWave 4.8s ease-in-out infinite;
+    }
+
+    @keyframes memberFlagWave {
+        0%,
+        100% {
+            transform: perspective(800px) rotateY(0deg) skewY(0deg) scaleX(1);
+        }
+        25% {
+            transform: perspective(800px) rotateY(-12deg) skewY(1.6deg) scaleX(1.02);
+        }
+        50% {
+            transform: perspective(800px) rotateY(7deg) skewY(-1.2deg) scaleX(0.99);
+        }
+        75% {
+            transform: perspective(800px) rotateY(-8deg) skewY(0.8deg) scaleX(1.01);
+        }
+    }
+
+    .ms-hero-kicker {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(248, 250, 252, 0.78);
+    }
+</style>
+
 <nav class="nxl-navigation" style="background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #e0f2fe 100%);">
     <div class="navbar-wrapper" style="background: transparent;">
         {{-- <div class="m-header">
@@ -10,19 +83,35 @@
 
         <div class="navbar-content">
             <div class="px-3 pt-3">
-                <div class="card border-0 shadow-sm position-relative overflow-hidden"
-                    style="background: linear-gradient(135deg, #0f172a 0%, #0ea5e9 50%, #10b981 100%); color:#f8fafc; border-radius:14px;">
-                    <div style="position:absolute; inset:0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15), transparent 45%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.18), transparent 40%);"></div>
-                    <div class="card-body py-3 d-flex align-items-center gap-3 position-relative">
-                        <span class="module-icon" style="background: rgba(255,255,255,0.18); color:#f8fafc;">
-                            <i class="feather-cpu"></i>
-                        </span>
-                        <div class="flex-grow-1">
-                            <div class="fw-bold">ATTP Control Center</div>
-                            <div class="small text-white-50">Operations & Oversight</div>
+                @if($isMemberStateSidebarUser)
+                    <div class="ms-sidebar-hero">
+                        <div class="hero-body card-body py-3 d-flex align-items-center gap-3">
+                            <div class="ms-flag-wave-wrap flex-shrink-0">
+                                <img src="{{ $sidebarMemberStateFlag }}" alt="{{ $sidebarMemberState?->name ?? 'Member State' }} flag"
+                                    class="ms-flag-wave">
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="ms-hero-kicker">Member State Command Desk</div>
+                                <div class="fw-bold">{{ $sidebarMemberState?->name ?? 'Member State' }}</div>
+                                <div class="small text-white-50">Agenda 2063 Progress Workspace</div>
+                            </div>
                         </div>
                     </div>
-                </div>
+                @else
+                    <div class="card border-0 shadow-sm position-relative overflow-hidden"
+                        style="background: linear-gradient(135deg, #0f172a 0%, #0ea5e9 50%, #10b981 100%); color:#f8fafc; border-radius:14px;">
+                        <div style="position:absolute; inset:0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15), transparent 45%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.18), transparent 40%);"></div>
+                        <div class="card-body py-3 d-flex align-items-center gap-3 position-relative">
+                            <span class="module-icon" style="background: rgba(255,255,255,0.18); color:#f8fafc;">
+                                <i class="feather-cpu"></i>
+                            </span>
+                            <div class="flex-grow-1">
+                                <div class="fw-bold">ATTP Control Center</div>
+                                <div class="small text-white-50">Operations & Oversight</div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
                 <div class="mt-2">
                     <div class="d-flex align-items-center px-3 py-2 rounded-3 shadow-sm"
                         style="background: linear-gradient(120deg, #0ea5e9 0%, #6366f1 100%); color:#f8fafc;">
@@ -33,14 +122,52 @@
             </div>
             <ul class="nxl-navbar">
 
-                @if (auth()->check() && auth()->user()->user_type === 'member_state' && auth()->user()->can('member_state.treaties.view'))
+                @if (auth()->check() && auth()->user()->user_type === 'member_state')
                     <li class="nxl-item nxl-caption">
-                        <label>Member State</label>
+                        <label>Member State Portal</label>
                     </li>
+                    <li class="nxl-item">
+                        <a href="{{ route('member-state.dashboard') }}" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-home"></i></span>
+                            <span class="nxl-mtext">Dashboard</span>
+                        </a>
+                    </li>
+                    @can('member_state.treaties.view')
                     <li class="nxl-item">
                         <a href="{{ route('member-state.treaties.index') }}" class="nxl-link">
                             <span class="nxl-micon"><i class="feather-file-text"></i></span>
                             <span class="nxl-mtext">Treaties & Agreements</span>
+                        </a>
+                    </li>
+                    @endcan
+                    <li class="nxl-item">
+                        <a href="{{ route('member-state.communications.index') }}" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-send"></i></span>
+                            <span class="nxl-mtext">Communications</span>
+                        </a>
+                    </li>
+                    <li class="nxl-item">
+                        <a href="{{ route('member-state.national-data.index') }}" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-database"></i></span>
+                            <span class="nxl-mtext">National Data</span>
+                        </a>
+                    </li>
+                    <li class="nxl-item">
+                        <a href="{{ route('member-state.comparisons.index') }}" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-bar-chart-2"></i></span>
+                            <span class="nxl-mtext">Comparisons</span>
+                        </a>
+                    </li>
+                    <li class="nxl-item">
+                        <a href="{{ route('member-state.questions.index') }}" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-help-circle"></i></span>
+                            <span class="nxl-mtext">Ask the AU</span>
+                        </a>
+                    </li>
+                    <li class="nxl-item">
+                        <a href="{{ route('member-state.commodities.index') }}" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-package"></i></span>
+                            <span class="nxl-mtext">Commodities</span>
                         </a>
                     </li>
                 @endif
@@ -966,6 +1093,35 @@
                     </li>
                 @endcanany
 
+
+                {{-- ================= COMMUNICATIONS ================= --}}
+                @canany(['communications.view', 'communications.respond', 'questions.view', 'questions.respond', 'national_data.review', 'national_data.approve'])
+                    <li class="nxl-item nxl-caption">
+                        <label>Communications</label>
+                    </li>
+
+                    @can('communications.view')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.communications.index') }}" class="nxl-link">
+                                <i class="feather-message-circle me-2"></i> Member State Communications
+                            </a>
+                        </li>
+                    @endcan
+                    @can('questions.view')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.questions.index') }}" class="nxl-link">
+                                <i class="feather-help-circle me-2"></i> Respond to Questions
+                            </a>
+                        </li>
+                    @endcan
+                    @can('national_data.review')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.national-data-reviews.index') }}" class="nxl-link">
+                                <i class="feather-check-square me-2"></i> National Data Reviews
+                            </a>
+                        </li>
+                    @endcan
+                @endcanany
 
                 {{-- ================= SYSTEM MANAGEMENT ================= --}}
                 @canany(['users.manage', 'roles.manage', 'permissions.manage', 'system.audit.view'])

@@ -76,6 +76,34 @@
                                     <div class="text-muted small">Description</div>
                                     <div class="fw-semibold" style="white-space: pre-wrap;">{{ $treaty->description ?: '—' }}</div>
                                 </div>
+                                <div class="col-md-6">
+                                    <div class="text-muted small">Overview / Background</div>
+                                    <div class="fw-semibold" style="white-space: pre-wrap;">{{ $treaty->overview ?: '—' }}</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="text-muted small">Key Provisions</div>
+                                    <div class="fw-semibold" style="white-space: pre-wrap;">{{ $treaty->key_provisions ?: '—' }}</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="text-muted small">Implementation Framework</div>
+                                    <div class="fw-semibold" style="white-space: pre-wrap;">{{ $treaty->implementation_framework ?: '—' }}</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="text-muted small">Monitoring and Reporting</div>
+                                    <div class="fw-semibold" style="white-space: pre-wrap;">{{ $treaty->monitoring_and_reporting ?: '—' }}</div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="text-muted small">Read More Link</div>
+                                    <div class="fw-semibold">
+                                        @if($treaty->read_more_url)
+                                            <a href="{{ $treaty->read_more_url }}" target="_blank" rel="noopener noreferrer">
+                                                {{ $treaty->read_more_url }}
+                                            </a>
+                                        @else
+                                            —
+                                        @endif
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -152,7 +180,7 @@
             <div class="card shadow-sm border-0 mt-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Member State Sign / Ratify Matrix</h5>
-                    <small class="text-muted">Final completion requires AU Legal entry of signed + ratified proof-of-service codes</small>
+                    <small class="text-muted">Signed code can be verified after signing; ratified code can be verified after ratification.</small>
                 </div>
                 <div class="card-body">
                     @can('treaties.edit')
@@ -284,40 +312,68 @@
                                         </td>
                                         <td>
                                             @can('treaties.edit')
-                                                @if ($stateStatus?->is_ratified)
+                                                @if ($stateStatus?->is_signed)
                                                     <input type="text" name="proof_signed_code[{{ $memberState->id }}]"
                                                         value="{{ old('proof_signed_code.' . $memberState->id) }}"
                                                         class="form-control form-control-sm mb-1"
                                                         placeholder="Signed code (XXXX-XXXX-XXXX-XXXX)">
+                                                    @if ($stateStatus?->signed_service_code_verified_at)
+                                                        <div class="small text-success mb-1">
+                                                            Signed code verified
+                                                            @if ($stateStatus?->signedServiceCodeVerifiedByUser)
+                                                                by {{ $stateStatus->signedServiceCodeVerifiedByUser->name }}
+                                                            @endif
+                                                        </div>
+                                                    @elseif($stateStatus?->signed_service_code)
+                                                        <div class="small text-warning mb-1">Signed code verification pending.</div>
+                                                    @endif
+                                                @else
+                                                    <div class="small text-muted mb-1">Signed code entry is available after signing.</div>
+                                                @endif
+
+                                                @if ($stateStatus?->is_ratified)
                                                     <input type="text" name="proof_ratified_code[{{ $memberState->id }}]"
                                                         value="{{ old('proof_ratified_code.' . $memberState->id) }}"
                                                         class="form-control form-control-sm mb-1"
                                                         placeholder="Ratified code (XXXX-XXXX-XXXX-XXXX)">
-
-                                                    @if (
-                                                        $stateStatus?->is_original_submitted &&
-                                                            $stateStatus?->signed_service_code_verified_at &&
-                                                            $stateStatus?->ratified_service_code_verified_at)
-                                                        <div class="small text-success">
-                                                            Final step complete
-                                                            @if ($stateStatus->ratifiedServiceCodeVerifiedByUser)
+                                                    @if ($stateStatus?->ratified_service_code_verified_at)
+                                                        <div class="small text-success mb-1">
+                                                            Ratified code verified
+                                                            @if ($stateStatus?->ratifiedServiceCodeVerifiedByUser)
                                                                 by {{ $stateStatus->ratifiedServiceCodeVerifiedByUser->name }}
                                                             @endif
                                                         </div>
-                                                    @elseif($stateStatus?->original_document_path)
-                                                        <div class="small text-warning">Awaiting matching code entry.</div>
-                                                    @else
-                                                        <div class="small text-muted">Original submission file not uploaded yet.</div>
+                                                    @elseif($stateStatus?->ratified_service_code)
+                                                        <div class="small text-warning mb-1">Ratified code verification pending.</div>
                                                     @endif
                                                 @else
-                                                    <span class="text-muted small">Available after ratification.</span>
+                                                    <div class="small text-muted mb-1">Ratified code entry is available after ratification.</div>
                                                 @endif
-                                            @else
+
                                                 @if (
                                                     $stateStatus?->is_original_submitted &&
                                                         $stateStatus?->signed_service_code_verified_at &&
                                                         $stateStatus?->ratified_service_code_verified_at)
-                                                    <span class="badge bg-success">Code Verified</span>
+                                                    <div class="small text-success">
+                                                        Final step complete
+                                                        @if ($stateStatus->ratifiedServiceCodeVerifiedByUser)
+                                                            by {{ $stateStatus->ratifiedServiceCodeVerifiedByUser->name }}
+                                                        @endif
+                                                    </div>
+                                                @elseif($stateStatus?->is_original_submitted)
+                                                    <div class="small text-warning">Original submission exists; awaiting required code verification.</div>
+                                                @elseif($stateStatus?->is_ratified)
+                                                    <div class="small text-muted">Original submission file not uploaded yet.</div>
+                                                @else
+                                                    <div class="small text-muted">Proceed with signing and ratification steps first.</div>
+                                                @endif
+                                            @else
+                                                @if ($stateStatus?->signed_service_code_verified_at && $stateStatus?->ratified_service_code_verified_at)
+                                                    <span class="badge bg-success">Signed + Ratified Codes Verified</span>
+                                                @elseif($stateStatus?->signed_service_code_verified_at)
+                                                    <span class="badge bg-info text-dark">Signed Code Verified</span>
+                                                @elseif($stateStatus?->ratified_service_code_verified_at)
+                                                    <span class="badge bg-primary">Ratified Code Verified</span>
                                                 @elseif($stateStatus?->original_document_path)
                                                     <span class="badge bg-warning text-dark">Pending Verification</span>
                                                 @else

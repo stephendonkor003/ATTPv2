@@ -236,6 +236,10 @@ private function resolveAuditModule(Model $model): string
         'FinanceResource' => 'finance',
         'FinanceResourceCategory' => 'finance',
         'FinanceResourceItem' => 'finance',
+
+        // Communications
+        'MemberStateCommunication' => 'communications',
+        'MemberStateCommunicationAttachment' => 'communications',
     ];
 
     return $map[$class] ?? 'system';

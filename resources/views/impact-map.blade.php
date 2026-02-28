@@ -383,7 +383,8 @@
         /* Map Container */
         .africa-map-canvas {
             width: 100%;
-            height: 550px;
+            height: clamp(360px, 62vh, 620px);
+            min-height: 360px;
             border-radius: 12px;
             background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
         }
@@ -399,6 +400,34 @@
         .treaty-controls .meta {
             color: #6b7280;
             font-size: 0.88rem;
+        }
+
+        .treaty-visual-tools {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 0.75rem;
+            align-items: center;
+            margin-top: 0.55rem;
+        }
+
+        .treaty-visual-tools .hint {
+            font-size: 0.78rem;
+            color: #4b5563;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            padding: 0.3rem 0.62rem;
+        }
+
+        .treaty-visual-tools .focus-btn {
+            border-color: #0f766e;
+            color: #0f766e;
+            font-weight: 600;
+        }
+
+        .treaty-visual-tools .focus-btn:hover {
+            background: #0f766e;
+            color: #fff;
         }
 
         .map-legend {
@@ -762,6 +791,207 @@
             font-size: 0.9rem;
         }
 
+        .popup-actions {
+            margin-top: 0.9rem;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .popup-learn-btn {
+            border: 1px solid #34d399;
+            background: rgba(16, 185, 129, 0.2);
+            color: #d1fae5;
+            border-radius: 999px;
+            padding: 0.35rem 0.8rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .popup-learn-btn:hover {
+            background: #10b981;
+            border-color: #10b981;
+            color: #042f2e;
+        }
+
+        /* Treaty Details Modal */
+        .treaty-detail-overlay {
+            padding: 1.25rem;
+            z-index: 10010;
+        }
+
+        .treaty-detail-modal {
+            width: min(980px, 96vw);
+            max-height: min(90vh, 920px);
+            background: #ffffff;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 26px 75px rgba(0, 0, 0, 0.35);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .treaty-detail-header {
+            background: linear-gradient(135deg, #064e3b 0%, #0f766e 70%, #34d399 100%);
+            padding: 1.05rem 1.45rem 0.95rem;
+            color: #ecfdf5;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .treaty-detail-title {
+            margin: 0;
+            font-size: 1.35rem;
+            line-height: 1.35;
+            font-weight: 700;
+            color: #ffffff;
+            padding-right: 2rem;
+        }
+
+        .treaty-detail-subtitle {
+            margin: 0.25rem 0 0;
+            font-size: 0.9rem;
+            color: rgba(236, 253, 245, 0.95);
+        }
+
+        .treaty-detail-close {
+            color: #e5e7eb;
+            right: 1.1rem;
+            top: 0.75rem;
+            z-index: 2;
+        }
+
+        .treaty-detail-close:hover {
+            color: #ffffff;
+        }
+
+        .treaty-detail-body {
+            padding: 1.2rem 1.45rem 1.35rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.95rem;
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        }
+
+        .treaty-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .treaty-detail-card {
+            border: 1px solid #d1fae5;
+            border-radius: 12px;
+            padding: 0.75rem 0.8rem;
+            background: #ffffff;
+        }
+
+        .treaty-detail-card .label {
+            color: #065f46;
+            text-transform: uppercase;
+            font-weight: 700;
+            font-size: 0.72rem;
+            letter-spacing: 0.04em;
+        }
+
+        .treaty-detail-card .value {
+            margin-top: 0.25rem;
+            color: #111827;
+            font-size: 0.94rem;
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+        .treaty-detail-section {
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 0.75rem 0.9rem;
+        }
+
+        .treaty-detail-section h4 {
+            margin: 0 0 0.4rem;
+            font-size: 0.88rem;
+            color: #111827;
+        }
+
+        .treaty-detail-section p {
+            margin: 0;
+            color: #374151;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .treaty-status-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            border: 1px solid transparent;
+        }
+
+        .treaty-status-pill.signed {
+            background: #fef9c3;
+            border-color: #facc15;
+            color: #92400e;
+        }
+
+        .treaty-status-pill.ratified {
+            background: #dcfce7;
+            border-color: #16a34a;
+            color: #166534;
+        }
+
+        .treaty-status-pill.original {
+            background: #ccfbf1;
+            border-color: #0f766e;
+            color: #134e4a;
+        }
+
+        .treaty-status-pill.none {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+            color: #4b5563;
+        }
+
+        .treaty-detail-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .treaty-detail-table th,
+        .treaty-detail-table td {
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            padding: 0.58rem 0.65rem;
+            font-size: 0.86rem;
+            vertical-align: top;
+        }
+
+        .treaty-detail-table th {
+            color: #065f46;
+            background: #ecfdf5;
+            font-weight: 700;
+        }
+
+        .treaty-detail-link {
+            color: #0f766e;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .treaty-detail-link:hover {
+            text-decoration: underline;
+        }
+
         /* Success Modal */
         .modal-overlay {
             display: none;
@@ -909,6 +1139,32 @@
 
             .treaty-controls {
                 grid-template-columns: 1fr;
+            }
+
+            .africa-map-canvas {
+                height: 430px;
+                min-height: 430px;
+            }
+
+            .treaty-detail-title {
+                font-size: 1.1rem;
+            }
+
+            .treaty-detail-body {
+                padding: 0.95rem;
+            }
+
+            .treaty-detail-table th,
+            .treaty-detail-table td {
+                font-size: 0.8rem;
+                padding: 0.45rem 0.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .africa-map-canvas {
+                height: 360px;
+                min-height: 360px;
             }
         }
     </style>
@@ -1214,6 +1470,12 @@
                             </select>
                             <div class="meta" id="treaty-selector-meta">Showing combined treaty status across all
                                 records.</div>
+                            <div class="treaty-visual-tools">
+                                <button type="button" id="treaty-focus-btn" class="filter-action-btn focus-btn">
+                                    Focus Colored Countries
+                                </button>
+                                <span class="hint">Signed = yellow, Ratified = green. The map auto-focuses active countries.</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1227,7 +1489,7 @@
                         <span class="map-legend-item"><span class="map-legend-swatch"
                                 style="background:#2e7d32;"></span>Ratified</span>
                         <span class="map-legend-item"><span class="map-legend-swatch"
-                                style="background:#f59e0b;"></span>Signed (Not Ratified)</span>
+                                style="background:#facc15;"></span>Signed (Not Ratified)</span>
                         <span class="map-legend-item"><span class="map-legend-swatch"
                                 style="background:#d1d5db;"></span>No Recorded Action</span>
                     </div>
@@ -1512,6 +1774,21 @@
         </div>
     </div>
 
+    <!-- Treaty Details Modal -->
+    <div class="modal-overlay treaty-detail-overlay" id="treaty-detail-modal" aria-hidden="true">
+        <div class="treaty-detail-modal" role="dialog" aria-modal="true" aria-labelledby="treaty-detail-title">
+            <button type="button" class="modal-close treaty-detail-close" id="treaty-detail-close-btn"
+                aria-label="Close treaty details">&times;</button>
+            <div class="treaty-detail-header">
+                <h2 class="treaty-detail-title" id="treaty-detail-title">Treaty Details</h2>
+                <p class="treaty-detail-subtitle" id="treaty-detail-subtitle">
+                    Detailed treaty information for this member state.
+                </p>
+            </div>
+            <div class="treaty-detail-body" id="treaty-detail-body"></div>
+        </div>
+    </div>
+
     <!-- Success Modal -->
     <div class="modal-overlay" id="success-modal">
         <div class="success-modal">
@@ -1594,6 +1871,13 @@
         const treatiesMapStatusEl = document.getElementById('treaties-map-status');
         const treatySelectorEl = document.getElementById('treaty-selector');
         const treatySelectorMetaEl = document.getElementById('treaty-selector-meta');
+        const treatyFocusBtn = document.getElementById('treaty-focus-btn');
+        const treatyCountryLayersByCode = {};
+        const treatyDetailModalEl = document.getElementById('treaty-detail-modal');
+        const treatyDetailCloseBtn = document.getElementById('treaty-detail-close-btn');
+        const treatyDetailTitleEl = document.getElementById('treaty-detail-title');
+        const treatyDetailSubtitleEl = document.getElementById('treaty-detail-subtitle');
+        const treatyDetailBodyEl = document.getElementById('treaty-detail-body');
         let activeTreatyId = treatySelectorEl ? treatySelectorEl.value : '';
 
         function setMapStatus(message) {
@@ -1624,7 +1908,10 @@
                 }
 
                 if (tab === 'treaties') {
-                    setTimeout(() => treatiesMap.invalidateSize(), 120);
+                    setTimeout(() => {
+                        treatiesMap.invalidateSize();
+                        focusTreatyMapOnActiveCountries(false);
+                    }, 120);
                 }
 
                 // Initialize charts when trends tab is shown
@@ -1754,6 +2041,17 @@
             return lookup;
         }, {});
 
+        const treatyCodeMappingByName = (Array.isArray(treatiesData) ? treatiesData : []).reduce((lookup, treaty) => {
+            (Array.isArray(treaty.statuses) ? treaty.statuses : []).forEach((entry) => {
+                const normalizedName = normalizeCountryName(entry.country_name || '');
+                const rawCode = (entry.country_code || '').toString().trim().toUpperCase();
+                if (normalizedName && rawCode) {
+                    lookup[normalizedName] = rawCode;
+                }
+            });
+            return lookup;
+        }, {});
+
         function resolveCountryCode(countryName) {
             const normalized = normalizeCountryName(countryName);
             if (!normalized) {
@@ -1762,7 +2060,20 @@
             if (aliasToCode[normalized]) {
                 return aliasToCode[normalized];
             }
-            return codeMappingByName[normalized] || null;
+            if (codeMappingByName[normalized]) {
+                return codeMappingByName[normalized];
+            }
+            return treatyCodeMappingByName[normalized] || null;
+        }
+
+        function normalizeCountryCode(countryName) {
+            const code = resolveCountryCode(countryName);
+            if (!code) {
+                return null;
+            }
+
+            const normalizedCode = String(code).trim().toUpperCase();
+            return /^[A-Z]{2}$/.test(normalizedCode) ? normalizedCode : null;
         }
 
         const defaultTreatyStatus = {
@@ -1779,11 +2090,11 @@
             (Array.isArray(treatyRows) ? treatyRows : []).forEach((entry) => {
                 const rawCode = (entry.country_code || '').toString().toUpperCase();
                 let code = rawCode;
-                if (!code || !countryGeoData[code]) {
+                if (!code || code.length !== 2) {
                     const resolvedByName = resolveCountryCode(entry.country_name || '');
                     code = resolvedByName ? resolvedByName.toUpperCase() : code;
                 }
-                if (!code) {
+                if (!code || !/^[A-Z]{2}$/.test(code)) {
                     return;
                 }
                 index[code] = {
@@ -1862,7 +2173,7 @@
                 return '#2e7d32';
             }
             if (status.is_signed) {
-                return '#f59e0b';
+                return '#facc15';
             }
             return '#d1d5db';
         }
@@ -2100,12 +2411,14 @@
         }
 
         function getTreatyDefaultStyle(countryName) {
+            const status = getTreatyStatusForCountry(countryName);
+            const hasTreatyAction = status.is_signed || status.is_ratified || status.is_original_submitted;
             return {
                 fillColor: getTreatyFillColor(countryName),
-                weight: 1.4,
-                opacity: 1,
-                color: '#ffffff',
-                fillOpacity: 0.9
+                weight: hasTreatyAction ? 2.2 : 0.85,
+                opacity: hasTreatyAction ? 1 : 0.72,
+                color: hasTreatyAction ? '#1f2937' : '#ffffff',
+                fillOpacity: hasTreatyAction ? 0.95 : 0.52
             };
         }
 
@@ -2122,12 +2435,302 @@
             return 'No recorded action';
         }
 
+        function treatyStatusClass(status) {
+            if (status.is_original_submitted) {
+                return 'original';
+            }
+            if (status.is_ratified) {
+                return 'ratified';
+            }
+            if (status.is_signed) {
+                return 'signed';
+            }
+            return 'none';
+        }
+
+        function escapeHtml(value) {
+            const raw = value === null || value === undefined ? '' : String(value);
+            return raw
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatDisplayDate(dateValue) {
+            if (!dateValue) {
+                return 'Not recorded';
+            }
+
+            const parsed = new Date(`${dateValue}T00:00:00`);
+            if (Number.isNaN(parsed.getTime())) {
+                return escapeHtml(dateValue);
+            }
+
+            return parsed.toLocaleDateString(undefined, {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+        }
+
+        function getTreatyById(treatyId) {
+            if (!treatyId) {
+                return null;
+            }
+
+            return (Array.isArray(treatiesData) ? treatiesData : []).find((treaty) => treaty.id === treatyId) || null;
+        }
+
+        function getTreatyStatusForCountryByTreaty(countryName, treatyId) {
+            const normalizedCode = normalizeCountryCode(countryName);
+            if (!normalizedCode || !treatyId) {
+                return defaultTreatyStatus;
+            }
+
+            const statusIndex = treatyStatusIndexesById[treatyId] || {};
+            return statusIndex[normalizedCode] || defaultTreatyStatus;
+        }
+
+        function getCountryTreatyRows(countryName) {
+            const normalizedCode = normalizeCountryCode(countryName);
+            if (!normalizedCode) {
+                return [];
+            }
+
+            return (Array.isArray(treatiesData) ? treatiesData : [])
+                .map((treaty) => {
+                    const statusIndex = treatyStatusIndexesById[treaty.id] || {};
+                    const status = {
+                        ...defaultTreatyStatus,
+                        ...(statusIndex[normalizedCode] || {})
+                    };
+                    const hasAction = !!(status.is_signed || status.is_ratified || status.is_original_submitted);
+
+                    return {
+                        treaty,
+                        status,
+                        hasAction
+                    };
+                })
+                .filter((row) => row.hasAction)
+                .sort((a, b) => {
+                    const aDate = a.status.ratified_at || a.status.signed_at || a.status.original_submitted_at || '';
+                    const bDate = b.status.ratified_at || b.status.signed_at || b.status.original_submitted_at || '';
+                    return String(bDate).localeCompare(String(aDate));
+                });
+        }
+
+        function renderTreatyDetailSection(title, value) {
+            const safeText = (value && String(value).trim() !== '') ? escapeHtml(value) : 'Not provided.';
+            return `
+                <section class="treaty-detail-section">
+                    <h4>${escapeHtml(title)}</h4>
+                    <p>${safeText}</p>
+                </section>
+            `;
+        }
+
+        function buildTreatyDetailModalContent(countryName, treaty, status) {
+            const countrySafe = escapeHtml(countryName);
+            const treatyName = escapeHtml(treaty.short_title || treaty.title || 'Treaty');
+            const statusLabel = escapeHtml(treatyStatusLabel(status));
+            const statusClass = treatyStatusClass(status);
+            const referenceCode = treaty.reference_code ? escapeHtml(treaty.reference_code) : 'Not provided';
+            const readMoreUrl = treaty.read_more_url ? escapeHtml(treaty.read_more_url) : '';
+
+            const readMoreSection = readMoreUrl ? `
+                <section class="treaty-detail-section">
+                    <h4>Read More</h4>
+                    <p>
+                        <a href="${readMoreUrl}" target="_blank" rel="noopener noreferrer" class="treaty-detail-link">
+                            Open official treaty reference in a new tab
+                        </a>
+                    </p>
+                </section>
+            ` : '';
+
+            return `
+                <div class="treaty-detail-grid">
+                    <div class="treaty-detail-card">
+                        <div class="label">Member State</div>
+                        <div class="value">${countrySafe}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Treaty</div>
+                        <div class="value">${treatyName}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Status</div>
+                        <div class="value"><span class="treaty-status-pill ${statusClass}">${statusLabel}</span></div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Signed On</div>
+                        <div class="value">${formatDisplayDate(status.signed_at)}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Ratified On</div>
+                        <div class="value">${formatDisplayDate(status.ratified_at)}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Original Submitted</div>
+                        <div class="value">${formatDisplayDate(status.original_submitted_at)}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Reference Code</div>
+                        <div class="value">${referenceCode}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Adoption Date</div>
+                        <div class="value">${formatDisplayDate(treaty.adoption_date)}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Entry Into Force</div>
+                        <div class="value">${formatDisplayDate(treaty.entry_into_force_date)}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Signed Count</div>
+                        <div class="value">${Number(treaty.signed_count || 0)}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Ratified Count</div>
+                        <div class="value">${Number(treaty.ratified_count || 0)}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Original Submissions</div>
+                        <div class="value">${Number(treaty.original_submitted_count || 0)}</div>
+                    </div>
+                </div>
+                ${renderTreatyDetailSection('Description', treaty.description)}
+                ${renderTreatyDetailSection('Overview', treaty.overview)}
+                ${renderTreatyDetailSection('Key Provisions', treaty.key_provisions)}
+                ${renderTreatyDetailSection('Implementation Framework', treaty.implementation_framework)}
+                ${renderTreatyDetailSection('Monitoring & Reporting', treaty.monitoring_and_reporting)}
+                ${readMoreSection}
+            `;
+        }
+
+        function buildCountryTreatyPortfolioContent(countryName) {
+            const countrySafe = escapeHtml(countryName);
+            const rows = getCountryTreatyRows(countryName);
+            const signedCount = rows.filter((row) => row.status.is_signed).length;
+            const ratifiedCount = rows.filter((row) => row.status.is_ratified).length;
+            const originalCount = rows.filter((row) => row.status.is_original_submitted).length;
+
+            const tableRows = rows.length ? rows.map((row) => {
+                const treatyLabel = escapeHtml(row.treaty.short_title || row.treaty.title || 'Treaty');
+                const statusLabel = escapeHtml(treatyStatusLabel(row.status));
+                const statusClass = treatyStatusClass(row.status);
+                return `
+                    <tr>
+                        <td>${treatyLabel}</td>
+                        <td><span class="treaty-status-pill ${statusClass}">${statusLabel}</span></td>
+                        <td>${formatDisplayDate(row.status.signed_at)}</td>
+                        <td>${formatDisplayDate(row.status.ratified_at)}</td>
+                        <td>${formatDisplayDate(row.status.original_submitted_at)}</td>
+                    </tr>
+                `;
+            }).join('') : `
+                <tr>
+                    <td colspan="5">No treaty action has been recorded for ${countrySafe} yet.</td>
+                </tr>
+            `;
+
+            return `
+                <div class="treaty-detail-grid">
+                    <div class="treaty-detail-card">
+                        <div class="label">Member State</div>
+                        <div class="value">${countrySafe}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Treaties With Activity</div>
+                        <div class="value">${rows.length}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Signed</div>
+                        <div class="value">${signedCount}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Ratified</div>
+                        <div class="value">${ratifiedCount}</div>
+                    </div>
+                    <div class="treaty-detail-card">
+                        <div class="label">Original Submitted</div>
+                        <div class="value">${originalCount}</div>
+                    </div>
+                </div>
+                <table class="treaty-detail-table">
+                    <thead>
+                        <tr>
+                            <th>Treaty</th>
+                            <th>Status</th>
+                            <th>Signed On</th>
+                            <th>Ratified On</th>
+                            <th>Original Submitted</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            `;
+        }
+
+        function openTreatyDetailModal(countryName, treatyId = '') {
+            if (!treatyDetailModalEl || !treatyDetailBodyEl || !treatyDetailTitleEl || !treatyDetailSubtitleEl) {
+                return;
+            }
+
+            const treaty = treatyId ? getTreatyById(treatyId) : getSelectedTreaty();
+
+            if (treaty) {
+                const treatyTitle = treaty.short_title || treaty.title || 'Treaty';
+                const treatyStatus = getTreatyStatusForCountryByTreaty(countryName, treaty.id);
+
+                treatyDetailTitleEl.textContent = treatyTitle;
+                treatyDetailSubtitleEl.textContent = `${countryName} treaty timeline, status, and implementation details.`;
+                treatyDetailBodyEl.innerHTML = buildTreatyDetailModalContent(countryName, treaty, treatyStatus);
+            } else {
+                treatyDetailTitleEl.textContent = `${countryName} Treaty Portfolio`;
+                treatyDetailSubtitleEl.textContent = 'Combined view across all treaties with recorded activity.';
+                treatyDetailBodyEl.innerHTML = buildCountryTreatyPortfolioContent(countryName);
+            }
+
+            treatyDetailModalEl.classList.add('show');
+            treatyDetailModalEl.setAttribute('aria-hidden', 'false');
+        }
+
+        function openTreatyDetailModalFromButton(buttonEl, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            if (!buttonEl) {
+                return;
+            }
+
+            const countryName = buttonEl.dataset.countryName || 'Country';
+            const treatyId = buttonEl.dataset.treatyId || '';
+            openTreatyDetailModal(countryName, treatyId);
+        }
+
+        function closeTreatyDetailModal() {
+            if (!treatyDetailModalEl) {
+                return;
+            }
+
+            treatyDetailModalEl.classList.remove('show');
+            treatyDetailModalEl.setAttribute('aria-hidden', 'true');
+        }
+
         function highlightTreatyFeature(e) {
             const layer = e.target;
             const countryName = layer._countryName || 'Country';
             const treatyStatus = getTreatyStatusForCountry(countryName);
             const selectedTreaty = getSelectedTreaty();
             const treatyTitle = selectedTreaty ? selectedTreaty.title : 'Combined Treaties View';
+            const safeCountryName = escapeHtml(countryName);
+            const safeTreatyId = selectedTreaty ? escapeHtml(selectedTreaty.id) : '';
 
             layer.setStyle({
                 weight: 3,
@@ -2162,6 +2765,17 @@
                         <span>Original Submitted:</span>
                         <span>${treatyStatus.original_submitted_at || '—'}</span>
                     </div>
+                    <div class="popup-actions">
+                        <button
+                            type="button"
+                            class="popup-learn-btn js-treaty-learn-more"
+                            data-country-name="${safeCountryName}"
+                            data-treaty-id="${safeTreatyId}"
+                            onclick="openTreatyDetailModalFromButton(this, event)"
+                        >
+                            Learn More
+                        </button>
+                    </div>
                 </div>
             `;
             layer.bindPopup(popupContent).openPopup();
@@ -2170,10 +2784,47 @@
         function resetTreatyHighlight(e) {
             const layer = e.target;
             layer.setStyle(getTreatyDefaultStyle(layer._countryName));
-            layer.closePopup();
         }
 
-        function refreshTreatyMapStyles() {
+        function getActiveTreatyCountryCodes() {
+            const selectedTreaty = getSelectedTreaty();
+            const sourceIndex = selectedTreaty ? (treatyStatusIndexesById[selectedTreaty.id] || {}) : combinedTreatyStatusIndex;
+
+            return Object.keys(sourceIndex).filter((countryCode) => {
+                const row = sourceIndex[countryCode] || defaultTreatyStatus;
+                return !!(row.is_signed || row.is_ratified || row.is_original_submitted);
+            });
+        }
+
+        function focusTreatyMapOnActiveCountries(animateFocus = true) {
+            const activeCodes = getActiveTreatyCountryCodes();
+            const focusGroup = L.featureGroup();
+
+            activeCodes.forEach((code) => {
+                (treatyCountryLayersByCode[code] || []).forEach((layer) => {
+                    focusGroup.addLayer(layer);
+                });
+            });
+
+            if (focusGroup.getLayers().length > 0) {
+                treatiesMap.fitBounds(focusGroup.getBounds(), {
+                    padding: [36, 36],
+                    maxZoom: 5,
+                    animate: animateFocus
+                });
+                return;
+            }
+
+            if (treatiesLayerGroup.getLayers().length > 0) {
+                treatiesMap.fitBounds(treatiesLayerGroup.getBounds(), {
+                    padding: [28, 28],
+                    maxZoom: 4,
+                    animate: animateFocus
+                });
+            }
+        }
+
+        function refreshTreatyMapStyles(autoFocus = false) {
             treatiesLayerGroup.eachLayer(function(layer) {
                 if (typeof layer.eachLayer === 'function') {
                     layer.eachLayer(function(childLayer) {
@@ -2185,6 +2836,9 @@
                 }
             });
             refreshTreatySelectorMeta();
+            if (autoFocus) {
+                focusTreatyMapOnActiveCountries(false);
+            }
         }
 
         function highlightFeature(e) {
@@ -2289,6 +2943,14 @@
                 onEachFeature: function(feature, layer) {
                     const countryName = getCountryNameFromFeature(feature, shapeUrl);
                     layer._countryName = countryName;
+                    const countryCode = resolveCountryCode(countryName);
+                    if (countryCode) {
+                        const normalizedCode = countryCode.toUpperCase();
+                        if (!treatyCountryLayersByCode[normalizedCode]) {
+                            treatyCountryLayersByCode[normalizedCode] = [];
+                        }
+                        treatyCountryLayersByCode[normalizedCode].push(layer);
+                    }
                     layer.on({
                         mouseover: highlightTreatyFeature,
                         mouseout: resetTreatyHighlight
@@ -2353,7 +3015,7 @@
                     });
                 }
 
-                refreshTreatyMapStyles();
+                refreshTreatyMapStyles(true);
 
                 if (failed.length > 0) {
                     setMapStatus(`Map loaded with ${failed.length} shapefile(s) skipped due to read errors.`);
@@ -2371,11 +3033,68 @@
         if (treatySelectorEl) {
             treatySelectorEl.addEventListener('change', function() {
                 activeTreatyId = this.value || '';
-                refreshTreatyMapStyles();
+                refreshTreatyMapStyles(true);
+            });
+        }
+
+        if (treatyFocusBtn) {
+            treatyFocusBtn.addEventListener('click', function() {
+                focusTreatyMapOnActiveCountries(true);
+            });
+        }
+
+        if (treatiesMap) {
+            treatiesMap.on('popupopen', function(popupEvent) {
+                const popupElement = popupEvent && popupEvent.popup && typeof popupEvent.popup.getElement === 'function' ?
+                    popupEvent.popup.getElement() :
+                    null;
+                const learnMoreBtn = popupElement ? popupElement.querySelector('.js-treaty-learn-more') : null;
+
+                if (learnMoreBtn && !learnMoreBtn.dataset.boundLearnMore) {
+                    learnMoreBtn.dataset.boundLearnMore = '1';
+                    learnMoreBtn.addEventListener('click', function(clickEvent) {
+                        openTreatyDetailModalFromButton(learnMoreBtn, clickEvent);
+                    });
+                }
+            });
+        }
+
+        document.addEventListener('click', function(event) {
+            const learnMoreBtn = event.target.closest('.js-treaty-learn-more');
+            if (!learnMoreBtn) {
+                return;
+            }
+
+            const countryName = learnMoreBtn.dataset.countryName || 'Country';
+            const treatyId = learnMoreBtn.dataset.treatyId || '';
+            openTreatyDetailModal(countryName, treatyId);
+        });
+
+        if (treatyDetailCloseBtn) {
+            treatyDetailCloseBtn.addEventListener('click', closeTreatyDetailModal);
+        }
+
+        if (treatyDetailModalEl) {
+            treatyDetailModalEl.addEventListener('click', function(event) {
+                if (event.target === treatyDetailModalEl) {
+                    closeTreatyDetailModal();
+                }
             });
         }
 
         refreshTreatySelectorMeta();
+
+        let resizeTimer = null;
+        window.addEventListener('resize', function() {
+            if (resizeTimer) {
+                clearTimeout(resizeTimer);
+            }
+            resizeTimer = setTimeout(function() {
+                map.invalidateSize();
+                treatiesMap.invalidateSize();
+                focusTreatyMapOnActiveCountries(false);
+            }, 180);
+        });
 
         // Filter functions
         function selectAll(type) {
@@ -2557,12 +3276,18 @@
         }
 
         function closeModal() {
-            document.getElementById('success-modal').classList.remove('show');
+            const successModal = document.getElementById('success-modal');
+            if (successModal) {
+                successModal.classList.remove('show');
+            }
         }
 
         // Close modal with ESC key
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') closeModal();
+            if (e.key === 'Escape') {
+                closeModal();
+                closeTreatyDetailModal();
+            }
         });
 
         // Initialize on load

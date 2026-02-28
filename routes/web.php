@@ -141,6 +141,9 @@ use App\Http\Controllers\System\{
     RoleController,
     PermissionController,
     UserAccessController,
+    MemberStateCommunicationAdminController,
+    MemberStateQuestionAdminController,
+    MemberStateNationalDataReviewController,
 };
 
 /*
@@ -176,6 +179,15 @@ use App\Http\Controllers\Procurement\Settings\{
     StepApprovalController,
 };
 
+use App\Http\Controllers\MemberState\{
+    MemberStateDashboardController,
+    MemberStateCommunicationController,
+    MemberStateNationalDataController,
+    MemberStateComparisonController,
+    MemberStateQuestionController,
+    MemberStateCommodityController,
+};
+
 /*
 |--------------------------------------------------------------------------
 | LANGUAGE SWITCHING ROUTES
@@ -189,6 +201,55 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
     ->prefix('system')
     ->name('system.')
     ->group(function () {
+
+        /*
+        |--------------------------------------------------------------------------
+        | MEMBER-STATE COMMUNICATIONS MANAGEMENT
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('communications')->name('communications.')->group(function () {
+            Route::get('/', [MemberStateCommunicationAdminController::class, 'index'])
+                ->middleware('permission:communications.view')
+                ->name('index');
+
+            Route::post('/{communication}/respond', [MemberStateCommunicationAdminController::class, 'respond'])
+                ->middleware('permission:communications.respond')
+                ->name('respond');
+
+            Route::get('/{communication}/attachments/{attachment}', [MemberStateCommunicationAdminController::class, 'downloadAttachment'])
+                ->middleware('permission:communications.view')
+                ->name('attachments.download');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | MEMBER-STATE QUESTION RESPONSE MANAGEMENT
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('questions')->name('questions.')->group(function () {
+            Route::get('/', [MemberStateQuestionAdminController::class, 'index'])
+                ->middleware('permission:questions.view')
+                ->name('index');
+
+            Route::post('/{question}/respond', [MemberStateQuestionAdminController::class, 'respond'])
+                ->middleware('permission:questions.respond')
+                ->name('respond');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | MEMBER-STATE NATIONAL DATA REVIEW
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('national-data-reviews')->name('national-data-reviews.')->group(function () {
+            Route::get('/', [MemberStateNationalDataReviewController::class, 'index'])
+                ->middleware('permission:national_data.review')
+                ->name('index');
+
+            Route::post('/{entry}/status', [MemberStateNationalDataReviewController::class, 'updateStatus'])
+                ->middleware('permission:national_data.approve')
+                ->name('status.update');
+        });
 
         /*
         |--------------------------------------------------------------------------
@@ -2543,6 +2604,49 @@ Route::middleware(['auth', 'not.funding.partner'])
         // AJAX: Get goals by aspiration IDs
         Route::get('goals/by-aspiration', [AuGoalController::class, 'byAspiration'])
             ->name('goals.by-aspiration');
+    });
+
+Route::middleware(['auth', 'member.state'])
+    ->prefix('member-state')
+    ->name('member-state.')
+    ->group(function () {
+        Route::get('/dashboard', [MemberStateDashboardController::class, 'index'])
+            ->name('dashboard');
+
+        Route::get('/communications', [MemberStateCommunicationController::class, 'index'])
+            ->name('communications.index');
+        Route::post('/communications', [MemberStateCommunicationController::class, 'store'])
+            ->name('communications.store');
+        Route::delete('/communications/{communication}', [MemberStateCommunicationController::class, 'destroy'])
+            ->name('communications.destroy');
+        Route::get('/communications/{communication}/attachments/{attachment}', [MemberStateCommunicationController::class, 'downloadAttachment'])
+            ->name('communications.attachments.download');
+
+        Route::get('/national-data', [MemberStateNationalDataController::class, 'index'])
+            ->name('national-data.index');
+        Route::post('/national-data', [MemberStateNationalDataController::class, 'store'])
+            ->name('national-data.store');
+        Route::delete('/national-data/{entry}', [MemberStateNationalDataController::class, 'destroy'])
+            ->name('national-data.destroy');
+
+        Route::get('/comparisons', [MemberStateComparisonController::class, 'index'])
+            ->name('comparisons.index');
+
+        Route::get('/questions', [MemberStateQuestionController::class, 'index'])
+            ->name('questions.index');
+        Route::post('/questions', [MemberStateQuestionController::class, 'store'])
+            ->name('questions.store');
+        Route::delete('/questions/{question}', [MemberStateQuestionController::class, 'destroy'])
+            ->name('questions.destroy');
+
+        Route::get('/commodities', [MemberStateCommodityController::class, 'index'])
+            ->name('commodities.index');
+        Route::post('/commodities/catalog', [MemberStateCommodityController::class, 'storeCommodity'])
+            ->name('commodities.catalog.store');
+        Route::post('/commodities/trends', [MemberStateCommodityController::class, 'storeTrend'])
+            ->name('commodities.trends.store');
+        Route::delete('/commodities/trends/{trend}', [MemberStateCommodityController::class, 'destroyTrend'])
+            ->name('commodities.trends.destroy');
     });
 
 Route::middleware(['auth', 'member.state'])

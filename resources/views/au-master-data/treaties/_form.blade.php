@@ -67,6 +67,53 @@
         @enderror
     </div>
 
+    <div class="col-md-6">
+        <label class="form-label fw-semibold">Overview / Background</label>
+        <textarea name="overview" rows="5" class="form-control @error('overview') is-invalid @enderror"
+            placeholder="Historical context and why this treaty exists...">{{ old('overview', optional($treaty)->overview) }}</textarea>
+        @error('overview')
+            <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label fw-semibold">Key Provisions</label>
+        <textarea name="key_provisions" rows="5" class="form-control @error('key_provisions') is-invalid @enderror"
+            placeholder="Main obligations, clauses, and commitments...">{{ old('key_provisions', optional($treaty)->key_provisions) }}</textarea>
+        @error('key_provisions')
+            <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label fw-semibold">Implementation Framework</label>
+        <textarea name="implementation_framework" rows="5" class="form-control @error('implementation_framework') is-invalid @enderror"
+            placeholder="Institutions, timelines, and implementation mechanism...">{{ old('implementation_framework', optional($treaty)->implementation_framework) }}</textarea>
+        @error('implementation_framework')
+            <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label fw-semibold">Monitoring and Reporting</label>
+        <textarea name="monitoring_and_reporting" rows="5" class="form-control @error('monitoring_and_reporting') is-invalid @enderror"
+            placeholder="How progress is monitored and reported...">{{ old('monitoring_and_reporting', optional($treaty)->monitoring_and_reporting) }}</textarea>
+        @error('monitoring_and_reporting')
+            <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+
+    <div class="col-12">
+        <label class="form-label fw-semibold">Read More Link (External Reference)</label>
+        <input type="url" name="read_more_url" class="form-control @error('read_more_url') is-invalid @enderror"
+            value="{{ old('read_more_url', optional($treaty)->read_more_url) }}"
+            placeholder="https://...">
+        <small class="text-muted">This link appears in member-state "Read More" modal and opens in a new tab.</small>
+        @error('read_more_url')
+            <div class="invalid-feedback">{{ $message }}</div>
+        @enderror
+    </div>
+
     <div class="col-12">
         <div class="border rounded-3 p-3">
             <div class="d-flex justify-content-between align-items-center mb-2">

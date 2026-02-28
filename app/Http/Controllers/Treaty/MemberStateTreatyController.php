@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class MemberStateTreatyController extends Controller
 {
@@ -24,18 +25,82 @@ class MemberStateTreatyController extends Controller
     {
         $user = $request->user();
 
-        $treaties = Treaty::query()
+        $query = Treaty::query()
             ->whereIn('status', ['active', 'draft'])
             ->with(['memberStateStatuses' => function ($query) use ($user) {
                 $query->where('member_state_id', $user->member_state_id);
             }, 'supportingDocuments'])
             ->orderByDesc('adoption_date')
-            ->orderBy('title')
-            ->get();
+            ->orderBy('title');
+
+        $search = trim((string) $request->input('q', ''));
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search, $user) {
+                $builder->where('title', 'like', '%' . $search . '%')
+                    ->orWhere('short_title', 'like', '%' . $search . '%')
+                    ->orWhere('reference_code', 'like', '%' . $search . '%')
+                    ->orWhere('description', 'like', '%' . $search . '%')
+                    ->orWhere('overview', 'like', '%' . $search . '%')
+                    ->orWhere('key_provisions', 'like', '%' . $search . '%')
+                    ->orWhere('implementation_framework', 'like', '%' . $search . '%')
+                    ->orWhere('monitoring_and_reporting', 'like', '%' . $search . '%')
+                    ->orWhereHas('memberStateStatuses', function ($statusQuery) use ($user, $search) {
+                        $statusQuery->where('member_state_id', $user->member_state_id)
+                            ->where(function ($codesQuery) use ($search) {
+                                $codesQuery->where('signed_service_code', 'like', '%' . $search . '%')
+                                    ->orWhere('ratified_service_code', 'like', '%' . $search . '%')
+                                    ->orWhere('signed_document_name', 'like', '%' . $search . '%')
+                                    ->orWhere('ratified_document_name', 'like', '%' . $search . '%')
+                                    ->orWhere('original_document_name', 'like', '%' . $search . '%');
+                            });
+                    });
+            });
+        }
+
+        if ($request->filled('year')) {
+            $query->whereYear('adoption_date', (int) $request->input('year'));
+        }
+
+        $treaties = $query->get();
+
+        $statusByTreatyId = $treaties
+            ->mapWithKeys(function ($treaty) {
+                return [$treaty->id => $treaty->memberStateStatuses->first()];
+            });
+
+        $stageFilter = (string) $request->input('stage', '');
+        if ($stageFilter !== '') {
+            $treaties = $treaties->filter(function ($treaty) use ($statusByTreatyId, $stageFilter) {
+                $status = $statusByTreatyId->get($treaty->id);
+                return $this->matchesStageFilter($status, $stageFilter);
+            })->values();
+        }
+
+        $codeVerificationFilter = (string) $request->input('code_verification', '');
+        if ($codeVerificationFilter !== '') {
+            $treaties = $treaties->filter(function ($treaty) use ($statusByTreatyId, $codeVerificationFilter) {
+                $status = $statusByTreatyId->get($treaty->id);
+                return $this->matchesCodeVerificationFilter($status, $codeVerificationFilter);
+            })->values();
+        }
 
         $statusRows = $treaties->map(function ($treaty) {
             return $treaty->memberStateStatuses->first();
         })->filter();
+
+        $stageByTreatyId = $treaties
+            ->mapWithKeys(function ($treaty) use ($statusByTreatyId) {
+                $status = $statusByTreatyId->get($treaty->id);
+                return [$treaty->id => $this->resolveTreatyStage($status)];
+            });
+
+        $availableYears = Treaty::query()
+            ->whereIn('status', ['active', 'draft'])
+            ->whereNotNull('adoption_date')
+            ->selectRaw('YEAR(adoption_date) as year')
+            ->distinct()
+            ->orderByDesc('year')
+            ->pluck('year');
 
         $summary = [
             'total_treaties' => $treaties->count(),
@@ -45,12 +110,33 @@ class MemberStateTreatyController extends Controller
             'pending_sign_count' => $treaties->count() - $statusRows->where('is_signed', true)->count(),
             'pending_ratification_count' => $statusRows->where('is_signed', true)->where('is_ratified', false)->count(),
             'pending_original_submission_count' => $statusRows->where('is_ratified', true)->where('is_original_submitted', false)->count(),
+            'fully_completed_count' => $statusRows->filter(function ($status) {
+                return $status->is_original_submitted
+                    && $status->signed_service_code_verified_at
+                    && $status->ratified_service_code_verified_at;
+            })->count(),
+            'pending_legal_verification_count' => $statusRows->filter(function ($status) {
+                if (!$status->signed_service_code && !$status->ratified_service_code) {
+                    return false;
+                }
+
+                return !$status->signed_service_code_verified_at || !$status->ratified_service_code_verified_at;
+            })->count(),
         ];
 
         return view('member-state.treaties.index', [
             'memberState' => $user->memberState,
             'treaties' => $treaties,
             'summary' => $summary,
+            'statusByTreatyId' => $statusByTreatyId,
+            'stageByTreatyId' => $stageByTreatyId,
+            'availableYears' => $availableYears,
+            'filters' => [
+                'q' => $search,
+                'year' => $request->input('year', ''),
+                'stage' => $stageFilter,
+                'code_verification' => $codeVerificationFilter,
+            ],
         ]);
     }
 
@@ -253,5 +339,63 @@ class MemberStateTreatyController extends Controller
             ->filter()
             ->unique()
             ->values();
+    }
+
+    private function resolveTreatyStage(?TreatyMemberStateStatus $status): string
+    {
+        if (!$status || !$status->is_signed) {
+            return 'Not Started';
+        }
+
+        if ($status->is_signed && !$status->is_ratified) {
+            return 'Signed';
+        }
+
+        if ($status->is_ratified && !$status->is_original_submitted) {
+            return 'Ratified';
+        }
+
+        if (
+            $status->is_original_submitted
+            && $status->signed_service_code_verified_at
+            && $status->ratified_service_code_verified_at
+        ) {
+            return 'Completed';
+        }
+
+        return 'Original Submitted';
+    }
+
+    private function matchesStageFilter(?TreatyMemberStateStatus $status, string $stageFilter): bool
+    {
+        $stageFilter = Str::lower($stageFilter);
+
+        return match ($stageFilter) {
+            'not_started' => !$status || !$status->is_signed,
+            'signed' => (bool) ($status?->is_signed) && !(bool) ($status?->is_ratified),
+            'ratified' => (bool) ($status?->is_ratified) && !(bool) ($status?->is_original_submitted),
+            'original_submitted' => (bool) ($status?->is_original_submitted),
+            'completed' => (bool) ($status?->is_original_submitted)
+                && !empty($status?->signed_service_code_verified_at)
+                && !empty($status?->ratified_service_code_verified_at),
+            default => true,
+        };
+    }
+
+    private function matchesCodeVerificationFilter(?TreatyMemberStateStatus $status, string $filter): bool
+    {
+        $filter = Str::lower($filter);
+
+        $hasSignedCode = !empty($status?->signed_service_code);
+        $hasRatifiedCode = !empty($status?->ratified_service_code);
+        $signedVerified = !empty($status?->signed_service_code_verified_at);
+        $ratifiedVerified = !empty($status?->ratified_service_code_verified_at);
+
+        return match ($filter) {
+            'pending' => ($hasSignedCode || $hasRatifiedCode) && (!$signedVerified || !$ratifiedVerified),
+            'verified' => ($hasSignedCode || $hasRatifiedCode) && $signedVerified && $ratifiedVerified,
+            'not_generated' => !$hasSignedCode && !$hasRatifiedCode,
+            default => true,
+        };
     }
 }

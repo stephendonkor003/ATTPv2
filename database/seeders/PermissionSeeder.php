@@ -15,6 +15,12 @@ class PermissionSeeder extends Seeder
             ['name' => 'users.manage', 'module' => 'system', 'description' => 'Manage system users'],
             ['name' => 'roles.manage', 'module' => 'system', 'description' => 'Manage roles and role settings'],
             ['name' => 'permissions.manage', 'module' => 'system', 'description' => 'Manage permission catalog and assignments'],
+            ['name' => 'communications.view', 'module' => 'system', 'description' => 'View member-state communications submitted to AU'],
+            ['name' => 'communications.respond', 'module' => 'system', 'description' => 'Respond to member-state communications and send official feedback'],
+            ['name' => 'questions.view', 'module' => 'system', 'description' => 'View member-state questions submitted to AU'],
+            ['name' => 'questions.respond', 'module' => 'system', 'description' => 'Respond to member-state questions and send official feedback'],
+            ['name' => 'national_data.review', 'module' => 'system', 'description' => 'View and review member-state national data submissions'],
+            ['name' => 'national_data.approve', 'module' => 'system', 'description' => 'Approve, reject, or request revisions for member-state national data'],
 
             // Prescreening
             ['name' => 'prescreening.access', 'module' => 'prescreening', 'description' => 'Access prescreening module'],

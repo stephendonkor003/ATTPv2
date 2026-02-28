@@ -103,9 +103,9 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('vendor.dashboard', absolute: false));
         }
 
-        // Redirect member states to treaty workspace
+        // Redirect member states to their dedicated portal dashboard
         if ($user->user_type === 'member_state') {
-            return redirect()->intended(route('member-state.treaties.index', absolute: false));
+            return redirect()->intended(route('member-state.dashboard', absolute: false));
         }
 
         // Default redirect to admin dashboard for all other users

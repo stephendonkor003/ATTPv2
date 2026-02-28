@@ -18,6 +18,10 @@ class DashboardController extends Controller
 
     public function index()
     {
+        if (Auth::check() && Auth::user()->user_type === 'member_state') {
+            return redirect()->route('member-state.dashboard');
+        }
+
         $totalApplicants = Applicant::count();
 
         // If you have another way to mark reviewed records, replace this with that logic
