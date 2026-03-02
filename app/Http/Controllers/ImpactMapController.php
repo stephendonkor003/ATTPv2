@@ -766,6 +766,14 @@ class ImpactMapController extends Controller
 
         return Treaty::query()
             ->whereIn('status', ['active', 'draft'])
+            ->whereHas('memberStateStatuses', function ($query) {
+                $query->where(function ($statusQuery) {
+                    $statusQuery
+                        ->where('is_signed', true)
+                        ->orWhere('is_ratified', true)
+                        ->orWhere('is_original_submitted', true);
+                });
+            })
             ->with(['memberStateStatuses.memberState'])
             ->orderByDesc('adoption_date')
             ->orderBy('title')

@@ -1880,7 +1880,12 @@
         const treatyDetailTitleEl = document.getElementById('treaty-detail-title');
         const treatyDetailSubtitleEl = document.getElementById('treaty-detail-subtitle');
         const treatyDetailBodyEl = document.getElementById('treaty-detail-body');
-        let activeTreatyId = treatySelectorEl ? treatySelectorEl.value : '';
+
+        function toTreatyId(value) {
+            return value === null || value === undefined ? '' : String(value);
+        }
+
+        let activeTreatyId = toTreatyId(treatySelectorEl ? treatySelectorEl.value : '');
 
         function isTreatiesTabActive() {
             const treatiesTabEl = document.getElementById('treaties-tab');
@@ -2147,7 +2152,7 @@
         })();
 
         const treatyStatusIndexesById = (Array.isArray(treatiesData) ? treatiesData : []).reduce((lookup, treaty) => {
-            lookup[treaty.id] = buildTreatyStatusIndex(treaty.statuses || []);
+            lookup[toTreatyId(treaty.id)] = buildTreatyStatusIndex(treaty.statuses || []);
             return lookup;
         }, {});
 
@@ -2155,7 +2160,8 @@
             if (!activeTreatyId) {
                 return null;
             }
-            return (Array.isArray(treatiesData) ? treatiesData : []).find((treaty) => treaty.id === activeTreatyId) || null;
+            return (Array.isArray(treatiesData) ? treatiesData : []).find((treaty) => toTreatyId(treaty.id) ===
+                activeTreatyId) || null;
         }
 
         function getTreatyStatusForCountry(countryName) {
@@ -2484,20 +2490,23 @@
         }
 
         function getTreatyById(treatyId) {
-            if (!treatyId) {
+            const normalizedTreatyId = toTreatyId(treatyId);
+            if (!normalizedTreatyId) {
                 return null;
             }
 
-            return (Array.isArray(treatiesData) ? treatiesData : []).find((treaty) => treaty.id === treatyId) || null;
+            return (Array.isArray(treatiesData) ? treatiesData : []).find((treaty) => toTreatyId(treaty.id) ===
+                normalizedTreatyId) || null;
         }
 
         function getTreatyStatusForCountryByTreaty(countryName, treatyId) {
             const normalizedCode = normalizeCountryCode(countryName);
-            if (!normalizedCode || !treatyId) {
+            const normalizedTreatyId = toTreatyId(treatyId);
+            if (!normalizedCode || !normalizedTreatyId) {
                 return defaultTreatyStatus;
             }
 
-            const statusIndex = treatyStatusIndexesById[treatyId] || {};
+            const statusIndex = treatyStatusIndexesById[normalizedTreatyId] || {};
             return statusIndex[normalizedCode] || defaultTreatyStatus;
         }
 
@@ -2509,7 +2518,7 @@
 
             return (Array.isArray(treatiesData) ? treatiesData : [])
                 .map((treaty) => {
-                    const statusIndex = treatyStatusIndexesById[treaty.id] || {};
+                    const statusIndex = treatyStatusIndexesById[toTreatyId(treaty.id)] || {};
                     const status = {
                         ...defaultTreatyStatus,
                         ...(statusIndex[normalizedCode] || {})
@@ -2738,7 +2747,7 @@
             const selectedTreaty = getSelectedTreaty();
             const treatyTitle = selectedTreaty ? selectedTreaty.title : 'Combined Treaties View';
             const safeCountryName = escapeHtml(countryName);
-            const safeTreatyId = selectedTreaty ? escapeHtml(selectedTreaty.id) : '';
+            const safeTreatyId = selectedTreaty ? escapeHtml(toTreatyId(selectedTreaty.id)) : '';
 
             layer.setStyle({
                 weight: 3,
@@ -2796,7 +2805,8 @@
 
         function getActiveTreatyCountryCodes() {
             const selectedTreaty = getSelectedTreaty();
-            const sourceIndex = selectedTreaty ? (treatyStatusIndexesById[selectedTreaty.id] || {}) : combinedTreatyStatusIndex;
+            const sourceIndex = selectedTreaty ? (treatyStatusIndexesById[toTreatyId(selectedTreaty.id)] || {}) :
+                combinedTreatyStatusIndex;
 
             return Object.keys(sourceIndex).filter((countryCode) => {
                 const row = sourceIndex[countryCode] || defaultTreatyStatus;
@@ -3074,7 +3084,7 @@
 
         if (treatySelectorEl) {
             treatySelectorEl.addEventListener('change', function() {
-                activeTreatyId = this.value || '';
+                activeTreatyId = toTreatyId(this.value || '');
                 if (treatiesLayersInitialized) {
                     refreshTreatyMapStyles(true);
                 } else {
