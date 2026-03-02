@@ -827,8 +827,11 @@ class ImpactMapController extends Controller
             return [];
         }
 
+        $host = app()->bound('request')
+            ? rtrim(request()->getSchemeAndHttpHost(), '/')
+            : rtrim((string) config('app.url'), '/');
         $baseUrl = app()->bound('request') ? rtrim(request()->getBaseUrl(), '/') : '';
-        $assetPathPrefix = ($baseUrl !== '' ? $baseUrl : '') . '/assets/Africa/';
+        $assetPathPrefix = $host . ($baseUrl !== '' ? $baseUrl : '') . '/assets/Africa/';
 
         return collect(File::files($africaPath))
             ->filter(function ($file) {
