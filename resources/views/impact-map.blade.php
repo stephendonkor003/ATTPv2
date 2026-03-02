@@ -1873,12 +1873,19 @@
         const treatySelectorMetaEl = document.getElementById('treaty-selector-meta');
         const treatyFocusBtn = document.getElementById('treaty-focus-btn');
         const treatyCountryLayersByCode = {};
+        const treatyShapeCache = [];
+        let treatiesLayersInitialized = false;
         const treatyDetailModalEl = document.getElementById('treaty-detail-modal');
         const treatyDetailCloseBtn = document.getElementById('treaty-detail-close-btn');
         const treatyDetailTitleEl = document.getElementById('treaty-detail-title');
         const treatyDetailSubtitleEl = document.getElementById('treaty-detail-subtitle');
         const treatyDetailBodyEl = document.getElementById('treaty-detail-body');
         let activeTreatyId = treatySelectorEl ? treatySelectorEl.value : '';
+
+        function isTreatiesTabActive() {
+            const treatiesTabEl = document.getElementById('treaties-tab');
+            return !!(treatiesTabEl && treatiesTabEl.classList.contains('active'));
+        }
 
         function setMapStatus(message) {
             if (mapStatusEl) {
@@ -1908,6 +1915,7 @@
                 }
 
                 if (tab === 'treaties') {
+                    initializeTreatiesLayersIfNeeded();
                     setTimeout(() => {
                         treatiesMap.invalidateSize();
                         focusTreatyMapOnActiveCountries(false);
@@ -2959,6 +2967,35 @@
             }).addTo(treatiesLayerGroup);
         }
 
+        function initializeTreatiesLayersIfNeeded() {
+            if (treatiesLayersInitialized) {
+                return;
+            }
+
+            if (!treatyShapeCache.length) {
+                setTreatiesMapStatus('Treaties map is waiting for Africa map data...');
+                return;
+            }
+
+            setTreatiesMapStatus('Initializing treaty layer...');
+
+            treatyShapeCache.forEach(function(shapeRecord) {
+                addShapeToTreatiesMap(shapeRecord.featureCollection, shapeRecord.shapeUrl);
+            });
+
+            treatiesLayersInitialized = true;
+            refreshTreatyMapStyles(true);
+
+            if (treatiesLayerGroup.getLayers().length > 0) {
+                treatiesMap.fitBounds(treatiesLayerGroup.getBounds(), {
+                    padding: [30, 30],
+                    maxZoom: 4
+                });
+            }
+
+            setTreatiesMapStatus('Treaties map loaded.');
+        }
+
         function loadAfricaShapefiles() {
             if (!shapeFiles.length) {
                 setMapStatus('No shapefiles found in public/assets/Africa.');
@@ -2967,17 +3004,23 @@
             }
 
             setMapStatus(`Loading ${shapeFiles.length} shapefiles...`);
-            setTreatiesMapStatus(`Loading ${shapeFiles.length} shapefiles...`);
+            setTreatiesMapStatus(`Preparing ${shapeFiles.length} treaty map source files...`);
             let loaded = 0;
 
             const loaders = shapeFiles.map(function(shapeUrl) {
                 return shp(shapeUrl)
                     .then(function(rawShape) {
-                        addShapeToMap(rawShape, shapeUrl);
-                        addShapeToTreatiesMap(rawShape, shapeUrl);
+                        const featureCollection = toFeatureCollection(rawShape);
+                        if (featureCollection.features.length) {
+                            treatyShapeCache.push({
+                                shapeUrl: shapeUrl,
+                                featureCollection: featureCollection
+                            });
+                            addShapeToMap(featureCollection, shapeUrl);
+                        }
                         loaded += 1;
                         setMapStatus(`Loaded ${loaded}/${shapeFiles.length} shapefiles...`);
-                        setTreatiesMapStatus(`Loaded ${loaded}/${shapeFiles.length} shapefiles...`);
+                        setTreatiesMapStatus(`Prepared ${loaded}/${shapeFiles.length} treaty map source files...`);
                     })
                     .catch(function(error) {
                         throw {
@@ -3008,22 +3051,21 @@
                     });
                 }
 
-                if (treatiesLayerGroup.getLayers().length > 0) {
-                    treatiesMap.fitBounds(treatiesLayerGroup.getBounds(), {
-                        padding: [30, 30],
-                        maxZoom: 4
-                    });
-                }
-
-                refreshTreatyMapStyles(true);
-
                 if (failed.length > 0) {
                     setMapStatus(`Map loaded with ${failed.length} shapefile(s) skipped due to read errors.`);
-                    setTreatiesMapStatus(
-                        `Map loaded with ${failed.length} shapefile(s) skipped due to read errors.`);
+                    if (isTreatiesTabActive()) {
+                        initializeTreatiesLayersIfNeeded();
+                    } else {
+                        setTreatiesMapStatus(
+                            `Treaties layer is ready. ${failed.length} shapefile(s) were skipped due to read errors.`);
+                    }
                 } else {
                     setMapStatus('Africa map loaded.');
-                    setTreatiesMapStatus('Treaties map loaded.');
+                    if (isTreatiesTabActive()) {
+                        initializeTreatiesLayersIfNeeded();
+                    } else {
+                        setTreatiesMapStatus('Treaties layer is ready. Open the Treaties tab to initialize.');
+                    }
                 }
             });
         }
@@ -3033,7 +3075,11 @@
         if (treatySelectorEl) {
             treatySelectorEl.addEventListener('change', function() {
                 activeTreatyId = this.value || '';
-                refreshTreatyMapStyles(true);
+                if (treatiesLayersInitialized) {
+                    refreshTreatyMapStyles(true);
+                } else {
+                    refreshTreatySelectorMeta();
+                }
             });
         }
 

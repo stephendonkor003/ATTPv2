@@ -28,17 +28,21 @@ class TreatyController extends Controller
 
     public function index()
     {
+        $statusCounts = TreatyMemberStateStatus::query()
+            ->select('treaty_id')
+            ->selectRaw('SUM(CASE WHEN is_signed = 1 THEN 1 ELSE 0 END) as signed_count')
+            ->selectRaw('SUM(CASE WHEN is_ratified = 1 THEN 1 ELSE 0 END) as ratified_count')
+            ->groupBy('treaty_id');
+
         $treaties = Treaty::query()
-            ->withCount([
-                'memberStateStatuses as signed_count' => function ($query) {
-                    $query->where('is_signed', true);
-                },
-                'memberStateStatuses as ratified_count' => function ($query) {
-                    $query->where('is_ratified', true);
-                },
-            ])
-            ->orderByDesc('adoption_date')
-            ->orderByDesc('created_at')
+            ->leftJoinSub($statusCounts, 'status_counts', function ($join) {
+                $join->on('myb_treaties.id', '=', 'status_counts.treaty_id');
+            })
+            ->select('myb_treaties.*')
+            ->selectRaw('COALESCE(status_counts.signed_count, 0) as signed_count')
+            ->selectRaw('COALESCE(status_counts.ratified_count, 0) as ratified_count')
+            ->orderByDesc('myb_treaties.adoption_date')
+            ->orderByDesc('myb_treaties.created_at')
             ->get();
 
         return view('au-master-data.treaties.index', compact('treaties'));

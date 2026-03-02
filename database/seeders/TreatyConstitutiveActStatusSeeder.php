@@ -8,12 +8,16 @@ use App\Models\TreatyMemberStateStatus;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
 class TreatyConstitutiveActStatusSeeder extends Seeder
 {
-    private const SOURCE_URL = 'https://au.int/sites/default/files/treaties/7758-sl-constitutive_act_of_the_african_union_2.pdf';
-    private const SOURCE_DATE = '2017-06-15';
+    private const STATUS_FILES_DIR = 'treaty files/Treaties Contd';
 
     public function run(): void
     {
@@ -22,10 +26,14 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
             $this->call(AuMemberStateSeeder::class);
         }
 
-        $treaty = $this->resolveTreaty();
+        if (Treaty::query()->count() === 0) {
+            $this->command?->warn('Treaties are missing. Seeding treaties first.');
+            $this->call(TreatySeeder::class);
+        }
 
-        if (!$treaty) {
-            $this->command?->warn('TreatyConstitutiveActStatusSeeder skipped: treaty not found. Run TreatySeeder first.');
+        $statusFiles = $this->discoverStatusFiles();
+        if (empty($statusFiles)) {
+            $this->command?->warn('TreatyConstitutiveActStatusSeeder skipped: no status Excel files found.');
             return;
         }
 
@@ -40,115 +48,651 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
             return;
         }
 
+        /** @var Collection<int, Treaty> $treaties */
+        $treaties = Treaty::query()
+            ->withCount('supportingDocuments')
+            ->get(['id', 'title']);
+
+        if ($treaties->isEmpty()) {
+            $this->command?->warn('TreatyConstitutiveActStatusSeeder skipped: no treaties available.');
+            return;
+        }
+
         $seedUserId = User::query()
             ->where('user_type', 'admin')
             ->value('id') ?? User::query()->oldest()->value('id');
 
         $aliases = $this->countryAliases();
-        $rows = $this->statusRows();
-        $seeded = 0;
-        $missing = [];
+        $filesProcessed = 0;
+        $rowsProcessed = 0;
+        $rowsSeeded = 0;
+        $rowsUpdated = 0;
+        $missingCountries = [];
+        $missingTreaties = [];
+        $filesWithUnknownLayout = [];
 
-        foreach ($rows as $row) {
-            $normalizedPdfName = $this->normalizeCountryName($row['country']);
-            $lookupName = $aliases[$normalizedPdfName] ?? $normalizedPdfName;
+        foreach ($statusFiles as $filePath) {
+            $folderName = basename(dirname($filePath));
+            $treaty = $this->resolveTreatyForFolder($folderName, $treaties);
 
-            /** @var AuMemberState|null $memberState */
-            $memberState = $memberStatesByNormalized->get($lookupName);
-
-            if (!$memberState) {
-                $missing[] = $row['country'];
+            if (!$treaty) {
+                $missingTreaties[$folderName] = true;
                 continue;
             }
 
-            $signedAt = $this->parsePdfDate($row['signature_date']);
-            $ratifiedAt = $this->parsePdfDate($row['ratification_or_accession_date']);
-            $depositedAt = $this->parsePdfDate($row['deposit_date']);
-
-            $isRatified = !is_null($ratifiedAt);
-            // Ratification by accession may exist without signature date (e.g. Morocco).
-            $isSigned = !is_null($signedAt) || $isRatified;
-
-            $status = TreatyMemberStateStatus::query()->firstOrNew([
-                'treaty_id' => $treaty->id,
-                'member_state_id' => $memberState->id,
-            ]);
-
-            $status->is_signed = $isSigned;
-            $status->signed_at = $signedAt ?? ($isRatified ? $ratifiedAt : null);
-
-            $status->is_ratified = $isRatified;
-            $status->ratified_at = $ratifiedAt;
-
-            if ($isSigned && empty($status->signed_notes)) {
-                $status->signed_notes = $signedAt
-                    ? 'Seeded from AU treaty status list PDF dated ' . Carbon::parse(self::SOURCE_DATE)->format('d/m/Y') . '.'
-                    : 'Seeded as accession record from AU treaty status list PDF (no signature date published).';
+            $rows = $this->loadSpreadsheetRows($filePath);
+            if (empty($rows)) {
+                continue;
             }
 
-            if ($isRatified) {
-                $status->ratified_notes = $this->buildRatifiedNote($row, $depositedAt, (string) $status->ratified_notes);
+            $columnIndexes = $this->detectStatusColumns($rows);
+            if ($columnIndexes === null) {
+                $filesWithUnknownLayout[] = $this->relativeStatusPath($filePath);
+                continue;
             }
 
+            $fileRowsProcessed = 0;
+            for ($i = $columnIndexes['header_row'] + 1; $i < count($rows); $i++) {
+                $row = $rows[$i];
+                $country = trim((string) ($row[$columnIndexes['country']] ?? ''));
+
+                if ($this->shouldSkipCountryCell($country)) {
+                    continue;
+                }
+
+                $normalizedSheetCountry = $this->normalizeCountryName($country);
+                $lookupCountry = $aliases[$normalizedSheetCountry] ?? $normalizedSheetCountry;
+
+                /** @var AuMemberState|null $memberState */
+                $memberState = $memberStatesByNormalized->get($lookupCountry);
+                if (!$memberState) {
+                    $missingCountries[$country] = true;
+                    continue;
+                }
+
+                $signatureDate = $this->parseSpreadsheetDate($row[$columnIndexes['signature']] ?? null);
+                $ratificationDate = $this->parseSpreadsheetDate($row[$columnIndexes['ratification']] ?? null);
+                $depositDate = $this->parseSpreadsheetDate($row[$columnIndexes['deposit']] ?? null);
+
+                $isRatified = !is_null($ratificationDate);
+                $isSigned = !is_null($signatureDate) || $isRatified;
+
+                $status = TreatyMemberStateStatus::query()->firstOrNew([
+                    'treaty_id' => $treaty->id,
+                    'member_state_id' => $memberState->id,
+                ]);
+
+                $isNew = !$status->exists;
+
+                $status->is_signed = $isSigned;
+                $status->signed_at = $isSigned ? ($signatureDate ?? $ratificationDate) : null;
+                $status->is_ratified = $isRatified;
+                $status->ratified_at = $ratificationDate;
+
+                if ($isSigned && empty($status->signed_service_code)) {
+                    $status->signed_service_code = TreatyMemberStateStatus::generateUniqueServiceCode('signed_service_code');
+                }
+
+                if ($isRatified && empty($status->ratified_service_code)) {
+                    $status->ratified_service_code = TreatyMemberStateStatus::generateUniqueServiceCode('ratified_service_code');
+                }
+
+                if ($isSigned && !empty($status->signed_service_code) && empty($status->signed_service_code_verified_at)) {
+                    $status->signed_service_code_verified_at = now();
+                    if ($seedUserId && empty($status->signed_service_code_verified_by_user_id)) {
+                        $status->signed_service_code_verified_by_user_id = $seedUserId;
+                    }
+                }
+
+                if ($isRatified && !empty($status->ratified_service_code) && empty($status->ratified_service_code_verified_at)) {
+                    $status->ratified_service_code_verified_at = now();
+                    if ($seedUserId && empty($status->ratified_service_code_verified_by_user_id)) {
+                        $status->ratified_service_code_verified_by_user_id = $seedUserId;
+                    }
+                }
+
+                if ($isSigned && empty($status->signed_notes)) {
+                    $status->signed_notes = $this->buildSignedNote($filePath);
+                }
+
+                if ($isRatified) {
+                    $status->ratified_notes = $this->buildRatifiedNote($filePath, $depositDate, (string) $status->ratified_notes);
+                }
+
+                if ($seedUserId) {
+                    $status->updated_by = $seedUserId;
+                }
+
+                $status->save();
+
+                $fileRowsProcessed++;
+                if ($isNew) {
+                    $rowsSeeded++;
+                } else {
+                    $rowsUpdated++;
+                }
+            }
+
+            if ($fileRowsProcessed > 0) {
+                $filesProcessed++;
+                $rowsProcessed += $fileRowsProcessed;
+            }
+        }
+
+        if (!empty($missingTreaties)) {
+            $this->command?->warn(
+                'TreatyConstitutiveActStatusSeeder missing treaty matches for folders: '
+                . implode(', ', array_keys($missingTreaties))
+            );
+        }
+
+        if (!empty($missingCountries)) {
+            $this->command?->warn(
+                'TreatyConstitutiveActStatusSeeder missing member-state matches: '
+                . implode(', ', array_keys($missingCountries))
+            );
+        }
+
+        if (!empty($filesWithUnknownLayout)) {
+            $this->command?->warn(
+                'TreatyConstitutiveActStatusSeeder skipped files with unknown layout: '
+                . implode(', ', $filesWithUnknownLayout)
+            );
+        }
+
+        $backfilledCodes = $this->backfillMissingServiceCodes($seedUserId);
+
+        $this->command?->info(
+            'TreatyConstitutiveActStatusSeeder processed '
+            . $rowsProcessed
+            . ' status rows across '
+            . $filesProcessed
+            . '/'
+            . count($statusFiles)
+            . ' files (new: '
+            . $rowsSeeded
+            . ', updated: '
+            . $rowsUpdated
+            . '). Service-code backfill (signed: '
+            . $backfilledCodes['signed_code']
+            . ', ratified: '
+            . $backfilledCodes['ratified_code']
+            . '), verification backfill (signed: '
+            . $backfilledCodes['signed_verified']
+            . ', ratified: '
+            . $backfilledCodes['ratified_verified']
+            . ').'
+        );
+    }
+
+    /**
+     * @return array{
+     *     signed_code: int,
+     *     ratified_code: int,
+     *     signed_verified: int,
+     *     ratified_verified: int
+     * }
+     */
+    private function backfillMissingServiceCodes(?string $seedUserId): array
+    {
+        $signedCodeBackfilled = 0;
+        $ratifiedCodeBackfilled = 0;
+        $signedVerifiedBackfilled = 0;
+        $ratifiedVerifiedBackfilled = 0;
+
+        $signedMissing = TreatyMemberStateStatus::query()
+            ->where('is_signed', true)
+            ->where(function ($query) {
+                $query->whereNull('signed_service_code')
+                    ->orWhere('signed_service_code', '');
+            })
+            ->get();
+
+        foreach ($signedMissing as $status) {
+            $status->signed_service_code = TreatyMemberStateStatus::generateUniqueServiceCode('signed_service_code');
             if ($seedUserId) {
                 $status->updated_by = $seedUserId;
             }
-
             $status->save();
-            $seeded++;
+            $signedCodeBackfilled++;
         }
 
-        if (!empty($missing)) {
-            $this->command?->warn('TreatyConstitutiveActStatusSeeder missing member-state matches: ' . implode(', ', array_unique($missing)));
+        $ratifiedMissing = TreatyMemberStateStatus::query()
+            ->where('is_ratified', true)
+            ->where(function ($query) {
+                $query->whereNull('ratified_service_code')
+                    ->orWhere('ratified_service_code', '');
+            })
+            ->get();
+
+        foreach ($ratifiedMissing as $status) {
+            $status->ratified_service_code = TreatyMemberStateStatus::generateUniqueServiceCode('ratified_service_code');
+            if ($seedUserId) {
+                $status->updated_by = $seedUserId;
+            }
+            $status->save();
+            $ratifiedCodeBackfilled++;
         }
 
-        $this->command?->info("TreatyConstitutiveActStatusSeeder synced {$seeded} member-state status rows for '{$treaty->title}'.");
+        $signedUnverified = TreatyMemberStateStatus::query()
+            ->where('is_signed', true)
+            ->whereNotNull('signed_service_code')
+            ->where('signed_service_code', '!=', '')
+            ->whereNull('signed_service_code_verified_at')
+            ->get();
+
+        foreach ($signedUnverified as $status) {
+            $status->signed_service_code_verified_at = now();
+            if ($seedUserId && empty($status->signed_service_code_verified_by_user_id)) {
+                $status->signed_service_code_verified_by_user_id = $seedUserId;
+            }
+            if ($seedUserId) {
+                $status->updated_by = $seedUserId;
+            }
+            $status->save();
+            $signedVerifiedBackfilled++;
+        }
+
+        $ratifiedUnverified = TreatyMemberStateStatus::query()
+            ->where('is_ratified', true)
+            ->whereNotNull('ratified_service_code')
+            ->where('ratified_service_code', '!=', '')
+            ->whereNull('ratified_service_code_verified_at')
+            ->get();
+
+        foreach ($ratifiedUnverified as $status) {
+            $status->ratified_service_code_verified_at = now();
+            if ($seedUserId && empty($status->ratified_service_code_verified_by_user_id)) {
+                $status->ratified_service_code_verified_by_user_id = $seedUserId;
+            }
+            if ($seedUserId) {
+                $status->updated_by = $seedUserId;
+            }
+            $status->save();
+            $ratifiedVerifiedBackfilled++;
+        }
+
+        return [
+            'signed_code' => $signedCodeBackfilled,
+            'ratified_code' => $ratifiedCodeBackfilled,
+            'signed_verified' => $signedVerifiedBackfilled,
+            'ratified_verified' => $ratifiedVerifiedBackfilled,
+        ];
     }
 
-    private function resolveTreaty(): ?Treaty
+    /**
+     * @return array<int, string>
+     */
+    private function discoverStatusFiles(): array
     {
-        $treaty = Treaty::query()
-            ->where('title', 'Constitutive Act of the African Union')
-            ->orWhere('title', 'like', '%Constitutive Act%African Union%')
-            ->first();
-
-        if ($treaty) {
-            return $treaty;
+        $rootPath = database_path(self::STATUS_FILES_DIR);
+        if (!is_dir($rootPath)) {
+            return [];
         }
 
-        $this->command?->warn('Treaty not found. Seeding treaty register first.');
-        $this->call(TreatySeeder::class);
+        $files = [];
+        foreach (File::directories($rootPath) as $directory) {
+            foreach (File::files($directory) as $file) {
+                if (Str::lower($file->getExtension()) === 'xlsx') {
+                    $files[] = $file->getPathname();
+                }
+            }
+        }
 
-        return Treaty::query()
-            ->where('title', 'Constitutive Act of the African Union')
-            ->orWhere('title', 'like', '%Constitutive Act%African Union%')
-            ->first();
+        sort($files);
+
+        return $files;
     }
 
-    private function buildRatifiedNote(array $row, ?Carbon $depositedAt, string $existing): string
+    /**
+     * @return array<int, array<int, mixed>>
+     */
+    private function loadSpreadsheetRows(string $filePath): array
     {
-        $sourceText = 'Seeded from AU treaty status list PDF dated '
-            . Carbon::parse(self::SOURCE_DATE)->format('d/m/Y')
-            . ' (' . self::SOURCE_URL . ').';
+        try {
+            return IOFactory::load($filePath)
+                ->getActiveSheet()
+                ->toArray(null, true, true, false);
+        } catch (\Throwable $exception) {
+            Log::warning('TreatyConstitutiveActStatusSeeder: failed to load status spreadsheet.', [
+                'path' => $filePath,
+                'error' => $exception->getMessage(),
+            ]);
 
-        $parts = [];
-        if ($depositedAt) {
-            $parts[] = 'Deposit date: ' . $depositedAt->format('d/m/Y') . '.';
-        } elseif (!empty($row['deposit_date']) && $row['deposit_date'] !== '-') {
-            $parts[] = 'Deposit date: ' . $row['deposit_date'] . '.';
+            return [];
+        }
+    }
+
+    /**
+     * @param array<int, array<int, mixed>> $rows
+     * @return array{
+     *     header_row: int,
+     *     country: int,
+     *     signature: int,
+     *     ratification: int,
+     *     deposit: int
+     * }|null
+     */
+    private function detectStatusColumns(array $rows): ?array
+    {
+        $maxHeaderRows = min(10, count($rows));
+
+        for ($headerRow = 0; $headerRow < $maxHeaderRows; $headerRow++) {
+            $columns = [
+                'country' => null,
+                'signature' => null,
+                'ratification' => null,
+                'deposit' => null,
+            ];
+
+            foreach ($rows[$headerRow] as $index => $value) {
+                $header = $this->normalizeHeader((string) $value);
+
+                if ($header === '') {
+                    continue;
+                }
+
+                if ($columns['country'] === null && (Str::contains($header, 'country') || Str::contains($header, 'pays'))) {
+                    $columns['country'] = $index;
+                }
+                if ($columns['signature'] === null && Str::contains($header, 'signature')) {
+                    $columns['signature'] = $index;
+                }
+                if (
+                    $columns['ratification'] === null
+                    && (Str::contains($header, 'ratification') || Str::contains($header, 'accession'))
+                ) {
+                    $columns['ratification'] = $index;
+                }
+                if ($columns['deposit'] === null && Str::contains($header, 'deposit')) {
+                    $columns['deposit'] = $index;
+                }
+            }
+
+            if (
+                $columns['country'] !== null
+                && $columns['signature'] !== null
+                && $columns['ratification'] !== null
+                && $columns['deposit'] !== null
+            ) {
+                return [
+                    'header_row' => $headerRow,
+                    'country' => (int) $columns['country'],
+                    'signature' => (int) $columns['signature'],
+                    'ratification' => (int) $columns['ratification'],
+                    'deposit' => (int) $columns['deposit'],
+                ];
+            }
         }
 
-        $appended = trim($sourceText . ' ' . implode(' ', $parts));
+        return null;
+    }
 
-        if ($existing !== '' && !Str::contains($existing, self::SOURCE_URL)) {
+    private function normalizeHeader(string $header): string
+    {
+        $normalized = Str::ascii($header);
+        $normalized = Str::lower($normalized);
+        $normalized = preg_replace('/[^a-z0-9]+/u', ' ', $normalized);
+        $normalized = preg_replace('/\s+/u', ' ', $normalized ?? '');
+
+        return trim((string) $normalized);
+    }
+
+    private function shouldSkipCountryCell(string $country): bool
+    {
+        if ($country === '') {
+            return true;
+        }
+
+        $normalized = $this->normalizeCountryName($country);
+        if ($normalized === '') {
+            return true;
+        }
+
+        return Str::startsWith($normalized, 'total countries');
+    }
+
+    private function buildSignedNote(string $filePath): string
+    {
+        return 'Seeded from treaty status spreadsheet (' . $this->relativeStatusPath($filePath) . ').';
+    }
+
+    private function buildRatifiedNote(string $filePath, ?Carbon $depositDate, string $existing): string
+    {
+        $base = 'Seeded from treaty status spreadsheet (' . $this->relativeStatusPath($filePath) . ').';
+        $depositPart = $depositDate ? ' Deposit date: ' . $depositDate->format('d/m/Y') . '.' : '';
+        $appended = trim($base . $depositPart);
+
+        if ($existing !== '' && !Str::contains($existing, $base)) {
             return trim($existing . ' ' . $appended);
         }
 
         return $existing !== '' ? $existing : $appended;
     }
 
+    private function relativeStatusPath(string $absolutePath): string
+    {
+        $root = database_path();
+        $relative = Str::replaceFirst($root . DIRECTORY_SEPARATOR, '', $absolutePath);
+
+        return str_replace('\\', '/', $relative);
+    }
+
+    private function parseSpreadsheetDate(mixed $value): ?Carbon
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->startOfDay();
+        }
+
+        if (is_numeric($value)) {
+            try {
+                return Carbon::instance(ExcelDate::excelToDateTimeObject((float) $value))->startOfDay();
+            } catch (\Throwable $exception) {
+                return null;
+            }
+        }
+
+        $text = trim((string) $value);
+        if ($text === '' || $text === '-' || Str::lower($text) === 'n/a') {
+            return null;
+        }
+
+        foreach (['d/m/Y', 'd-m-Y', 'Y-m-d', 'm/d/Y'] as $format) {
+            try {
+                return Carbon::createFromFormat($format, $text)->startOfDay();
+            } catch (\Throwable $exception) {
+                // Continue trying other formats.
+            }
+        }
+
+        try {
+            return Carbon::parse($text)->startOfDay();
+        } catch (\Throwable $exception) {
+            return null;
+        }
+    }
+
     /**
-     * Normalize names to map PDF entries and local member-state names reliably.
+     * @param Collection<int, Treaty> $treaties
+     */
+    private function resolveTreatyForFolder(string $folderName, Collection $treaties): ?Treaty
+    {
+        $folderKeys = $this->buildMatchKeys($folderName);
+
+        $candidates = $treaties->filter(function (Treaty $treaty) use ($folderKeys) {
+            $titleKeys = $this->buildMatchKeys($treaty->title);
+
+            return count(array_intersect($folderKeys, $titleKeys)) > 0;
+        })->values();
+
+        if ($candidates->count() === 1) {
+            return $candidates->first();
+        }
+
+        if ($candidates->count() > 1) {
+            $exactTitle = Str::lower(trim($folderName));
+            $exact = $candidates->first(function (Treaty $treaty) use ($exactTitle) {
+                return Str::lower(trim($treaty->title)) === $exactTitle;
+            });
+
+            if ($exact) {
+                return $exact;
+            }
+
+            return $candidates
+                ->sortByDesc('supporting_documents_count')
+                ->sortByDesc(function (Treaty $treaty) use ($folderName) {
+                    return Str::lower(trim($treaty->title)) === Str::lower(trim($folderName)) ? 1 : 0;
+                })
+                ->first();
+        }
+
+        return $this->findHighConfidenceTreatyMatch($folderName, $treaties);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function buildMatchKeys(string $value): array
+    {
+        $keys = [];
+
+        $normalized = $this->normalizeForMatching($value);
+        if ($normalized !== '') {
+            $keys[] = $normalized;
+        }
+
+        $withoutParentheses = preg_replace('/\([^)]*\)/u', ' ', $value) ?? $value;
+        $normalizedWithoutParentheses = $this->normalizeForMatching($withoutParentheses);
+        if ($normalizedWithoutParentheses !== '') {
+            $keys[] = $normalizedWithoutParentheses;
+        }
+
+        return array_values(array_unique($keys));
+    }
+
+    private function normalizeForMatching(string $value): string
+    {
+        $normalized = Str::ascii($value);
+        $normalized = str_replace(['&', '_', '-'], [' and ', ' ', ' '], $normalized);
+        $normalized = Str::lower($normalized);
+        $normalized = preg_replace('/[^a-z0-9\s]+/u', ' ', $normalized);
+        $normalized = preg_replace('/\s+/u', ' ', $normalized ?? '');
+
+        return trim((string) $normalized);
+    }
+
+    /**
+     * @param Collection<int, Treaty> $treaties
+     */
+    private function findHighConfidenceTreatyMatch(string $folderName, Collection $treaties): ?Treaty
+    {
+        $folderTokens = $this->extractMatchTokens($folderName);
+        if (count($folderTokens) < 4) {
+            return null;
+        }
+
+        $candidates = [];
+
+        foreach ($treaties as $treaty) {
+            $treatyTokens = $this->extractMatchTokens($treaty->title);
+            if (empty($treatyTokens)) {
+                continue;
+            }
+
+            $intersectionCount = count(array_intersect($folderTokens, $treatyTokens));
+            if ($intersectionCount === 0) {
+                continue;
+            }
+
+            $folderCoverage = $intersectionCount / count($folderTokens);
+            $treatyCoverage = $intersectionCount / count($treatyTokens);
+
+            if ($folderCoverage >= 0.95 && $treatyCoverage >= 0.80 && $intersectionCount >= 4) {
+                $candidates[] = [
+                    'treaty' => $treaty,
+                    'folder_coverage' => $folderCoverage,
+                    'treaty_coverage' => $treatyCoverage,
+                    'intersection_count' => $intersectionCount,
+                ];
+            }
+        }
+
+        if (empty($candidates)) {
+            return null;
+        }
+
+        usort($candidates, static function (array $left, array $right): int {
+            if ($left['folder_coverage'] !== $right['folder_coverage']) {
+                return $left['folder_coverage'] < $right['folder_coverage'] ? 1 : -1;
+            }
+            if ($left['treaty_coverage'] !== $right['treaty_coverage']) {
+                return $left['treaty_coverage'] < $right['treaty_coverage'] ? 1 : -1;
+            }
+            if ($left['intersection_count'] !== $right['intersection_count']) {
+                return $left['intersection_count'] < $right['intersection_count'] ? 1 : -1;
+            }
+
+            return 0;
+        });
+
+        if (count($candidates) > 1) {
+            $best = $candidates[0];
+            $runnerUp = $candidates[1];
+            if (
+                $best['folder_coverage'] === $runnerUp['folder_coverage']
+                && $best['treaty_coverage'] === $runnerUp['treaty_coverage']
+                && $best['intersection_count'] === $runnerUp['intersection_count']
+            ) {
+                return null;
+            }
+        }
+
+        return $candidates[0]['treaty'];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function extractMatchTokens(string $value): array
+    {
+        $stopWords = [
+            'a', 'an', 'and', 'at', 'by', 'for', 'from', 'in', 'into', 'its', 'of', 'on', 'or',
+            'relating', 'the', 'to', 'towards', 'within',
+        ];
+
+        $aliases = [
+            'african' => 'africa',
+            'immunitie' => 'immunities',
+            'peoples' => 'people',
+        ];
+
+        $withoutParentheses = preg_replace('/\([^)]*\)/u', ' ', $value) ?? $value;
+        $normalized = $this->normalizeForMatching($withoutParentheses);
+
+        if ($normalized === '') {
+            return [];
+        }
+
+        $tokenMap = [];
+        foreach (explode(' ', $normalized) as $token) {
+            if ($token === '') {
+                continue;
+            }
+
+            $token = $aliases[$token] ?? $token;
+            if (in_array($token, $stopWords, true)) {
+                continue;
+            }
+
+            $tokenMap[$token] = true;
+        }
+
+        return array_keys($tokenMap);
+    }
+
+    /**
+     * Normalize names to map spreadsheet entries and local member-state names reliably.
      */
     private function normalizeCountryName(string $name): string
     {
@@ -171,89 +715,6 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
             $this->normalizeCountryName('Democratic Rep. of Congo') => $this->normalizeCountryName('Democratic Republic of the Congo'),
             $this->normalizeCountryName('Sao Tome & Principe') => $this->normalizeCountryName('Sao Tome and Principe'),
             $this->normalizeCountryName('Swaziland') => $this->normalizeCountryName('Eswatini'),
-        ];
-    }
-
-    private function parsePdfDate(string $value): ?Carbon
-    {
-        $trimmed = trim($value);
-        if ($trimmed === '' || $trimmed === '-') {
-            return null;
-        }
-
-        try {
-            return Carbon::createFromFormat('d/m/Y', $trimmed)->startOfDay();
-        } catch (\Throwable $exception) {
-            return null;
-        }
-    }
-
-    /**
-     * @return array<int, array{
-     *     country: string,
-     *     signature_date: string,
-     *     ratification_or_accession_date: string,
-     *     deposit_date: string
-     * }>
-     */
-    private function statusRows(): array
-    {
-        return [
-            ['country' => 'Algeria', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '23/05/2001', 'deposit_date' => '31/05/2001'],
-            ['country' => 'Angola', 'signature_date' => '01/03/2001', 'ratification_or_accession_date' => '19/09/2001', 'deposit_date' => '20/12/2001'],
-            ['country' => 'Benin', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '03/07/2001', 'deposit_date' => '11/07/2001'],
-            ['country' => 'Botswana', 'signature_date' => '26/02/2001', 'ratification_or_accession_date' => '01/03/2001', 'deposit_date' => '02/03/2001'],
-            ['country' => 'Burkina Faso', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '27/02/2001', 'deposit_date' => '02/03/2001'],
-            ['country' => 'Burundi', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '28/02/2001', 'deposit_date' => '01/03/2001'],
-            ['country' => 'Cameroon', 'signature_date' => '28/02/2001', 'ratification_or_accession_date' => '09/11/2001', 'deposit_date' => '19/04/2002'],
-            ['country' => 'Central African Rep.', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '16/02/2001', 'deposit_date' => '01/03/2001'],
-            ['country' => 'Cape Verde', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '21/06/2001', 'deposit_date' => '09/07/2001'],
-            ['country' => 'Chad', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '16/01/2001', 'deposit_date' => '06/02/2001'],
-            ['country' => 'Cote d\'Ivoire', 'signature_date' => '10/01/2001', 'ratification_or_accession_date' => '27/02/2001', 'deposit_date' => '01/03/2001'],
-            ['country' => 'Comoros', 'signature_date' => '01/02/2001', 'ratification_or_accession_date' => '16/02/2001', 'deposit_date' => '27/02/2001'],
-            ['country' => 'Congo', 'signature_date' => '01/03/2001', 'ratification_or_accession_date' => '18/02/2002', 'deposit_date' => '29/05/2002'],
-            ['country' => 'Djibouti', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '04/12/2000', 'deposit_date' => '10/01/2001'],
-            ['country' => 'Democratic Rep. of Congo', 'signature_date' => '01/03/2001', 'ratification_or_accession_date' => '07/07/2002', 'deposit_date' => '09/07/2002'],
-            ['country' => 'Egypt', 'signature_date' => '22/01/2001', 'ratification_or_accession_date' => '05/07/2001', 'deposit_date' => '30/07/2001'],
-            ['country' => 'Equatorial Guinea', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '26/12/2000', 'deposit_date' => '24/02/2001'],
-            ['country' => 'Eritrea', 'signature_date' => '01/03/2001', 'ratification_or_accession_date' => '01/03/2001', 'deposit_date' => '01/03/2001'],
-            ['country' => 'Ethiopia', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '08/03/2001', 'deposit_date' => '09/03/2001'],
-            ['country' => 'Gabon', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '17/05/2001', 'deposit_date' => '05/06/2001'],
-            ['country' => 'Gambia', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '22/02/2001', 'deposit_date' => '18/04/2001'],
-            ['country' => 'Ghana', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '11/05/2001', 'deposit_date' => '21/05/2001'],
-            ['country' => 'Guinea-Bissau', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '14/01/2001', 'deposit_date' => '07/07/2003'],
-            ['country' => 'Guinea', 'signature_date' => '02/03/2001', 'ratification_or_accession_date' => '23/04/2002', 'deposit_date' => '05/07/2002'],
-            ['country' => 'Kenya', 'signature_date' => '02/03/2001', 'ratification_or_accession_date' => '04/07/2001', 'deposit_date' => '10/07/2001'],
-            ['country' => 'Libya', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '25/10/2000', 'deposit_date' => '29/10/2000'],
-            ['country' => 'Lesotho', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '16/02/2001', 'deposit_date' => '12/03/2001'],
-            ['country' => 'Liberia', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '26/02/2001', 'deposit_date' => '01/03/2001'],
-            ['country' => 'Madagascar', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '05/06/2003', 'deposit_date' => '10/06/2003'],
-            ['country' => 'Mali', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '11/08/2000', 'deposit_date' => '21/08/2000'],
-            ['country' => 'Malawi', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '03/02/2001', 'deposit_date' => '14/02/2001'],
-            ['country' => 'Morocco', 'signature_date' => '-', 'ratification_or_accession_date' => '20/01/2017', 'deposit_date' => '31/01/2017'],
-            ['country' => 'Mozambique', 'signature_date' => '23/11/2000', 'ratification_or_accession_date' => '17/05/2001', 'deposit_date' => '25/05/2001'],
-            ['country' => 'Mauritania', 'signature_date' => '28/02/2001', 'ratification_or_accession_date' => '20/11/2001', 'deposit_date' => '04/07/2002'],
-            ['country' => 'Mauritius', 'signature_date' => '09/02/2001', 'ratification_or_accession_date' => '13/04/2001', 'deposit_date' => '19/04/2001'],
-            ['country' => 'Namibia', 'signature_date' => '27/10/2000', 'ratification_or_accession_date' => '28/02/2001', 'deposit_date' => '21/03/2001'],
-            ['country' => 'Nigeria', 'signature_date' => '08/09/2000', 'ratification_or_accession_date' => '29/03/2001', 'deposit_date' => '26/04/2001'],
-            ['country' => 'Niger', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '26/01/2001', 'deposit_date' => '09/02/2001'],
-            ['country' => 'Rwanda', 'signature_date' => '07/12/2000', 'ratification_or_accession_date' => '16/04/2001', 'deposit_date' => '18/04/2001'],
-            ['country' => 'South Africa', 'signature_date' => '08/09/2000', 'ratification_or_accession_date' => '03/03/2001', 'deposit_date' => '23/04/2001'],
-            ['country' => 'Sahrawi Arab Democratic Republic', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '27/12/2000', 'deposit_date' => '02/01/2001'],
-            ['country' => 'Senegal', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '28/08/2000', 'deposit_date' => '31/08/2000'],
-            ['country' => 'Seychelles', 'signature_date' => '11/09/2000', 'ratification_or_accession_date' => '20/03/2001', 'deposit_date' => '09/04/2001'],
-            ['country' => 'Sierra Leone', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '09/02/2001', 'deposit_date' => '01/03/2001'],
-            ['country' => 'Somalia', 'signature_date' => '18/01/2001', 'ratification_or_accession_date' => '26/02/2001', 'deposit_date' => '01/03/2001'],
-            ['country' => 'South Sudan', 'signature_date' => '15/08/2011', 'ratification_or_accession_date' => '15/08/2011', 'deposit_date' => '15/08/2011'],
-            ['country' => 'Sao Tome & Principe', 'signature_date' => '16/12/2000', 'ratification_or_accession_date' => '27/02/2001', 'deposit_date' => '02/03/2001'],
-            ['country' => 'Sudan', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '22/11/2000', 'deposit_date' => '24/01/2001'],
-            ['country' => 'Swaziland', 'signature_date' => '01/03/2001', 'ratification_or_accession_date' => '08/08/2001', 'deposit_date' => '18/09/2001'],
-            ['country' => 'Tanzania', 'signature_date' => '15/12/2000', 'ratification_or_accession_date' => '06/04/2001', 'deposit_date' => '11/04/2001'],
-            ['country' => 'Togo', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '30/08/2000', 'deposit_date' => '14/09/2000'],
-            ['country' => 'Tunisia', 'signature_date' => '14/12/2000', 'ratification_or_accession_date' => '13/03/2001', 'deposit_date' => '21/03/2001'],
-            ['country' => 'Uganda', 'signature_date' => '25/02/2001', 'ratification_or_accession_date' => '03/04/2001', 'deposit_date' => '09/04/2001'],
-            ['country' => 'Zambia', 'signature_date' => '12/07/2000', 'ratification_or_accession_date' => '21/02/2001', 'deposit_date' => '01/03/2001'],
-            ['country' => 'Zimbabwe', 'signature_date' => '15/02/2001', 'ratification_or_accession_date' => '03/03/2001', 'deposit_date' => '03/04/2001'],
         ];
     }
 }
