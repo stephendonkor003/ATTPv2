@@ -827,6 +827,9 @@ class ImpactMapController extends Controller
             return [];
         }
 
+        $baseUrl = app()->bound('request') ? rtrim(request()->getBaseUrl(), '/') : '';
+        $assetPathPrefix = ($baseUrl !== '' ? $baseUrl : '') . '/assets/Africa/';
+
         return collect(File::files($africaPath))
             ->filter(function ($file) {
                 return strtolower($file->getExtension()) === 'shp';
@@ -834,8 +837,8 @@ class ImpactMapController extends Controller
             ->sortBy(function ($file) {
                 return $file->getFilename();
             })
-            ->map(function ($file) {
-                return asset('assets/Africa/' . rawurlencode($file->getFilename()));
+            ->map(function ($file) use ($assetPathPrefix) {
+                return $assetPathPrefix . rawurlencode($file->getFilename());
             })
             ->values()
             ->all();

@@ -44,6 +44,9 @@ class LandingPageController extends Controller
         $shapeFiles = [];
 
         if (File::exists($africaPath)) {
+            $baseUrl = app()->bound('request') ? rtrim(request()->getBaseUrl(), '/') : '';
+            $assetPathPrefix = ($baseUrl !== '' ? $baseUrl : '') . '/assets/Africa/';
+
             $shapeFiles = collect(File::files($africaPath))
                 ->filter(function ($file) {
                     return strtolower($file->getExtension()) === 'shp';
@@ -51,8 +54,8 @@ class LandingPageController extends Controller
                 ->sortBy(function ($file) {
                     return $file->getFilename();
                 })
-                ->map(function ($file) {
-                    return asset('assets/Africa/' . rawurlencode($file->getFilename()));
+                ->map(function ($file) use ($assetPathPrefix) {
+                    return $assetPathPrefix . rawurlencode($file->getFilename());
                 })
                 ->values()
                 ->all();
