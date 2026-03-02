@@ -44,11 +44,8 @@ class LandingPageController extends Controller
         $shapeFiles = [];
 
         if (File::exists($africaPath)) {
-            $host = app()->bound('request')
-                ? rtrim(request()->getSchemeAndHttpHost(), '/')
-                : rtrim((string) config('app.url'), '/');
             $baseUrl = app()->bound('request') ? rtrim(request()->getBaseUrl(), '/') : '';
-            $assetPathPrefix = $host . ($baseUrl !== '' ? $baseUrl : '') . '/assets/Africa/';
+            $assetPathPrefix = ($baseUrl !== '' ? $baseUrl : '') . '/assets/Africa/';
 
             $shapeFiles = collect(File::files($africaPath))
                 ->filter(function ($file) {

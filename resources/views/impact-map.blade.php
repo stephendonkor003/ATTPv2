@@ -3013,20 +3013,54 @@
                 return;
             }
 
+            function resolveShapeFileUrl(shapeUrl) {
+                const rawUrl = (shapeUrl || '').toString().trim();
+                if (!rawUrl) {
+                    return '';
+                }
+
+                try {
+                    const resolved = new URL(rawUrl, window.location.href);
+                    const isHttpUrl = resolved.protocol === 'http:' || resolved.protocol === 'https:';
+                    const looksLikeAfricaShape = /\/assets\/Africa\/[^/]+\.shp$/i.test(resolved.pathname);
+
+                    if (looksLikeAfricaShape && resolved.host !== window.location.host) {
+                        return new URL(
+                            `${resolved.pathname}${resolved.search}${resolved.hash}`,
+                            window.location.origin
+                        ).toString();
+                    }
+
+                    if (isHttpUrl && resolved.protocol !== window.location.protocol) {
+                        resolved.protocol = window.location.protocol;
+                    }
+
+                    return resolved.toString();
+                } catch (error) {
+                    if (rawUrl.startsWith('/')) {
+                        return `${window.location.origin}${rawUrl}`;
+                    }
+
+                    return rawUrl;
+                }
+            }
+
             setMapStatus(`Loading ${shapeFiles.length} shapefiles...`);
             setTreatiesMapStatus(`Preparing ${shapeFiles.length} treaty map source files...`);
             let loaded = 0;
 
             const loaders = shapeFiles.map(function(shapeUrl) {
-                return shp(shapeUrl)
+                const resolvedShapeUrl = resolveShapeFileUrl(shapeUrl);
+
+                return shp(resolvedShapeUrl)
                     .then(function(rawShape) {
                         const featureCollection = toFeatureCollection(rawShape);
                         if (featureCollection.features.length) {
                             treatyShapeCache.push({
-                                shapeUrl: shapeUrl,
+                                shapeUrl: resolvedShapeUrl,
                                 featureCollection: featureCollection
                             });
-                            addShapeToMap(featureCollection, shapeUrl);
+                            addShapeToMap(featureCollection, resolvedShapeUrl);
                         }
                         loaded += 1;
                         setMapStatus(`Loaded ${loaded}/${shapeFiles.length} shapefiles...`);
@@ -3035,6 +3069,7 @@
                     .catch(function(error) {
                         throw {
                             shapeUrl: shapeUrl,
+                            resolvedShapeUrl: resolvedShapeUrl,
                             error: error
                         };
                     });
@@ -3047,7 +3082,7 @@
 
                 failed.forEach(function(result) {
                     if (result.reason && result.reason.shapeUrl) {
-                        console.warn('Failed to load shapefile:', result.reason.shapeUrl, result.reason
+                        console.warn('Failed to load shapefile:', result.reason.resolvedShapeUrl || result.reason.shapeUrl, result.reason
                             .error);
                     } else {
                         console.warn('Failed to load shapefile:', result.reason);

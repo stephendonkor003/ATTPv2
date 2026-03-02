@@ -200,6 +200,38 @@
             }).addTo(africaLayerGroup);
         }
 
+        function resolveShapeFileUrl(shapeUrl) {
+            const rawUrl = (shapeUrl || '').toString().trim();
+            if (!rawUrl) {
+                return '';
+            }
+
+            try {
+                const resolved = new URL(rawUrl, window.location.href);
+                const isHttpUrl = resolved.protocol === 'http:' || resolved.protocol === 'https:';
+                const looksLikeAfricaShape = /\/assets\/Africa\/[^/]+\.shp$/i.test(resolved.pathname);
+
+                if (looksLikeAfricaShape && resolved.host !== window.location.host) {
+                    return new URL(
+                        `${resolved.pathname}${resolved.search}${resolved.hash}`,
+                        window.location.origin
+                    ).toString();
+                }
+
+                if (isHttpUrl && resolved.protocol !== window.location.protocol) {
+                    resolved.protocol = window.location.protocol;
+                }
+
+                return resolved.toString();
+            } catch (error) {
+                if (rawUrl.startsWith('/')) {
+                    return `${window.location.origin}${rawUrl}`;
+                }
+
+                return rawUrl;
+            }
+        }
+
         if (!shapeFiles.length) {
             statusEl.textContent = 'No shapefiles found in public/assets/Africa.';
         } else {
@@ -207,8 +239,10 @@
             statusEl.textContent = `Loading ${shapeFiles.length} shapefiles...`;
 
             const loaders = shapeFiles.map(function(shapeUrl) {
-                return shp(shapeUrl).then(function(rawShape) {
-                    addShapeToMap(rawShape, shapeUrl);
+                const resolvedShapeUrl = resolveShapeFileUrl(shapeUrl);
+
+                return shp(resolvedShapeUrl).then(function(rawShape) {
+                    addShapeToMap(rawShape, resolvedShapeUrl);
                     loaded += 1;
                     statusEl.textContent = `Loaded ${loaded}/${shapeFiles.length} shapefiles...`;
                 });
