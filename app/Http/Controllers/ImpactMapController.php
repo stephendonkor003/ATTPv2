@@ -69,9 +69,6 @@ class ImpactMapController extends Controller
         // Shape files for Africa base map
         $shapeFiles = $this->getAfricaShapeFiles();
 
-        // Treaties and agreements data for the additional map tab
-        $treatiesData = $this->getTreatiesData();
-
         return view('impact-map', compact(
             'summary',
             'filterOptions',
@@ -83,8 +80,67 @@ class ImpactMapController extends Controller
             'fundingByFlagship',
             'trendData',
             'countryGeoData',
+            'shapeFiles'
+        ));
+    }
+
+    /**
+     * Display the dedicated AU treaties information page.
+     */
+    public function treatiesInformation()
+    {
+        $shapeFiles = $this->getAfricaShapeFiles();
+        $treatiesData = $this->getTreatiesData();
+
+        $memberStates = collect($treatiesData)
+            ->flatMap(function (array $treaty) {
+                return collect($treaty['statuses'] ?? [])->map(function (array $statusRow) {
+                    return [
+                        'country_code' => strtoupper((string) ($statusRow['country_code'] ?? '')),
+                        'country_name' => (string) ($statusRow['country_name'] ?? ''),
+                    ];
+                });
+            })
+            ->filter(function (array $row) {
+                return $row['country_code'] !== '' && $row['country_name'] !== '';
+            })
+            ->unique(function (array $row) {
+                return $row['country_code'] . '|' . strtolower($row['country_name']);
+            })
+            ->sortBy('country_name')
+            ->values()
+            ->all();
+
+        $statusTableRows = collect($treatiesData)
+            ->flatMap(function (array $treaty) {
+                return collect($treaty['statuses'] ?? [])->map(function (array $statusRow) use ($treaty) {
+                    return [
+                        'treaty_id' => (string) ($treaty['id'] ?? ''),
+                        'treaty_title' => (string) ($treaty['title'] ?? ''),
+                        'treaty_short_title' => (string) ($treaty['short_title'] ?? ''),
+                        'reference_code' => (string) ($treaty['reference_code'] ?? ''),
+                        'country_code' => strtoupper((string) ($statusRow['country_code'] ?? '')),
+                        'country_name' => (string) ($statusRow['country_name'] ?? ''),
+                        'is_signed' => (bool) ($statusRow['is_signed'] ?? false),
+                        'is_ratified' => (bool) ($statusRow['is_ratified'] ?? false),
+                        'is_original_submitted' => (bool) ($statusRow['is_original_submitted'] ?? false),
+                        'signed_at' => $statusRow['signed_at'] ?? null,
+                        'ratified_at' => $statusRow['ratified_at'] ?? null,
+                        'original_submitted_at' => $statusRow['original_submitted_at'] ?? null,
+                    ];
+                });
+            })
+            ->filter(function (array $row) {
+                return $row['country_code'] !== '' && $row['country_name'] !== '' && $row['treaty_id'] !== '';
+            })
+            ->values()
+            ->all();
+
+        return view('treaties-information', compact(
             'shapeFiles',
-            'treatiesData'
+            'treatiesData',
+            'memberStates',
+            'statusTableRows'
         ));
     }
 

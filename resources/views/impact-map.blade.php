@@ -1452,47 +1452,19 @@
 
                 <!-- Treaties Tab -->
                 <div class="tab-content" id="treaties-tab">
-                    <h2 style="color: var(--wine); margin-bottom: 1rem;">Treaties and Agreements Map</h2>
-                    <p style="margin-bottom: 1rem; color: #666;">
-                        Explore how AU member states are progressing on treaty signature and ratification.
+                    <h2 style="color: var(--wine); margin-bottom: 0.75rem;">African Union Treaties</h2>
+                    <p style="margin-bottom: 0.9rem; color: #4b5563; line-height: 1.7;">
+                        The African Union treaty framework guides continental cooperation, legal harmonization,
+                        ratification milestones, and formal submission of treaty instruments by member states.
                     </p>
-
-                    <div class="treaty-controls">
-                        <div>
-                            <label for="treaty-selector" class="form-label fw-semibold mb-1">Select Treaty</label>
-                            <select id="treaty-selector" class="form-select">
-                                <option value="">All Treaties (Combined View)</option>
-                                @foreach ($treatiesData as $treaty)
-                                    <option value="{{ $treaty['id'] }}">
-                                        {{ $treaty['short_title'] ?: $treaty['title'] }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <div class="meta" id="treaty-selector-meta">Showing combined treaty status across all
-                                records.</div>
-                            <div class="treaty-visual-tools">
-                                <button type="button" id="treaty-focus-btn" class="filter-action-btn focus-btn">
-                                    Focus Colored Countries
-                                </button>
-                                <span class="hint">Signed = yellow, Ratified = green. The map auto-focuses active countries.</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="treaties-map" class="africa-map-canvas"></div>
-                    <p id="treaties-map-status" style="margin: 0.75rem 0 0; color: #666; font-size: 0.9rem;">
-                        Loading treaty map...
+                    <p style="margin-bottom: 1.4rem; color: #6b7280; line-height: 1.7;">
+                        Open the dedicated treaties information page to explore treaty-by-treaty status filters,
+                        member-state status indicators on the Africa map, and the full status dataset in a searchable table.
                     </p>
-                    <div class="map-legend">
-                        <span class="map-legend-item"><span class="map-legend-swatch"
-                                style="background:#0f766e;"></span>Original Submitted</span>
-                        <span class="map-legend-item"><span class="map-legend-swatch"
-                                style="background:#2e7d32;"></span>Ratified</span>
-                        <span class="map-legend-item"><span class="map-legend-swatch"
-                                style="background:#facc15;"></span>Signed (Not Ratified)</span>
-                        <span class="map-legend-item"><span class="map-legend-swatch"
-                                style="background:#d1d5db;"></span>No Recorded Action</span>
-                    </div>
+                    <a href="{{ route('impact.treaties.information') }}" class="filter-reset"
+                        style="display:inline-flex; width:auto; padding:0.72rem 1.25rem; text-decoration:none;">
+                        View Treaties Information
+                    </a>
                 </div>
 
                 <!-- Partners Tab -->
@@ -1858,7 +1830,8 @@
         });
         const africaLayerGroup = L.featureGroup().addTo(map);
         const mapStatusEl = document.getElementById('africa-map-status');
-        const treatiesMap = L.map('treaties-map', {
+        const treatiesMapEl = document.getElementById('treaties-map');
+        const treatiesMap = treatiesMapEl ? L.map('treaties-map', {
             center: [0, 20],
             zoom: 3,
             minZoom: 3,
@@ -1866,8 +1839,8 @@
             scrollWheelZoom: true,
             zoomControl: true,
             attributionControl: false
-        });
-        const treatiesLayerGroup = L.featureGroup().addTo(treatiesMap);
+        }) : null;
+        const treatiesLayerGroup = treatiesMap ? L.featureGroup().addTo(treatiesMap) : L.featureGroup();
         const treatiesMapStatusEl = document.getElementById('treaties-map-status');
         const treatySelectorEl = document.getElementById('treaty-selector');
         const treatySelectorMetaEl = document.getElementById('treaty-selector-meta');
@@ -1920,11 +1893,13 @@
                 }
 
                 if (tab === 'treaties') {
-                    initializeTreatiesLayersIfNeeded();
-                    setTimeout(() => {
-                        treatiesMap.invalidateSize();
-                        focusTreatyMapOnActiveCountries(false);
-                    }, 120);
+                    if (treatiesMap) {
+                        initializeTreatiesLayersIfNeeded();
+                        setTimeout(() => {
+                            treatiesMap.invalidateSize();
+                            focusTreatyMapOnActiveCountries(false);
+                        }, 120);
+                    }
                 }
 
                 // Initialize charts when trends tab is shown
@@ -2815,6 +2790,10 @@
         }
 
         function focusTreatyMapOnActiveCountries(animateFocus = true) {
+            if (!treatiesMap) {
+                return;
+            }
+
             const activeCodes = getActiveTreatyCountryCodes();
             const focusGroup = L.featureGroup();
 
@@ -2843,6 +2822,11 @@
         }
 
         function refreshTreatyMapStyles(autoFocus = false) {
+            if (!treatiesMap) {
+                refreshTreatySelectorMeta();
+                return;
+            }
+
             treatiesLayerGroup.eachLayer(function(layer) {
                 if (typeof layer.eachLayer === 'function') {
                     layer.eachLayer(function(childLayer) {
@@ -2947,6 +2931,10 @@
         }
 
         function addShapeToTreatiesMap(rawShape, shapeUrl) {
+            if (!treatiesMap) {
+                return;
+            }
+
             const featureCollection = toFeatureCollection(rawShape);
 
             if (!featureCollection.features.length) {
@@ -2978,6 +2966,10 @@
         }
 
         function initializeTreatiesLayersIfNeeded() {
+            if (!treatiesMap) {
+                return;
+            }
+
             if (treatiesLayersInitialized) {
                 return;
             }
@@ -3009,7 +3001,9 @@
         function loadAfricaShapefiles() {
             if (!shapeFiles.length) {
                 setMapStatus('No shapefiles found in public/assets/Africa.');
-                setTreatiesMapStatus('No shapefiles found in public/assets/Africa.');
+                if (treatiesMap) {
+                    setTreatiesMapStatus('No shapefiles found in public/assets/Africa.');
+                }
                 return;
             }
 
@@ -3046,7 +3040,9 @@
             }
 
             setMapStatus(`Loading ${shapeFiles.length} shapefiles...`);
-            setTreatiesMapStatus(`Preparing ${shapeFiles.length} treaty map source files...`);
+            if (treatiesMap) {
+                setTreatiesMapStatus(`Preparing ${shapeFiles.length} treaty map source files...`);
+            }
             let loaded = 0;
 
             const loaders = shapeFiles.map(function(shapeUrl) {
@@ -3056,15 +3052,19 @@
                     .then(function(rawShape) {
                         const featureCollection = toFeatureCollection(rawShape);
                         if (featureCollection.features.length) {
-                            treatyShapeCache.push({
-                                shapeUrl: resolvedShapeUrl,
-                                featureCollection: featureCollection
-                            });
+                            if (treatiesMap) {
+                                treatyShapeCache.push({
+                                    shapeUrl: resolvedShapeUrl,
+                                    featureCollection: featureCollection
+                                });
+                            }
                             addShapeToMap(featureCollection, resolvedShapeUrl);
                         }
                         loaded += 1;
                         setMapStatus(`Loaded ${loaded}/${shapeFiles.length} shapefiles...`);
-                        setTreatiesMapStatus(`Prepared ${loaded}/${shapeFiles.length} treaty map source files...`);
+                        if (treatiesMap) {
+                            setTreatiesMapStatus(`Prepared ${loaded}/${shapeFiles.length} treaty map source files...`);
+                        }
                     })
                     .catch(function(error) {
                         throw {
@@ -3098,18 +3098,22 @@
 
                 if (failed.length > 0) {
                     setMapStatus(`Map loaded with ${failed.length} shapefile(s) skipped due to read errors.`);
-                    if (isTreatiesTabActive()) {
-                        initializeTreatiesLayersIfNeeded();
-                    } else {
-                        setTreatiesMapStatus(
-                            `Treaties layer is ready. ${failed.length} shapefile(s) were skipped due to read errors.`);
+                    if (treatiesMap) {
+                        if (isTreatiesTabActive()) {
+                            initializeTreatiesLayersIfNeeded();
+                        } else {
+                            setTreatiesMapStatus(
+                                `Treaties layer is ready. ${failed.length} shapefile(s) were skipped due to read errors.`);
+                        }
                     }
                 } else {
                     setMapStatus('Africa map loaded.');
-                    if (isTreatiesTabActive()) {
-                        initializeTreatiesLayersIfNeeded();
-                    } else {
-                        setTreatiesMapStatus('Treaties layer is ready. Open the Treaties tab to initialize.');
+                    if (treatiesMap) {
+                        if (isTreatiesTabActive()) {
+                            initializeTreatiesLayersIfNeeded();
+                        } else {
+                            setTreatiesMapStatus('Treaties layer is ready. Open the Treaties tab to initialize.');
+                        }
                     }
                 }
             });
@@ -3182,8 +3186,10 @@
             }
             resizeTimer = setTimeout(function() {
                 map.invalidateSize();
-                treatiesMap.invalidateSize();
-                focusTreatyMapOnActiveCountries(false);
+                if (treatiesMap) {
+                    treatiesMap.invalidateSize();
+                    focusTreatyMapOnActiveCountries(false);
+                }
             }, 180);
         });
 
@@ -3387,7 +3393,9 @@
             refreshTreatySelectorMeta();
             setTimeout(() => {
                 map.invalidateSize();
-                treatiesMap.invalidateSize();
+                if (treatiesMap) {
+                    treatiesMap.invalidateSize();
+                }
             }, 150);
 
             // Initialize Countries DataTable

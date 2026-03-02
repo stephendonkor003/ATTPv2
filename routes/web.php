@@ -2259,6 +2259,8 @@ Route::post('/impact-map/request-information', [LandingPageController::class, 's
 use App\Http\Controllers\ImpactMapController;
 
 Route::get('/impact-map', [ImpactMapController::class, 'index'])->name('impact.map');
+Route::get('/impact-map/treaties-information', [ImpactMapController::class, 'treatiesInformation'])
+    ->name('impact.treaties.information');
 Route::post('/api/impact-map/filter', [ImpactMapController::class, 'getFilteredData'])
     ->middleware('throttle:60,1')
     ->name('impact.filter');
