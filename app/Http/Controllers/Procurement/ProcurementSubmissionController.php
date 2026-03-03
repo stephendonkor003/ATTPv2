@@ -26,7 +26,9 @@ class ProcurementSubmissionController extends Controller
         $submissions = FormSubmission::with([
                 'procurement',
                 'form',
-                'values'
+                'values' => function ($query) {
+                    $query->whereIn('field_key', ['official_name', 'official_email']);
+                }
             ])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereHas('procurement', function ($proc) use ($scopedNodeIds) {

@@ -21,6 +21,8 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-4">Submission Code</th>
+                            <th>Official Name</th>
+                            <th>Official Email</th>
                             <th>Procurement</th>
                             <th>Form</th>
                             <th class="text-center">Status</th>
@@ -30,11 +32,25 @@
                     </thead>
                     <tbody>
                         @foreach($submissions as $submission)
+                            @php
+                                $officialName = $submission->values->firstWhere('field_key', 'official_name')?->value;
+                                $officialEmail = $submission->values->firstWhere('field_key', 'official_email')?->value;
+                            @endphp
                             <tr>
                                 <td class="ps-4">
                                     <span class="fw-semibold text-primary">
                                         {{ $submission->procurement_submission_code }}
                                     </span>
+                                </td>
+
+                                <td>{{ $officialName ?: '—' }}</td>
+
+                                <td>
+                                    @if ($officialEmail)
+                                        <a href="mailto:{{ $officialEmail }}">{{ $officialEmail }}</a>
+                                    @else
+                                        —
+                                    @endif
                                 </td>
 
                                 <td>
