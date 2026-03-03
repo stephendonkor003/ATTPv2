@@ -109,29 +109,49 @@
                 <div class="card-body bg-soft-{{ $color }}">
 
                     {{-- ADD CRITERIA --}}
-                    <form method="POST" action="{{ route('evals.cfg.crt.add', $sec) }}" class="row g-2 mb-3">
+                    <form method="POST" action="{{ route('evals.cfg.crt.add', $sec) }}"
+                        class="criteria-bulk-form mb-3"
+                        data-section-id="{{ $sec->id }}"
+                        data-services="{{ $evaluation->type === 'services' ? 1 : 0 }}"
+                        data-color="{{ $color }}">
                         @csrf
-                        <div class="col-md-5">
-                            <input name="name" class="form-control" placeholder="Criteria name" required>
-                        </div>
-                        <div class="col-md-5">
-                            <input name="description" class="form-control" placeholder="Description">
+                        <input type="hidden" name="criteria_payload" class="criteria-payload">
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle mb-2">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Sub-Criteria</th>
+                                        <th>Description</th>
+                                        @if ($evaluation->type === 'services')
+                                            <th width="120">Max Score</th>
+                                        @endif
+                                        <th width="80" class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="criteria-draft-body"></tbody>
+                            </table>
                         </div>
 
-                        @if ($evaluation->type === 'services')
-                            <div class="col-md-1">
-                                <input name="max_score" type="number" min="1" class="form-control max-score-input"
-                                    placeholder="Max" required>
-                            </div>
-                        @endif
-
-                        <div class="col-md-{{ $evaluation->type === 'services' ? 1 : 2 }}">
-                            <button class="btn btn-outline-{{ $color }} w-100">Add</button>
+                        <div class="d-flex gap-2 align-items-center">
+                            <button type="button" class="btn btn-sm btn-outline-{{ $color }} btn-add-criteria-row">
+                                Add Row
+                            </button>
+                            <button type="submit" class="btn btn-sm btn-{{ $color }}">
+                                Save Added Criteria
+                            </button>
+                            <small class="text-muted">
+                                Add as many rows as needed, then save once.
+                            </small>
                         </div>
+
+                        <div class="criteria-feedback small mt-2"></div>
                     </form>
 
                     {{-- CRITERIA TABLE --}}
-                    <table class="table table-sm table-bordered align-middle">
+                    <table class="table table-sm table-bordered align-middle criteria-list-table"
+                        data-section-id="{{ $sec->id }}"
+                        data-services="{{ $evaluation->type === 'services' ? 1 : 0 }}">
                         <thead class="table-light">
                             <tr>
                                 <th>Criteria</th>
@@ -142,7 +162,7 @@
                                 <th class="text-center">Action</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody class="criteria-list-body">
                             @foreach ($sec->criteria as $crt)
                                 <tr data-update-url="{{ route('evals.cfg.crt.upd', $crt) }}">
                                     {{-- NAME --}}
@@ -232,59 +252,287 @@
 
     {{-- ================= INLINE EDIT JS ================= --}}
     <script>
-        document.querySelectorAll('.btn-edit').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const row = btn.closest('tr');
+        const csrfToken = '{{ csrf_token() }}';
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function extractError(payload) {
+            if (!payload) {
+                return null;
+            }
+
+            if (payload.message) {
+                return payload.message;
+            }
+
+            if (payload.errors && typeof payload.errors === 'object') {
+                const firstKey = Object.keys(payload.errors)[0];
+                if (firstKey && Array.isArray(payload.errors[firstKey]) && payload.errors[firstKey].length) {
+                    return payload.errors[firstKey][0];
+                }
+            }
+
+            return null;
+        }
+
+        function setCriteriaFeedback(form, message, type = 'success') {
+            const feedback = form.querySelector('.criteria-feedback');
+            if (!feedback) {
+                return;
+            }
+
+            feedback.textContent = message;
+            feedback.className = `criteria-feedback small mt-2 text-${type === 'success' ? 'success' : 'danger'}`;
+        }
+
+        function buildDraftRow(form, seed = {}) {
+            const isServices = form.dataset.services === '1';
+            const tr = document.createElement('tr');
+            tr.className = 'criteria-draft-row';
+
+            tr.innerHTML = `
+                <td>
+                    <input type="text" class="form-control form-control-sm draft-name"
+                        placeholder="e.g. Methodology quality"
+                        value="${escapeHtml(seed.name ?? '')}">
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm draft-description"
+                        placeholder="Optional description"
+                        value="${escapeHtml(seed.description ?? '')}">
+                </td>
+                ${isServices ? `
+                <td>
+                    <input type="number" min="1" step="0.01"
+                        class="form-control form-control-sm draft-max-score"
+                        placeholder="Max"
+                        value="${escapeHtml(seed.max_score ?? '')}">
+                </td>` : ''}
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-danger btn-remove-draft-row">Remove</button>
+                </td>
+            `;
+
+            form.querySelector('.criteria-draft-body')?.appendChild(tr);
+        }
+
+        function initializeBulkCriteriaForms() {
+            document.querySelectorAll('.criteria-bulk-form').forEach(form => {
+                if (!form.querySelector('.criteria-draft-row')) {
+                    buildDraftRow(form);
+                }
+            });
+        }
+
+        function collectDraftRows(form) {
+            const isServices = form.dataset.services === '1';
+
+            return Array.from(form.querySelectorAll('.criteria-draft-row'))
+                .map(row => {
+                    const name = row.querySelector('.draft-name')?.value?.trim() ?? '';
+                    const description = row.querySelector('.draft-description')?.value?.trim() ?? '';
+                    const rawMax = row.querySelector('.draft-max-score')?.value ?? '';
+                    const maxScore = isServices && rawMax !== '' ? rawMax : null;
+
+                    return {
+                        name,
+                        description,
+                        max_score: maxScore,
+                    };
+                })
+                .filter(item => item.name !== '' || item.description !== '' || item.max_score !== null);
+        }
+
+        function appendCriteriaRow(sectionId, criterion, isServices) {
+            const body = document.querySelector(
+                `.criteria-list-table[data-section-id="${sectionId}"] .criteria-list-body`
+            );
+            if (!body) {
+                return;
+            }
+
+            const tr = document.createElement('tr');
+            tr.setAttribute('data-update-url', criterion.update_url);
+
+            tr.innerHTML = `
+                <td>
+                    <span class="view">${escapeHtml(criterion.name)}</span>
+                    <input class="edit form-control form-control-sm d-none" value="${escapeHtml(criterion.name)}">
+                </td>
+                <td>
+                    <span class="view">${escapeHtml(criterion.description ?? '')}</span>
+                    <input class="edit form-control form-control-sm d-none" value="${escapeHtml(criterion.description ?? '')}">
+                </td>
+                ${isServices ? `
+                    <td class="text-end">
+                        <span class="view score">${escapeHtml(criterion.max_score ?? '')}</span>
+                        <input type="number" min="1" class="edit form-control form-control-sm d-none"
+                            value="${escapeHtml(criterion.max_score ?? '')}">
+                    </td>` : ''}
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-secondary btn-edit">Edit</button>
+                    <button type="button" class="btn btn-sm btn-success btn-save d-none">Save</button>
+                    <form method="POST" action="${escapeHtml(criterion.delete_url)}"
+                        class="d-inline" onsubmit="return confirm('Delete this criteria?')">
+                        <input type="hidden" name="_token" value="${escapeHtml(csrfToken)}">
+                        <input type="hidden" name="_method" value="DELETE">
+                        <button class="btn btn-sm btn-outline-danger">Delete</button>
+                    </form>
+                </td>
+            `;
+
+            body.appendChild(tr);
+        }
+
+        document.addEventListener('click', async event => {
+            const addRowBtn = event.target.closest('.btn-add-criteria-row');
+            if (addRowBtn) {
+                buildDraftRow(addRowBtn.closest('.criteria-bulk-form'));
+                return;
+            }
+
+            const removeDraftBtn = event.target.closest('.btn-remove-draft-row');
+            if (removeDraftBtn) {
+                const form = removeDraftBtn.closest('.criteria-bulk-form');
+                const row = removeDraftBtn.closest('.criteria-draft-row');
+                const rows = form.querySelectorAll('.criteria-draft-row');
+
+                if (rows.length === 1) {
+                    row.querySelectorAll('input').forEach(input => input.value = '');
+                } else {
+                    row.remove();
+                }
+                return;
+            }
+
+            const editBtn = event.target.closest('.btn-edit');
+            if (editBtn) {
+                const row = editBtn.closest('tr');
                 row.querySelectorAll('.view').forEach(el => el.classList.add('d-none'));
                 row.querySelectorAll('.edit').forEach(el => el.classList.remove('d-none'));
+                editBtn.classList.add('d-none');
+                row.querySelector('.btn-save')?.classList.remove('d-none');
+                return;
+            }
 
-                btn.classList.add('d-none');
-                row.querySelector('.btn-save').classList.remove('d-none');
-            });
-        });
-
-        document.querySelectorAll('.btn-save').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const row = btn.closest('tr');
+            const saveBtn = event.target.closest('.btn-save');
+            if (saveBtn) {
+                const row = saveBtn.closest('tr');
                 const inputs = row.querySelectorAll('.edit');
+                const maxInput = inputs[2];
 
                 const formData = new FormData();
                 formData.append('name', inputs[0].value);
                 formData.append('description', inputs[1].value);
-
-                if (inputs[2]) {
-                    formData.append('max_score', inputs[2].value);
+                if (maxInput) {
+                    formData.append('max_score', maxInput.value);
                 }
-
                 formData.append('_method', 'PUT');
-                formData.append('_token', '{{ csrf_token() }}');
+                formData.append('_token', csrfToken);
 
-                const response = await fetch(row.dataset.updateUrl, {
+                try {
+                    const response = await fetch(row.dataset.updateUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: formData
+                    });
+                    const payload = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        throw new Error(extractError(payload) || 'Update failed.');
+                    }
+
+                    row.querySelectorAll('.view')[0].textContent = inputs[0].value;
+                    row.querySelectorAll('.view')[1].textContent = inputs[1].value;
+                    if (maxInput) {
+                        row.querySelector('.score').textContent = maxInput.value;
+                    }
+
+                    row.querySelectorAll('.view').forEach(el => el.classList.remove('d-none'));
+                    row.querySelectorAll('.edit').forEach(el => el.classList.add('d-none'));
+                    saveBtn.classList.add('d-none');
+                    row.querySelector('.btn-edit')?.classList.remove('d-none');
+
+                    if (typeof calculateTotals === 'function') {
+                        calculateTotals();
+                    }
+                } catch (error) {
+                    alert(error.message || 'Update failed.');
+                }
+            }
+        });
+
+        document.addEventListener('submit', async event => {
+            const form = event.target.closest('.criteria-bulk-form');
+            if (!form) {
+                return;
+            }
+
+            event.preventDefault();
+
+            const sectionId = form.dataset.sectionId;
+            const isServices = form.dataset.services === '1';
+            const rows = collectDraftRows(form);
+
+            if (!rows.length) {
+                setCriteriaFeedback(form, 'Add at least one sub-criteria row before saving.', 'danger');
+                return;
+            }
+
+            if (isServices && rows.some(item => item.max_score === null || Number(item.max_score) <= 0)) {
+                setCriteriaFeedback(form, 'Each services sub-criteria row must include a valid max score.', 'danger');
+                return;
+            }
+
+            const payloadInput = form.querySelector('.criteria-payload');
+            payloadInput.value = JSON.stringify(rows);
+
+            const requestData = new FormData();
+            requestData.append('_token', form.querySelector('input[name="_token"]').value);
+            requestData.append('criteria_payload', payloadInput.value);
+
+            try {
+                const response = await fetch(form.action, {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: requestData
                 });
+                const payload = await response.json().catch(() => ({}));
 
                 if (!response.ok) {
-                    alert('Update failed');
-                    return;
+                    throw new Error(extractError(payload) || 'Unable to save criteria.');
                 }
 
-                // Update UI
-                row.querySelectorAll('.view')[0].textContent = inputs[0].value;
-                row.querySelectorAll('.view')[1].textContent = inputs[1].value;
+                const created = Array.isArray(payload.criteria) ? payload.criteria : [];
+                created.forEach(criterion => appendCriteriaRow(sectionId, criterion, isServices));
 
-                if (inputs[2]) {
-                    row.querySelector('.score').textContent = inputs[2].value;
+                form.querySelector('.criteria-draft-body').innerHTML = '';
+                buildDraftRow(form);
+
+                setCriteriaFeedback(form, payload.message || 'Criteria added successfully.', 'success');
+
+                if (typeof calculateTotals === 'function') {
+                    calculateTotals();
                 }
-
-                row.querySelectorAll('.view').forEach(el => el.classList.remove('d-none'));
-                row.querySelectorAll('.edit').forEach(el => el.classList.add('d-none'));
-
-                btn.classList.add('d-none');
-                row.querySelector('.btn-edit').classList.remove('d-none');
-            });
+            } catch (error) {
+                setCriteriaFeedback(form, error.message || 'Unable to save criteria.', 'danger');
+            }
         });
+
+        initializeBulkCriteriaForms();
     </script>
 
     @if ($evaluation->type === 'services')
