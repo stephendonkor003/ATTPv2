@@ -18,6 +18,11 @@ class ProcurementWorkflowService
     public function publish(Procurement $procurement)
     {
         $this->ensureStatus($procurement, 'approved');
+        $missingRequirements = $this->missingPublishingRequirements($procurement);
+        if (!empty($missingRequirements)) {
+            throw new Exception($this->publishBlockedMessage($missingRequirements));
+        }
+
         $this->transition($procurement, 'published', 'Published procurement');
         ProcurementPlan::markLaunchedByCode($procurement->reference_no);
     }
@@ -55,5 +60,29 @@ class ProcurementWorkflowService
             'procurement_id' => $procurement->id,
             'created_at' => now()
         ]);
+    }
+
+    private function missingPublishingRequirements(Procurement $procurement): array
+    {
+        $missing = [];
+
+        if (!$procurement->prescreeningTemplate()->exists()) {
+            $missing[] = 'a prescreening template';
+        }
+
+        if (!$procurement->forms()->exists()) {
+            $missing[] = 'at least one attached form';
+        }
+
+        return $missing;
+    }
+
+    private function publishBlockedMessage(array $missingRequirements): string
+    {
+        if (count($missingRequirements) === 1) {
+            return 'Cannot publish this procurement yet. Please add ' . $missingRequirements[0] . ' first.';
+        }
+
+        return 'Cannot publish this procurement yet. Please add ' . implode(' and ', $missingRequirements) . ' first.';
     }
 }

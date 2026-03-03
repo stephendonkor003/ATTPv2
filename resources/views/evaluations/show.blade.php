@@ -21,6 +21,23 @@
             </a>
         </div>
 
+        @if (session('success'))
+            <div class="alert alert-success mb-3">{{ session('success') }}</div>
+        @endif
+        @if (session('error'))
+            <div class="alert alert-danger mb-3">{{ session('error') }}</div>
+        @endif
+        @if ($errors->any())
+            <div class="alert alert-danger mb-3">
+                <strong>Please fix the following:</strong>
+                <ul class="mb-0 mt-2">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         {{-- ================= TYPE BADGE ================= --}}
         <div class="alert alert-info mb-4">
             <strong>Evaluation Type:</strong>
@@ -28,6 +45,11 @@
                 {{ ucfirst($evaluation->type) }}
             </span>
         </div>
+        @if ($evaluation->status !== 'draft')
+            <div class="alert alert-warning mb-4">
+                This evaluation is currently <strong>{{ ucfirst($evaluation->status) }}</strong> and cannot be modified.
+            </div>
+        @endif
 
         {{-- ================= TOTAL (SERVICES ONLY) ================= --}}
         @if ($evaluation->type === 'services')

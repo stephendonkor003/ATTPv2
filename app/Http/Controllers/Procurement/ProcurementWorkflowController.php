@@ -25,7 +25,11 @@ class ProcurementWorkflowController extends Controller
         ProcurementWorkflowService $service
     ) {
         $this->assertProcurementInScope($procurement);
-        $service->publish($procurement);
+        try {
+            $service->publish($procurement);
+        } catch (\Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
         return back()->with('success', 'Procurement published');
     }
 

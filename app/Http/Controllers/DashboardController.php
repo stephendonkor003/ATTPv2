@@ -22,6 +22,21 @@ class DashboardController extends Controller
             return redirect()->route('member-state.dashboard');
         }
 
+        $user = Auth::user();
+        $hasDashboardAccess = $user?->can('dashboard.access') ?? false;
+
+        // Keep payload light if the user cannot access dashboard modules.
+        if (!$hasDashboardAccess) {
+            return view('dashboard', [
+                'hasDashboardAccess' => false,
+                'totalApplicants' => 0,
+                'reviewedApplicants' => 0,
+                'countriesCount' => 0,
+                'applicationDates' => collect(),
+                'applicationCounts' => collect(),
+            ]);
+        }
+
         $totalApplicants = Applicant::count();
 
         // If you have another way to mark reviewed records, replace this with that logic
@@ -42,6 +57,7 @@ class DashboardController extends Controller
         $applicationCounts = $last7Days->pluck('total');
 
         return view('dashboard', compact(
+            'hasDashboardAccess',
             'totalApplicants',
             'reviewedApplicants',
             'countriesCount',

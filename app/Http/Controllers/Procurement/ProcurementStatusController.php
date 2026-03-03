@@ -72,6 +72,11 @@ class ProcurementStatusController extends Controller
             return back()->with('error', 'Only approved procurements can be published.');
         }
 
+        $missingRequirements = $this->missingPublishingRequirements($procurement);
+        if (!empty($missingRequirements)) {
+            return back()->with('error', $this->publishBlockedMessage($missingRequirements));
+        }
+
         $procurement->update([
             'status' => 'published',
         ]);
@@ -95,6 +100,21 @@ class ProcurementStatusController extends Controller
         return back()->with('success', 'Procurement closed.');
     }
 
+    public function draft(Procurement $procurement)
+    {
+        $this->assertProcurementInScope($procurement);
+        if ($procurement->status !== 'closed') {
+            return back()->with('error', 'Only closed procurements can be moved back to draft.');
+        }
+
+        $procurement->update([
+            'status' => 'draft',
+            'rejection_reason' => null,
+        ]);
+
+        return back()->with('success', 'Procurement moved back to draft.');
+    }
+
     public function award(Procurement $procurement, \App\Services\ProcurementAwardService $awardService)
     {
         $this->assertProcurementInScope($procurement);
@@ -105,5 +125,29 @@ class ProcurementStatusController extends Controller
         }
 
         return back()->with('success', 'Procurement awarded and vendor notified.');
+    }
+
+    private function missingPublishingRequirements(Procurement $procurement): array
+    {
+        $missing = [];
+
+        if (!$procurement->prescreeningTemplate()->exists()) {
+            $missing[] = 'a prescreening template';
+        }
+
+        if (!$procurement->forms()->exists()) {
+            $missing[] = 'at least one attached form';
+        }
+
+        return $missing;
+    }
+
+    private function publishBlockedMessage(array $missingRequirements): string
+    {
+        if (count($missingRequirements) === 1) {
+            return 'Cannot publish this procurement yet. Please add ' . $missingRequirements[0] . ' first.';
+        }
+
+        return 'Cannot publish this procurement yet. Please add ' . implode(' and ', $missingRequirements) . ' first.';
     }
 }

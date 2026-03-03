@@ -1284,10 +1284,8 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])->group(function (
      | DASHBOARD (ROLE / PERMISSION BASED)
      ===================================================== */
 
-    Route::middleware('permission:dashboard.access')->group(function () {
-        Route::get('/dashboard', [DashboardController::class, 'index'])
-            ->name('dashboard');
-    });
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard');
 
 
     /* =====================================================
@@ -1440,6 +1438,10 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::post('{procurement}/close',
             [ProcurementStatusController::class, 'close']
         )->name('close');
+
+        Route::post('{procurement}/draft',
+            [ProcurementStatusController::class, 'draft']
+        )->name('draft');
 
         Route::post('{procurement}/award',
             [ProcurementStatusController::class, 'award']
@@ -1868,19 +1870,15 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
          | SINGLE EVALUATION
          =============================== */
         Route::get('/{evaluation}', [EvaluationController::class, 'show'])
-            ->whereNumber('evaluation')
             ->name('show');
 
         Route::get('/{evaluation}/edit', [EvaluationController::class, 'edit'])
-            ->whereNumber('evaluation')
             ->name('edit');
 
         Route::put('/{evaluation}/update', [EvaluationController::class, 'update'])
-            ->whereNumber('evaluation')
             ->name('update');
 
         Route::delete('/{evaluation}/delete', [EvaluationController::class, 'destroy'])
-            ->whereNumber('evaluation')
             ->name('delete');
 
         /* ===============================
@@ -1889,19 +1887,16 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
         Route::post('/{evaluation}/sec/add',
             [EvaluationSectionController::class, 'store']
         )
-            ->whereNumber('evaluation')
             ->name('sec.add');
 
         Route::put('/sec/{section}/upd',
             [EvaluationSectionController::class, 'update']
         )
-            ->whereNumber('section')
             ->name('sec.upd');
 
         Route::delete('/sec/{section}/del',
             [EvaluationSectionController::class, 'destroy']
         )
-            ->whereNumber('section')
             ->name('sec.del');
 
         /* ===============================
@@ -1910,19 +1905,16 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
         Route::post('/sec/{section}/crt/add',
             [EvaluationCriteriaController::class, 'store']
         )
-            ->whereNumber('section')
             ->name('crt.add');
 
         Route::put('/crt/{criteria}/upd',
             [EvaluationCriteriaController::class, 'update']
         )
-            ->whereNumber('criteria')
             ->name('crt.upd');
 
         Route::delete('/crt/{criteria}/del',
             [EvaluationCriteriaController::class, 'destroy']
         )
-            ->whereNumber('criteria')
             ->name('crt.del');
 
        Route::get(
@@ -1951,13 +1943,11 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
         Route::get('/{procurement}/eval/assign',
             [ProcurementEvaluationController::class, 'create']
         )
-            ->whereNumber('procurement')
             ->name('eval.assign');
 
         Route::post('/{procurement}/eval/assign',
             [ProcurementEvaluationController::class, 'store']
         )
-            ->whereNumber('procurement')
             ->name('eval.assign.store');
 });
 

@@ -97,6 +97,129 @@
                 </div>
             </div>
 
+        {{-- ================= PROCUREMENT STATUS ACTIONS ================= --}}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-semibold">Procurement Status Actions</h6>
+                <span class="badge bg-light text-dark border">
+                    Current: {{ ucfirst($procurement->status ?? 'draft') }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    @if ($procurement->status === 'draft')
+                        <form method="POST" action="{{ route('statusProcurement.submit', $procurement) }}">
+                            @csrf
+                            <button class="btn btn-outline-warning"
+                                onclick="return confirm('Submit this procurement for approval?')">
+                                <i class="feather-send me-1"></i> Submit for Approval
+                            </button>
+                        </form>
+                    @endif
+
+                    @if ($procurement->status === 'rejected')
+                        <form method="POST" action="{{ route('statusProcurement.submit', $procurement) }}">
+                            @csrf
+                            <button class="btn btn-outline-warning"
+                                onclick="return confirm('Resubmit this procurement for approval?')">
+                                <i class="feather-send me-1"></i> Resubmit
+                            </button>
+                        </form>
+                    @endif
+
+                    @if ($procurement->status === 'submitted')
+                        <form method="POST" action="{{ route('statusProcurement.approve', $procurement) }}">
+                            @csrf
+                            <button class="btn btn-outline-success"
+                                onclick="return confirm('Approve this procurement?')">
+                                <i class="feather-check me-1"></i> Approve
+                            </button>
+                        </form>
+                        <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal"
+                            data-bs-target="#rejectProcurementModal">
+                            <i class="feather-x me-1"></i> Reject
+                        </button>
+                    @endif
+
+                    @if ($procurement->status === 'approved')
+                        <form method="POST" action="{{ route('statusProcurement.publish', $procurement) }}">
+                            @csrf
+                            <button class="btn btn-outline-primary"
+                                onclick="return confirm('Publish this procurement?')">
+                                <i class="feather-globe me-1"></i> Publish
+                            </button>
+                        </form>
+                    @endif
+
+                    @if ($procurement->status === 'published')
+                        <form method="POST" action="{{ route('statusProcurement.close', $procurement) }}">
+                            @csrf
+                            <button class="btn btn-outline-dark"
+                                onclick="return confirm('Close this procurement?')">
+                                <i class="feather-lock me-1"></i> Close
+                            </button>
+                        </form>
+                    @endif
+
+                    @if ($procurement->status === 'closed')
+                        <form method="POST" action="{{ route('statusProcurement.award', $procurement) }}">
+                            @csrf
+                            <button class="btn btn-outline-success"
+                                onclick="return confirm('Award this procurement? This is final.')">
+                                <i class="feather-award me-1"></i> Award
+                            </button>
+                        </form>
+
+                        <form method="POST" action="{{ route('statusProcurement.draft', $procurement) }}">
+                            @csrf
+                            <button class="btn btn-outline-secondary"
+                                onclick="return confirm('Move this procurement back to draft?')">
+                                <i class="feather-rotate-ccw me-1"></i> Move to Draft
+                            </button>
+                        </form>
+                    @endif
+                </div>
+
+                @if ($procurement->status === 'rejected' && $procurement->rejection_reason)
+                    <div class="alert alert-danger mt-3 mb-0">
+                        <strong>Rejection reason:</strong> {{ $procurement->rejection_reason }}
+                    </div>
+                @endif
+            </div>
+        </div>
+
+        @if ($procurement->status === 'submitted')
+            <div class="modal fade" id="rejectProcurementModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <form method="POST" action="{{ route('statusProcurement.reject', $procurement) }}" class="w-100">
+                        @csrf
+                        <div class="modal-content border-0 shadow">
+                            <div class="modal-header">
+                                <h5 class="fw-bold mb-0">
+                                    <i class="feather-x-circle text-danger me-2"></i>
+                                    Reject Procurement
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <label class="form-label fw-semibold">
+                                    Reason for rejection <span class="text-danger">*</span>
+                                </label>
+                                <textarea name="rejection_reason" class="form-control" rows="3" required
+                                    placeholder="Enter the reason for rejection...">{{ old('rejection_reason') }}</textarea>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="feather-x me-1"></i> Reject
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        @endif
+
         @canany(['vendor.outreach.send', 'procurement.manage'])
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
