@@ -1559,6 +1559,9 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:forms.manage'])
         Route::get('/{form}/edit', [DynamicFormController::class, 'edit'])
             ->name('forms.edit');
 
+        Route::delete('/{form}', [DynamicFormController::class, 'destroy'])
+            ->name('forms.destroy');
+
         /* ===============================
            FORM FIELDS (BUILDER)
            =============================== */

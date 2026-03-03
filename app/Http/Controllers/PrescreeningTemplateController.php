@@ -6,6 +6,8 @@ use App\Models\PrescreeningTemplate;
 use App\Models\PrescreeningCriterion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class PrescreeningTemplateController extends Controller
 {
@@ -34,18 +36,7 @@ class PrescreeningTemplateController extends Controller
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name'                        => 'required|string|max:255',
-            'description'                 => 'nullable|string',
-            'is_active'                   => 'nullable|boolean',
-
-            'criteria'                    => 'required|array|min:1',
-            'criteria.*.name'             => 'required|string|max:255',
-            'criteria.*.field_key'        => 'required|string|max:191',
-            'criteria.*.evaluation_type'  => 'required|in:yes_no,exists,numeric',
-            'criteria.*.min_value'        => 'nullable|numeric',
-            'criteria.*.is_mandatory'     => 'nullable|boolean',
-        ]);
+        $validated = $this->validateTemplatePayload($request);
 
         DB::transaction(function () use ($validated) {
 
@@ -99,18 +90,7 @@ class PrescreeningTemplateController extends Controller
      */
     public function update(Request $request, PrescreeningTemplate $template)
     {
-        $validated = $request->validate([
-            'name'                        => 'required|string|max:255',
-            'description'                 => 'nullable|string',
-            'is_active'                   => 'nullable|boolean',
-
-            'criteria'                    => 'required|array|min:1',
-            'criteria.*.name'             => 'required|string|max:255',
-            'criteria.*.field_key'        => 'required|string|max:191',
-            'criteria.*.evaluation_type'  => 'required|in:yes_no,exists,numeric',
-            'criteria.*.min_value'        => 'nullable|numeric',
-            'criteria.*.is_mandatory'     => 'nullable|boolean',
-        ]);
+        $validated = $this->validateTemplatePayload($request);
 
         DB::transaction(function () use ($validated, $template) {
 
@@ -141,5 +121,94 @@ class PrescreeningTemplateController extends Controller
         return redirect()
             ->route('prescreening.templates.show', $template)
             ->with('success', 'Prescreening template updated successfully.');
+    }
+
+    private function validateTemplatePayload(Request $request): array
+    {
+        $criteria = $this->resolveCriteriaPayload($request);
+
+        $validator = Validator::make(
+            [
+                'name'        => $request->input('name'),
+                'description' => $request->input('description'),
+                'is_active'   => $request->boolean('is_active'),
+                'criteria'    => $criteria,
+            ],
+            [
+                'name'                        => 'required|string|max:255',
+                'description'                 => 'nullable|string',
+                'is_active'                   => 'nullable|boolean',
+                'criteria'                    => 'required|array|min:1',
+                'criteria.*.name'             => 'required|string|max:255',
+                'criteria.*.field_key'        => 'required|string|max:191',
+                'criteria.*.evaluation_type'  => 'required|in:yes_no,exists,numeric',
+                'criteria.*.min_value'        => 'nullable|numeric',
+                'criteria.*.is_mandatory'     => 'nullable|boolean',
+            ],
+            [
+                'criteria.required' => 'Add at least one criterion before saving the template.',
+                'criteria.array'    => 'Criteria payload is invalid. Please refresh and try again.',
+                'criteria.min'      => 'Add at least one criterion before saving the template.',
+            ]
+        );
+
+        $validator->after(function ($validator) use ($criteria) {
+            $fieldKeys = collect($criteria)
+                ->pluck('field_key')
+                ->map(fn ($key) => trim((string) $key))
+                ->filter();
+
+            if ($fieldKeys->duplicates()->isNotEmpty()) {
+                $validator->errors()->add(
+                    'criteria',
+                    'Duplicate field keys detected. Each criterion must have a unique field key.'
+                );
+            }
+        });
+
+        $validated = $validator->validate();
+
+        $validated['criteria'] = collect($validated['criteria'])
+            ->values()
+            ->map(function (array $criterion): array {
+                $evaluationType = (string) $criterion['evaluation_type'];
+
+                return [
+                    'name'            => trim((string) $criterion['name']),
+                    'field_key'       => trim((string) $criterion['field_key']),
+                    'evaluation_type' => $evaluationType,
+                    'min_value'       => $evaluationType === 'numeric'
+                        ? ($criterion['min_value'] !== null && $criterion['min_value'] !== '' ? $criterion['min_value'] : null)
+                        : null,
+                    'is_mandatory'    => filter_var($criterion['is_mandatory'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                ];
+            })
+            ->all();
+
+        return $validated;
+    }
+
+    private function resolveCriteriaPayload(Request $request): array
+    {
+        $payload = $request->input('criteria_payload');
+        if (!is_string($payload) || trim($payload) === '') {
+            return (array) $request->input('criteria', []);
+        }
+
+        try {
+            $decoded = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw ValidationException::withMessages([
+                'criteria' => 'Unable to process criteria rows. Please reload the page and try saving again.',
+            ]);
+        }
+
+        if (!is_array($decoded)) {
+            throw ValidationException::withMessages([
+                'criteria' => 'Unable to process criteria rows. Please reload the page and try saving again.',
+            ]);
+        }
+
+        return $decoded;
     }
 }

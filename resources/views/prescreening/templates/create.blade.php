@@ -17,8 +17,20 @@
             </a>
         </div>
 
+        @if ($errors->any())
+            <div class="alert alert-danger">
+                <strong>Unable to save template.</strong>
+                <ul class="mb-0 mt-2">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         <form method="POST" action="{{ route('prescreening.templates.store') }}">
             @csrf
+            <input type="hidden" name="criteria_payload" id="criteriaPayload">
 
             {{-- ================= TEMPLATE INFO ================= --}}
             <div class="card shadow-sm mb-4">
@@ -106,7 +118,19 @@
             }
         }
 
-        function addCriterionRow() {
+        function parseMandatory(value, defaultValue = true) {
+            if (value === undefined || value === null || value === '') {
+                return defaultValue;
+            }
+
+            if (typeof value === 'boolean') {
+                return value;
+            }
+
+            return !['0', 'false', 'off'].includes(String(value).toLowerCase());
+        }
+
+        function addCriterionRow(seed = null) {
             const tbody = document.querySelector('#criteriaTable tbody');
 
             const row = document.createElement('tr');
@@ -164,6 +188,23 @@
 
             const labelInput = row.querySelector('.label-input');
             const fieldKeyInput = row.querySelector('.field-key');
+            const typeInput = row.querySelector('select[name*="[evaluation_type]"]');
+            const minValueInput = row.querySelector('.min-value');
+            const mandatoryInput = row.querySelector('input[type="checkbox"][name*="[is_mandatory]"]');
+
+            if (seed && typeof seed === 'object') {
+                labelInput.value = (seed.name ?? '').toString();
+                fieldKeyInput.value = (seed.field_key ?? '').toString();
+
+                typeInput.value = (seed.evaluation_type ?? 'yes_no').toString();
+                toggleMinValue(typeInput);
+
+                if (typeInput.value === 'numeric' && seed.min_value !== null && seed.min_value !== undefined) {
+                    minValueInput.value = seed.min_value;
+                }
+
+                mandatoryInput.checked = parseMandatory(seed.is_mandatory, true);
+            }
 
             labelInput.addEventListener('input', function() {
                 fieldKeyInput.value = slugify(this.value);
@@ -171,5 +212,69 @@
 
             rowIndex++;
         }
+
+        function buildCriteriaPayload() {
+            return Array.from(document.querySelectorAll('#criteriaTable tbody tr'))
+                .map(row => {
+                    const labelInput = row.querySelector('.label-input');
+                    const fieldKeyInput = row.querySelector('.field-key');
+                    const typeInput = row.querySelector('select[name*="[evaluation_type]"]');
+                    const minValueInput = row.querySelector('.min-value');
+                    const mandatoryInput = row.querySelector('input[type="checkbox"][name*="[is_mandatory]"]');
+
+                    const name = (labelInput?.value || '').trim();
+                    const evaluationType = typeInput?.value || 'yes_no';
+                    const minValue = evaluationType === 'numeric'
+                        ? ((minValueInput?.value ?? '') === '' ? null : minValueInput.value)
+                        : null;
+
+                    return {
+                        name,
+                        field_key: ((fieldKeyInput?.value || '').trim() || slugify(name)),
+                        evaluation_type: evaluationType,
+                        min_value: minValue,
+                        is_mandatory: !!mandatoryInput?.checked,
+                    };
+                })
+                .filter(row => row.name !== '' || row.field_key !== '');
+        }
+
+        document.querySelector('form[action="{{ route('prescreening.templates.store') }}"]')
+            ?.addEventListener('submit', function(event) {
+                const criteria = buildCriteriaPayload();
+                if (criteria.length === 0) {
+                    event.preventDefault();
+                    alert('Add at least one criterion before saving.');
+                    return;
+                }
+
+                const payloadInput = document.getElementById('criteriaPayload');
+                payloadInput.value = JSON.stringify(criteria);
+
+                // Prevent max_input_vars truncation for large criteria sets.
+                this.querySelectorAll('#criteriaTable [name^="criteria["]')
+                    .forEach(el => el.disabled = true);
+            });
+
+        (() => {
+            const payload = @json(old('criteria_payload'));
+            if (!payload || typeof payload !== 'string') {
+                return;
+            }
+
+            try {
+                const decoded = JSON.parse(payload);
+                if (!Array.isArray(decoded) || decoded.length === 0) {
+                    return;
+                }
+
+                const tbody = document.querySelector('#criteriaTable tbody');
+                tbody.innerHTML = '';
+                rowIndex = 0;
+                decoded.forEach(item => addCriterionRow(item));
+            } catch (e) {
+                // Ignore invalid old payload and let the user re-enter.
+            }
+        })();
     </script>
 @endsection

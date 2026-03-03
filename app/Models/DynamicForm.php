@@ -10,14 +10,14 @@ class DynamicForm extends BaseModel
 
     public const GLOBAL_FIELDS = [
         [
-            'label' => 'Official Name',
+            'label' => 'Name',
             'field_key' => 'official_name',
             'field_type' => 'text',
             'is_required' => true,
             'sort_order' => '0',
         ],
         [
-            'label' => 'Official Email',
+            'label' => 'Email',
             'field_key' => 'official_email',
             'field_type' => 'email',
             'is_required' => true,
@@ -73,11 +73,21 @@ class DynamicForm extends BaseModel
         return $this->belongsTo(Procurement::class, 'procurement_id');
     }
 
+    public function submissions()
+    {
+        return $this->hasMany(FormSubmission::class, 'form_id');
+    }
+
     /* ================= BUSINESS HELPERS ================= */
 
     public function canEdit(): bool
     {
-        return in_array($this->status, ['draft', 'rejected']);
+        return !$this->hasSubmissions();
+    }
+
+    public function hasSubmissions(): bool
+    {
+        return $this->submissions()->exists();
     }
 
     public function isApproved(): bool
@@ -108,6 +118,15 @@ class DynamicForm extends BaseModel
         return $query->where('applies_to', $stage);
     }
 
+    protected static function booted(): void
+    {
+        static::created(function (DynamicForm $form): void {
+            // Always enforce required default fields for procurement forms,
+            // regardless of where the form was created from.
+            $form->ensureGlobalFields();
+        });
+    }
+
     public static function globalFieldKeys(): array
     {
         return array_column(self::GLOBAL_FIELDS, 'field_key');
@@ -115,12 +134,10 @@ class DynamicForm extends BaseModel
 
     public function ensureGlobalFields(): void
     {
-        if ($this->applies_to !== 'submission') {
-            return;
-        }
+        $createdBy = $this->created_by ?: auth()->id();
 
         foreach (self::GLOBAL_FIELDS as $field) {
-            DynamicFormField::firstOrCreate(
+            DynamicFormField::updateOrCreate(
                 [
                     'form_id' => $this->id,
                     'field_key' => $field['field_key'],
@@ -131,7 +148,7 @@ class DynamicForm extends BaseModel
                     'is_required' => $field['is_required'],
                     'options' => null,
                     'sort_order' => $field['sort_order'],
-                    'created_by' => auth()->id(),
+                    'created_by' => $createdBy,
                 ]
             );
         }

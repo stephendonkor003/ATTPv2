@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
 use App\Models\DynamicForm;
+use App\Models\ProcurementFormAssignment;
 use App\Models\Resource;
 use App\Models\Procurement;
 use Illuminate\Http\Request;
@@ -28,6 +29,7 @@ class DynamicFormController extends Controller
     public function index()
     {
         $forms = DynamicForm::with('resource')
+            ->withCount('submissions')
             ->when($this->scopedNodeIds() !== null, function ($query) {
                 $query->whereHas('resource', function ($res) {
                     $res->whereIn('governance_node_id', $this->scopedNodeIds())
@@ -93,9 +95,11 @@ class DynamicFormController extends Controller
         $form = DynamicForm::create($data);
         $form->ensureGlobalFields();
 
+        $message = 'Procurement form created. Default Name and Email fields were added automatically.';
+
         return redirect()
             ->route('forms.edit', $form->id)
-            ->with('success', 'Procurement form created. You can now add fields.');
+            ->with('success', $message);
     }
 
     /**
@@ -105,7 +109,7 @@ class DynamicFormController extends Controller
     {
         $this->assertFormInScope($form);
         $form->ensureGlobalFields();
-        $form->load('fields');
+        $form->load('fields')->loadCount('submissions');
         $resources = Resource::orderBy('name')
             ->when($this->scopedNodeIds() !== null, function ($query) {
                 $query->whereIn('governance_node_id', $this->scopedNodeIds())
@@ -122,8 +126,12 @@ class DynamicFormController extends Controller
     public function submit(DynamicForm $form)
     {
         $this->assertFormInScope($form);
-        if (!$form->canEdit()) {
-            return back()->with('error', 'This form cannot be submitted in its current state.');
+        if (!in_array($form->status, ['draft', 'rejected'], true)) {
+            return back()->with('error', 'Only draft or rejected forms can be submitted.');
+        }
+
+        if ($form->hasSubmissions()) {
+            return back()->with('error', 'This form already has submissions and cannot be resubmitted.');
         }
 
         if ($form->fields()->count() === 0) {
@@ -179,6 +187,23 @@ class DynamicFormController extends Controller
         ]);
 
         return back()->with('success', 'Form rejected and returned for correction.');
+    }
+
+    public function destroy(DynamicForm $form)
+    {
+        $this->assertFormInScope($form);
+
+        if ($form->hasSubmissions()) {
+            return back()->with('error', 'This form already has submissions and cannot be deleted.');
+        }
+
+        ProcurementFormAssignment::where('form_id', $form->id)->delete();
+        $form->fields()->delete();
+        $form->delete();
+
+        return redirect()
+            ->route('forms.index')
+            ->with('success', 'Form deleted successfully.');
     }
 
 

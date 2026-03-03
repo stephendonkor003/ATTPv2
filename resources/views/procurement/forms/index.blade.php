@@ -39,7 +39,7 @@
                             <th class="text-center">Stage</th>
                             <th class="text-center">Status</th>
                             <th>Attachment</th>
-                            <th width="120" class="text-center">Actions</th>
+                            <th width="180" class="text-center">Actions</th>
                         </tr>
                     </thead>
 
@@ -90,6 +90,22 @@
                                     <a href="{{ route('forms.edit', $form->id) }}" class="btn btn-sm btn-outline-primary" title="Edit Form">
                                         <i class="feather-edit"></i>
                                     </a>
+
+                                    @if (($form->submissions_count ?? 0) === 0)
+                                        <form method="POST" action="{{ route('forms.destroy', $form->id) }}" class="d-inline"
+                                            onsubmit="return confirm('Delete this form? This action cannot be undone.')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger ms-1" title="Delete Form">
+                                                <i class="feather-trash-2"></i>
+                                            </button>
+                                        </form>
+                                    @else
+                                        <span class="badge bg-secondary-subtle text-secondary ms-1"
+                                            title="Cannot delete: this form already has submissions.">
+                                            Locked
+                                        </span>
+                                    @endif
 
                                     @if ($form->isApproved())
                                         <button type="button" class="btn btn-sm btn-outline-success ms-1 attachFormBtn"
@@ -148,6 +164,10 @@
                                     <option value="technical">Technical Evaluation</option>
                                     <option value="financial">Financial Evaluation</option>
                                 </select>
+                                <small class="text-muted">
+                                    Default fields are added automatically:
+                                    <strong>Name</strong> and <strong>Email</strong>.
+                                </small>
                             </div>
 
                             <div class="col-md-12 mb-3">

@@ -58,6 +58,11 @@
                             {{ $form->rejection_reason }}
                         </div>
                     @endif
+
+                    <div class="alert alert-info mt-3 mb-0">
+                        <strong>Default fields enforced:</strong>
+                        Name and Email are automatically included on all procurement forms.
+                    </div>
                 </div>
 
                 <hr>
@@ -93,6 +98,16 @@
                         @endcan
                     @endif
 
+                    @if (($form->submissions_count ?? 0) === 0)
+                        <form method="POST" action="{{ route('forms.destroy', $form->id) }}"
+                            onsubmit="return confirm('Delete this form? This action cannot be undone.')">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn btn-outline-danger btn-sm">
+                                <i class="feather-trash-2 me-1"></i> Delete Form
+                            </button>
+                        </form>
+                    @endif
 
                 </div>
 
@@ -161,7 +176,7 @@
                     </form>
                 @else
                     <div class="alert alert-warning">
-                        This form has been submitted or approved and can no longer be edited.
+                        This form already has submissions and can no longer be edited.
                     </div>
                 @endif
 

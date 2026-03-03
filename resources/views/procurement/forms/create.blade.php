@@ -60,6 +60,10 @@
                                 <option value="technical">Technical Evaluation</option>
                                 <option value="financial">Financial Evaluation</option>
                             </select>
+                            <small class="text-muted">
+                                Default fields are added automatically:
+                                <strong>Name</strong> and <strong>Email</strong>.
+                            </small>
                         </div>
 
                         {{-- FORM NAME --}}

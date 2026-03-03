@@ -17,7 +17,7 @@ class DynamicFormFieldController extends Controller
     {
         // ❗ Business rule: only editable forms can be modified
         if (!$form->canEdit()) {
-            return back()->with('error', 'This form cannot be edited in its current state.');
+            return back()->with('error', 'This form already has submissions and cannot be edited.');
         }
 
         $data = $request->validate([
@@ -48,7 +48,7 @@ class DynamicFormFieldController extends Controller
     {
         // ❗ Prevent deletion if parent form is locked
         if (!$field->form->canEdit()) {
-            return back()->with('error', 'Fields cannot be removed from a submitted or approved form.');
+            return back()->with('error', 'Fields cannot be removed after submissions exist for this form.');
         }
 
         if (in_array($field->field_key, DynamicForm::globalFieldKeys(), true)) {
