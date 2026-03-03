@@ -46,7 +46,7 @@
                             <th class="text-center">Type</th>
                             <th class="text-center">Sections</th>
                             <th class="text-center">Status</th>
-                            <th width="200" class="text-center">Actions</th>
+                            <th width="320" class="text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -90,9 +90,22 @@
                                 </td>
 
                                 <td class="text-center">
-                                    <div class="d-inline-flex gap-1">
-                                        <a href="{{ route('evals.cfg.show', $eval) }}" class="btn btn-sm btn-outline-primary">
+                                    <div class="d-inline-flex flex-wrap justify-content-center gap-1">
+                                        <a href="{{ route('evals.cfg.show', $eval) }}"
+                                            class="btn btn-sm btn-outline-primary">
                                             <i class="feather-settings me-1"></i> Configure
+                                        </a>
+
+                                        <button type="button" class="btn btn-sm btn-outline-info btn-preview-template"
+                                            data-preview-url="{{ route('evals.cfg.preview', $eval) }}"
+                                            data-pdf-url="{{ route('evals.cfg.template.pdf', $eval) }}"
+                                            data-title="{{ $eval->name }}">
+                                            <i class="feather-eye me-1"></i> Preview
+                                        </button>
+
+                                        <a href="{{ route('evals.cfg.template.pdf', $eval) }}"
+                                            class="btn btn-sm btn-outline-danger">
+                                            <i class="feather-download me-1"></i> PDF
                                         </a>
 
                                         @if ($eval->status === 'draft')
@@ -126,4 +139,79 @@
         </div>
 
     </div>
+
+    <div class="modal fade" id="evaluationTemplatePreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-semibold" id="evaluationTemplatePreviewTitle">Template Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="evaluationTemplatePreviewBody">
+                    <div class="d-flex align-items-center justify-content-center py-5">
+                        <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="#" id="evaluationTemplatePreviewPdfBtn" class="btn btn-outline-danger" target="_blank"
+                        rel="noopener">
+                        <i class="feather-download me-1"></i> Download PDF
+                    </a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('click', async event => {
+            const trigger = event.target.closest('.btn-preview-template');
+            if (!trigger) {
+                return;
+            }
+
+            const modalElement = document.getElementById('evaluationTemplatePreviewModal');
+            const modalTitle = document.getElementById('evaluationTemplatePreviewTitle');
+            const modalBody = document.getElementById('evaluationTemplatePreviewBody');
+            const pdfBtn = document.getElementById('evaluationTemplatePreviewPdfBtn');
+
+            modalTitle.textContent = `${trigger.dataset.title} - Template Preview`;
+            modalBody.innerHTML = `
+                <div class="d-flex align-items-center justify-content-center py-5">
+                    <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                </div>
+            `;
+            pdfBtn.href = trigger.dataset.pdfUrl || '#';
+
+            const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+            modal.show();
+
+            try {
+                const response = await fetch(trigger.dataset.previewUrl, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload.html) {
+                    throw new Error(payload.message || 'Unable to load template preview.');
+                }
+
+                modalBody.innerHTML = payload.html;
+                if (payload.download_url) {
+                    pdfBtn.href = payload.download_url;
+                }
+            } catch (error) {
+                modalBody.innerHTML = `
+                    <div class="alert alert-danger mb-0">
+                        ${error.message || 'Unable to load template preview.'}
+                    </div>
+                `;
+            }
+        });
+    </script>
+@endpush

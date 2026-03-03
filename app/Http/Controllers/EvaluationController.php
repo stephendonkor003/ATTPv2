@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Evaluation;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class EvaluationController extends Controller
 {
@@ -59,6 +61,57 @@ class EvaluationController extends Controller
         $evaluation->load('sections.criteria');
 
         return view('evaluations.show', compact('evaluation'));
+    }
+
+    /**
+     * Preview template structure (sections + criteria)
+     */
+    public function preview(Request $request, Evaluation $evaluation)
+    {
+        $evaluation->load([
+            'sections' => fn ($query) => $query->orderBy('created_at'),
+            'sections.criteria' => fn ($query) => $query->orderBy('created_at'),
+        ]);
+
+        $html = view('evaluations.partials.template-preview', compact('evaluation'))->render();
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success'      => true,
+                'title'        => $evaluation->name,
+                'html'         => $html,
+                'download_url' => route('evals.cfg.template.pdf', $evaluation),
+            ]);
+        }
+
+        return view('evaluations.preview', compact('evaluation'));
+    }
+
+    /**
+     * Download template structure as PDF
+     */
+    public function templatePdf(Evaluation $evaluation)
+    {
+        $evaluation->load([
+            'sections' => fn ($query) => $query->orderBy('created_at'),
+            'sections.criteria' => fn ($query) => $query->orderBy('created_at'),
+        ]);
+
+        $sectionTotals = $evaluation->sections->mapWithKeys(function ($section) {
+            return [$section->id => (float) $section->criteria->sum('max_score')];
+        });
+
+        $overallTotal = (float) $sectionTotals->sum();
+
+        $pdf = Pdf::loadView('evaluations.pdf.template', compact(
+            'evaluation',
+            'sectionTotals',
+            'overallTotal'
+        ))->setPaper('a4', 'portrait');
+
+        $safeName = Str::slug($evaluation->name ?: 'evaluation-template');
+
+        return $pdf->download("{$safeName}-template.pdf");
     }
 
     /**

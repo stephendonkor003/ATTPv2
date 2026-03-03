@@ -1869,6 +1869,12 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
         Route::post('/store', [EvaluationController::class, 'store'])
             ->name('store');
 
+        Route::get('/{evaluation}/preview', [EvaluationController::class, 'preview'])
+            ->name('preview');
+
+        Route::get('/{evaluation}/template.pdf', [EvaluationController::class, 'templatePdf'])
+            ->name('template.pdf');
+
         /* ===============================
          | SINGLE EVALUATION
          =============================== */
