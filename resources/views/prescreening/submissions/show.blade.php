@@ -20,12 +20,40 @@
             </div>
 </div>
 
+        @php
+            $officialName = $submission->values->firstWhere('field_key', 'official_name')?->value ?: $submission->submitter?->name;
+            $officialEmail = $submission->values->firstWhere('field_key', 'official_email')?->value ?: $submission->submitter?->email;
+        @endphp
+
         {{-- ================= INFO BANNER ================= --}}
         @if (!$canEdit)
             <div class="alert alert-info mt-3">
                 This evaluation is <strong>locked</strong> and can only be edited if a rework is requested.
             </div>
         @endif
+
+        <div class="card mt-3 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Submission Code</small>
+                        <span class="fw-semibold">{{ $submission->procurement_submission_code }}</span>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Official Name</small>
+                        <span class="fw-semibold">{{ $officialName ?: '—' }}</span>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Official Email</small>
+                        @if ($officialEmail)
+                            <a href="mailto:{{ $officialEmail }}" class="fw-semibold">{{ $officialEmail }}</a>
+                        @else
+                            <span class="fw-semibold">—</span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
 
         {{-- ================= EVALUATION FORM ================= --}}
         <form method="POST" action="{{ route('prescreening.submissions.store', $submission) }}">

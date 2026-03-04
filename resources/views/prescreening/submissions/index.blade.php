@@ -48,6 +48,8 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-4">Submission Code</th>
+                            <th>Official Name</th>
+                            <th>Official Email</th>
                             <th>Procurement</th>
                             <th class="text-center">Status</th>
                             <th>Evaluator</th>
@@ -69,6 +71,10 @@
 
                                 $status = $submission->status;
                                 $badge = $statusColors[$status] ?? 'info';
+                                $officialName = $submission->values->firstWhere('field_key', 'official_name')?->value;
+                                $officialEmail = $submission->values->firstWhere('field_key', 'official_email')?->value;
+                                $displayName = $officialName ?: $submission->submitter?->name;
+                                $displayEmail = $officialEmail ?: $submission->submitter?->email;
                             @endphp
 
                             <tr>
@@ -77,6 +83,16 @@
                                     <small class="text-muted">
                                         {{ $submission->created_at?->diffForHumans() }}
                                     </small>
+                                </td>
+
+                                <td>{{ $displayName ?: '—' }}</td>
+
+                                <td>
+                                    @if ($displayEmail)
+                                        <a href="mailto:{{ $displayEmail }}">{{ $displayEmail }}</a>
+                                    @else
+                                        —
+                                    @endif
                                 </td>
 
                                 <td>

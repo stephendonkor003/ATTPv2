@@ -41,11 +41,14 @@ class PrescreeningEvaluationController extends Controller
      */
     public function index()
     {
-        $query = FormSubmission::with(
+        $query = FormSubmission::with([
             'procurement',
             'submitter',
-            'prescreeningResult'
-        );
+            'prescreeningResult.evaluator',
+            'values' => function ($query) {
+                $query->whereIn('field_key', ['official_name', 'official_email']);
+            },
+        ]);
 
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
@@ -91,6 +94,13 @@ class PrescreeningEvaluationController extends Controller
         if (!$this->canAccessSubmission($submission)) {
             abort(403);
         }
+
+        $submission->loadMissing([
+            'submitter',
+            'values' => function ($query) {
+                $query->whereIn('field_key', ['official_name', 'official_email']);
+            },
+        ]);
 
         $template = $submission->procurement
             ->prescreeningTemplate
