@@ -10,43 +10,23 @@ class SecurityHeaders
 {
     public function handle(Request $request, Closure $next): Response
     {
-        /** @var Response $response */
         $response = $next($request);
 
-        // Prevent clickjacking
         $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
-
-        // Prevent MIME sniffing
         $response->headers->set('X-Content-Type-Options', 'nosniff');
-
-        // XSS protection (legacy browsers)
         $response->headers->set('X-XSS-Protection', '1; mode=block');
-
-        // Referrer protection
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
 
-        // Allow browser features needed by the app
         $response->headers->set(
             'Permissions-Policy',
             'camera=(self), microphone=(self), geolocation=(self)'
         );
 
-        // Content Security Policy
         $response->headers->set(
             'Content-Security-Policy',
-            "default-src 'self';
-            script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;
-            style-src 'self' 'unsafe-inline' https:;
-            img-src 'self' data: https:;
-            font-src 'self' data: https:;
-            connect-src 'self' https:;
-            media-src 'self' blob:;
-            frame-ancestors 'self';
-            base-uri 'self';
-            form-action 'self';"
+            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https:; media-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
         );
 
-        // Enforce HTTPS
         if ($request->isSecure()) {
             $response->headers->set(
                 'Strict-Transport-Security',
@@ -54,7 +34,6 @@ class SecurityHeaders
             );
         }
 
-        // Prevent caching on sensitive routes
         if ($request->routeIs('login', 'security.*')) {
             $response->headers->set(
                 'Cache-Control',
