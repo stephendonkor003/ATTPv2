@@ -97,9 +97,8 @@ class PrescreeningEvaluationController extends Controller
 
         $submission->loadMissing([
             'submitter',
-            'values' => function ($query) {
-                $query->whereIn('field_key', ['official_name', 'official_email']);
-            },
+            'form.fields',
+            'values',
         ]);
 
         $template = $submission->procurement
