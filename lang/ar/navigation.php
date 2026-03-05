@@ -16,4 +16,5 @@ return [
     'process' => 'تدفق النظام',
     'customization' => 'التخصيص',
     'impact_map' => 'خريطة التأثير',
+    'world_indicators_performance' => 'World Indicators / Performance',
 ];

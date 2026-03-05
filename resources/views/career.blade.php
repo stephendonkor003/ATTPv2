@@ -361,6 +361,7 @@
             <a href="#vacancies">{{ __('navigation.vacancies') }}</a>
             <a href="{{ route('events') }}">{{ __('navigation.events') }}</a>
             <a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a>
+            <a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a>
             <a href="{{ route('careers') }}" class="active">{{ __('navigation.careers') }}</a>
             <a href="{{ route('applicants.faq') }}">{{ __('navigation.faqs') }}</a>
         </nav>

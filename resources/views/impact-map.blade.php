@@ -1182,6 +1182,7 @@
             <a href="{{ route('landing.index') }}">{{ __('navigation.home') }}</a>
             <a href="{{ route('events') }}">{{ __('navigation.events') }}</a>
             <a href="{{ route('impact.map') }}" class="active">{{ __('navigation.impact_map') }}</a>
+            <a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a>
             <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
             <a href="{{ route('applicants.faq') }}">{{ __('navigation.faqs') }}</a>
         </nav>
@@ -1786,6 +1787,7 @@
                 <h4>{{ __('landing.footer_links_title') }}</h4>
                 <a href="{{ route('landing.index') }}">{{ __('landing.footer_link_home') }}</a>
                 <a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a>
+                <a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a>
                 <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
                 <a href="#contact">{{ __('navigation.contact') }}</a>
             </div>

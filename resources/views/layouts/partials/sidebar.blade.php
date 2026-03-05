@@ -463,7 +463,7 @@
                 {{-- ======================================================
                     | MONITORING & EVALUATION
                     ====================================================== --}}
-                @canany(['me.configuration.view', 'me.configuration.manage'])
+                @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('Monitoring & Evaluation') }}</label>
                     </li>
@@ -476,45 +476,48 @@
                         </a>
 
                         <ul class="nxl-submenu">
-                            <li class="nxl-item">
-                                <a href="{{ route('budget.me.indicators.index') }}" class="nxl-link">
-                                    <i class="feather-target me-2"></i> Indicators
-                                </a>
-                            </li>
+                            @canany(['me.configuration.view', 'me.configuration.manage'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.indicators.index') }}" class="nxl-link">
+                                        <i class="feather-target me-2"></i> Indicators
+                                    </a>
+                                </li>
 
-                            <li class="nxl-item">
-                                <a href="{{ route('budget.me.data-sources.index') }}" class="nxl-link">
-                                    <i class="feather-database me-2"></i> Data Source Controller
-                                </a>
-                            </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.data-sources.index') }}" class="nxl-link">
+                                        <i class="feather-database me-2"></i> Data Source Controller
+                                    </a>
+                                </li>
 
-                            <li class="nxl-item">
-                                <a href="{{ route('budget.me-configuration.indicator-levels.index') }}" class="nxl-link">
-                                    <i class="feather-layers me-2"></i> Indicator Levels
-                                </a>
-                            </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me-configuration.indicator-levels.index') }}" class="nxl-link">
+                                        <i class="feather-layers me-2"></i> Indicator Levels
+                                    </a>
+                                </li>
 
-                            <li class="nxl-item">
-                                <a href="{{ route('budget.me-configuration.frequencies.index') }}" class="nxl-link">
-                                    <i class="feather-clock me-2"></i> Reporting Frequencies
-                                </a>
-                            </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me-configuration.frequencies.index') }}" class="nxl-link">
+                                        <i class="feather-clock me-2"></i> Reporting Frequencies
+                                    </a>
+                                </li>
 
-                            <li class="nxl-item">
-                                <a href="{{ route('budget.me-configuration.units.index') }}" class="nxl-link">
-                                    <i class="feather-sliders me-2"></i> Indicator Units
-                                </a>
-                            </li>
-                            <li class="nxl-item">
-                                <a href="{{ route('budget.me-configuration.definitions.index') }}" class="nxl-link">
-                                    <i class="feather-file-text me-2"></i> Definitions / Formulas
-                                </a>
-                            </li>
-                            <li class="nxl-item">
-                                <a href="{{ route('budget.me-configuration.methodologies.index') }}" class="nxl-link">
-                                    <i class="feather-book-open me-2"></i> Methodologies
-                                </a>
-                            </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me-configuration.units.index') }}" class="nxl-link">
+                                        <i class="feather-sliders me-2"></i> Indicator Units
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me-configuration.definitions.index') }}" class="nxl-link">
+                                        <i class="feather-file-text me-2"></i> Definitions / Formulas
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me-configuration.methodologies.index') }}" class="nxl-link">
+                                        <i class="feather-book-open me-2"></i> Methodologies
+                                    </a>
+                                </li>
+                            @endcanany
+
                         </ul>
                     </li>
                 @endcanany
@@ -1122,6 +1125,40 @@
                         </li>
                     @endcan
                 @endcanany
+
+                {{-- ================= WORLD INDICATORS ================= --}}
+                @can('world.indicators.manage')
+                    <li class="nxl-item nxl-caption">
+                        <label>World Indicators</label>
+                    </li>
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-globe"></i></span>
+                            <span class="nxl-mtext">World Indicators</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+                        <ul class="nxl-submenu">
+                            <li class="nxl-item">
+                                <a href="{{ route('budget.me.world-indicators.settings.edit') }}#api-controls"
+                                    class="nxl-link">
+                                    <i class="feather-sliders me-2"></i> API Controls
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('budget.me.world-indicators.settings.edit') }}#imf-data"
+                                    class="nxl-link">
+                                    <i class="feather-trending-up me-2"></i> IMF Data
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('budget.me.world-indicators.settings.edit') }}#world-bank-data"
+                                    class="nxl-link">
+                                    <i class="feather-bar-chart-2 me-2"></i> World Bank Data
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                @endcan
 
                 {{-- ================= SYSTEM MANAGEMENT ================= --}}
                 @canany(['users.manage', 'roles.manage', 'permissions.manage', 'system.audit.view'])

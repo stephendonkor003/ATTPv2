@@ -104,6 +104,8 @@ use App\Http\Controllers\{
         MeDataSourceController,
         IndicatorSurveyController,
         PublicIndicatorSurveyController,
+        WorldIndicatorsController,
+        WorldIndicatorSettingsController,
 	};
 
 /*
@@ -1020,6 +1022,20 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('me.data-sources.template.download');
         Route::get('me/data-sources/{indicator}/raw-data', [MeDataSourceController::class, 'rawData'])
             ->name('me.data-sources.raw-data');
+
+        // World Indicators / Performance (Back Office Controller)
+        Route::get('me/world-indicators/settings', [WorldIndicatorSettingsController::class, 'edit'])
+            ->middleware('permission:world.indicators.manage')
+            ->name('me.world-indicators.settings.edit');
+        Route::put('me/world-indicators/settings', [WorldIndicatorSettingsController::class, 'update'])
+            ->middleware('permission:world.indicators.manage')
+            ->name('me.world-indicators.settings.update');
+        Route::post('me/world-indicators/settings/sync-catalog', [WorldIndicatorSettingsController::class, 'syncWorldBankCatalog'])
+            ->middleware('permission:world.indicators.manage')
+            ->name('me.world-indicators.settings.sync-catalog');
+        Route::post('me/world-indicators/settings/sync-data', [WorldIndicatorSettingsController::class, 'syncWorldBankData'])
+            ->middleware('permission:world.indicators.manage')
+            ->name('me.world-indicators.settings.sync-data');
 
         // Indicator Levels
         Route::get('me/indicator-levels', [MeConfigurationController::class, 'indicatorLevelsIndex'])
@@ -2269,6 +2285,26 @@ Route::get('/impact-map/download/pdf', [ImpactMapController::class, 'downloadPdf
 Route::get('/impact-map/download/excel', [ImpactMapController::class, 'downloadExcel'])
     ->middleware('throttle:10,1')
     ->name('impact.download.excel');
+Route::get('/world-indicators-performance', [WorldIndicatorsController::class, 'index'])
+    ->name('world.indicators.performance');
+Route::get('/api/world-indicators/country-metrics', [WorldIndicatorsController::class, 'countryMetrics'])
+    ->middleware('throttle:120,1')
+    ->name('world.indicators.country-metrics');
+Route::get('/api/world-indicators/topics', [WorldIndicatorsController::class, 'topics'])
+    ->middleware('throttle:120,1')
+    ->name('world.indicators.topics');
+Route::get('/api/world-indicators/indicators', [WorldIndicatorsController::class, 'indicators'])
+    ->middleware('throttle:120,1')
+    ->name('world.indicators.indicators');
+Route::get('/api/world-indicators/countries', [WorldIndicatorsController::class, 'countries'])
+    ->middleware('throttle:120,1')
+    ->name('world.indicators.countries');
+Route::get('/api/world-indicators/continents', [WorldIndicatorsController::class, 'continents'])
+    ->middleware('throttle:120,1')
+    ->name('world.indicators.continents');
+Route::get('/api/world-indicators/compare', [WorldIndicatorsController::class, 'compare'])
+    ->middleware('throttle:120,1')
+    ->name('world.indicators.compare');
 Route::get('/bids/{project}', [LandingPageController::class, 'showBid'])->name('landing.show');
 Route::get('/applicants', [ApplicantController::class, 'index'])
     ->middleware('auth')

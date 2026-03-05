@@ -16,4 +16,5 @@ return [
     'process' => 'Mtiririko wa Mfumo',
     'customization' => 'Ubinafsishaji',
     'impact_map' => 'Ramani ya Athari',
+    'world_indicators_performance' => 'World Indicators / Performance',
 ];

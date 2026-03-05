@@ -15,6 +15,9 @@ class Kernel extends ConsoleKernel
     {
         // Send indicator reminder emails every 4 hours via queued job
         $schedule->job(new IndicatorReminderJob())->everyFourHours();
+
+        // Refresh World Bank catalog + recent values for used indicators each day.
+        $schedule->command('worldbank:sync --catalog --used')->dailyAt('02:15')->withoutOverlapping();
     }
 
     /**

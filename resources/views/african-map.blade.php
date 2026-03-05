@@ -88,6 +88,7 @@
         <div class="links">
             <a href="{{ route('landing.index') }}">Home</a>
             <a href="{{ route('impact.map') }}">Impact Map</a>
+            <a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a>
             <a href="{{ route('landing.african_map') }}">AFRICAN MAP</a>
         </div>
     </header>

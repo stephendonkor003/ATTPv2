@@ -16,4 +16,5 @@ return [
     'process' => 'Flux du Système',
     'customization' => 'Personnalisation',
     'impact_map' => 'Carte d\'Impact',
+    'world_indicators_performance' => 'World Indicators / Performance',
 ];

@@ -16,4 +16,5 @@ return [
     'process' => 'System Flow',
     'customization' => 'Customization',
     'impact_map' => 'Impact Map',
+    'world_indicators_performance' => 'World Indicators / Performance',
 ];

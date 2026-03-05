@@ -121,6 +121,7 @@ class PermissionSeeder extends Seeder
             // Monitoring & Evaluation (M&E)
             ['name' => 'me.configuration.view', 'module' => 'M&E', 'description' => 'View M&E configuration, indicators, and data-source dashboards'],
             ['name' => 'me.configuration.manage', 'module' => 'M&E', 'description' => 'Create, update, delete, and sync M&E configuration and indicator data'],
+            ['name' => 'world.indicators.manage', 'module' => 'M&E', 'description' => 'Manage World Indicators / Performance public page settings and source endpoints'],
 
             // Evaluations
             ['name' => 'evaluations.manage', 'module' => 'evaluations', 'description' => 'Manage evaluations and assignments'],

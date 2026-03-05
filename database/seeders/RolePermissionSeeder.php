@@ -71,6 +71,7 @@ class RolePermissionSeeder extends Seeder
             'evaluations.evaluate',
             'me.configuration.view',
             'me.configuration.manage',
+            'world.indicators.manage',
         ]);
 
         // Communications Officer

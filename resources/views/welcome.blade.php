@@ -115,6 +115,7 @@
             <a href="#annoucements">{{ __('landing.announcements') }}</a>
             <a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a>
             <a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a>
+            <a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a>
             {{-- <a href="{{ route('landing.african_map') }}">AFRICAN MAP</a> --}}
             <a href="#contact">{{ __('navigation.contact') }}</a>
             <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
