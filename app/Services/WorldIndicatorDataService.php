@@ -138,10 +138,11 @@ class WorldIndicatorDataService
 
         return $query
             ->limit(400)
-            ->get(['iso2_code', 'name', 'continent', 'region'])
+            ->get(['wb_country_id', 'iso2_code', 'name', 'continent', 'region'])
             ->map(function (WorldBankCountry $country): array {
                 return [
                     'iso2' => strtoupper((string) $country->iso2_code),
+                    'iso3' => strtoupper((string) $country->wb_country_id),
                     'name' => $country->name,
                     'continent' => $country->continent,
                     'region' => $country->region,

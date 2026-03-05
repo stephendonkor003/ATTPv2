@@ -187,7 +187,7 @@ class WorldIndicatorsController extends Controller
         $validated = $request->validate([
             'indicator_id' => ['required', 'string', 'max:80'],
             'compare_mode' => ['required', Rule::in(['country', 'continent'])],
-            'countries' => ['required_if:compare_mode,country', 'array', 'min:2'],
+            'countries' => ['required_if:compare_mode,country', 'array', 'min:1'],
             'countries.*' => ['string', 'size:2'],
             'continents' => ['required_if:compare_mode,continent', 'array', 'min:2'],
             'continents.*' => ['string', 'max:80'],
