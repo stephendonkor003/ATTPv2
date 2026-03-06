@@ -30,19 +30,20 @@
         .world-panel-head p { margin:.25rem 0 0; color:#334155; font-size:.8rem; line-height:1.4; }
         .controls { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.55rem; padding:.8rem 1rem; border-bottom:1px solid #e8edf5; background:#f8fbff; }
         .controls.controls-6 { grid-template-columns:repeat(6,minmax(0,1fr)); }
-        .controls .span-2 { grid-column:span 2; } .controls .span-3 { grid-column:span 3; }
+        .controls .span-2 { grid-column:span 2; } .controls .span-3 { grid-column:span 3; } .controls .span-4 { grid-column:span 4; }
         .controls label { display:block; margin-bottom:.22rem; font-size:.7rem; letter-spacing:.05em; font-weight:700; text-transform:uppercase; color:var(--muted); }
         .controls select,.controls input,.controls button { width:100%; border:1px solid #cfd8e6; border-radius:8px; padding:.43rem .48rem; background:#fff; color:var(--ink); font-size:.85rem; }
         .controls button { border:0; font-weight:700; cursor:pointer; }
-        .btn-primary { background:linear-gradient(120deg,#1d4ed8,#0a3d62); color:#fff; }
+        .slider-readout { margin-top:.25rem; font-size:.72rem; color:#475569; }
+        .btn-primary { background:linear-gradient(120deg,#65a30d,#854d0e); color:#fff; }
         .btn-secondary { background:#e8eef8; color:#0f172a; }
         #worldMap { width:100%; min-height:590px; background:#dbe7f6; }
-        .status,.map-status { border:1px solid #d6e3f4; background:#edf4ff; color:#1e3a8a; border-radius:10px; padding:.52rem .65rem; font-size:.8rem; line-height:1.35; }
+        .status,.map-status { border:1px solid #d9dfc7; background:#f4f8ea; color:#3f6212; border-radius:10px; padding:.52rem .65rem; font-size:.8rem; line-height:1.35; }
         .status.error,.map-status.error { background:#fff1f2; border-color:#fecdd3; color:#9f1239; }
         .map-meta { padding:.75rem 1rem; border-top:1px solid #e8edf5; background:#f8fbff; }
         .legend { border:1px solid #d9e3f1; border-radius:10px; background:#fff; padding:.6rem .7rem; margin-bottom:.55rem; }
         .legend-title { font-weight:700; font-size:.83rem; margin-bottom:.36rem; }
-        .legend-scale { height:10px; border-radius:999px; background:linear-gradient(90deg,#dbeafe 0%,#93c5fd 25%,#60a5fa 50%,#2563eb 75%,#1e3a8a 100%); border:1px solid #c8d7ed; }
+        .legend-scale { height:10px; border-radius:999px; background:linear-gradient(90deg,#fde047 0%,#d9f99d 34%,#65a30d 67%,#a16207 100%); border:1px solid #c8d7ed; }
         .legend-range { margin-top:.3rem; font-size:.75rem; color:#475569; display:flex; justify-content:space-between; gap:.4rem; }
         .data-grid { padding:0 1rem 1rem; display:grid; grid-template-columns:1fr 1fr; gap:.7rem; }
         .data-card { border:1px solid #dbe4ef; border-radius:11px; background:#fff; overflow:hidden; }
@@ -84,11 +85,46 @@
         .viz-modal-head p { margin:.15rem 0 0; color:#64748b; font-size:.78rem; }
         .viz-modal-close { border:0; background:#e2e8f0; width:32px; height:32px; border-radius:8px; font-size:1rem; cursor:pointer; }
         .viz-modal-body { overflow:auto; padding:.85rem .95rem 1rem; }
+        .loading-modal { position:fixed; inset:0; z-index:3200; background:rgba(15,23,42,.62); display:none; align-items:center; justify-content:center; padding:1rem; }
+        .loading-modal.open { display:flex; }
+        .loading-box { width:min(420px,92vw); border:1px solid #dbe4ef; border-radius:14px; background:#fff; box-shadow:0 18px 44px rgba(15,23,42,.28); padding:1rem 1.1rem; text-align:center; }
+        .loading-spinner { width:44px; height:44px; border-radius:50%; border:4px solid #d9f99d; border-top-color:#65a30d; margin:0 auto .7rem; animation:loading-spin 1s linear infinite; }
+        .loading-title { margin:0; font-size:.95rem; color:#1f2937; }
+        .loading-text { margin:.28rem 0 0; font-size:.8rem; color:#64748b; }
+        @keyframes loading-spin { to { transform:rotate(360deg); } }
+        body.app-loading { cursor:progress; }
+        body.app-loading .navbar,
+        body.app-loading .hero-world,
+        body.app-loading .summary-grid,
+        body.app-loading .viz-shell,
+        body.app-loading .compare-shell,
+        body.app-loading .footer,
+        body.app-loading .viz-modal { pointer-events:none !important; }
+        body.app-loading .world-panel,
+        body.app-loading .data-card,
+        body.app-loading .table-wrap,
+        body.app-loading .heatmap-wrap,
+        body.app-loading #worldMap,
+        body.app-loading .viz-modal-dialog,
+        body.app-loading .continent-map-card { opacity:.58; filter:saturate(.72); transition:opacity .12s ease; }
+        body.app-loading #loadingModal,
+        body.app-loading #loadingModal * { pointer-events:auto !important; opacity:1; filter:none; }
+        .map-compare-dialog { width:min(1320px,98vw); }
+        .continent-map-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; margin-bottom:.75rem; }
+        .continent-map-card { border:1px solid #dbe4ef; border-radius:12px; background:#fff; overflow:hidden; }
+        .continent-map-head { display:flex; justify-content:space-between; align-items:center; gap:.4rem; padding:.6rem .7rem; border-bottom:1px solid #e8edf5; background:#f8fbff; }
+        .continent-map-head h5 { margin:0; font-size:.82rem; color:#334155; }
+        .continent-map-head span { font-size:.72rem; color:#64748b; }
+        .continent-map { min-height:270px; background:#eef4fb; }
+        .continent-map-meta { padding:.45rem .65rem .6rem; border-top:1px solid #e8edf5; background:#f8fbff; }
+        .continent-map-scale { height:8px; border-radius:999px; background:linear-gradient(90deg,#fde047 0%,#d9f99d 34%,#65a30d 67%,#a16207 100%); border:1px solid #d8e1ef; }
+        .continent-map-range { margin-top:.24rem; display:flex; justify-content:space-between; gap:.45rem; font-size:.71rem; color:#475569; }
+        .continent-mini-table { max-height:170px; overflow:auto; }
         .empty-box { border:1px dashed #9fb4d2; border-radius:10px; background:#f8fbff; color:#475569; font-size:.8rem; padding:.72rem; }
-        @media (max-width:1200px){ .summary-grid{grid-template-columns:repeat(4,minmax(0,1fr));} .viz-shell,.data-grid,.compare-grid{grid-template-columns:1fr;} .viz-card.wide{grid-column:span 1;} }
+        @media (max-width:1200px){ .summary-grid{grid-template-columns:repeat(4,minmax(0,1fr));} .viz-shell,.data-grid,.compare-grid,.continent-map-grid{grid-template-columns:1fr;} .viz-card.wide{grid-column:span 1;} }
         @media (max-width:900px){ .controls,.controls.controls-6{grid-template-columns:1fr 1fr;} .controls .span-2,.controls .span-3{grid-column:span 2;} }
         @media (max-width:768px){ body{padding-top:150px;} .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));} #worldMap{min-height:500px;} }
-        @media (max-width:560px){ .summary-grid,.controls,.controls.controls-6{grid-template-columns:1fr;} .controls .span-2,.controls .span-3{grid-column:span 1;} .snapshot-highlights,.series-cards{grid-template-columns:1fr;} }
+        @media (max-width:560px){ .summary-grid,.controls,.controls.controls-6{grid-template-columns:1fr;} .controls .span-2,.controls .span-3,.controls .span-4{grid-column:span 1;} .snapshot-highlights,.series-cards{grid-template-columns:1fr;} }
     </style>
 </head>
 <body>
@@ -149,8 +185,14 @@
                 <div><label for="regionSelect">Region</label><select id="regionSelect">@foreach ($enabledRegions as $region)<option value="{{ $region }}" @selected($defaultRegion === $region)>{{ $regionLabels[$region] ?? $region }}</option>@endforeach</select></div>
                 <div><label for="mapTopicSelect">Map Group</label><select id="mapTopicSelect"><option value="">Loading...</option></select></div>
                 <div><label for="mapIndicatorSelect">Map Indicator</label><select id="mapIndicatorSelect"><option value="">Select indicator</option></select></div>
-                <div><label for="mapYearInput">Map Year</label><input id="mapYearInput" type="number" min="1960" step="1"></div>
+                <div><label for="mapYearInput">Map Year</label><input id="mapYearInput" type="number" min="1960" max="{{ now()->year }}" step="1"></div>
+                <div><label for="mapYearSlider">Year Slider</label><input id="mapYearSlider" type="range" min="1960" max="{{ now()->year }}" step="1"></div>
+                <div class="span-2"><label for="mapContinentsSelect">Geo Compare Continents (2+)</label><select id="mapContinentsSelect" multiple size="6"></select></div>
+                <div><label for="mapRangeMinSlider">Color Range Min %</label><input id="mapRangeMinSlider" type="range" min="0" max="100" step="1" value="0"></div>
+                <div><label for="mapRangeMaxSlider">Color Range Max %</label><input id="mapRangeMaxSlider" type="range" min="0" max="100" step="1" value="100"><div class="slider-readout" id="mapRangeLabel">Visible range: 0% - 100%</div></div>
                 <div><label for="runMapVizBtn">Map Overlay</label><button id="runMapVizBtn" class="btn-primary" type="button">Apply Indicator To Map</button></div>
+                <div><label for="runContinentCompareBtn">Continent Compare</label><button id="runContinentCompareBtn" class="btn-primary" type="button">Compare Selected Continents</button></div>
+                <div><label for="openMapCompareModalBtn">Geo Modal</label><button id="openMapCompareModalBtn" class="btn-secondary" type="button">Open Multi-Map Modal</button></div>
                 <div><label for="resetMapVizBtn">Map Reset</label><button id="resetMapVizBtn" class="btn-secondary" type="button">Clear Overlay</button></div>
             </div>
             <div id="worldMap"></div>
@@ -206,6 +248,8 @@
                 <div><label for="compareChartTypeSelect">Chart Type</label><select id="compareChartTypeSelect"><option value="line" selected>Line</option><option value="bar">Bar</option></select></div>
                 <div><label for="compareYearFrom">Year From</label><input id="compareYearFrom" type="number" min="1960" step="1"></div>
                 <div><label for="compareYearTo">Year To</label><input id="compareYearTo" type="number" min="1960" step="1"></div>
+                <div><label for="compareRangeMinSlider">Heat Range Min %</label><input id="compareRangeMinSlider" type="range" min="0" max="100" step="1" value="0"></div>
+                <div><label for="compareRangeMaxSlider">Heat Range Max %</label><input id="compareRangeMaxSlider" type="range" min="0" max="100" step="1" value="100"><div class="slider-readout" id="compareRangeLabel">Color window: 0% - 100%</div></div>
                 <div class="span-3" id="compareCountriesWrap"><label for="compareCountriesSelect">Countries (2 or more)</label><select id="compareCountriesSelect" multiple size="7"></select></div>
                 <div class="span-3" id="compareContinentsWrap" style="display:none;"><label for="compareContinentsSelect">Continents (2 or more)</label><select id="compareContinentsSelect" multiple size="7"></select></div>
                 <div><label for="runCompareBtn">Compute</label><button id="runCompareBtn" class="btn-primary" type="button">Run Comparison</button></div>
@@ -239,6 +283,31 @@
         </div>
     </div>
 
+    <div id="mapCompareModal" class="viz-modal" aria-hidden="true">
+        <div class="viz-modal-dialog map-compare-dialog">
+            <div class="viz-modal-head"><div><h4 id="mapCompareModalTitle">Multi-Continent Map Comparison</h4><p id="mapCompareModalSubtitle">Compare separate continent maps using slider-based color ranges.</p></div><button class="viz-modal-close" id="mapCompareModalCloseBtn" type="button" aria-label="Close geo modal">x</button></div>
+            <div class="viz-modal-body">
+                <div id="mapComparePanels" class="continent-map-grid"><div class="empty-box">Run "Compare Selected Continents" to load Africa/Asia or any other continent side-by-side maps.</div></div>
+                <div class="data-card">
+                    <h4>Regional Data Sheet (Selected Year)</h4>
+                    <div class="table-wrap"><table><thead><tr><th>Country</th><th>Code</th><th>Value</th></tr></thead><tbody id="mapCompareCountryTableBody"><tr><td colspan="3">No map comparison loaded yet.</td></tr></tbody></table></div>
+                </div>
+                <div class="data-card" style="margin-top:0.7rem;">
+                    <h4>Global Comparison (Selected Year)</h4>
+                    <div class="table-wrap"><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody id="mapCompareGlobalTableBody"><tr><td colspan="2">No global comparison loaded yet.</td></tr></tbody></table></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingModal" class="loading-modal" aria-hidden="true" aria-live="polite">
+        <div class="loading-box">
+            <div class="loading-spinner" aria-hidden="true"></div>
+            <h4 class="loading-title">Loading</h4>
+            <p class="loading-text" id="loadingModalMessage">Please wait while data is loading...</p>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/shpjs@6.2.0/dist/shp.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -259,7 +328,14 @@
         const mapTopicSelect = document.getElementById('mapTopicSelect');
         const mapIndicatorSelect = document.getElementById('mapIndicatorSelect');
         const mapYearInput = document.getElementById('mapYearInput');
+        const mapYearSlider = document.getElementById('mapYearSlider');
+        const mapContinentsSelect = document.getElementById('mapContinentsSelect');
+        const mapRangeMinSlider = document.getElementById('mapRangeMinSlider');
+        const mapRangeMaxSlider = document.getElementById('mapRangeMaxSlider');
+        const mapRangeLabel = document.getElementById('mapRangeLabel');
         const runMapVizBtn = document.getElementById('runMapVizBtn');
+        const runContinentCompareBtn = document.getElementById('runContinentCompareBtn');
+        const openMapCompareModalBtn = document.getElementById('openMapCompareModalBtn');
         const resetMapVizBtn = document.getElementById('resetMapVizBtn');
         const mapStatus = document.getElementById('mapStatus');
         const mapLegendTitle = document.getElementById('mapLegendTitle');
@@ -287,6 +363,9 @@
         const compareChartTypeSelect = document.getElementById('compareChartTypeSelect');
         const compareYearFromInput = document.getElementById('compareYearFrom');
         const compareYearToInput = document.getElementById('compareYearTo');
+        const compareRangeMinSlider = document.getElementById('compareRangeMinSlider');
+        const compareRangeMaxSlider = document.getElementById('compareRangeMaxSlider');
+        const compareRangeLabel = document.getElementById('compareRangeLabel');
         const compareCountriesWrap = document.getElementById('compareCountriesWrap');
         const compareCountriesSelect = document.getElementById('compareCountriesSelect');
         const compareContinentsWrap = document.getElementById('compareContinentsWrap');
@@ -308,6 +387,15 @@
         const vizModalChartCanvas = document.getElementById('vizModalChart');
         const vizModalTableHeadRow = document.getElementById('vizModalTableHeadRow');
         const vizModalTableBody = document.getElementById('vizModalTableBody');
+        const mapCompareModal = document.getElementById('mapCompareModal');
+        const mapCompareModalCloseBtn = document.getElementById('mapCompareModalCloseBtn');
+        const mapCompareModalTitle = document.getElementById('mapCompareModalTitle');
+        const mapCompareModalSubtitle = document.getElementById('mapCompareModalSubtitle');
+        const mapComparePanels = document.getElementById('mapComparePanels');
+        const mapCompareCountryTableBody = document.getElementById('mapCompareCountryTableBody');
+        const mapCompareGlobalTableBody = document.getElementById('mapCompareGlobalTableBody');
+        const loadingModal = document.getElementById('loadingModal');
+        const loadingModalMessage = document.getElementById('loadingModalMessage');
         const pageNavbar = document.querySelector('header.navbar');
 
         const state = {
@@ -317,13 +405,27 @@
             countryByNormName: new Map(),
             countryByIso2: new Map(),
             countryByIso3: new Map(),
+            continentByIso2: new Map(),
+            iso2ByContinent: new Map(),
             mapValuesByIso2: new Map(),
             mapValuesByNormName: new Map(),
+            mapRows: [],
             mapRange: { min: null, max: null },
+            mapIndicatorMeta: { label: 'Indicator', unit: '' },
+            mapVisibleRangePercent: { min: 0, max: 100 },
             selectedCountryIso2: null,
             selectedCountryName: null,
             comparePayload: null,
             snapshotPayload: null,
+            compareVisibleRangePercent: { min: 0, max: 100 },
+            mapComparePayloadByContinent: new Map(),
+            mapCompareContext: null,
+            mapCompareModalMaps: [],
+            mapCompareRenderTimer: null,
+            mapCompareRenderToken: 0,
+            loadingDepth: 0,
+            interactionLocked: false,
+            lockedControls: [],
             compareChart: null,
             compareLatestChart: null,
             snapshotChart: null,
@@ -355,10 +457,199 @@
         function getSelectedValues(selectEl) { return selectEl ? Array.from(selectEl.selectedOptions).map((option) => option.value).filter(Boolean) : []; }
         function setMapStatus(message, isError = false) { mapStatus.textContent = message; mapStatus.classList.toggle('error', Boolean(isError)); }
         function setCompareStatus(message, isError = false) { compareStatus.textContent = message; compareStatus.classList.toggle('error', Boolean(isError)); }
+        const nonBlueScale = ['#fde047', '#d9f99d', '#65a30d', '#a16207'];
+        const PERF_LIMITS = {
+            maxCountrySeriesRequest: 60,
+            maxCountryCellsRequest: 6000,
+            maxComparisonCellsRender: 1800,
+            maxRenderYears: 20,
+            maxRenderSeries: 24,
+            maxMapCompareContinents: 2,
+            maxMapCompareTableRows: 260,
+        };
+
+        function getPointValueForYear(seriesItem, year) {
+            const points = Array.isArray(seriesItem?.points) ? seriesItem.points : [];
+            const point = points.find((entry) => Number(entry?.year) === Number(year)) || null;
+            return point?.value ?? null;
+        }
+
+        function getSafeComparisonSlice(payload) {
+            const years = Array.isArray(payload?.years) ? payload.years : [];
+            const series = Array.isArray(payload?.series) ? payload.series : [];
+            const cellCount = years.length * series.length;
+            if (!years.length || !series.length) {
+                return { years, series, reduced: false, cellCount };
+            }
+            if (cellCount <= PERF_LIMITS.maxComparisonCellsRender) {
+                return { years, series, reduced: false, cellCount };
+            }
+            const slicedYears = years.slice(-Math.min(PERF_LIMITS.maxRenderYears, years.length));
+            const rankedSeries = [...series]
+                .map((item) => {
+                    const latest = getPointValueForYear(item, slicedYears[slicedYears.length - 1]);
+                    const latestScore = latest !== null && latest !== undefined && Number.isFinite(Number(latest)) ? Number(latest) : Number.NEGATIVE_INFINITY;
+                    return { item, latestScore };
+                })
+                .sort((a, b) => b.latestScore - a.latestScore)
+                .slice(0, Math.min(PERF_LIMITS.maxRenderSeries, series.length))
+                .map((entry) => entry.item);
+            return {
+                years: slicedYears,
+                series: rankedSeries,
+                reduced: true,
+                cellCount,
+                fullSeries: series.length,
+                fullYears: years.length,
+            };
+        }
+
+        function getComparisonRenderNote(slice) {
+            if (!slice?.reduced) return '';
+            return `Large dataset detected (${slice.fullSeries} series x ${slice.fullYears} years). Showing ${slice.series.length} series and latest ${slice.years.length} years for stability.`;
+        }
+
+        function buildPayloadFromSlice(payload, slice) {
+            if (!slice?.reduced) return payload;
+            const years = Array.isArray(slice.years) ? slice.years : [];
+            const series = Array.isArray(slice.series) ? slice.series : [];
+            return {
+                ...payload,
+                years,
+                series: series.map((item) => ({
+                    ...item,
+                    points: years.map((year) => ({
+                        year,
+                        value: getPointValueForYear(item, year),
+                    })),
+                })),
+            };
+        }
+
+        function clampPercent(value) {
+            return Math.max(0, Math.min(100, Number(value) || 0));
+        }
+
+        function getValueWindowFromPercent(min, max, minPercent, maxPercent) {
+            if (min === null || max === null || !Number.isFinite(Number(min)) || !Number.isFinite(Number(max))) {
+                return { min: null, max: null };
+            }
+            const lowerPercent = Math.min(clampPercent(minPercent), clampPercent(maxPercent));
+            const upperPercent = Math.max(clampPercent(minPercent), clampPercent(maxPercent));
+            if (min === max) return { min, max };
+            const distance = max - min;
+            return {
+                min: min + ((distance * lowerPercent) / 100),
+                max: min + ((distance * upperPercent) / 100),
+            };
+        }
+
+        function valueIsInWindow(value, windowMin, windowMax) {
+            if (value === null || value === undefined || !Number.isFinite(Number(value))) return false;
+            if (windowMin === null || windowMax === null) return true;
+            return Number(value) >= windowMin && Number(value) <= windowMax;
+        }
+
+        function getColorByRatio(ratio) {
+            if (!Number.isFinite(Number(ratio))) return '#dbe4ef';
+            if (ratio < 0.25) return nonBlueScale[0];
+            if (ratio < 0.5) return nonBlueScale[1];
+            if (ratio < 0.75) return nonBlueScale[2];
+            return nonBlueScale[3];
+        }
+
+        function showLoadingModal(message = 'Please wait while data is loading...') {
+            state.loadingDepth += 1;
+            loadingModalMessage.textContent = message;
+            loadingModal.classList.add('open');
+            loadingModal.setAttribute('aria-hidden', 'false');
+            syncGlobalLoadingState();
+        }
+
+        function hideLoadingModal() {
+            state.loadingDepth = Math.max(0, state.loadingDepth - 1);
+            syncGlobalLoadingState();
+        }
+
+        function syncGlobalLoadingState() {
+            const isLoading = state.loadingDepth > 0;
+            document.body.classList.toggle('app-loading', isLoading);
+            document.body.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+            if (isLoading) {
+                lockAllInteractiveControls();
+                if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                    document.activeElement.blur();
+                }
+                return;
+            }
+            unlockAllInteractiveControls();
+            loadingModal.classList.remove('open');
+            loadingModal.setAttribute('aria-hidden', 'true');
+            loadingModalMessage.textContent = 'Please wait while data is loading...';
+        }
+
+        function setMapInteractionLocked(locked) {
+            if (!map) return;
+            if (locked) {
+                map.dragging.disable();
+                map.scrollWheelZoom.disable();
+                map.doubleClickZoom.disable();
+                map.boxZoom.disable();
+                map.keyboard.disable();
+                if (map.tap) map.tap.disable();
+                return;
+            }
+            map.dragging.enable();
+            map.scrollWheelZoom.enable();
+            map.doubleClickZoom.enable();
+            map.boxZoom.enable();
+            map.keyboard.enable();
+            if (map.tap) map.tap.enable();
+        }
+
+        function lockAllInteractiveControls() {
+            if (state.interactionLocked) return;
+            state.lockedControls = [];
+            const controls = document.querySelectorAll('button, input, select, textarea');
+            controls.forEach((control) => {
+                if (loadingModal.contains(control)) return;
+                state.lockedControls.push({
+                    el: control,
+                    disabled: Boolean(control.disabled),
+                });
+                control.disabled = true;
+                control.setAttribute('aria-disabled', 'true');
+            });
+            setMapInteractionLocked(true);
+            state.interactionLocked = true;
+        }
+
+        function unlockAllInteractiveControls() {
+            if (!state.interactionLocked) return;
+            state.lockedControls.forEach((entry) => {
+                if (!entry?.el || !entry.el.isConnected) return;
+                entry.el.disabled = Boolean(entry.disabled);
+                if (!entry.disabled) entry.el.removeAttribute('aria-disabled');
+            });
+            state.lockedControls = [];
+            setMapInteractionLocked(false);
+            state.interactionLocked = false;
+        }
+
+        function blockUiEventWhileLoading(event) {
+            if (state.loadingDepth <= 0) return;
+            if (loadingModal.contains(event.target)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+        }
 
         function buildCountryLookups(countries) {
             state.worldBankCountries = countries;
             state.countryByNormName.clear(); state.countryByIso2.clear(); state.countryByIso3.clear();
+            state.continentByIso2.clear(); state.iso2ByContinent.clear();
             countries.forEach((country) => {
                 const iso2 = String(country.iso2 || '').toUpperCase();
                 const iso3 = String(country.iso3 || '').toUpperCase();
@@ -366,6 +657,12 @@
                     state.countryByNormName.set(normalizeCountryName(country.name), iso2);
                     state.countryByIso2.set(iso2, country);
                     if (iso3.length === 3) state.countryByIso3.set(iso3, iso2);
+                    const continent = String(country.continent || '').trim();
+                    if (continent) {
+                        state.continentByIso2.set(iso2, continent);
+                        if (!state.iso2ByContinent.has(continent)) state.iso2ByContinent.set(continent, []);
+                        state.iso2ByContinent.get(continent).push(iso2);
+                    }
                 }
             });
             Object.entries(manualCountryAliases).forEach(([name, iso2]) => state.countryByNormName.set(normalizeCountryName(name), iso2));
@@ -449,37 +746,85 @@
             if (normalizedName && state.mapValuesByNormName.has(normalizedName)) return state.mapValuesByNormName.get(normalizedName);
             return null;
         }
-        function getChoroplethColor(value, min, max) {
+        function getChoroplethColor(value, min, max, windowMin = min, windowMax = max) {
             if (value === null || value === undefined || Number.isNaN(Number(value))) return '#dbe4ef';
-            if (min === null || max === null || min === max) return '#1d4ed8';
+            if (windowMin !== null && windowMax !== null && !valueIsInWindow(value, windowMin, windowMax)) return '#f1f5f9';
+            if (min === null || max === null || min === max) return nonBlueScale[2];
             const ratio = (Number(value) - min) / (max - min);
-            if (ratio < 0.2) return '#dbeafe'; if (ratio < 0.4) return '#93c5fd'; if (ratio < 0.6) return '#60a5fa'; if (ratio < 0.8) return '#2563eb';
-            return '#1e3a8a';
+            return getColorByRatio(ratio);
         }
+
+        function syncSliderPairState(minSlider, maxSlider, changedBy = 'min') {
+            let minValue = clampPercent(minSlider.value);
+            let maxValue = clampPercent(maxSlider.value);
+            if (minValue > maxValue) {
+                if (changedBy === 'min') maxValue = minValue;
+                else minValue = maxValue;
+            }
+            minSlider.value = String(minValue);
+            maxSlider.value = String(maxValue);
+            return { min: minValue, max: maxValue };
+        }
+
+        function getCurrentMapValueWindow() {
+            return getValueWindowFromPercent(
+                state.mapRange.min,
+                state.mapRange.max,
+                state.mapVisibleRangePercent.min,
+                state.mapVisibleRangePercent.max
+            );
+        }
+
+        function renderMapRangeLabel() {
+            const visibleRange = getCurrentMapValueWindow();
+            if (state.mapRange.min === null || state.mapRange.max === null || visibleRange.min === null || visibleRange.max === null) {
+                mapRangeLabel.textContent = `Visible range: ${state.mapVisibleRangePercent.min}% - ${state.mapVisibleRangePercent.max}%`;
+                return;
+            }
+            mapRangeLabel.textContent = `Visible range: ${state.mapVisibleRangePercent.min}% - ${state.mapVisibleRangePercent.max}% (${formatCompact(visibleRange.min)} to ${formatCompact(visibleRange.max)})`;
+        }
+
         function refreshMapStyles() {
             const comparedIso2 = new Set(getSelectedValues(compareCountriesSelect).map((v) => String(v).toUpperCase()));
+            const visibleRange = getCurrentMapValueWindow();
             state.featureLayers.forEach((layer) => {
                 const iso2 = String(layer.__countryIso2 || '').toUpperCase();
                 const value = getMapValueForLayer(layer);
-                const fillColor = getChoroplethColor(value, state.mapRange.min, state.mapRange.max);
+                const inWindow = valueIsInWindow(value, visibleRange.min, visibleRange.max);
+                const fillColor = getChoroplethColor(value, state.mapRange.min, state.mapRange.max, visibleRange.min, visibleRange.max);
                 const isSelected = state.selectedCountryIso2 && iso2 && state.selectedCountryIso2 === iso2;
                 const isCompared = comparedIso2.has(iso2);
-                layer.setStyle({ color: isSelected ? '#f59e0b' : (isCompared ? '#0ea5e9' : '#1e3a8a'), weight: isSelected ? 2.1 : (isCompared ? 1.6 : 0.9), fillColor, fillOpacity: value === null ? 0.2 : 0.72 });
+                layer.setStyle({
+                    color: isSelected ? '#92400e' : (isCompared ? '#a16207' : '#334155'),
+                    weight: isSelected ? 2.2 : (isCompared ? 1.6 : 0.9),
+                    fillColor,
+                    fillOpacity: value === null ? 0.2 : (inWindow ? 0.78 : 0.25),
+                });
                 const valueLabel = value === null ? 'No data' : formatValue(value);
-                layer.bindTooltip(`${escapeHtml(layer.__countryName || 'Unknown')}<br><strong>${escapeHtml(valueLabel)}</strong>`, { direction: 'auto', sticky: true });
+                const filtered = value !== null && !inWindow ? ' (outside slider range)' : '';
+                layer.bindTooltip(`${escapeHtml(layer.__countryName || 'Unknown')}<br><strong>${escapeHtml(valueLabel + filtered)}</strong>`, { direction: 'auto', sticky: true });
             });
         }
+
         function renderMapLegend(indicatorLabel, unit, min, max) {
+            const visibleRange = getCurrentMapValueWindow();
             if (min === null || max === null) { mapLegendTitle.textContent = `${indicatorLabel || 'Indicator'} - no mapped values`; mapLegendRange.innerHTML = '<span>No data</span><span>No data</span>'; return; }
             mapLegendTitle.textContent = `${indicatorLabel || 'Indicator'} ${unit ? `(${unit})` : ''}`;
-            mapLegendRange.innerHTML = `<span>Min: ${escapeHtml(formatValue(min))}</span><span>Max: ${escapeHtml(formatValue(max))}</span>`;
+            mapLegendRange.innerHTML = `<span>Global: ${escapeHtml(formatValue(min))} to ${escapeHtml(formatValue(max))}</span><span>Slider: ${escapeHtml(formatValue(visibleRange.min))} to ${escapeHtml(formatValue(visibleRange.max))}</span>`;
         }
+
         function renderMapTables(rows) {
+            const visibleRange = getCurrentMapValueWindow();
             const sortedRows = [...rows].sort((a, b) => { if (a.value === null) return 1; if (b.value === null) return -1; return b.value - a.value; });
-            const topRows = sortedRows.slice(0, 12);
-            mapTopTableBody.innerHTML = topRows.length ? topRows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.label)}</td><td>${escapeHtml(formatCompact(row.value))}</td></tr>`).join('') : '<tr><td colspan="3">No data for this year/indicator.</td></tr>';
-            mapDataTableBody.innerHTML = sortedRows.length ? sortedRows.map((row) => `<tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(row.key || '-')}</td><td>${escapeHtml(formatValue(row.value))}</td></tr>`).join('') : '<tr><td colspan="3">No data for this year/indicator.</td></tr>';
+            const visibleRows = sortedRows.filter((row) => valueIsInWindow(row.value, visibleRange.min, visibleRange.max));
+            const topRows = visibleRows.slice(0, 12);
+            mapTopTableBody.innerHTML = topRows.length ? topRows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.label)}</td><td>${escapeHtml(formatCompact(row.value))}</td></tr>`).join('') : '<tr><td colspan="3">No countries inside the selected slider range.</td></tr>';
+            mapDataTableBody.innerHTML = sortedRows.length ? sortedRows.map((row) => {
+                const suffix = row.value !== null && !valueIsInWindow(row.value, visibleRange.min, visibleRange.max) ? ' (filtered)' : '';
+                return `<tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(row.key || '-')}</td><td>${escapeHtml(formatValue(row.value))}${escapeHtml(suffix)}</td></tr>`;
+            }).join('') : '<tr><td colspan="3">No data for this year/indicator.</td></tr>';
         }
+
         function applyMapValuesFromPayload(payload, targetYear, sourceLabel = 'Map overlay') {
             const series = Array.isArray(payload?.series) ? payload.series : [];
             const byIso2 = new Map(); const byName = new Map(); const rows = [];
@@ -492,39 +837,93 @@
                 byName.set(normalizeCountryName(label), value); rows.push({ key, label, value });
             });
             const values = rows.map((row) => row.value).filter((value) => value !== null && Number.isFinite(value));
-            state.mapValuesByIso2 = byIso2; state.mapValuesByNormName = byName; state.mapRange = { min: values.length ? Math.min(...values) : null, max: values.length ? Math.max(...values) : null };
-            refreshMapStyles(); renderMapTables(rows);
-            renderMapLegend(payload?.indicator?.name || 'Indicator', payload?.indicator?.unit || '', state.mapRange.min, state.mapRange.max);
+            state.mapValuesByIso2 = byIso2;
+            state.mapValuesByNormName = byName;
+            state.mapRows = rows;
+            state.mapIndicatorMeta = {
+                label: payload?.indicator?.name || 'Indicator',
+                unit: payload?.indicator?.unit || '',
+            };
+            state.mapRange = { min: values.length ? Math.min(...values) : null, max: values.length ? Math.max(...values) : null };
+            renderMapRangeLabel();
+            refreshMapStyles();
+            renderMapTables(rows);
+            renderMapLegend(state.mapIndicatorMeta.label, state.mapIndicatorMeta.unit, state.mapRange.min, state.mapRange.max);
             setMapStatus(`${sourceLabel}: mapped ${rows.length} countries for ${targetYear}. ${values.length} countries have values.`);
         }
-        function applyRegionCountries(region) {
-            const countries = countriesByRegion[region] || [];
+
+        function applyRegionCountries(regions) {
+            const mergedCountries = regions.flatMap((region) => countriesByRegion[region] || []);
             countrySelect.innerHTML = '<option value="">Select a country</option>';
-            countries.forEach((countryName) => { const option = document.createElement('option'); option.value = countryName; option.textContent = countryName; countrySelect.appendChild(option); });
+            Array.from(new Set(mergedCountries)).sort().forEach((countryName) => {
+                const option = document.createElement('option');
+                option.value = countryName;
+                option.textContent = countryName;
+                countrySelect.appendChild(option);
+            });
         }
-        async function loadRegion(region) {
-            clearMapLayers(); applyRegionCountries(region); setMapStatus(`Loading shapefiles for ${regionLabels[region] || region}...`);
-            const shapeFiles = shapeFilesByRegion[region] || []; if (!shapeFiles.length) { setMapStatus('No shapefiles found for this region.', true); return; }
+
+        function normalizeRegionMatch(value) {
+            return normalizeCountryName(value).replace(/\s+/g, ' ').trim();
+        }
+
+        function getRegionKeyForContinent(continent) {
+            const normalizedContinent = normalizeRegionMatch(continent);
+            const aliases = {
+                'oceania': 'oceanica',
+                'antarctica': 'antartica',
+            };
+            const target = aliases[normalizedContinent] || normalizedContinent;
+            return Object.keys(shapeFilesByRegion).find((regionKey) => {
+                const regionLabel = regionLabels[regionKey] || regionKey;
+                return normalizeRegionMatch(regionLabel) === target || normalizeRegionMatch(regionKey) === target;
+            }) || null;
+        }
+
+        async function loadRegions(regions, statusLabel = 'selected regions') {
+            const uniqueRegions = Array.from(new Set((regions || []).filter((region) => String(region || '').trim() !== '')));
+            clearMapLayers();
+            applyRegionCountries(uniqueRegions);
+            setMapStatus(`Loading shapefiles for ${statusLabel}...`);
+            const shapeFiles = uniqueRegions.flatMap((region) => shapeFilesByRegion[region] || []);
+            if (!shapeFiles.length) { setMapStatus('No shapefiles found for selected region(s).', true); return; }
             let loadedCount = 0; let failedCount = 0; let lastError = null;
             for (const shapeFile of shapeFiles) {
                 try {
                     const geojson = await loadGeoJsonFromShape(shapeFile);
                     const featureCollection = toFeatureCollection(geojson);
                     if (!featureCollection.features.length) continue;
-                    const layerGroup = L.geoJSON(featureCollection, { onEachFeature: (feature, leafletLayer) => {
-                        const countryName = getCountryName(feature, shapeFile);
-                        const countryIso2 = resolveIso2FromFeature(feature, countryName);
-                        leafletLayer.__countryName = countryName; leafletLayer.__countryIso2 = countryIso2;
-                        leafletLayer.on('click', () => selectCountry(countryName, countryIso2, true));
-                        state.featureLayers.push(leafletLayer);
-                    }}).addTo(map);
-                    state.activeLayers.push(layerGroup); loadedCount++;
-                } catch (error) { failedCount++; lastError = error; console.error('Could not load shapefile:', shapeFile, error); }
+                    const layerGroup = L.geoJSON(featureCollection, {
+                        onEachFeature: (feature, leafletLayer) => {
+                            const countryName = getCountryName(feature, shapeFile);
+                            const countryIso2 = resolveIso2FromFeature(feature, countryName);
+                            leafletLayer.__countryName = countryName;
+                            leafletLayer.__countryIso2 = countryIso2;
+                            leafletLayer.on('click', () => selectCountry(countryName, countryIso2, true));
+                            state.featureLayers.push(leafletLayer);
+                        },
+                    }).addTo(map);
+                    state.activeLayers.push(layerGroup);
+                    loadedCount++;
+                } catch (error) {
+                    failedCount++;
+                    lastError = error;
+                    console.error('Could not load shapefile:', shapeFile, error);
+                }
             }
-            if (!loadedCount) { const reason = lastError && lastError.message ? ` Last error: ${lastError.message}` : ''; setMapStatus(`All shapefiles failed to load.${reason}`, true); return; }
+            if (!loadedCount) {
+                const reason = lastError && lastError.message ? ` Last error: ${lastError.message}` : '';
+                setMapStatus(`All shapefiles failed to load.${reason}`, true);
+                return;
+            }
             refreshMapStyles();
-            const boundsLayer = L.featureGroup(state.activeLayers); if (boundsLayer.getBounds().isValid()) map.fitBounds(boundsLayer.getBounds(), { padding: [20, 20] });
+            const boundsLayer = L.featureGroup(state.activeLayers);
+            if (boundsLayer.getBounds().isValid()) map.fitBounds(boundsLayer.getBounds(), { padding: [20, 20] });
             setMapStatus(failedCount ? `Loaded ${loadedCount} shapefiles. ${failedCount} failed.` : `Loaded ${loadedCount} shapefiles successfully.`);
+        }
+
+        async function loadRegion(region) {
+            await loadRegions([region], regionLabels[region] || region);
         }
         async function fetchComparisonPayload(params) {
             const url = new URL(worldBankCompareUrl, window.location.origin);
@@ -549,24 +948,132 @@
             return Array.from(new Set(iso2Codes));
         }
 
-        async function runMapVisualization() {
+        function getIso2CodesForContinents(continents) {
+            const iso2Codes = continents.flatMap((continent) => state.iso2ByContinent.get(continent) || []);
+            return Array.from(new Set(iso2Codes.map((iso2) => String(iso2).toUpperCase())));
+        }
+
+        function getRegionKeysForContinents(continents) {
+            return Array.from(new Set(continents.map((continent) => getRegionKeyForContinent(continent)).filter(Boolean)));
+        }
+
+        function buildContinentPayloadFromMapPayload(payload, continent) {
+            const series = Array.isArray(payload?.series) ? payload.series : [];
+            const continentSeries = series.filter((item) => state.continentByIso2.get(String(item?.key || '').toUpperCase()) === continent);
+            return {
+                ...payload,
+                compare_mode: 'country',
+                series: continentSeries,
+            };
+        }
+
+        async function runMapVisualization(options = {}) {
+            if (state.loadingDepth > 0 && !options.allowWhileLoading) return;
             const indicatorId = String(mapIndicatorSelect.value || '').trim();
             const region = String(regionSelect.value || '').trim();
+            const selectedContinents = getSelectedValues(mapContinentsSelect);
             const year = parseInt(mapYearInput.value || '', 10);
             if (!indicatorId) { setMapStatus('Select a map indicator first.', true); return; }
             if (!Number.isFinite(year)) { setMapStatus('Provide a valid map year.', true); return; }
-            const regionCodes = getIso2CodesForRegion(region);
-            if (regionCodes.length < 2) { setMapStatus('Not enough mapped countries in this region for selected shapefiles.', true); return; }
-            setMapStatus('Loading map values from World Bank endpoint...');
+            if (selectedContinents.length > PERF_LIMITS.maxMapCompareContinents) {
+                setMapStatus(`For stability, select up to ${PERF_LIMITS.maxMapCompareContinents} continents at once.`, true);
+                return;
+            }
+            mapYearSlider.value = String(year);
             runMapVizBtn.disabled = true;
+            runContinentCompareBtn.disabled = true;
+            openMapCompareModalBtn.disabled = true;
+            showLoadingModal('Loading map indicator and refreshing map layers...');
+            let countryCodes = [];
+            let sourceLabel = 'Geo Intelligence Map';
             try {
-                const payload = await fetchComparisonPayload({ indicatorId, compareMode: 'country', countries: regionCodes, continents: [], yearFrom: year, yearTo: year, aggregation: 'avg' });
-                applyMapValuesFromPayload(payload, year, 'Geo Intelligence Map');
+                if (selectedContinents.length >= 2) {
+                    const regionKeys = getRegionKeysForContinents(selectedContinents);
+                    if (regionKeys.length < 2) { setMapStatus('Selected continents are missing shapefile regions.', true); return; }
+                    await loadRegions(regionKeys, selectedContinents.join(' vs '));
+                    countryCodes = getIso2CodesForContinents(selectedContinents);
+                    sourceLabel = `Geo Intelligence Map (${selectedContinents.join(' vs ')})`;
+                } else {
+                    countryCodes = getIso2CodesForRegion(region);
+                }
+                if (countryCodes.length < 2) { setMapStatus('Not enough mapped countries for this map view.', true); return; }
+                setMapStatus('Loading map values from World Bank endpoint...');
+                const payload = await fetchComparisonPayload({ indicatorId, compareMode: 'country', countries: countryCodes, continents: [], yearFrom: year, yearTo: year, aggregation: 'avg' });
+                applyMapValuesFromPayload(payload, year, sourceLabel);
+                if (selectedContinents.length >= 2) {
+                    state.mapComparePayloadByContinent = new Map();
+                    selectedContinents.forEach((continent) => {
+                        state.mapComparePayloadByContinent.set(continent, buildContinentPayloadFromMapPayload(payload, continent));
+                    });
+                    state.mapCompareContext = { continents: selectedContinents, year, indicatorName: payload?.indicator?.name || indicatorId, indicatorUnit: payload?.indicator?.unit || '' };
+                    await renderMapCompareModalContent();
+                } else {
+                    state.mapComparePayloadByContinent = new Map();
+                    state.mapCompareContext = null;
+                    if (mapCompareModal.classList.contains('open')) closeMapCompareModal();
+                }
             } catch (error) {
                 console.error('Map visualization failed', error);
                 setMapStatus('Could not load map values. Please try again.', true);
             } finally {
+                hideLoadingModal();
                 runMapVizBtn.disabled = false;
+                runContinentCompareBtn.disabled = false;
+                openMapCompareModalBtn.disabled = false;
+            }
+        }
+
+        async function runContinentComparison(options = {}) {
+            if (state.loadingDepth > 0 && !options.allowWhileLoading) return false;
+            const indicatorId = String(options.indicatorId || mapIndicatorSelect.value || '').trim();
+            const year = Number.isFinite(Number(options.year)) ? Number(options.year) : parseInt(mapYearInput.value || '', 10);
+            const continents = Array.isArray(options.continents) && options.continents.length ? options.continents : getSelectedValues(mapContinentsSelect);
+            Array.from(mapContinentsSelect.options).forEach((option) => { option.selected = continents.includes(option.value); });
+            if (!indicatorId) { setMapStatus('Select a map indicator first.', true); return false; }
+            if (!Number.isFinite(year)) { setMapStatus('Provide a valid map year.', true); return false; }
+            if (continents.length < 2) { setMapStatus('Select at least two continents for Geo comparison.', true); return false; }
+            if (continents.length > PERF_LIMITS.maxMapCompareContinents) { setMapStatus(`For stability, select up to ${PERF_LIMITS.maxMapCompareContinents} continents at once.`, true); return false; }
+            const regionKeys = getRegionKeysForContinents(continents);
+            if (regionKeys.length < 2) { setMapStatus('Selected continents are missing shapefile regions.', true); return false; }
+            const countryCodes = getIso2CodesForContinents(continents);
+            if (countryCodes.length < 2) { setMapStatus('No country mappings found for selected continents.', true); return false; }
+
+            mapYearInput.value = String(year);
+            mapYearSlider.value = String(year);
+            runMapVizBtn.disabled = true;
+            runContinentCompareBtn.disabled = true;
+            openMapCompareModalBtn.disabled = true;
+            showLoadingModal('Building multi-continent maps and fetching data...');
+
+            try {
+                await loadRegions(regionKeys, continents.join(' vs '));
+                const payload = await fetchComparisonPayload({
+                    indicatorId,
+                    compareMode: 'country',
+                    countries: countryCodes,
+                    continents: [],
+                    yearFrom: year,
+                    yearTo: year,
+                    aggregation: 'avg',
+                });
+                applyMapValuesFromPayload(payload, year, `Geo Intelligence Map (${continents.join(' vs ')})`);
+                state.mapComparePayloadByContinent = new Map();
+                continents.forEach((continent) => {
+                    state.mapComparePayloadByContinent.set(continent, buildContinentPayloadFromMapPayload(payload, continent));
+                });
+                state.mapCompareContext = { continents, year, indicatorName: payload?.indicator?.name || indicatorId, indicatorUnit: payload?.indicator?.unit || '' };
+                if (options.openModal) openMapCompareModal();
+                await renderMapCompareModalContent();
+                return true;
+            } catch (error) {
+                console.error('Continent comparison failed', error);
+                setMapStatus('Could not load multi-continent map comparison.', true);
+                return false;
+            } finally {
+                hideLoadingModal();
+                runMapVizBtn.disabled = false;
+                runContinentCompareBtn.disabled = false;
+                openMapCompareModalBtn.disabled = false;
             }
         }
 
@@ -600,7 +1107,7 @@
             if (!canvas || typeof Chart === 'undefined') return;
             const years = Array.isArray(payload?.years) ? payload.years.map((year) => String(year)) : [];
             const series = Array.isArray(payload?.series) ? payload.series : [];
-            const palette = ['#1d4ed8', '#e11d48', '#0f766e', '#d97706', '#7c3aed', '#0891b2', '#65a30d', '#475569'];
+            const palette = ['#65a30d', '#a16207', '#ca8a04', '#15803d', '#b45309', '#4d7c0f', '#64748b', '#854d0e'];
             const datasets = series.map((item, index) => {
                 const color = palette[index % palette.length];
                 return {
@@ -635,6 +1142,7 @@
         }
 
         async function runSnapshotTrend() {
+            if (state.loadingDepth > 0) return;
             const selectedCountryName = state.selectedCountryName || countrySelect.value;
             if (!selectedCountryName) { snapshotHint.textContent = 'Select a country first.'; return; }
             const iso2 = state.selectedCountryIso2 || resolveIso2ByName(selectedCountryName);
@@ -646,6 +1154,7 @@
             if (!Number.isFinite(yearFrom) || !Number.isFinite(yearTo)) { snapshotHint.textContent = 'Provide a valid snapshot year range.'; return; }
             snapshotHint.textContent = 'Loading snapshot trend...';
             runSnapshotBtn.disabled = true;
+            showLoadingModal('Loading country trend data...');
             try {
                 const payload = await fetchComparisonPayload({ indicatorId, compareMode: 'country', countries: [iso2], continents: [], yearFrom, yearTo, aggregation: 'avg' });
                 state.snapshotPayload = payload;
@@ -656,11 +1165,13 @@
                 console.error('Snapshot trend failed', error);
                 snapshotHint.textContent = 'Could not load snapshot trend. Please try again.';
             } finally {
+                hideLoadingModal();
                 runSnapshotBtn.disabled = false;
             }
         }
 
         async function selectCountry(countryName, iso2Hint = null, pinToCompare = false) {
+            if (state.loadingDepth > 0) return;
             if (!countryName) return;
             const iso2 = iso2Hint || resolveIso2ByName(countryName);
             state.selectedCountryName = countryName;
@@ -685,6 +1196,7 @@
                 if (targetOption) targetOption.selected = true;
             }
 
+            showLoadingModal('Loading country profile metrics...');
             try {
                 const response = await fetch(`${countryMetricsUrl}?country=${encodeURIComponent(countryName)}`);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -695,9 +1207,281 @@
                 console.error('Country metrics load failed', error);
                 snapshotMetrics.innerHTML = '<div class="empty-box">Could not load country metrics. Please retry.</div>';
                 snapshotHint.textContent = 'Could not load source metrics for this country.';
+            } finally {
+                hideLoadingModal();
             }
             await runSnapshotTrend();
         }
+
+        function getSeriesRowsForYear(payload, year) {
+            const series = Array.isArray(payload?.series) ? payload.series : [];
+            return series.map((item) => {
+                const points = Array.isArray(item?.points) ? item.points : [];
+                const targetPoint = points.find((point) => Number(point?.year) === Number(year)) || null;
+                return {
+                    key: String(item?.key || '').toUpperCase(),
+                    label: String(item?.label || item?.key || 'Unknown'),
+                    value: targetPoint && targetPoint.value !== undefined && targetPoint.value !== null ? Number(targetPoint.value) : null,
+                };
+            });
+        }
+
+        function getCompareValueWindow(payload) {
+            const series = Array.isArray(payload?.series) ? payload.series : [];
+            const allValues = series.flatMap((item) => (item.points || []).map((point) => point?.value)).filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
+            const min = allValues.length ? Math.min(...allValues) : null;
+            const max = allValues.length ? Math.max(...allValues) : null;
+            const visible = getValueWindowFromPercent(min, max, state.compareVisibleRangePercent.min, state.compareVisibleRangePercent.max);
+            return { min, max, visibleMin: visible.min, visibleMax: visible.max };
+        }
+
+        function renderCompareRangeLabel(payload = state.comparePayload) {
+            if (!payload) {
+                compareRangeLabel.textContent = `Color window: ${state.compareVisibleRangePercent.min}% - ${state.compareVisibleRangePercent.max}%`;
+                return;
+            }
+            const range = getCompareValueWindow(payload);
+            if (range.min === null || range.max === null || range.visibleMin === null || range.visibleMax === null) {
+                compareRangeLabel.textContent = `Color window: ${state.compareVisibleRangePercent.min}% - ${state.compareVisibleRangePercent.max}%`;
+                return;
+            }
+            compareRangeLabel.textContent = `Color window: ${state.compareVisibleRangePercent.min}% - ${state.compareVisibleRangePercent.max}% (${formatCompact(range.visibleMin)} to ${formatCompact(range.visibleMax)})`;
+        }
+
+        function destroyMapCompareModalMaps() {
+            state.mapCompareModalMaps.forEach((miniMap) => {
+                try {
+                    miniMap.remove();
+                } catch (error) {
+                    console.warn('Could not dispose map instance', error);
+                }
+            });
+            state.mapCompareModalMaps = [];
+        }
+
+        async function drawContinentMiniMap(mapContainerId, regionKey, rows, min, max, windowMin, windowMax) {
+            const mapContainer = document.getElementById(mapContainerId);
+            if (!mapContainer) return;
+            const continentMap = L.map(mapContainer, {
+                center: [18, 0],
+                zoom: 2,
+                minZoom: 2,
+                maxZoom: 8,
+                zoomControl: false,
+                attributionControl: false,
+                worldCopyJump: true,
+            });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
+            }).addTo(continentMap);
+
+            const valueByIso2 = new Map();
+            const valueByName = new Map();
+            rows.forEach((row) => {
+                const iso2 = String(row.key || '').toUpperCase();
+                if (iso2.length === 2) valueByIso2.set(iso2, row.value);
+                valueByName.set(normalizeCountryName(row.label), row.value);
+            });
+
+            const layers = [];
+            const shapeFiles = shapeFilesByRegion[regionKey] || [];
+            for (const shapeFile of shapeFiles) {
+                try {
+                    const geojson = await loadGeoJsonFromShape(shapeFile);
+                    const featureCollection = toFeatureCollection(geojson);
+                    if (!featureCollection.features.length) continue;
+                    const layer = L.geoJSON(featureCollection, {
+                        style: (feature) => {
+                            const countryName = getCountryName(feature, shapeFile);
+                            const iso2 = resolveIso2FromFeature(feature, countryName);
+                            const value = iso2 && valueByIso2.has(iso2) ? valueByIso2.get(iso2) : valueByName.get(normalizeCountryName(countryName));
+                            return {
+                                color: '#334155',
+                                weight: 0.7,
+                                fillColor: getChoroplethColor(value, min, max, windowMin, windowMax),
+                                fillOpacity: value === null ? 0.18 : (valueIsInWindow(value, windowMin, windowMax) ? 0.78 : 0.23),
+                            };
+                        },
+                        onEachFeature: (feature, layerRef) => {
+                            const countryName = getCountryName(feature, shapeFile);
+                            const iso2 = resolveIso2FromFeature(feature, countryName);
+                            const value = iso2 && valueByIso2.has(iso2) ? valueByIso2.get(iso2) : valueByName.get(normalizeCountryName(countryName));
+                            const valueLabel = value === null || value === undefined ? 'No data' : formatValue(value);
+                            layerRef.bindTooltip(`${escapeHtml(countryName)}<br><strong>${escapeHtml(valueLabel)}</strong>`, { sticky: true });
+                        },
+                    }).addTo(continentMap);
+                    layers.push(layer);
+                } catch (error) {
+                    console.error('Could not load mini map shapefile', shapeFile, error);
+                }
+            }
+
+            if (!layers.length) {
+                continentMap.remove();
+                mapContainer.innerHTML = '<div class="empty-box" style="margin:0.6rem;">No map shapes available for this continent.</div>';
+                return;
+            }
+
+            const bounds = L.featureGroup(layers).getBounds();
+            continentMap.__autoBounds = bounds && bounds.isValid() ? bounds : null;
+            if (continentMap.__autoBounds) {
+                continentMap.fitBounds(continentMap.__autoBounds, { padding: [10, 10], animate: false });
+            }
+            state.mapCompareModalMaps.push(continentMap);
+        }
+
+        async function renderMapCompareModalContent() {
+            destroyMapCompareModalMaps();
+            const context = state.mapCompareContext;
+            if (!context || !Array.isArray(context.continents) || !context.continents.length) {
+                mapCompareModalTitle.textContent = 'Multi-Continent Map Comparison';
+                mapCompareModalSubtitle.textContent = 'Compare separate continent maps using slider-based color ranges.';
+                mapComparePanels.innerHTML = '<div class="empty-box">Run "Compare Selected Continents" to load multi-continent maps.</div>';
+                mapCompareCountryTableBody.innerHTML = '<tr><td colspan="3">No map comparison loaded yet.</td></tr>';
+                mapCompareGlobalTableBody.innerHTML = '<tr><td colspan="2">No global comparison loaded yet.</td></tr>';
+                return;
+            }
+
+            const allRows = context.continents.flatMap((continent) => {
+                const payload = state.mapComparePayloadByContinent.get(continent);
+                return getSeriesRowsForYear(payload, context.year).map((row) => ({ ...row, continent }));
+            });
+            const finiteValues = allRows.map((row) => row.value).filter((value) => value !== null && Number.isFinite(Number(value)));
+            const globalMin = finiteValues.length ? Math.min(...finiteValues) : null;
+            const globalMax = finiteValues.length ? Math.max(...finiteValues) : null;
+            const mapWindow = getCurrentMapValueWindow();
+
+            mapCompareModalTitle.textContent = `${context.indicatorName || 'Indicator'} - Continent Maps`;
+            mapCompareModalSubtitle.textContent = `${context.continents.join(' vs ')} | Year ${context.year}${context.indicatorUnit ? ` | Unit: ${context.indicatorUnit}` : ''}`;
+
+            mapComparePanels.innerHTML = context.continents.map((continent, index) => `
+                <article class="continent-map-card">
+                    <div class="continent-map-head"><h5>${escapeHtml(continent)}</h5><span>Year ${escapeHtml(context.year)}</span></div>
+                    <div id="continentMiniMap_${index}" class="continent-map"></div>
+                    <div class="continent-map-meta">
+                        <div class="continent-map-scale"></div>
+                        <div class="continent-map-range"><span>Global: ${escapeHtml(formatValue(globalMin))} to ${escapeHtml(formatValue(globalMax))}</span><span>Slider: ${escapeHtml(formatValue(mapWindow.min))} to ${escapeHtml(formatValue(mapWindow.max))}</span></div>
+                    </div>
+                    <div class="table-wrap continent-mini-table"><table><thead><tr><th>Country</th><th>Value</th></tr></thead><tbody id="continentMiniRows_${index}"><tr><td colspan="2">Loading...</td></tr></tbody></table></div>
+                </article>
+            `).join('');
+
+            const sortedRows = [...allRows].sort((a, b) => {
+                if (a.value === null) return 1;
+                if (b.value === null) return -1;
+                return Number(b.value) - Number(a.value);
+            });
+            const truncatedRows = sortedRows.slice(0, PERF_LIMITS.maxMapCompareTableRows);
+            const truncated = sortedRows.length > truncatedRows.length;
+            const truncateNote = truncated ? `<tr><td colspan="3" style="background:#fffbeb;color:#92400e;font-weight:700;">Large result set detected. Showing first ${truncatedRows.length} rows out of ${sortedRows.length}.</td></tr>` : '';
+            mapCompareCountryTableBody.innerHTML = truncatedRows.length
+                ? `${truncateNote}${truncatedRows.map((row) => `<tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(row.key || '-')}</td><td>${escapeHtml(formatValue(row.value))}</td></tr>`).join('')}`
+                : '<tr><td colspan="3">No data loaded for selected continents.</td></tr>';
+
+            const validRows = allRows.filter((row) => row.value !== null && Number.isFinite(Number(row.value)));
+            const sum = validRows.reduce((acc, row) => acc + Number(row.value), 0);
+            const avg = validRows.length ? (sum / validRows.length) : null;
+            const topRow = validRows.length ? [...validRows].sort((a, b) => Number(b.value) - Number(a.value))[0] : null;
+            const bottomRow = validRows.length ? [...validRows].sort((a, b) => Number(a.value) - Number(b.value))[0] : null;
+            const continentStats = context.continents.map((continent) => {
+                const rows = validRows.filter((row) => row.continent === continent);
+                const total = rows.reduce((acc, row) => acc + Number(row.value), 0);
+                return {
+                    continent,
+                    count: rows.length,
+                    avg: rows.length ? (total / rows.length) : null,
+                };
+            });
+            const rankedContinentStats = continentStats.filter((row) => row.avg !== null).sort((a, b) => Number(b.avg) - Number(a.avg));
+            const bestContinent = rankedContinentStats[0] || null;
+            const worstContinent = rankedContinentStats[rankedContinentStats.length - 1] || null;
+            mapCompareGlobalTableBody.innerHTML = `
+                <tr><td>Compared Continents</td><td>${escapeHtml(context.continents.join(', '))}</td></tr>
+                <tr><td>Selected Year</td><td>${escapeHtml(context.year)}</td></tr>
+                <tr><td>Countries In Sheet</td><td>${escapeHtml(allRows.length)}</td></tr>
+                <tr><td>Countries With Values</td><td>${escapeHtml(validRows.length)}</td></tr>
+                <tr><td>Global Min</td><td>${escapeHtml(formatValue(globalMin))}</td></tr>
+                <tr><td>Global Max</td><td>${escapeHtml(formatValue(globalMax))}</td></tr>
+                <tr><td>Global Average</td><td>${escapeHtml(formatValue(avg))}</td></tr>
+                <tr><td>Top Country</td><td>${escapeHtml(topRow ? `${topRow.label} (${topRow.continent}) - ${formatValue(topRow.value)}` : 'N/A')}</td></tr>
+                <tr><td>Lowest Country</td><td>${escapeHtml(bottomRow ? `${bottomRow.label} (${bottomRow.continent}) - ${formatValue(bottomRow.value)}` : 'N/A')}</td></tr>
+                <tr><td>Best Continent (Avg)</td><td>${escapeHtml(bestContinent ? `${bestContinent.continent} - ${formatValue(bestContinent.avg)}` : 'N/A')}</td></tr>
+                <tr><td>Lowest Continent (Avg)</td><td>${escapeHtml(worstContinent ? `${worstContinent.continent} - ${formatValue(worstContinent.avg)}` : 'N/A')}</td></tr>
+                <tr><td>Slider Window</td><td>${escapeHtml(`${formatValue(mapWindow.min)} to ${formatValue(mapWindow.max)}`)}</td></tr>
+            `;
+
+            const drawJobs = context.continents.map(async (continent, index) => {
+                const payload = state.mapComparePayloadByContinent.get(continent);
+                const rows = getSeriesRowsForYear(payload, context.year).filter((row) => row.value !== null && Number.isFinite(Number(row.value))).sort((a, b) => b.value - a.value);
+                const miniRowsBody = document.getElementById(`continentMiniRows_${index}`);
+                miniRowsBody.innerHTML = rows.length ? rows.slice(0, 12).map((row) => `<tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(formatCompact(row.value))}</td></tr>`).join('') : '<tr><td colspan="2">No values for this year.</td></tr>';
+                const regionKey = getRegionKeyForContinent(continent);
+                if (!regionKey) {
+                    const mapContainer = document.getElementById(`continentMiniMap_${index}`);
+                    if (mapContainer) mapContainer.innerHTML = '<div class="empty-box" style="margin:0.6rem;">No matching region shapefile.</div>';
+                    return;
+                }
+                await drawContinentMiniMap(`continentMiniMap_${index}`, regionKey, rows, globalMin, globalMax, mapWindow.min, mapWindow.max);
+            });
+            await Promise.all(drawJobs);
+            if (mapCompareModal.classList.contains('open')) refreshMapCompareModalMaps();
+        }
+
+        function refreshMapCompareModalMaps() {
+            if (!state.mapCompareModalMaps.length) return;
+            [0, 90, 220, 460].forEach((delayMs) => {
+                setTimeout(() => {
+                    state.mapCompareModalMaps.forEach((miniMap) => {
+                        try {
+                            miniMap.invalidateSize(true);
+                            if (miniMap.__autoBounds && miniMap.__autoBounds.isValid()) {
+                                miniMap.fitBounds(miniMap.__autoBounds, { padding: [10, 10], animate: false });
+                            }
+                        } catch (error) {
+                            console.warn('Could not refresh modal map viewport', error);
+                        }
+                    });
+                }, delayMs);
+            });
+        }
+
+        function openMapCompareModal() {
+            mapCompareModal.classList.add('open');
+            mapCompareModal.setAttribute('aria-hidden', 'false');
+            refreshMapCompareModalMaps();
+        }
+
+        function closeMapCompareModal() {
+            mapCompareModal.classList.remove('open');
+            mapCompareModal.setAttribute('aria-hidden', 'true');
+            destroyMapCompareModalMaps();
+            if (state.mapCompareRenderTimer) {
+                clearTimeout(state.mapCompareRenderTimer);
+                state.mapCompareRenderTimer = null;
+            }
+            state.mapCompareRenderToken += 1;
+        }
+
+        function scheduleMapCompareModalRender(delayMs = 180) {
+            if (!mapCompareModal.classList.contains('open') || !state.mapCompareContext) return;
+            state.mapCompareRenderToken += 1;
+            const token = state.mapCompareRenderToken;
+            if (state.mapCompareRenderTimer) clearTimeout(state.mapCompareRenderTimer);
+            state.mapCompareRenderTimer = setTimeout(async () => {
+                state.mapCompareRenderTimer = null;
+                if (token !== state.mapCompareRenderToken) return;
+                if (state.loadingDepth > 0) return;
+                showLoadingModal('Refreshing map comparison view...');
+                try {
+                    await renderMapCompareModalContent();
+                } catch (error) {
+                    console.error('Could not refresh map comparison modal', error);
+                } finally {
+                    hideLoadingModal();
+                }
+            }, delayMs);
+        }
+
         function syncCompareMode() {
             const mode = compareModeSelect.value || 'country';
             const isContinent = mode === 'continent';
@@ -707,20 +1491,27 @@
         }
 
         function renderCompareTable(payload) {
-            const years = Array.isArray(payload?.years) ? payload.years : [];
-            const series = Array.isArray(payload?.series) ? payload.series : [];
+            const slice = getSafeComparisonSlice(payload);
+            const years = slice.years;
+            const series = slice.series;
             compareTableHeadRow.innerHTML = '<th>Year</th>';
             series.forEach((item) => {
                 const th = document.createElement('th');
                 th.textContent = item.label;
                 compareTableHeadRow.appendChild(th);
             });
-            compareTableBody.innerHTML = (years.length && series.length) ? years.map((year, yearIndex) => `
-                <tr><td>${escapeHtml(year)}</td>${series.map((item) => {
-                    const point = Array.isArray(item.points) ? item.points[yearIndex] : null;
-                    return `<td>${escapeHtml(formatValue(point?.value ?? null))}</td>`;
-                }).join('')}</tr>
-            `).join('') : '<tr><td>No comparison data available.</td></tr>';
+            if (!(years.length && series.length)) {
+                compareTableBody.innerHTML = '<tr><td>No comparison data available.</td></tr>';
+                return;
+            }
+            const note = getComparisonRenderNote(slice);
+            const noteRow = note ? `<tr><td colspan="${series.length + 1}" style="background:#fffbeb;color:#92400e;font-weight:700;">${escapeHtml(note)}</td></tr>` : '';
+            compareTableBody.innerHTML = `
+                ${noteRow}
+                ${years.map((year) => `
+                    <tr><td>${escapeHtml(year)}</td>${series.map((item) => `<td>${escapeHtml(formatValue(getPointValueForYear(item, year)))}</td>`).join('')}</tr>
+                `).join('')}
+            `;
         }
 
         function getLatestSeriesValues(payload) {
@@ -738,60 +1529,83 @@
         function renderCompareLatestChart(payload) {
             if (!compareLatestChartCanvas || typeof Chart === 'undefined') return;
             const latestRows = getLatestSeriesValues(payload).filter((row) => row.latest !== null && Number.isFinite(Number(row.latest)));
-            const palette = ['#1d4ed8', '#e11d48', '#0f766e', '#d97706', '#7c3aed', '#0891b2', '#65a30d', '#475569'];
+            const valueWindow = getCompareValueWindow(payload);
+            const filteredRows = latestRows.filter((row) => valueIsInWindow(row.latest, valueWindow.visibleMin, valueWindow.visibleMax));
+            const rowsForChart = filteredRows.length ? filteredRows : latestRows;
             destroyChartInstance('compareLatestChart');
             state.compareLatestChart = new Chart(compareLatestChartCanvas, {
                 type: 'bar',
-                data: { labels: latestRows.map((row) => row.label), datasets: [{ label: 'Latest', data: latestRows.map((row) => row.latest), backgroundColor: latestRows.map((_, i) => palette[i % palette.length]) }] },
+                data: {
+                    labels: rowsForChart.map((row) => row.label),
+                    datasets: [{
+                        label: 'Latest',
+                        data: rowsForChart.map((row) => row.latest),
+                        backgroundColor: rowsForChart.map((row) => getChoroplethColor(row.latest, valueWindow.min, valueWindow.max, valueWindow.visibleMin, valueWindow.visibleMax)),
+                    }],
+                },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
             });
         }
 
         function renderCompareSeriesCards(payload) {
             const latestRows = getLatestSeriesValues(payload);
+            const valueWindow = getCompareValueWindow(payload);
             compareSeriesCards.innerHTML = latestRows.length ? latestRows.map((row) => {
                 const change = row.latest !== null && row.first !== null ? row.latest - row.first : null;
                 const changeLabel = change === null ? 'Change: N/A' : `Change: ${formatCompact(change)}`;
-                return `<div class="series-card"><div class="name">${escapeHtml(row.label)}</div><div class="latest">${escapeHtml(formatCompact(row.latest))}</div><div class="change">${escapeHtml(changeLabel)}</div></div>`;
+                const inWindow = valueIsInWindow(row.latest, valueWindow.visibleMin, valueWindow.visibleMax);
+                const tone = row.latest === null ? '#cbd5e1' : getChoroplethColor(row.latest, valueWindow.min, valueWindow.max, valueWindow.visibleMin, valueWindow.visibleMax);
+                const bg = row.latest === null ? '#f8fbff' : `${tone}2E`;
+                const hint = row.latest !== null && !inWindow ? 'Outside slider range' : 'Inside slider range';
+                return `<div class="series-card" style="background:${escapeHtml(bg)}; border-color:${escapeHtml(tone)};"><div class="name">${escapeHtml(row.label)}</div><div class="latest">${escapeHtml(formatCompact(row.latest))}</div><div class="change">${escapeHtml(changeLabel)}</div><div class="change">${escapeHtml(hint)}</div></div>`;
             }).join('') : '<div class="empty-box">No series available.</div>';
         }
 
         function renderCompareHeatmap(payload) {
-            const years = Array.isArray(payload?.years) ? payload.years : [];
-            const series = Array.isArray(payload?.series) ? payload.series : [];
+            const slice = getSafeComparisonSlice(payload);
+            const years = slice.years;
+            const series = slice.series;
             if (!years.length || !series.length) {
                 compareHeatmap.innerHTML = '<table><tbody><tr><td style="padding:0.6rem;">No data available.</td></tr></tbody></table>';
                 return;
             }
-            const allValues = series.flatMap((item) => (item.points || []).map((point) => point?.value)).filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
-            const min = allValues.length ? Math.min(...allValues) : null;
-            const max = allValues.length ? Math.max(...allValues) : null;
+            const valueWindow = getCompareValueWindow(payload);
             const cellStyle = (value) => {
-                if (value === null || value === undefined || !Number.isFinite(Number(value)) || min === null || max === null || min === max) return 'background:#f8fafc;';
-                const ratio = (Number(value) - min) / (max - min);
-                const hue = 220 - Math.round(ratio * 150);
-                const light = 96 - Math.round(ratio * 42);
-                return `background:hsl(${hue} 76% ${light}%);`;
+                if (value === null || value === undefined || !Number.isFinite(Number(value)) || valueWindow.min === null || valueWindow.max === null) return 'background:#f8fafc;';
+                if (!valueIsInWindow(value, valueWindow.visibleMin, valueWindow.visibleMax)) return 'background:#f8fafc;color:#94a3b8;';
+                const ratio = valueWindow.min === valueWindow.max ? 1 : ((Number(value) - valueWindow.min) / (valueWindow.max - valueWindow.min));
+                const color = getChoroplethColor(value, valueWindow.min, valueWindow.max, valueWindow.visibleMin, valueWindow.visibleMax);
+                const textColor = ratio > 0.72 ? '#f8fafc' : '#1f2937';
+                return `background:${color};color:${textColor};`;
             };
+            const note = getComparisonRenderNote(slice);
             compareHeatmap.innerHTML = `
                 <table>
                     <thead><tr><th>Series</th>${years.map((year) => `<th>${escapeHtml(year)}</th>`).join('')}</tr></thead>
                     <tbody>
-                        ${series.map((item) => `<tr><td>${escapeHtml(item.label)}</td>${(item.points || []).map((point) => `<td style="${cellStyle(point?.value)}">${escapeHtml(formatValue(point?.value ?? null))}</td>`).join('')}</tr>`).join('')}
+                        ${note ? `<tr><td colspan="${years.length + 1}" style="background:#fffbeb;color:#92400e;font-weight:700;">${escapeHtml(note)}</td></tr>` : ''}
+                        ${series.map((item) => `<tr><td>${escapeHtml(item.label)}</td>${years.map((year) => {
+                            const cellValue = getPointValueForYear(item, year);
+                            return `<td style="${cellStyle(cellValue)}">${escapeHtml(formatValue(cellValue))}</td>`;
+                        }).join('')}</tr>`).join('')}
                     </tbody>
                 </table>
             `;
         }
 
         function renderComparisonVisuals(payload) {
-            renderTrendChart(compareChartCanvas, 'compareChart', payload, compareChartTypeSelect.value || 'line');
-            renderCompareLatestChart(payload);
-            renderCompareSeriesCards(payload);
-            renderCompareTable(payload);
-            renderCompareHeatmap(payload);
+            const slice = getSafeComparisonSlice(payload);
+            const renderPayload = buildPayloadFromSlice(payload, slice);
+            renderTrendChart(compareChartCanvas, 'compareChart', renderPayload, compareChartTypeSelect.value || 'line');
+            renderCompareLatestChart(renderPayload);
+            renderCompareSeriesCards(renderPayload);
+            renderCompareTable(renderPayload);
+            renderCompareHeatmap(renderPayload);
+            renderCompareRangeLabel(renderPayload);
         }
 
         async function runComparison() {
+            if (state.loadingDepth > 0) return;
             const indicatorId = String(compareIndicatorSelect.value || '').trim();
             const mode = String(compareModeSelect.value || 'country');
             const yearFrom = parseInt(compareYearFromInput.value || '', 10);
@@ -803,22 +1617,48 @@
             if (!Number.isFinite(yearFrom) || !Number.isFinite(yearTo)) { setCompareStatus('Provide a valid comparison year range.', true); return; }
             if (mode === 'country' && countries.length < 2) { setCompareStatus('Select at least two countries for side-by-side comparison.', true); return; }
             if (mode === 'continent' && continents.length < 2) { setCompareStatus('Select at least two continents.', true); return; }
+            const requestedYears = Math.abs(yearTo - yearFrom) + 1;
+            if (mode === 'country' && countries.length > PERF_LIMITS.maxCountrySeriesRequest) {
+                setCompareStatus(`Too many countries selected (${countries.length}). Use ${PERF_LIMITS.maxCountrySeriesRequest} or fewer to avoid browser crashes.`, true);
+                return;
+            }
+            if (mode === 'country' && (countries.length * requestedYears) > PERF_LIMITS.maxCountryCellsRequest) {
+                setCompareStatus(`Selection is too large (${countries.length} countries x ${requestedYears} years). Reduce countries or years to continue safely.`, true);
+                return;
+            }
             setCompareStatus('Running comparison and refreshing cache for selected window...');
             runCompareBtn.disabled = true;
+            showLoadingModal('Running comparison and preparing visualizations...');
             try {
                 const payload = await fetchComparisonPayload({ indicatorId, compareMode: mode, countries, continents, yearFrom, yearTo, aggregation });
                 state.comparePayload = payload;
                 renderComparisonVisuals(payload);
-                setCompareStatus(`Loaded ${(payload?.series || []).length} series for ${payload?.indicator?.name || indicatorId}.`);
+                const slice = getSafeComparisonSlice(payload);
+                const reductionNote = getComparisonRenderNote(slice);
+                setCompareStatus(`Loaded ${(payload?.series || []).length} series for ${payload?.indicator?.name || indicatorId}.${reductionNote ? ` ${reductionNote}` : ''}`);
                 if (mode === 'country') {
                     mapYearInput.value = String(yearTo);
+                    mapYearSlider.value = String(yearTo);
+                    if (Array.from(mapIndicatorSelect.options).some((option) => option.value === indicatorId)) {
+                        mapIndicatorSelect.value = indicatorId;
+                    }
                     applyMapValuesFromPayload(payload, yearTo, 'Comparison Studio overlay');
-                    if (!mapIndicatorSelect.value) mapIndicatorSelect.value = indicatorId;
+                } else if (mode === 'continent') {
+                    mapYearInput.value = String(yearTo);
+                    mapYearSlider.value = String(yearTo);
+                    Array.from(mapContinentsSelect.options).forEach((option) => {
+                        option.selected = continents.includes(option.value);
+                    });
+                    if (Array.from(mapIndicatorSelect.options).some((option) => option.value === indicatorId)) {
+                        mapIndicatorSelect.value = indicatorId;
+                    }
+                    await runContinentComparison({ indicatorId, year: yearTo, continents, allowWhileLoading: true });
                 }
             } catch (error) {
                 console.error('Comparison failed', error);
                 setCompareStatus('Could not complete comparison. Please try again.', true);
             } finally {
+                hideLoadingModal();
                 runCompareBtn.disabled = false;
                 refreshMapStyles();
             }
@@ -827,15 +1667,26 @@
         function renderModalFromPayload(payload, title, subtitle) {
             if (!payload) return;
             vizModalTitle.textContent = title;
-            vizModalSubtitle.textContent = subtitle;
+            const slice = getSafeComparisonSlice(payload);
+            const modalPayload = buildPayloadFromSlice(payload, slice);
+            const renderNote = getComparisonRenderNote(slice);
+            vizModalSubtitle.textContent = renderNote ? `${subtitle}. ${renderNote}` : subtitle;
             vizModal.classList.add('open');
             vizModal.setAttribute('aria-hidden', 'false');
-            renderTrendChart(vizModalChartCanvas, 'modalChart', payload, compareChartTypeSelect.value || 'line');
-            const years = Array.isArray(payload?.years) ? payload.years : [];
-            const series = Array.isArray(payload?.series) ? payload.series : [];
+            renderTrendChart(vizModalChartCanvas, 'modalChart', modalPayload, compareChartTypeSelect.value || 'line');
+            const years = Array.isArray(modalPayload?.years) ? modalPayload.years : [];
+            const series = Array.isArray(modalPayload?.series) ? modalPayload.series : [];
             vizModalTableHeadRow.innerHTML = '<th>Year</th>';
             series.forEach((item) => { const th = document.createElement('th'); th.textContent = item.label; vizModalTableHeadRow.appendChild(th); });
-            vizModalTableBody.innerHTML = (years.length && series.length) ? years.map((year, yearIndex) => `<tr><td>${escapeHtml(year)}</td>${series.map((item) => { const point = Array.isArray(item.points) ? item.points[yearIndex] : null; return `<td>${escapeHtml(formatValue(point?.value ?? null))}</td>`; }).join('')}</tr>`).join('') : '<tr><td>No data available.</td></tr>';
+            if (!(years.length && series.length)) {
+                vizModalTableBody.innerHTML = '<tr><td>No data available.</td></tr>';
+                return;
+            }
+            const noteRow = renderNote ? `<tr><td colspan="${series.length + 1}" style="background:#fffbeb;color:#92400e;font-weight:700;">${escapeHtml(renderNote)}</td></tr>` : '';
+            vizModalTableBody.innerHTML = `
+                ${noteRow}
+                ${years.map((year) => `<tr><td>${escapeHtml(year)}</td>${series.map((item) => `<td>${escapeHtml(formatValue(getPointValueForYear(item, year)))}</td>`).join('')}</tr>`).join('')}
+            `;
         }
 
         function closeVizModal() { vizModal.classList.remove('open'); vizModal.setAttribute('aria-hidden', 'true'); destroyChartInstance('modalChart'); }
@@ -857,8 +1708,23 @@
             const payload = await response.json();
             const continents = Array.isArray(payload?.data) ? payload.data : [];
             compareContinentsSelect.innerHTML = '';
-            continents.forEach((continent) => { const option = document.createElement('option'); option.value = String(continent); option.textContent = String(continent); compareContinentsSelect.appendChild(option); });
-            if (compareContinentsSelect.options.length >= 2) { compareContinentsSelect.options[0].selected = true; compareContinentsSelect.options[1].selected = true; }
+            mapContinentsSelect.innerHTML = '';
+            continents.forEach((continent) => {
+                const value = String(continent);
+                const optionA = document.createElement('option');
+                optionA.value = value;
+                optionA.textContent = value;
+                compareContinentsSelect.appendChild(optionA);
+                const optionB = document.createElement('option');
+                optionB.value = value;
+                optionB.textContent = value;
+                mapContinentsSelect.appendChild(optionB);
+            });
+            if (compareContinentsSelect.options.length >= 2) {
+                compareContinentsSelect.options[0].selected = true;
+                compareContinentsSelect.options[1].selected = true;
+            }
+            Array.from(mapContinentsSelect.options).forEach((option) => { option.selected = false; });
         }
 
         async function fetchIndicatorsByTopic(topicId) {
@@ -925,54 +1791,192 @@
 
         function initializeYearInputs() {
             const currentYear = new Date().getFullYear();
-            mapYearInput.value = String(currentYear - 1);
+            const defaultMapYear = Math.max(1960, currentYear - 1);
+            mapYearInput.value = String(defaultMapYear);
+            mapYearSlider.min = '1960';
+            mapYearSlider.max = String(currentYear);
+            mapYearSlider.value = String(defaultMapYear);
             compareYearFromInput.value = String(Math.max(1960, currentYear - 12));
             compareYearToInput.value = String(currentYear);
             snapshotYearFrom.value = String(Math.max(1960, currentYear - 12));
             snapshotYearTo.value = String(currentYear);
+            state.mapVisibleRangePercent = { min: 0, max: 100 };
+            mapRangeMinSlider.value = '0';
+            mapRangeMaxSlider.value = '100';
+            state.compareVisibleRangePercent = { min: 0, max: 100 };
+            compareRangeMinSlider.value = '0';
+            compareRangeMaxSlider.value = '100';
+            renderMapRangeLabel();
+            renderCompareRangeLabel();
         }
 
         function wireEvents() {
             window.addEventListener('load', syncNavbarOffset);
-            window.addEventListener('resize', syncNavbarOffset);
-            regionSelect.addEventListener('change', async () => { await loadRegion(regionSelect.value); if (mapIndicatorSelect.value) await runMapVisualization(); });
-            mapTopicSelect.addEventListener('change', async () => { await loadMapIndicators(); if (mapIndicatorSelect.value) await runMapVisualization(); });
+            window.addEventListener('resize', () => {
+                syncNavbarOffset();
+                if (mapCompareModal.classList.contains('open')) refreshMapCompareModalMaps();
+            });
+            ['click', 'dblclick', 'pointerdown', 'submit', 'change'].forEach((eventName) => {
+                document.addEventListener(eventName, blockUiEventWhileLoading, true);
+            });
+            regionSelect.addEventListener('change', async () => {
+                if (state.loadingDepth > 0) return;
+                showLoadingModal('Loading region shapes and map data...');
+                try {
+                    await loadRegion(regionSelect.value);
+                    if (mapIndicatorSelect.value) await runMapVisualization({ allowWhileLoading: true });
+                } finally {
+                    hideLoadingModal();
+                }
+            });
+            mapTopicSelect.addEventListener('change', async () => {
+                if (state.loadingDepth > 0) return;
+                showLoadingModal('Loading map indicators...');
+                try {
+                    await loadMapIndicators();
+                    if (mapIndicatorSelect.value) await runMapVisualization({ allowWhileLoading: true });
+                } finally {
+                    hideLoadingModal();
+                }
+            });
             mapIndicatorSelect.addEventListener('change', () => { if (!snapshotIndicatorSelect.value) snapshotIndicatorSelect.value = mapIndicatorSelect.value; });
+            mapYearInput.addEventListener('input', () => {
+                const year = parseInt(mapYearInput.value || '', 10);
+                if (Number.isFinite(year)) mapYearSlider.value = String(year);
+            });
+            mapYearSlider.addEventListener('input', () => {
+                mapYearInput.value = mapYearSlider.value;
+            });
+            mapRangeMinSlider.addEventListener('input', async () => {
+                state.mapVisibleRangePercent = syncSliderPairState(mapRangeMinSlider, mapRangeMaxSlider, 'min');
+                renderMapRangeLabel();
+                refreshMapStyles();
+                renderMapTables(state.mapRows);
+                renderMapLegend(state.mapIndicatorMeta.label, state.mapIndicatorMeta.unit, state.mapRange.min, state.mapRange.max);
+                scheduleMapCompareModalRender();
+            });
+            mapRangeMaxSlider.addEventListener('input', async () => {
+                state.mapVisibleRangePercent = syncSliderPairState(mapRangeMinSlider, mapRangeMaxSlider, 'max');
+                renderMapRangeLabel();
+                refreshMapStyles();
+                renderMapTables(state.mapRows);
+                renderMapLegend(state.mapIndicatorMeta.label, state.mapIndicatorMeta.unit, state.mapRange.min, state.mapRange.max);
+                scheduleMapCompareModalRender();
+            });
             runMapVizBtn.addEventListener('click', runMapVisualization);
+            runContinentCompareBtn.addEventListener('click', async () => { await runContinentComparison({ openModal: false }); });
+            openMapCompareModalBtn.addEventListener('click', async () => {
+                if (state.loadingDepth > 0) return;
+                if (!state.mapCompareContext) {
+                    await runContinentComparison({ openModal: true });
+                    return;
+                }
+                showLoadingModal('Preparing multi-map modal...');
+                try {
+                    openMapCompareModal();
+                    await renderMapCompareModalContent();
+                } finally {
+                    hideLoadingModal();
+                }
+            });
             resetMapVizBtn.addEventListener('click', () => {
-                state.mapValuesByIso2.clear(); state.mapValuesByNormName.clear(); state.mapRange = { min: null, max: null };
-                refreshMapStyles(); renderMapLegend('Indicator', '', null, null);
+                state.mapValuesByIso2.clear();
+                state.mapValuesByNormName.clear();
+                state.mapRows = [];
+                state.mapRange = { min: null, max: null };
+                state.mapIndicatorMeta = { label: 'Indicator', unit: '' };
+                state.mapVisibleRangePercent = { min: 0, max: 100 };
+                mapRangeMinSlider.value = '0';
+                mapRangeMaxSlider.value = '100';
+                state.mapComparePayloadByContinent = new Map();
+                state.mapCompareContext = null;
+                renderMapRangeLabel();
+                refreshMapStyles();
+                renderMapLegend('Indicator', '', null, null);
                 mapTopTableBody.innerHTML = '<tr><td colspan="3">Overlay cleared.</td></tr>';
                 mapDataTableBody.innerHTML = '<tr><td colspan="3">Overlay cleared.</td></tr>';
+                mapComparePanels.innerHTML = '<div class="empty-box">Run "Compare Selected Continents" to load multi-continent maps.</div>';
+                mapCompareCountryTableBody.innerHTML = '<tr><td colspan="3">No map comparison loaded yet.</td></tr>';
+                mapCompareGlobalTableBody.innerHTML = '<tr><td colspan="2">No global comparison loaded yet.</td></tr>';
                 setMapStatus('Map overlay cleared.');
             });
             countrySelect.addEventListener('change', async () => { const countryName = String(countrySelect.value || '').trim(); if (countryName) await selectCountry(countryName, resolveIso2ByName(countryName), false); });
             runSnapshotBtn.addEventListener('click', runSnapshotTrend);
-            compareTopicSelect.addEventListener('change', loadCompareIndicators);
+            compareTopicSelect.addEventListener('change', async () => {
+                if (state.loadingDepth > 0) return;
+                showLoadingModal('Loading comparison indicators...');
+                try {
+                    await loadCompareIndicators();
+                } finally {
+                    hideLoadingModal();
+                }
+            });
             compareModeSelect.addEventListener('change', syncCompareMode);
             compareCountriesSelect.addEventListener('change', refreshMapStyles);
+            compareRangeMinSlider.addEventListener('input', () => {
+                state.compareVisibleRangePercent = syncSliderPairState(compareRangeMinSlider, compareRangeMaxSlider, 'min');
+                renderCompareRangeLabel();
+                if (state.comparePayload) {
+                    renderCompareLatestChart(state.comparePayload);
+                    renderCompareSeriesCards(state.comparePayload);
+                    renderCompareHeatmap(state.comparePayload);
+                }
+            });
+            compareRangeMaxSlider.addEventListener('input', () => {
+                state.compareVisibleRangePercent = syncSliderPairState(compareRangeMinSlider, compareRangeMaxSlider, 'max');
+                renderCompareRangeLabel();
+                if (state.comparePayload) {
+                    renderCompareLatestChart(state.comparePayload);
+                    renderCompareSeriesCards(state.comparePayload);
+                    renderCompareHeatmap(state.comparePayload);
+                }
+            });
             runCompareBtn.addEventListener('click', runComparison);
-            openCompareModalBtn.addEventListener('click', () => { if (!state.comparePayload) { setCompareStatus('Run comparison first, then open modal.', true); return; } renderModalFromPayload(state.comparePayload, 'Comparison Studio Modal', state.comparePayload?.indicator?.name || 'Indicator comparison'); });
-            openSnapshotModalBtn.addEventListener('click', () => { if (!state.snapshotPayload) { snapshotHint.textContent = 'Load snapshot trend first, then open modal.'; return; } renderModalFromPayload(state.snapshotPayload, 'Country Snapshot Modal', state.snapshotPayload?.indicator?.name || 'Country trend'); });
+            openCompareModalBtn.addEventListener('click', () => {
+                if (state.loadingDepth > 0) return;
+                if (!state.comparePayload) { setCompareStatus('Run comparison first, then open modal.', true); return; }
+                renderModalFromPayload(state.comparePayload, 'Comparison Studio Modal', state.comparePayload?.indicator?.name || 'Indicator comparison');
+            });
+            openSnapshotModalBtn.addEventListener('click', () => {
+                if (state.loadingDepth > 0) return;
+                if (!state.snapshotPayload) { snapshotHint.textContent = 'Load snapshot trend first, then open modal.'; return; }
+                renderModalFromPayload(state.snapshotPayload, 'Country Snapshot Modal', state.snapshotPayload?.indicator?.name || 'Country trend');
+            });
             vizModalCloseBtn.addEventListener('click', closeVizModal);
             vizModal.addEventListener('click', (event) => { if (event.target === vizModal) closeVizModal(); });
-            document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && vizModal.classList.contains('open')) closeVizModal(); });
+            mapCompareModalCloseBtn.addEventListener('click', closeMapCompareModal);
+            mapCompareModal.addEventListener('click', (event) => { if (event.target === mapCompareModal) closeMapCompareModal(); });
+            document.addEventListener('keydown', (event) => {
+                if (state.loadingDepth > 0) {
+                    if (event.key === 'F5' || ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 'r')) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+                    return;
+                }
+                if (event.key !== 'Escape') return;
+                if (vizModal.classList.contains('open')) closeVizModal();
+                if (mapCompareModal.classList.contains('open')) closeMapCompareModal();
+            });
         }
 
         async function initializeDashboard() {
             syncNavbarOffset(); initializeYearInputs(); wireEvents(); syncCompareMode();
             setMapStatus('Loading metadata and shapefiles...');
             setCompareStatus('Loading World Bank topics, countries, and indicator catalog...');
+            showLoadingModal('Initializing dashboard, maps, and indicator catalog...');
             try {
                 await Promise.all([loadWorldBankCountries(), loadContinents(), loadTopicsAndPrimeIndicators()]);
                 const initialRegion = (defaultRegion && shapeFilesByRegion[defaultRegion]) ? defaultRegion : (regionSelect.options.length ? regionSelect.options[0].value : null);
                 if (initialRegion) { regionSelect.value = initialRegion; await loadRegion(initialRegion); } else { setMapStatus('No region shapefiles configured. Check public/assets/Worldshapes.', true); }
-                if (mapIndicatorSelect.value) await runMapVisualization();
+                if (mapIndicatorSelect.value) await runMapVisualization({ allowWhileLoading: true });
                 setCompareStatus('Ready. Run side-by-side comparisons by country or continent.');
             } catch (error) {
                 console.error('Initialization failed', error);
                 setMapStatus('Could not initialize dashboard data sources.', true);
                 setCompareStatus('Could not initialize comparison controls.', true);
+            } finally {
+                hideLoadingModal();
             }
         }
 
