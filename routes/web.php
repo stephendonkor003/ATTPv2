@@ -624,6 +624,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.funders.view')
             ->name('funders.show');
 
+        Route::get('funders/{funder}/pdf', [FunderController::class, 'pdf'])
+            ->middleware('permission:finance.funders.view')
+            ->name('funders.pdf');
+
         Route::get('funders/{funder}/edit', [FunderController::class, 'edit'])
             ->middleware('permission:finance.funders.edit')
             ->name('funders.edit');

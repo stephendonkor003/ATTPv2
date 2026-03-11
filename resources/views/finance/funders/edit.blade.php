@@ -2,12 +2,11 @@
 
 @section('content')
     <div class="nxl-container">
-
-        <div class="page-header d-flex justify-content-between align-items-center">
+        <div class="page-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
-                <h4 class="fw-bold mb-1">Edit Funder</h4>
+                <h4 class="fw-bold mb-1">Edit Partner</h4>
                 <p class="text-muted mb-0">
-                    Update funder information
+                    Update the partner CRM profile, assigned officer, communication tracker, and portal settings.
                 </p>
             </div>
 
@@ -17,7 +16,7 @@
         </div>
 
         @if ($errors->any())
-            <div class="alert alert-danger">
+            <div class="alert alert-danger mt-3">
                 <ul class="mb-0">
                     @foreach ($errors->all() as $error)
                         <li>{{ $error }}</li>
@@ -26,61 +25,24 @@
             </div>
         @endif
 
-        <div class="card shadow-sm border-0 mt-3">
-            <div class="card-body">
-                <form method="POST" action="{{ route('finance.funders.update', $funder) }}" enctype="multipart/form-data">
-                    @csrf
-                    @method('PUT')
+        <form method="POST" action="{{ route('finance.funders.update', $funder) }}" enctype="multipart/form-data" class="mt-3">
+            @csrf
+            @method('PUT')
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Funder Name *</label>
-                        <input name="name" class="form-control" value="{{ old('name', $funder->name) }}" required>
-                    </div>
+            @include('finance.funders.partials.form-fields', ['users' => $users, 'funder' => $funder])
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Funder Type *</label>
-                        <select name="type" class="form-select" required>
-                            @foreach (['government', 'donor', 'internal', 'private'] as $type)
-                                <option value="{{ $type }}" {{ $funder->type === $type ? 'selected' : '' }}>
-                                    {{ ucfirst($type) }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-semibold">Currency *</label>
-                        <input name="currency" class="form-control" value="{{ old('currency', $funder->currency) }}"
-                            required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Organization Logo</label>
-                        @if($funder->hasLogo())
-                            <div class="mb-2">
-                                <img src="{{ $funder->getLogoUrl() }}" alt="{{ $funder->name }}"
-                                     style="max-height: 80px; max-width: 200px;" class="border rounded p-2">
-                                <p class="text-muted small mb-0">Current logo</p>
-                            </div>
-                        @endif
-                        <input type="file" name="logo" class="form-control" accept="image/*">
-                        <small class="text-muted">Upload a new logo to replace the current one (PNG, JPG, or SVG). Max 2MB.</small>
-                    </div>
-
-                    <div class="alert alert-warning">
-                        Changing funder details affects all linked funding records.
-                    </div>
-
-                    <div class="d-flex justify-content-between">
-                        <a href="{{ route('finance.funders.index') }}" class="btn btn-light">
-                            Cancel
-                        </a>
-                        <button class="btn btn-primary">
-                            <i class="feather-save me-1"></i> Update Funder
-                        </button>
-                    </div>
-                </form>
+            <div class="alert alert-warning mt-4">
+                Updating this partner changes the CRM snapshot used across funding, communication, and portal oversight views.
             </div>
-        </div>
+
+            <div class="d-flex justify-content-between mt-4">
+                <a href="{{ route('finance.funders.index') }}" class="btn btn-light">
+                    Cancel
+                </a>
+                <button class="btn btn-primary">
+                    <i class="feather-save me-1"></i> Update Partner
+                </button>
+            </div>
+        </form>
     </div>
 @endsection

@@ -3,9 +3,9 @@
 return [
     // Main Sections
     'dashboard' => 'Dashboard',
-    'financial_governance' => 'Financial Governance',
-    'budget_planning' => 'Budget Planning',
-    'budget_execution' => 'Budget Execution',
+    'financial_governance' => 'Partnership Management',
+    'budget_planning' => 'Resource Mobilization',
+    'budget_execution' => 'Resource Planning',
     'reports_analytics' => 'Reports & Analytics Engine',
     'human_capital' => 'Human Capital Management',
     'procurement' => 'Procurement Management',
@@ -20,7 +20,7 @@ return [
     'governance_setup' => 'Governance Setup',
     'governance_structure' => 'Governance Structure',
     'program_financing' => 'Program Financing',
-    'funding_partners' => 'Funding Partners',
+    'funding_partners' => 'Partners',
 
     // Budget Planning
     'budget_structure' => 'Budget Structure',

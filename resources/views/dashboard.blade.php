@@ -179,7 +179,7 @@
                 'icon_style' => 'background: linear-gradient(145deg, #0ea5e92e 0%, #0ea5e94d 100%); color: #0f172a;',
                 'links' => [
                     ['label' => 'Setup', 'route' => 'finance.governance.index', 'permissions' => ['finance.access', 'finance.governance_structure.view']],
-                    ['label' => 'Funding Partners', 'route' => 'finance.funders.index', 'permissions' => ['finance.access', 'finance.funders.view']],
+                    ['label' => 'Partners', 'route' => 'finance.funders.index', 'permissions' => ['finance.access', 'finance.funders.view']],
                 ],
             ],
             [
