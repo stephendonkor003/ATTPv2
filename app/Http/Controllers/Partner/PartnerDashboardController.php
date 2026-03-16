@@ -257,7 +257,7 @@ class PartnerDashboardController extends Controller
         // Verify this project belongs to a program funded by this partner
         $funding = $this->resolveFundingForProgram(
             $funder,
-            $project->program_id,
+            (int) $project->program_id,
             $project->program->name ?? null
         );
 
@@ -283,7 +283,7 @@ class PartnerDashboardController extends Controller
         // Verify this activity belongs to a project in a program funded by this partner
         $funding = $this->resolveFundingForProgram(
             $funder,
-            $activity->project->program_id,
+            (int) $activity->project->program_id,
             $activity->project->program->name ?? null
         );
 
