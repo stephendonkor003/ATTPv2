@@ -37,7 +37,7 @@
     @stack('styles')
 
     <!-- RTL CSS for Arabic -->
-    @if(app()->getLocale() === 'ar')
+    @if (app()->getLocale() === 'ar')
         <link rel="stylesheet" href="{{ asset('assets/css/rtl.css') }}">
     @endif
 
@@ -210,6 +210,37 @@
             }
         }
 
+        /* Tawk.to Widget Styles - Override Theme Effects */
+        #tawkToRight,
+        #tawkToLeft,
+        .tawk-min-container,
+        .tawk-chat-container,
+        [class*="tawk"] {
+            z-index: 9999 !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: block !important;
+            filter: none !important;
+            backdrop-filter: none !important;
+            transform: none !important;
+            pointer-events: auto !important;
+        }
+
+        #tawkToRight:hover,
+        #tawkToLeft:hover,
+        .tawk-min-container:hover {
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: block !important;
+        }
+
+        iframe[src*="tawk.to"],
+        iframe[src*="embed.tawk"] {
+            z-index: 9999 !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: block !important;
+        }
     </style>
 </head>
 
@@ -294,6 +325,40 @@
     @stack('scripts')
     @stack('modals')
 
+    {{-- ATTP AI Guide Integration --}}
+    @php
+        $aiGuideSettings = \App\Models\AttpAiGuideSetting::active();
+        $showAIGuide = $aiGuideSettings && $aiGuideSettings->isAvailableForUser();
+    @endphp
+
+    @if ($showAIGuide && $aiGuideSettings->tawk_property_id && $aiGuideSettings->tawk_widget_id)
+        <script type="text/javascript">
+            var AI_API = AI_API || {},
+                AI_LoadStart = new Date();
+
+            AI_API.onLoad = function() {
+                // Set user attributes if authenticated
+                @if ($aiGuideSettings->welcome_message && auth()->check())
+                    AI_API.setAttributes({
+                        'name': '{{ auth()->user()->name }}',
+                        'email': '{{ auth()->user()->email }}'
+                    });
+                @endif
+            };
+
+            (function() {
+                var s1 = document.createElement("script"),
+                    s0 = document.getElementsByTagName("script")[0];
+                s1.async = true;
+                s1.src =
+                    'https://embed.tawk.to/{{ $aiGuideSettings->tawk_property_id }}/{{ $aiGuideSettings->tawk_widget_id }}';
+                s1.charset = 'UTF-8';
+                s1.setAttribute('crossorigin', '*');
+                s0.parentNode.insertBefore(s1, s0);
+            })
+            ();
+        </script>
+    @endif
 
 </body>
 

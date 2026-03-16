@@ -48,16 +48,20 @@
     }
 
     @keyframes memberFlagWave {
+
         0%,
         100% {
             transform: perspective(800px) rotateY(0deg) skewY(0deg) scaleX(1);
         }
+
         25% {
             transform: perspective(800px) rotateY(-12deg) skewY(1.6deg) scaleX(1.02);
         }
+
         50% {
             transform: perspective(800px) rotateY(7deg) skewY(-1.2deg) scaleX(0.99);
         }
+
         75% {
             transform: perspective(800px) rotateY(-8deg) skewY(0.8deg) scaleX(1.01);
         }
@@ -83,12 +87,12 @@
 
         <div class="navbar-content">
             <div class="px-3 pt-3">
-                @if($isMemberStateSidebarUser)
+                @if ($isMemberStateSidebarUser)
                     <div class="ms-sidebar-hero">
                         <div class="hero-body card-body py-3 d-flex align-items-center gap-3">
                             <div class="ms-flag-wave-wrap flex-shrink-0">
-                                <img src="{{ $sidebarMemberStateFlag }}" alt="{{ $sidebarMemberState?->name ?? 'Member State' }} flag"
-                                    class="ms-flag-wave">
+                                <img src="{{ $sidebarMemberStateFlag }}"
+                                    alt="{{ $sidebarMemberState?->name ?? 'Member State' }} flag" class="ms-flag-wave">
                             </div>
                             <div class="flex-grow-1">
                                 <div class="ms-hero-kicker">Member State Command Desk</div>
@@ -100,7 +104,9 @@
                 @else
                     <div class="card border-0 shadow-sm position-relative overflow-hidden"
                         style="background: linear-gradient(135deg, #0f172a 0%, #0ea5e9 50%, #10b981 100%); color:#f8fafc; border-radius:14px;">
-                        <div style="position:absolute; inset:0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15), transparent 45%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.18), transparent 40%);"></div>
+                        <div
+                            style="position:absolute; inset:0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15), transparent 45%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.18), transparent 40%);">
+                        </div>
                         <div class="card-body py-3 d-flex align-items-center gap-3 position-relative">
                             <span class="module-icon" style="background: rgba(255,255,255,0.18); color:#f8fafc;">
                                 <i class="feather-cpu"></i>
@@ -116,7 +122,8 @@
                     <div class="d-flex align-items-center px-3 py-2 rounded-3 shadow-sm"
                         style="background: linear-gradient(120deg, #0ea5e9 0%, #6366f1 100%); color:#f8fafc;">
                         <i class="feather-star me-2"></i>
-                        <span id="au-aspiration-ticker" class="small" style="line-height:1.3;">Loading aspiration...</span>
+                        <span id="au-aspiration-ticker" class="small" style="line-height:1.3;">Loading
+                            aspiration...</span>
                     </div>
                 </div>
             </div>
@@ -133,12 +140,12 @@
                         </a>
                     </li>
                     @can('member_state.treaties.view')
-                    <li class="nxl-item">
-                        <a href="{{ route('member-state.treaties.index') }}" class="nxl-link">
-                            <span class="nxl-micon"><i class="feather-file-text"></i></span>
-                            <span class="nxl-mtext">Treaties & Agreements</span>
-                        </a>
-                    </li>
+                        <li class="nxl-item">
+                            <a href="{{ route('member-state.treaties.index') }}" class="nxl-link">
+                                <span class="nxl-micon"><i class="feather-file-text"></i></span>
+                                <span class="nxl-mtext">Treaties & Agreements</span>
+                            </a>
+                        </li>
                     @endcan
                     <li class="nxl-item">
                         <a href="{{ route('member-state.communications.index') }}" class="nxl-link">
@@ -1054,35 +1061,35 @@
                         <ul class="nxl-submenu">
                             @canany(['settings.au_master_data.view', 'treaties.view'])
                                 @can('settings.au_master_data.view')
-                                <li class="nxl-item">
-                                    <a href="{{ route('settings.au.member-states.index') }}" class="nxl-link">
-                                        <i class="feather-flag me-2"></i> Member States
-                                    </a>
-                                </li>
+                                    <li class="nxl-item">
+                                        <a href="{{ route('settings.au.member-states.index') }}" class="nxl-link">
+                                            <i class="feather-flag me-2"></i> Member States
+                                        </a>
+                                    </li>
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('settings.au.regional-blocks.index') }}" class="nxl-link">
-                                        <i class="feather-map me-2"></i> Regional Blocks (RECs)
-                                    </a>
-                                </li>
+                                    <li class="nxl-item">
+                                        <a href="{{ route('settings.au.regional-blocks.index') }}" class="nxl-link">
+                                            <i class="feather-map me-2"></i> Regional Blocks (RECs)
+                                        </a>
+                                    </li>
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('settings.au.aspirations.index') }}" class="nxl-link">
-                                        <i class="feather-star me-2"></i> Aspirations
-                                    </a>
-                                </li>
+                                    <li class="nxl-item">
+                                        <a href="{{ route('settings.au.aspirations.index') }}" class="nxl-link">
+                                            <i class="feather-star me-2"></i> Aspirations
+                                        </a>
+                                    </li>
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('settings.au.goals.index') }}" class="nxl-link">
-                                        <i class="feather-target me-2"></i> Goals
-                                    </a>
-                                </li>
+                                    <li class="nxl-item">
+                                        <a href="{{ route('settings.au.goals.index') }}" class="nxl-link">
+                                            <i class="feather-target me-2"></i> Goals
+                                        </a>
+                                    </li>
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('settings.au.flagship-projects.index') }}" class="nxl-link">
-                                        <i class="feather-award me-2"></i> Flagship Projects
-                                    </a>
-                                </li>
+                                    <li class="nxl-item">
+                                        <a href="{{ route('settings.au.flagship-projects.index') }}" class="nxl-link">
+                                            <i class="feather-award me-2"></i> Flagship Projects
+                                        </a>
+                                    </li>
                                 @endcan
                                 @can('treaties.view')
                                     <li class="nxl-item">
@@ -1098,7 +1105,8 @@
 
 
                 {{-- ================= COMMUNICATIONS ================= --}}
-                @canany(['communications.view', 'communications.respond', 'questions.view', 'questions.respond', 'national_data.review', 'national_data.approve'])
+                @canany(['communications.view', 'communications.respond', 'questions.view', 'questions.respond',
+                    'national_data.review', 'national_data.approve'])
                     <li class="nxl-item nxl-caption">
                         <label>Communications</label>
                     </li>
@@ -1194,6 +1202,14 @@
                         <li class="nxl-item">
                             <a href="{{ route('system.audit.index') }}" class="nxl-link">
                                 <i class="feather-activity me-2"></i> System Audit
+                            </a>
+                        </li>
+                    @endcan
+
+                    @can('users.manage')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.attp-ai-guide.settings') }}" class="nxl-link">
+                                <i class="feather-bot me-2"></i> ATTP AI Guide
                             </a>
                         </li>
                     @endcan

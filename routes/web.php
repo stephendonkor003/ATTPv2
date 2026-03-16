@@ -148,6 +148,10 @@ use App\Http\Controllers\System\{
     MemberStateNationalDataReviewController,
 };
 
+use App\Http\Controllers\{
+    AttpAiGuideController,
+};
+
 /*
 |--------------------------------------------------------------------------
 | PROCUREMENT MODULE (DYNAMIC, FORM-BASED)
@@ -342,6 +346,23 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
 
             Route::post('/{role}/assign', [PermissionController::class, 'storeAssign'])
                 ->name('assign.store');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | ATTP AI GUIDE (TAWK.TO INTEGRATION)
+        |--------------------------------------------------------------------------
+        */
+        Route::middleware('permission:users.manage')->prefix('attp-ai-guide')->name('attp-ai-guide.')->group(function () {
+
+            Route::get('/settings', [AttpAiGuideController::class, 'settings'])
+                ->name('settings');
+
+            Route::put('/settings', [AttpAiGuideController::class, 'updateSettings'])
+                ->name('update');
+
+            Route::post('/test-widget', [AttpAiGuideController::class, 'testWidget'])
+                ->name('test');
         });
     });
 
