@@ -325,39 +325,28 @@
     @stack('scripts')
     @stack('modals')
 
-    {{-- ATTP AI Guide Integration --}}
+    {{-- ATTP AI Guide Integration (Admin Controlled) --}}
     @php
         $aiGuideSettings = \App\Models\AttpAiGuideSetting::active();
         $showAIGuide = $aiGuideSettings && $aiGuideSettings->isAvailableForUser();
     @endphp
 
     @if ($showAIGuide && $aiGuideSettings->tawk_property_id && $aiGuideSettings->tawk_widget_id)
+        <!--Start of Tawk.to Script-->
         <script type="text/javascript">
-            var AI_API = AI_API || {},
-                AI_LoadStart = new Date();
-
-            AI_API.onLoad = function() {
-                // Set user attributes if authenticated
-                @if ($aiGuideSettings->welcome_message && auth()->check())
-                    AI_API.setAttributes({
-                        'name': '{{ auth()->user()->name }}',
-                        'email': '{{ auth()->user()->email }}'
-                    });
-                @endif
-            };
-
+            var Tawk_API = Tawk_API || {},
+                Tawk_LoadStart = new Date();
             (function() {
                 var s1 = document.createElement("script"),
                     s0 = document.getElementsByTagName("script")[0];
                 s1.async = true;
-                s1.src =
-                    'https://embed.tawk.to/{{ $aiGuideSettings->tawk_property_id }}/{{ $aiGuideSettings->tawk_widget_id }}';
+                s1.src = 'https://embed.tawk.to/69204852eba156195f5dae48/1jaj1trqo';
                 s1.charset = 'UTF-8';
                 s1.setAttribute('crossorigin', '*');
                 s0.parentNode.insertBefore(s1, s0);
-            })
-            ();
+            })();
         </script>
+        <!--End of Tawk.to Script-->
     @endif
 
 </body>
