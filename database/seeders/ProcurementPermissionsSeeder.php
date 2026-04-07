@@ -29,7 +29,6 @@ class ProcurementPermissionsSeeder extends Seeder
             ['name' => 'procurement.settings.statuses', 'module' => 'Procurement Settings', 'description' => 'Manage procurement statuses'],
             ['name' => 'procurement.settings.step_stages', 'module' => 'Procurement Settings', 'description' => 'Manage procurement step stages'],
             ['name' => 'procurement.settings.step_approvals', 'module' => 'Procurement Settings', 'description' => 'Manage procurement step approvals'],
-            ['name' => 'procurement.settings.governance', 'module' => 'Procurement Settings', 'description' => 'Manage governance structure'],
             ['name' => 'procurement.settings.import', 'module' => 'Procurement Settings', 'description' => 'Import procurement settings from Excel/CSV'],
         ];
 

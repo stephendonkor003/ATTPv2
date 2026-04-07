@@ -3,6 +3,20 @@
     $isMemberStateSidebarUser = $sidebarUser && $sidebarUser->user_type === 'member_state';
     $sidebarMemberState = $isMemberStateSidebarUser ? $sidebarUser->memberState : null;
     $sidebarMemberStateFlag = $sidebarMemberState?->flag_url ?: asset('assets/images/au.png');
+    $financialGovernanceSidebarPermissions = [
+        'finance.governance_structure.view',
+        'finance.governance_structure.manage',
+        'finance.funders.view',
+        'finance.funders.manage',
+        'finance.program_funding.view',
+        'finance.program_funding.manage',
+        'finance.departments.view',
+        'finance.departments.manage',
+    ];
+    $canSeeFinancialGovernanceSidebar = $sidebarUser
+        && collect($financialGovernanceSidebarPermissions)->contains(
+            fn($permission) => $sidebarUser->can($permission)
+        );
     $procurementSettingsSidebarPermissions = [
         'procurement.settings.manage',
         'procurement.settings.geographics',
@@ -11,10 +25,7 @@
         'procurement.settings.statuses',
         'procurement.settings.step_stages',
         'procurement.settings.step_approvals',
-        'procurement.settings.governance',
         'procurement.view_all',
-        'finance.governance_structure.view',
-        'finance.governance_structure.manage',
     ];
     $canSeeProcurementSettingsSidebar = $sidebarUser
         && collect($procurementSettingsSidebarPermissions)->contains(
@@ -231,7 +242,7 @@
 
 
                 {{-- ================= FINANCIAL GOVERNANCE ================= --}}
-                @canany(['finance.departments.view', 'finance.program_funding.view', 'finance.funders.view'])
+                @if ($canSeeFinancialGovernanceSidebar)
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.financial_governance') }}</label>
                     </li>
@@ -271,7 +282,7 @@
 
                         </ul>
                     </li>
-                @endcanany
+                @endif
 
 
                 {{-- ================= BUDGET PLANNING ================= --}}
@@ -645,15 +656,6 @@
                             </a>
 
                             <ul class="nxl-submenu">
-                                @canany(['procurement.settings.governance', 'finance.governance_structure.view', 'finance.governance_structure.manage'])
-                                    <li class="nxl-item">
-                                        <a href="{{ route('finance.governance.index') }}" class="nxl-link">
-                                            <i class="feather-grid me-2"></i>
-                                            Governance Structure
-                                        </a>
-                                    </li>
-                                @endcanany
-
                                 @canany(['procurement.settings.manage', 'procurement.settings.geographics', 'procurement.view_all'])
                                     <li class="nxl-item">
                                         <a href="{{ route('procurement.settings.geographics.index') }}" class="nxl-link">

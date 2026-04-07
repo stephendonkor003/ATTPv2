@@ -667,71 +667,71 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
          ===================================================== */
 
         Route::get('governance-structure', [GovernanceStructureController::class, 'index'])
-            ->middleware('permission:finance.governance_structure.view|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.view|finance.governance_structure.manage')
             ->name('governance.index');
 
         Route::post('governance-structure/levels', [GovernanceStructureController::class, 'storeLevel'])
-            ->middleware('permission:finance.governance_structure.create|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.create|finance.governance_structure.manage')
             ->name('governance.levels.store');
 
         Route::put('governance-structure/levels/{level}', [GovernanceStructureController::class, 'updateLevel'])
-            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage')
             ->name('governance.levels.update');
 
         Route::delete('governance-structure/levels/{level}', [GovernanceStructureController::class, 'destroyLevel'])
-            ->middleware('permission:finance.governance_structure.delete|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.delete|finance.governance_structure.manage')
             ->name('governance.levels.destroy');
 
         Route::get('governance-structure/levels/{level}/edit', [GovernanceStructureController::class, 'editLevel'])
-            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage')
             ->name('governance.levels.edit');
 
         Route::post('governance-structure/nodes', [GovernanceStructureController::class, 'storeNode'])
-            ->middleware('permission:finance.governance_structure.create|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.create|finance.governance_structure.manage')
             ->name('governance.nodes.store');
 
         Route::put('governance-structure/nodes/{node}', [GovernanceStructureController::class, 'updateNode'])
-            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage')
             ->name('governance.nodes.update');
 
         Route::delete('governance-structure/nodes/{node}', [GovernanceStructureController::class, 'destroyNode'])
-            ->middleware('permission:finance.governance_structure.delete|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.delete|finance.governance_structure.manage')
             ->name('governance.nodes.destroy');
 
         Route::get('governance-structure/nodes/{node}/edit', [GovernanceStructureController::class, 'editNode'])
-            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage')
             ->name('governance.nodes.edit');
 
         Route::post('governance-structure/lines', [GovernanceStructureController::class, 'storeLine'])
-            ->middleware('permission:finance.governance_structure.create|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.create|finance.governance_structure.manage')
             ->name('governance.lines.store');
 
         Route::put('governance-structure/lines/{line}', [GovernanceStructureController::class, 'updateLine'])
-            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage')
             ->name('governance.lines.update');
 
         Route::delete('governance-structure/lines/{line}', [GovernanceStructureController::class, 'destroyLine'])
-            ->middleware('permission:finance.governance_structure.delete|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.delete|finance.governance_structure.manage')
             ->name('governance.lines.destroy');
 
         Route::get('governance-structure/lines/{line}/edit', [GovernanceStructureController::class, 'editLine'])
-            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage')
             ->name('governance.lines.edit');
 
         Route::post('governance-structure/assignments', [GovernanceStructureController::class, 'storeAssignment'])
-            ->middleware('permission:finance.governance_structure.create|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.create|finance.governance_structure.manage')
             ->name('governance.assignments.store');
 
         Route::put('governance-structure/assignments/{assignment}', [GovernanceStructureController::class, 'updateAssignment'])
-            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage')
             ->name('governance.assignments.update');
 
         Route::delete('governance-structure/assignments/{assignment}', [GovernanceStructureController::class, 'destroyAssignment'])
-            ->middleware('permission:finance.governance_structure.delete|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.delete|finance.governance_structure.manage')
             ->name('governance.assignments.destroy');
 
         Route::get('governance-structure/assignments/{assignment}/edit', [GovernanceStructureController::class, 'editAssignment'])
-            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage|procurement.settings.governance')
+            ->middleware('permission:finance.governance_structure.edit|finance.governance_structure.manage')
             ->name('governance.assignments.edit');
 
          /* ===================== DEPARTMENTS ===================== */
