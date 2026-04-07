@@ -15,7 +15,7 @@
             ];
             $matches = $screening?->response_payload['matches'] ?? [];
             $providerLabel = match (strtolower((string) $screening?->provider)) {
-                '3pap' => 'International Business',
+                '3pap' => 'International Screening',
                 '' => '—',
                 default => ucwords(str_replace(['_', '-'], ' ', (string) $screening->provider)),
             };
