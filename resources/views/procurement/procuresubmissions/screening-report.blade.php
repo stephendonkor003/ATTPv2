@@ -14,6 +14,11 @@
                 'critical' => 'dark',
             ];
             $matches = $screening?->response_payload['matches'] ?? [];
+            $providerLabel = match (strtolower((string) $screening?->provider)) {
+                '3pap' => 'International Business',
+                '' => '—',
+                default => ucwords(str_replace(['_', '-'], ' ', (string) $screening->provider)),
+            };
         @endphp
 
         <div class="page-header d-flex justify-content-between align-items-start mb-3">
@@ -144,7 +149,7 @@
                                 <div class="col-lg-3 col-md-6">
                                     <div class="border rounded p-3 h-100 bg-light-subtle">
                                         <div class="text-muted small mb-1">Provider</div>
-                                        <div class="fw-semibold text-uppercase">{{ $screening->provider ?: '—' }}</div>
+                                        <div class="fw-semibold">{{ $providerLabel }}</div>
                                     </div>
                                 </div>
                             </div>
