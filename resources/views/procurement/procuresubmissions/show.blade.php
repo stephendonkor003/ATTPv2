@@ -2,6 +2,9 @@
 
 @section('content')
     <div class="nxl-container">
+        @php
+            $screening = $submission->screening;
+        @endphp
 
         {{-- =====================================================
         PAGE HEADER
@@ -19,12 +22,11 @@
 
             <div class="d-flex gap-2">
                 @if ($screeningConfigured)
-                    <form method="POST" action="{{ route('procurement.submissions.screen', $submission) }}">
-                        @csrf
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="feather-shield me-1"></i> Check Applicant
-                        </button>
-                    </form>
+                    <a href="{{ route('procurement.submissions.screening.report', ['submission' => $submission, 'run' => $screening ? null : 1]) }}"
+                        class="btn btn-primary btn-sm">
+                        <i class="feather-shield me-1"></i>
+                        {{ $screening ? 'Open Screening Report' : 'Check Applicant' }}
+                    </a>
                 @endif
 
                 <a href="{{ url()->previous() }}" class="btn btn-light btn-sm">
@@ -73,7 +75,6 @@
         </div>
 
         @php
-            $screening = $submission->screening;
             $riskColors = [
                 'clear' => 'success',
                 'low' => 'info',
@@ -87,9 +88,17 @@
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-bold">International Screening</h6>
-                @if (!$screeningConfigured)
-                    <span class="badge bg-secondary-subtle text-secondary">Not Configured</span>
-                @endif
+                <div class="d-flex gap-2 align-items-center">
+                    @if (!$screeningConfigured)
+                        <span class="badge bg-secondary-subtle text-secondary">Not Configured</span>
+                    @endif
+                    @if ($screeningConfigured)
+                        <a href="{{ route('procurement.submissions.screening.report', ['submission' => $submission, 'run' => $screening ? null : 1]) }}"
+                            class="btn btn-sm btn-outline-primary">
+                            <i class="feather-external-link me-1"></i> Full Report
+                        </a>
+                    @endif
+                </div>
             </div>
             <div class="card-body">
                 @if (!$screeningConfigured)
@@ -130,6 +139,16 @@
                                 {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
                             </div>
                         </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="text-muted small">Decision</div>
+                            @if ($screening->review_decision === 'fit')
+                                <span class="badge bg-success px-3 py-1">Fit</span>
+                            @elseif ($screening->review_decision === 'not_fit')
+                                <span class="badge bg-danger px-3 py-1">Not Fit</span>
+                            @else
+                                <span class="badge bg-secondary-subtle text-secondary px-3 py-1">Pending Review</span>
+                            @endif
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -137,6 +156,13 @@
                             {{ $screening->total_matches }} match{{ $screening->total_matches === 1 ? '' : 'es' }} returned
                         </span>
                     </div>
+
+                    @if ($screening->review_notes)
+                        <div class="alert alert-light border mb-3">
+                            <div class="fw-semibold mb-1">Reviewer Notes</div>
+                            <div>{{ $screening->review_notes }}</div>
+                        </div>
+                    @endif
 
                     @if (!empty($matches))
                         <div class="table-responsive">

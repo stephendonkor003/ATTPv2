@@ -43,11 +43,59 @@ class ProcurementSubmissionController extends Controller
         $submission->load([
             'procurement',
             'form.fields',
+            'submitter',
             'values',
-            'screening',
+            'screening.checker',
+            'screening.reviewer',
         ]);
 
         return view('procurement.procuresubmissions.show', [
+            'submission' => $submission,
+            'screeningConfigured' => $screeningService->isConfigured(),
+        ]);
+    }
+
+    public function screeningReport(Request $request, FormSubmission $submission, ProcurementSubmissionScreeningService $screeningService)
+    {
+        $this->assertSubmissionInScope($submission);
+
+        if ($request->boolean('run')) {
+            if (! $screeningService->isConfigured()) {
+                return redirect()
+                    ->route('procurement.submissions.screening.report', $submission)
+                    ->with('error', 'International screening is not configured.');
+            }
+
+            $screening = $screeningService->screenSubmission(
+                $submission->loadMissing(['values', 'submitter']),
+                $request->user(),
+                'manual'
+            );
+
+            return redirect()
+                ->route('procurement.submissions.screening.report', $submission)
+                ->with(
+                    $screening->request_status === 'error' ? 'error' : 'success',
+                    $screening->request_status === 'error'
+                        ? ($screening->error_message ?: 'International screening failed.')
+                        : sprintf(
+                            'International screening completed for %s. Risk level: %s.',
+                            $screening->entity_name ?: $submission->procurement_submission_code,
+                            strtoupper((string) $screening->risk_level)
+                        )
+                );
+        }
+
+        $submission->load([
+            'procurement',
+            'form',
+            'submitter',
+            'values',
+            'screening.checker',
+            'screening.reviewer',
+        ]);
+
+        return view('procurement.procuresubmissions.screening-report', [
             'submission' => $submission,
             'screeningConfigured' => $screeningService->isConfigured(),
         ]);
@@ -58,7 +106,12 @@ class ProcurementSubmissionController extends Controller
         $this->assertSubmissionInScope($submission);
 
         if (! $screeningService->isConfigured()) {
-            return back()->with('error', 'International screening is not configured.');
+            return $this->redirectWithMessage(
+                $request,
+                $submission,
+                'error',
+                'International screening is not configured.'
+            );
         }
 
         $screening = $screeningService->screenSubmission(
@@ -68,10 +121,17 @@ class ProcurementSubmissionController extends Controller
         );
 
         if ($screening->request_status === 'error') {
-            return back()->with('error', $screening->error_message ?: 'International screening failed.');
+            return $this->redirectWithMessage(
+                $request,
+                $submission,
+                'error',
+                $screening->error_message ?: 'International screening failed.'
+            );
         }
 
-        return back()->with(
+        return $this->redirectWithMessage(
+            $request,
+            $submission,
             'success',
             sprintf(
                 'International screening completed for %s. Risk level: %s.',
@@ -79,6 +139,39 @@ class ProcurementSubmissionController extends Controller
                 strtoupper((string) $screening->risk_level)
             )
         );
+    }
+
+    public function saveScreeningDecision(Request $request, FormSubmission $submission)
+    {
+        $this->assertSubmissionInScope($submission);
+
+        $validated = $request->validate([
+            'review_decision' => ['required', 'in:fit,not_fit'],
+            'review_notes' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $screening = $submission->screening()->first();
+        if (! $screening) {
+            return redirect()
+                ->route('procurement.submissions.screening.report', $submission)
+                ->with('error', 'Run international screening before recording a fit decision.');
+        }
+
+        $screening->update([
+            'review_decision' => $validated['review_decision'],
+            'review_notes' => $validated['review_notes'] ?: null,
+            'reviewed_by' => $request->user()?->id,
+            'reviewed_at' => now(),
+        ]);
+
+        return redirect()
+            ->route('procurement.submissions.screening.report', $submission)
+            ->with(
+                'success',
+                $validated['review_decision'] === 'fit'
+                    ? 'Applicant marked as fit.'
+                    : 'Applicant marked as not fit.'
+            );
     }
 
     public function screenAll(Request $request, ProcurementSubmissionScreeningService $screeningService)
@@ -180,5 +273,20 @@ class ProcurementSubmissionController extends Controller
                     ->whereNotNull('governance_node_id');
             });
         });
+    }
+
+    private function redirectWithMessage(Request $request, FormSubmission $submission, string $key, string $message)
+    {
+        if ($request->filled('redirect_to')) {
+            return redirect()->to((string) $request->input('redirect_to'))->with($key, $message);
+        }
+
+        if ($request->boolean('to_report')) {
+            return redirect()
+                ->route('procurement.submissions.screening.report', $submission)
+                ->with($key, $message);
+        }
+
+        return back()->with($key, $message);
     }
 }

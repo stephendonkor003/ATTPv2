@@ -1696,8 +1696,14 @@ Route::prefix('procurement/submissions')
         Route::post('/screen-all', [ProcurementSubmissionController::class, 'screenAll'])
             ->name('procurement.submissions.screen-all');
 
+        Route::get('/{submission}/screening', [ProcurementSubmissionController::class, 'screeningReport'])
+            ->name('procurement.submissions.screening.report');
+
         Route::post('/{submission}/screen', [ProcurementSubmissionController::class, 'screen'])
             ->name('procurement.submissions.screen');
+
+        Route::post('/{submission}/screening/decision', [ProcurementSubmissionController::class, 'saveScreeningDecision'])
+            ->name('procurement.submissions.screening.decision');
 
         // View submission details
         Route::get('/{submission}', [ProcurementSubmissionController::class, 'show'])

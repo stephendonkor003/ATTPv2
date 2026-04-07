@@ -115,6 +115,13 @@
                                             <div class="small text-muted mt-1">
                                                 {{ $screening->total_matches }} match{{ $screening->total_matches === 1 ? '' : 'es' }}
                                             </div>
+                                            @if ($screening->review_decision)
+                                                <div class="small mt-1">
+                                                    <span class="badge bg-{{ $screening->review_decision === 'fit' ? 'success' : 'danger' }}-subtle text-{{ $screening->review_decision === 'fit' ? 'success' : 'danger' }}">
+                                                        {{ $screening->review_decision === 'fit' ? 'Fit' : 'Not Fit' }}
+                                                    </span>
+                                                </div>
+                                            @endif
                                             <div class="small text-muted">
                                                 {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
                                             </div>
@@ -134,12 +141,11 @@
                                         </a>
 
                                         @if ($screeningConfigured)
-                                            <form method="POST" action="{{ route('procurement.submissions.screen', $submission) }}">
-                                                @csrf
-                                                <button type="submit" class="btn btn-sm btn-outline-dark">
-                                                    <i class="feather-shield me-1"></i> Check
-                                                </button>
-                                            </form>
+                                            <a href="{{ route('procurement.submissions.screening.report', ['submission' => $submission, 'run' => $screening ? null : 1]) }}"
+                                                class="btn btn-sm btn-outline-dark">
+                                                <i class="feather-shield me-1"></i>
+                                                {{ $screening ? 'Report' : 'Check' }}
+                                            </a>
                                         @endif
                                     </div>
                                 </td>
