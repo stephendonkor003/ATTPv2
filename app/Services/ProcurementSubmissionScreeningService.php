@@ -41,10 +41,14 @@ class ProcurementSubmissionScreeningService
         'nationality',
     ];
 
+    private ?array $screeningConfig = null;
+
     public function isConfigured(): bool
     {
-        return filled(config('services.threepap_checker.api_token'))
-            && filled(config('services.threepap_checker.base_url'));
+        $config = $this->screeningConfig();
+
+        return filled($config['api_token'])
+            && filled($config['base_url']);
     }
 
     public function deferSubmissionScreening(string $submissionId): void
@@ -79,7 +83,7 @@ class ProcurementSubmissionScreeningService
             return $this->storeFailure(
                 $submission,
                 $entity,
-                'Applicant name was not available for 3PAP screening.',
+                'Applicant name was not available for international screening.',
                 $actor,
                 $checkedVia
             );
@@ -140,7 +144,7 @@ class ProcurementSubmissionScreeningService
                 $this->storeFailure(
                     $item['submission'],
                     $item['entity'],
-                    'Applicant name was not available for 3PAP screening.',
+                    'Applicant name was not available for international screening.',
                     $actor,
                     $checkedVia
                 );
@@ -186,7 +190,7 @@ class ProcurementSubmissionScreeningService
                     $this->storeFailure(
                         $item['submission'],
                         $item['entity'],
-                        '3PAP batch screening did not return a result for this applicant.',
+                        'International screening did not return a result for this applicant.',
                         $actor,
                         $checkedVia,
                         $response->status(),
@@ -207,18 +211,105 @@ class ProcurementSubmissionScreeningService
 
     private function client()
     {
+        $config = $this->screeningConfig();
+
         return Http::acceptJson()
             ->asJson()
-            ->withToken((string) config('services.threepap_checker.api_token'))
-            ->timeout((int) config('services.threepap_checker.timeout', 20))
-            ->baseUrl(rtrim((string) config('services.threepap_checker.base_url'), '/'));
+            ->withToken((string) $config['api_token'])
+            ->timeout((int) $config['timeout'])
+            ->baseUrl(rtrim((string) $config['base_url'], '/'));
     }
 
     private function ensureConfigured(): void
     {
         if (! $this->isConfigured()) {
-            throw new \RuntimeException('3PAP checker is not configured.');
+            throw new \RuntimeException('International screening is not configured.');
         }
+    }
+
+    private function screeningConfig(): array
+    {
+        if ($this->screeningConfig !== null) {
+            return $this->screeningConfig;
+        }
+
+        return $this->screeningConfig = [
+            'base_url' => $this->resolveRuntimeConfigValue(
+                'services.threepap_checker.base_url',
+                'THREEPAP_CHECKER_BASE_URL',
+                'https://checker.3pap.africa/api/v1'
+            ),
+            'api_token' => $this->resolveRuntimeConfigValue(
+                'services.threepap_checker.api_token',
+                'THREEPAP_CHECKER_API_TOKEN'
+            ),
+            'timeout' => (int) $this->resolveRuntimeConfigValue(
+                'services.threepap_checker.timeout',
+                'THREEPAP_CHECKER_TIMEOUT',
+                20
+            ),
+        ];
+    }
+
+    private function resolveRuntimeConfigValue(string $configKey, string $envKey, mixed $default = null): mixed
+    {
+        $configValue = config($configKey);
+        if (filled($configValue)) {
+            return $configValue;
+        }
+
+        $runtimeValue = $_ENV[$envKey] ?? $_SERVER[$envKey] ?? getenv($envKey);
+        if ($runtimeValue !== false && filled($runtimeValue)) {
+            return $runtimeValue;
+        }
+
+        $fileValue = $this->readEnvironmentFileValue($envKey);
+        if (filled($fileValue)) {
+            return $fileValue;
+        }
+
+        return $default;
+    }
+
+    private function readEnvironmentFileValue(string $key): ?string
+    {
+        foreach (['.env', 'env'] as $environmentFile) {
+            $path = base_path($environmentFile);
+            if (! is_file($path)) {
+                continue;
+            }
+
+            $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || str_starts_with($line, '#') || ! str_contains($line, '=')) {
+                    continue;
+                }
+
+                [$name, $value] = array_pad(explode('=', $line, 2), 2, null);
+                if (trim((string) $name) !== $key) {
+                    continue;
+                }
+
+                $value = trim((string) $value);
+                if ($value === '') {
+                    return null;
+                }
+
+                if (str_starts_with($value, '"') && str_ends_with($value, '"')) {
+                    return substr($value, 1, -1);
+                }
+
+                if (str_starts_with($value, "'") && str_ends_with($value, "'")) {
+                    return substr($value, 1, -1);
+                }
+
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     private function buildEntityPayload(FormSubmission $submission): array
@@ -380,7 +471,7 @@ class ProcurementSubmissionScreeningService
             return $message;
         }
 
-        return sprintf('3PAP request failed with HTTP %s.', $response->status());
+        return sprintf('International screening request failed with HTTP %s.', $response->status());
     }
 
     private function matchBatchResultByName(array $results, string $name): ?array

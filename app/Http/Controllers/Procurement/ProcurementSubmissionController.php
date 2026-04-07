@@ -58,7 +58,7 @@ class ProcurementSubmissionController extends Controller
         $this->assertSubmissionInScope($submission);
 
         if (! $screeningService->isConfigured()) {
-            return back()->with('error', '3PAP checker is not configured.');
+            return back()->with('error', 'International screening is not configured.');
         }
 
         $screening = $screeningService->screenSubmission(
@@ -68,13 +68,13 @@ class ProcurementSubmissionController extends Controller
         );
 
         if ($screening->request_status === 'error') {
-            return back()->with('error', $screening->error_message ?: '3PAP screening failed.');
+            return back()->with('error', $screening->error_message ?: 'International screening failed.');
         }
 
         return back()->with(
             'success',
             sprintf(
-                '3PAP screening completed for %s. Risk level: %s.',
+                'International screening completed for %s. Risk level: %s.',
                 $screening->entity_name ?: $submission->procurement_submission_code,
                 strtoupper((string) $screening->risk_level)
             )
@@ -89,7 +89,7 @@ class ProcurementSubmissionController extends Controller
         }
 
         if (! $screeningService->isConfigured()) {
-            return back()->with('error', '3PAP checker is not configured.');
+            return back()->with('error', 'International screening is not configured.');
         }
 
         $submissions = FormSubmission::with(['values', 'submitter'])
@@ -103,7 +103,7 @@ class ProcurementSubmissionController extends Controller
             ->get();
 
         if ($submissions->isEmpty()) {
-            return back()->with('error', 'No submissions were available for 3PAP screening.');
+            return back()->with('error', 'No submissions were available for international screening.');
         }
 
         $summary = $screeningService->screenSubmissions($submissions, $request->user(), 'bulk');
@@ -111,7 +111,7 @@ class ProcurementSubmissionController extends Controller
         return back()->with(
             'success',
             sprintf(
-                '3PAP batch screening finished. %d checked, %d failed, %d skipped.',
+                'International screening finished. %d checked, %d failed, %d skipped.',
                 $summary['checked'],
                 $summary['failed'],
                 $summary['skipped']

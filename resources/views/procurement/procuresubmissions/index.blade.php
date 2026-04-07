@@ -23,7 +23,7 @@
                     </form>
                 @else
                     <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
-                        <i class="feather-slash me-1"></i> 3PAP Not Configured
+                        <i class="feather-slash me-1"></i> Screening Not Configured
                     </button>
                 @endif
             </div>
@@ -40,7 +40,7 @@
                             <th>Procurement</th>
                             <th>Form</th>
                             <th class="text-center">Status</th>
-                            <th class="text-center">3PAP Screening</th>
+                            <th class="text-center">International Screening</th>
                             <th>Submitted At</th>
                             <th class="text-center" width="180">Action</th>
                         </tr>

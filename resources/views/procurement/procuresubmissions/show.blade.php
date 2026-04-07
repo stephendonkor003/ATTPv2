@@ -86,7 +86,7 @@
 
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h6 class="mb-0 fw-bold">3PAP Screening</h6>
+                <h6 class="mb-0 fw-bold">International Screening</h6>
                 @if (!$screeningConfigured)
                     <span class="badge bg-secondary-subtle text-secondary">Not Configured</span>
                 @endif
@@ -94,7 +94,7 @@
             <div class="card-body">
                 @if (!$screeningConfigured)
                     <div class="alert alert-warning mb-0">
-                        3PAP integration is not configured in this environment.
+                        International screening is not configured in this environment.
                     </div>
                 @elseif (!$screening)
                     <div class="alert alert-light border mb-0">
@@ -103,7 +103,7 @@
                 @elseif ($screening->request_status === 'error')
                     <div class="alert alert-danger mb-0">
                         <div class="fw-semibold mb-1">Screening failed</div>
-                        <div>{{ $screening->error_message ?: '3PAP screening did not complete successfully.' }}</div>
+                        <div>{{ $screening->error_message ?: 'International screening did not complete successfully.' }}</div>
                         <div class="small mt-2">
                             Last attempted: {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
                         </div>

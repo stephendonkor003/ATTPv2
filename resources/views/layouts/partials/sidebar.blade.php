@@ -11,6 +11,7 @@
         'procurement.settings.statuses',
         'procurement.settings.step_stages',
         'procurement.settings.step_approvals',
+        'procurement.settings.governance',
         'procurement.view_all',
         'finance.governance_structure.view',
         'finance.governance_structure.manage',
@@ -633,7 +634,7 @@
                     {{-- ================= PROCUREMENT SETTINGS ================= --}}
                     @if ($canSeeProcurementSettingsSidebar)
                         <li class="nxl-item nxl-hasmenu">
-                            {{-- <a href="javascript:void(0);" class="nxl-link">
+                            <a href="javascript:void(0);" class="nxl-link">
                                 <span class="nxl-micon">
                                     <i class="feather-settings"></i>
                                 </span>
@@ -641,10 +642,10 @@
                                 <span class="nxl-arrow">
                                     <i class="feather-chevron-right"></i>
                                 </span>
-                            </a> --}}
+                            </a>
 
                             <ul class="nxl-submenu">
-                                @canany(['finance.governance_structure.view', 'finance.governance_structure.manage'])
+                                @canany(['procurement.settings.governance', 'finance.governance_structure.view', 'finance.governance_structure.manage'])
                                     <li class="nxl-item">
                                         <a href="{{ route('finance.governance.index') }}" class="nxl-link">
                                             <i class="feather-grid me-2"></i>
