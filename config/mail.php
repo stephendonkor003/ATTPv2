@@ -1,5 +1,66 @@
 <?php
 
+$readEnvironmentFileValue = static function (string $key): mixed {
+    foreach (['.env', 'env'] as $environmentFile) {
+        $path = dirname(__DIR__) . DIRECTORY_SEPARATOR . $environmentFile;
+        if (! is_file($path)) {
+            continue;
+        }
+
+        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+
+            if ($line === '' || str_starts_with($line, '#') || ! str_contains($line, '=')) {
+                continue;
+            }
+
+            [$name, $value] = array_pad(explode('=', $line, 2), 2, null);
+            if (trim((string) $name) !== $key) {
+                continue;
+            }
+
+            $value = trim((string) $value);
+            if ($value === '') {
+                return null;
+            }
+
+            if (
+                (str_starts_with($value, '"') && str_ends_with($value, '"')) ||
+                (str_starts_with($value, "'") && str_ends_with($value, "'"))
+            ) {
+                return substr($value, 1, -1);
+            }
+
+            return $value;
+        }
+    }
+
+    return null;
+};
+
+$resolveMailValue = static function (array $keys, mixed $default = null) use ($readEnvironmentFileValue): mixed {
+    foreach ($keys as $key) {
+        $value = env($key);
+        if ($value !== null && $value !== '') {
+            return $value;
+        }
+
+        $runtimeValue = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
+        if ($runtimeValue !== false && $runtimeValue !== null && $runtimeValue !== '') {
+            return $runtimeValue;
+        }
+
+        $fileValue = $readEnvironmentFileValue($key);
+        if ($fileValue !== null && $fileValue !== '') {
+            return $fileValue;
+        }
+    }
+
+    return $default;
+};
+
 return [
 
     /*
@@ -14,7 +75,7 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'log'),
+    'default' => $resolveMailValue(['MAIL_MAILER'], 'log'),
 
     /*
     |--------------------------------------------------------------------------
@@ -39,14 +100,17 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
-            'url' => env('MAIL_URL'),
-            'host' => env('MAIL_HOST', '127.0.0.1'),
-            'port' => env('MAIL_PORT', 2525),
-            'username' => env('MAIL_USERNAME'),
-            'password' => env('MAIL_PASSWORD'),
+            'scheme' => $resolveMailValue(['MAIL_SCHEME', 'MAIL_ENCRYPTION']),
+            'url' => $resolveMailValue(['MAIL_URL']),
+            'host' => $resolveMailValue(['MAIL_HOST'], '127.0.0.1'),
+            'port' => $resolveMailValue(['MAIL_PORT'], 2525),
+            'username' => $resolveMailValue(['MAIL_USERNAME']),
+            'password' => $resolveMailValue(['MAIL_PASSWORD']),
             'timeout' => null,
-            'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+            'local_domain' => $resolveMailValue(
+                ['MAIL_EHLO_DOMAIN'],
+                parse_url((string) $resolveMailValue(['APP_URL'], 'http://localhost'), PHP_URL_HOST)
+            ),
         ],
 
         'ses' => [
@@ -67,12 +131,12 @@ return [
 
         'sendmail' => [
             'transport' => 'sendmail',
-            'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),
+            'path' => $resolveMailValue(['MAIL_SENDMAIL_PATH'], '/usr/sbin/sendmail -bs -i'),
         ],
 
         'log' => [
             'transport' => 'log',
-            'channel' => env('MAIL_LOG_CHANNEL'),
+            'channel' => $resolveMailValue(['MAIL_LOG_CHANNEL']),
         ],
 
         'array' => [
@@ -111,8 +175,8 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', 'Example'),
+        'address' => $resolveMailValue(['MAIL_FROM_ADDRESS'], 'hello@example.com'),
+        'name' => $resolveMailValue(['MAIL_FROM_NAME'], 'Example'),
     ],
 
 ];

@@ -109,7 +109,7 @@ class PurchaseRequestController extends Controller
         ]);
 
         try {
-            Mail::to([$validated['recipient_email'] => $validated['recipient_name']])
+            Mail::to($validated['recipient_email'], $validated['recipient_name'])
                 ->send(new PurchaseRequestMail($purchaseRequest, $validated['recipient_name']));
         } catch (\Throwable $e) {
             Log::error('Purchase request email failed', [
@@ -157,4 +157,3 @@ class PurchaseRequestController extends Controller
         }
     }
 }
-
