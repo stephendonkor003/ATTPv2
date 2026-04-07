@@ -8,6 +8,7 @@ use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
 use App\Models\VendorCategory;
+use App\Services\ProcurementSubmissionScreeningService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -92,7 +93,11 @@ class VendorProcurementController extends Controller
         ]);
     }
 
-    public function submit(Request $request, Procurement $procurement)
+    public function submit(
+        Request $request,
+        Procurement $procurement,
+        ProcurementSubmissionScreeningService $screeningService
+    )
     {
         $user = $request->user();
         $this->assertVendor($user);
@@ -165,7 +170,9 @@ class VendorProcurementController extends Controller
 
         $validated = $request->validate($rules);
 
-        DB::transaction(function () use ($request, $procurement, $form, $user) {
+        $submission = null;
+
+        DB::transaction(function () use ($request, $procurement, $form, $user, &$submission) {
             $submission = FormSubmission::create([
                 'procurement_id' => $procurement->id,
                 'form_id' => $form->id,
@@ -193,6 +200,10 @@ class VendorProcurementController extends Controller
                 ]);
             }
         });
+
+        if ($submission) {
+            $screeningService->deferSubmissionScreening($submission->id);
+        }
 
         return redirect()
             ->route('vendor.submissions')

@@ -51,4 +51,10 @@ return [
         'timeout_seconds' => (int) env('IP_GEO_TIMEOUT', 2),
     ],
 
+    'threepap_checker' => [
+        'base_url' => env('THREEPAP_CHECKER_BASE_URL', 'https://checker.3pap.africa/api/v1'),
+        'api_token' => env('THREEPAP_CHECKER_API_TOKEN'),
+        'timeout' => (int) env('THREEPAP_CHECKER_TIMEOUT', 20),
+    ],
+
 ];

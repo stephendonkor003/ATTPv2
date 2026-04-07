@@ -1693,6 +1693,12 @@ Route::prefix('procurement/submissions')
             // ->middleware('can:procurement.view')
             ->name('procurement.submissions.index');
 
+        Route::post('/screen-all', [ProcurementSubmissionController::class, 'screenAll'])
+            ->name('procurement.submissions.screen-all');
+
+        Route::post('/{submission}/screen', [ProcurementSubmissionController::class, 'screen'])
+            ->name('procurement.submissions.screen');
+
         // View submission details
         Route::get('/{submission}', [ProcurementSubmissionController::class, 'show'])
             // ->middleware('can:procurement.view')

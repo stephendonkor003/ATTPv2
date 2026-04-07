@@ -35,10 +35,15 @@ class FormSubmission extends BaseModel
         return $this->hasMany(FormSubmissionValue::class, 'submission_id');
     }
 
-    public function submitter()
-    {
-        return $this->belongsTo(User::class, 'submitted_by');
-    }
+public function submitter()
+{
+    return $this->belongsTo(User::class, 'submitted_by');
+}
+
+public function screening()
+{
+    return $this->hasOne(ProcurementSubmissionScreening::class, 'submission_id');
+}
 
 
 

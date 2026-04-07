@@ -9,6 +9,7 @@ use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
 use App\Models\User;
 use App\Mail\VendorApplicationReceived;
+use App\Services\ProcurementSubmissionScreeningService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -83,7 +84,11 @@ class PublicProcurementController extends Controller
      * SUBMIT PROCUREMENT APPLICATION
      * ===============================
      */
-    public function submit(Request $request, Procurement $procurement)
+    public function submit(
+        Request $request,
+        Procurement $procurement,
+        ProcurementSubmissionScreeningService $screeningService
+    )
     {
         if ($procurement->visibility_type && $procurement->visibility_type !== 'public') {
             abort(404);
@@ -246,6 +251,10 @@ class PublicProcurementController extends Controller
         if ($vendorUser && $submission) {
             Mail::to($vendorUser->email)
                 ->send(new VendorApplicationReceived($procurement, $submission, $vendorUser, $temporaryPassword));
+        }
+
+        if ($submission) {
+            $screeningService->deferSubmissionScreening($submission->id);
         }
 
         return back()->with('success', 'Application submitted successfully. Your login credentials have been emailed to the official email address provided.');

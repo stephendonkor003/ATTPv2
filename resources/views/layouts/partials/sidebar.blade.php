@@ -3,6 +3,42 @@
     $isMemberStateSidebarUser = $sidebarUser && $sidebarUser->user_type === 'member_state';
     $sidebarMemberState = $isMemberStateSidebarUser ? $sidebarUser->memberState : null;
     $sidebarMemberStateFlag = $sidebarMemberState?->flag_url ?: asset('assets/images/au.png');
+    $procurementSettingsSidebarPermissions = [
+        'procurement.settings.manage',
+        'procurement.settings.geographics',
+        'procurement.settings.methods',
+        'procurement.settings.stages',
+        'procurement.settings.statuses',
+        'procurement.settings.step_stages',
+        'procurement.settings.step_approvals',
+        'procurement.view_all',
+        'finance.governance_structure.view',
+        'finance.governance_structure.manage',
+    ];
+    $canSeeProcurementSettingsSidebar = $sidebarUser
+        && collect($procurementSettingsSidebarPermissions)->contains(
+            fn($permission) => $sidebarUser->can($permission)
+        );
+    $procurementSidebarPermissions = [
+        'procurement.create',
+        'procurement.view',
+        'procurement.manage',
+        'procurement.plan.view',
+        'procurement.plan.create',
+        'procurement.view_all',
+        'procurement.manage_all',
+        'procurement.audit',
+        'forms.manage',
+        'vendor.manage',
+        'prescreening.evaluate',
+        'prescreening.manage',
+        'prescreening.view_all',
+    ];
+    $canSeeProcurementSidebar = $canSeeProcurementSettingsSidebar
+        || ($sidebarUser
+            && collect($procurementSidebarPermissions)->contains(
+                fn($permission) => $sidebarUser->can($permission)
+            ));
 @endphp
 
 <style>
@@ -590,13 +626,12 @@
                 {{-- ======================================================
                 | PROCUREMENT MANAGEMENT
                 ====================================================== --}}
-                @canany(['procurement.create', 'procurement.view', 'procurement.manage', 'forms.manage',
-                    'prescreening.evaluate', 'prescreening.manage', 'prescreening.view_all', 'procurement.audit'])
+                @if ($canSeeProcurementSidebar)
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.procurement') }}</label>
                     </li>
                     {{-- ================= PROCUREMENT SETTINGS ================= --}}
-                    @canany(['procurement.settings.manage', 'procurement.view_all'])
+                    @if ($canSeeProcurementSettingsSidebar)
                         <li class="nxl-item nxl-hasmenu">
                             {{-- <a href="javascript:void(0);" class="nxl-link">
                                 <span class="nxl-micon">
@@ -609,57 +644,71 @@
                             </a> --}}
 
                             <ul class="nxl-submenu">
-                                <li class="nxl-item">
-                                    <a href="{{ route('finance.governance.index') }}" class="nxl-link">
-                                        <i class="feather-grid me-2"></i>
-                                        Governance Structure
-                                    </a>
-                                </li>
+                                @canany(['finance.governance_structure.view', 'finance.governance_structure.manage'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('finance.governance.index') }}" class="nxl-link">
+                                            <i class="feather-grid me-2"></i>
+                                            Governance Structure
+                                        </a>
+                                    </li>
+                                @endcanany
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.settings.geographics.index') }}" class="nxl-link">
-                                        <i class="feather-map-pin me-2"></i>
-                                        Geographics
-                                    </a>
-                                </li>
+                                @canany(['procurement.settings.manage', 'procurement.settings.geographics', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.settings.geographics.index') }}" class="nxl-link">
+                                            <i class="feather-map-pin me-2"></i>
+                                            Geographics
+                                        </a>
+                                    </li>
+                                @endcanany
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.settings.method-planned.index') }}" class="nxl-link">
-                                        <i class="feather-calendar me-2"></i>
-                                        Methods Planned
-                                    </a>
-                                </li>
+                                @canany(['procurement.settings.manage', 'procurement.settings.methods', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.settings.method-planned.index') }}" class="nxl-link">
+                                            <i class="feather-calendar me-2"></i>
+                                            Methods Planned
+                                        </a>
+                                    </li>
+                                @endcanany
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.settings.stages.index') }}" class="nxl-link">
-                                        <i class="feather-layers me-2"></i>
-                                        Stages
-                                    </a>
-                                </li>
+                                @canany(['procurement.settings.manage', 'procurement.settings.stages', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.settings.stages.index') }}" class="nxl-link">
+                                            <i class="feather-layers me-2"></i>
+                                            Stages
+                                        </a>
+                                    </li>
+                                @endcanany
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.settings.statuses.index') }}" class="nxl-link">
-                                        <i class="feather-flag me-2"></i>
-                                        Statuses
-                                    </a>
-                                </li>
+                                @canany(['procurement.settings.manage', 'procurement.settings.statuses', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.settings.statuses.index') }}" class="nxl-link">
+                                            <i class="feather-flag me-2"></i>
+                                            Statuses
+                                        </a>
+                                    </li>
+                                @endcanany
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.settings.step-stages.index') }}" class="nxl-link">
-                                        <i class="feather-git-branch me-2"></i>
-                                        Step Stages
-                                    </a>
-                                </li>
+                                @canany(['procurement.settings.manage', 'procurement.settings.step_stages', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.settings.step-stages.index') }}" class="nxl-link">
+                                            <i class="feather-git-branch me-2"></i>
+                                            Step Stages
+                                        </a>
+                                    </li>
+                                @endcanany
 
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.settings.step-approvals.index') }}" class="nxl-link">
-                                        <i class="feather-check-circle me-2"></i>
-                                        Step Approvals
-                                    </a>
-                                </li>
+                                @canany(['procurement.settings.manage', 'procurement.settings.step_approvals', 'procurement.view_all'])
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.settings.step-approvals.index') }}" class="nxl-link">
+                                            <i class="feather-check-circle me-2"></i>
+                                            Step Approvals
+                                        </a>
+                                    </li>
+                                @endcanany
                             </ul>
                         </li>
-                    @endcanany
+                    @endif
                     {{-- ================= PROCUREMENT STRUCTURE ================= --}}
                     @canany(['procurement.plan.view', 'procurement.plan.create', 'procurement.view_all'])
                         <li class="nxl-item nxl-hasmenu">
@@ -796,7 +845,7 @@
 
 
 
-                @endcanany
+                @endif
 
 
                 {{-- ================= VENDOR MANAGEMENT ================= --}}

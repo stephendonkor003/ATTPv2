@@ -17,9 +17,20 @@
                 </div>
             </div>
 
-            <a href="{{ url()->previous() }}" class="btn btn-light btn-sm">
-                <i class="feather-arrow-left me-1"></i> Back
-            </a>
+            <div class="d-flex gap-2">
+                @if ($screeningConfigured)
+                    <form method="POST" action="{{ route('procurement.submissions.screen', $submission) }}">
+                        @csrf
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="feather-shield me-1"></i> Check Applicant
+                        </button>
+                    </form>
+                @endif
+
+                <a href="{{ url()->previous() }}" class="btn btn-light btn-sm">
+                    <i class="feather-arrow-left me-1"></i> Back
+                </a>
+            </div>
         </div>
 
         {{-- =====================================================
@@ -58,6 +69,122 @@
                     </div>
 
                 </div>
+            </div>
+        </div>
+
+        @php
+            $screening = $submission->screening;
+            $riskColors = [
+                'clear' => 'success',
+                'low' => 'info',
+                'medium' => 'warning',
+                'high' => 'danger',
+                'critical' => 'dark',
+            ];
+            $matches = $screening?->response_payload['matches'] ?? [];
+        @endphp
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">3PAP Screening</h6>
+                @if (!$screeningConfigured)
+                    <span class="badge bg-secondary-subtle text-secondary">Not Configured</span>
+                @endif
+            </div>
+            <div class="card-body">
+                @if (!$screeningConfigured)
+                    <div class="alert alert-warning mb-0">
+                        3PAP integration is not configured in this environment.
+                    </div>
+                @elseif (!$screening)
+                    <div class="alert alert-light border mb-0">
+                        This applicant has not been screened yet.
+                    </div>
+                @elseif ($screening->request_status === 'error')
+                    <div class="alert alert-danger mb-0">
+                        <div class="fw-semibold mb-1">Screening failed</div>
+                        <div>{{ $screening->error_message ?: '3PAP screening did not complete successfully.' }}</div>
+                        <div class="small mt-2">
+                            Last attempted: {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
+                        </div>
+                    </div>
+                @else
+                    <div class="row g-3 mb-3">
+                        <div class="col-lg-3 col-md-6">
+                            <div class="text-muted small">Entity Screened</div>
+                            <div class="fw-semibold">{{ $screening->entity_name ?: '—' }}</div>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="text-muted small">Country</div>
+                            <div class="fw-semibold">{{ $screening->entity_country ?: '—' }}</div>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="text-muted small">Risk Level</div>
+                            <span class="badge bg-{{ $riskColors[$screening->risk_level] ?? 'secondary' }} px-3 py-1">
+                                {{ strtoupper($screening->risk_level ?? 'clear') }}
+                            </span>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="text-muted small">Checked At</div>
+                            <div class="fw-semibold">
+                                {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <span class="badge bg-primary-subtle text-primary px-3 py-2">
+                            {{ $screening->total_matches }} match{{ $screening->total_matches === 1 ? '' : 'es' }} returned
+                        </span>
+                    </div>
+
+                    @if (!empty($matches))
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Matched Entity</th>
+                                        <th>Dataset</th>
+                                        <th>Country</th>
+                                        <th>Program</th>
+                                        <th>Score</th>
+                                        <th>Source</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($matches as $match)
+                                        <tr>
+                                            <td class="fw-medium">{{ $match['name'] ?? '—' }}</td>
+                                            <td>{{ $match['dataset'] ?? '—' }}</td>
+                                            <td>{{ $match['country'] ?? '—' }}</td>
+                                            <td>{{ $match['program'] ?? '—' }}</td>
+                                            <td>
+                                                @if (isset($match['match_score']))
+                                                    {{ round(((float) $match['match_score']) * 100) }}%
+                                                @else
+                                                    —
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if (!empty($match['source_url']))
+                                                    <a href="{{ $match['source_url'] }}" target="_blank" rel="noopener">
+                                                        View Source
+                                                    </a>
+                                                @else
+                                                    —
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="alert alert-success mb-0">
+                            No sanctions matches were returned for this applicant.
+                        </div>
+                    @endif
+                @endif
             </div>
         </div>
 

@@ -214,6 +214,7 @@ private function resolveAuditModule(Model $model): string
         'Procurement' => 'procurement',
         'DynamicForm' => 'procurement',
         'FormSubmission' => 'procurement',
+        'ProcurementSubmissionScreening' => 'procurement',
 
         // Prescreening
         'PrescreeningTemplate' => 'prescreening',

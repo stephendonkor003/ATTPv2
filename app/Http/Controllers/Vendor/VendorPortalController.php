@@ -234,6 +234,7 @@ class VendorPortalController extends Controller
             );
         }
 
+        $submission->screening()->delete();
         $submission->touch();
 
         return redirect()

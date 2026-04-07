@@ -13,6 +13,20 @@
                     View and manage all bid submissions
                 </p>
             </div>
+            <div class="d-flex gap-2">
+                @if ($screeningConfigured)
+                    <form method="POST" action="{{ route('procurement.submissions.screen-all') }}">
+                        @csrf
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="feather-shield me-1"></i> Check All Applicants
+                        </button>
+                    </form>
+                @else
+                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
+                        <i class="feather-slash me-1"></i> 3PAP Not Configured
+                    </button>
+                @endif
+            </div>
         </div>
 
         <div class="card shadow-sm border-0">
@@ -26,8 +40,9 @@
                             <th>Procurement</th>
                             <th>Form</th>
                             <th class="text-center">Status</th>
+                            <th class="text-center">3PAP Screening</th>
                             <th>Submitted At</th>
-                            <th class="text-center" width="100">Action</th>
+                            <th class="text-center" width="180">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -35,6 +50,7 @@
                             @php
                                 $officialName = $submission->values->firstWhere('field_key', 'official_name')?->value;
                                 $officialEmail = $submission->values->firstWhere('field_key', 'official_email')?->value;
+                                $screening = $submission->screening;
                             @endphp
                             <tr>
                                 <td class="ps-4">
@@ -75,18 +91,66 @@
                                     </span>
                                 </td>
 
+                                <td class="text-center">
+                                    @if ($screening)
+                                        @php
+                                            $riskColors = [
+                                                'clear' => 'success',
+                                                'low' => 'info',
+                                                'medium' => 'warning',
+                                                'high' => 'danger',
+                                                'critical' => 'dark',
+                                            ];
+                                        @endphp
+
+                                        @if ($screening->request_status === 'error')
+                                            <span class="badge bg-danger-subtle text-danger px-3 py-1">Check Failed</span>
+                                            <div class="small text-muted mt-1">
+                                                {{ \Illuminate\Support\Str::limit($screening->error_message, 40) }}
+                                            </div>
+                                        @else
+                                            <span class="badge bg-{{ $riskColors[$screening->risk_level] ?? 'secondary' }} px-3 py-1">
+                                                {{ strtoupper($screening->risk_level ?? 'clear') }}
+                                            </span>
+                                            <div class="small text-muted mt-1">
+                                                {{ $screening->total_matches }} match{{ $screening->total_matches === 1 ? '' : 'es' }}
+                                            </div>
+                                            <div class="small text-muted">
+                                                {{ optional($screening->last_checked_at)->format('d M Y, H:i') ?? '—' }}
+                                            </div>
+                                        @endif
+                                    @else
+                                        <span class="badge bg-secondary-subtle text-secondary px-3 py-1">Not Checked</span>
+                                    @endif
+                                </td>
+
                                 <td>{{ $submission->submitted_at?->format('d M Y, H:i') ?? '—' }}</td>
 
                                 <td class="text-center">
-                                    <a href="{{ route('procurement.submissions.show', $submission) }}"
-                                        class="btn btn-sm btn-outline-primary">
-                                        <i class="feather-eye me-1"></i> View
-                                    </a>
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="{{ route('procurement.submissions.show', $submission) }}"
+                                            class="btn btn-sm btn-outline-primary">
+                                            <i class="feather-eye me-1"></i> View
+                                        </a>
+
+                                        @if ($screeningConfigured)
+                                            <form method="POST" action="{{ route('procurement.submissions.screen', $submission) }}">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-outline-dark">
+                                                    <i class="feather-shield me-1"></i> Check
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach
                     </tbody>
                 </x-data-table>
+
+                <div class="mt-3">
+                    {{ $submissions->links() }}
+                </div>
             </div>
         </div>
 
