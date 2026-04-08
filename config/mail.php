@@ -61,6 +61,36 @@ $resolveMailValue = static function (array $keys, mixed $default = null) use ($r
     return $default;
 };
 
+$resolveMailScheme = static function () use ($resolveMailValue): ?string {
+    $scheme = $resolveMailValue(['MAIL_SCHEME']);
+
+    if (is_string($scheme)) {
+        $scheme = strtolower(trim($scheme));
+
+        return match ($scheme) {
+            '', 'null', '(null)' => null,
+            'ssl' => 'smtps',
+            'tls' => 'smtp',
+            default => $scheme,
+        };
+    }
+
+    $legacyEncryption = $resolveMailValue(['MAIL_ENCRYPTION']);
+
+    if (! is_string($legacyEncryption)) {
+        return null;
+    }
+
+    $legacyEncryption = strtolower(trim($legacyEncryption));
+
+    return match ($legacyEncryption) {
+        '', 'null', '(null)' => null,
+        'ssl' => 'smtps',
+        'tls' => 'smtp',
+        default => null,
+    };
+};
+
 return [
 
     /*
@@ -100,7 +130,7 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => $resolveMailValue(['MAIL_SCHEME', 'MAIL_ENCRYPTION']),
+            'scheme' => $resolveMailScheme(),
             'url' => $resolveMailValue(['MAIL_URL']),
             'host' => $resolveMailValue(['MAIL_HOST'], '127.0.0.1'),
             'port' => $resolveMailValue(['MAIL_PORT'], 2525),
