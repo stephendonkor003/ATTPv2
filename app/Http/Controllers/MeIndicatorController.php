@@ -15,6 +15,7 @@ use App\Models\Project;
 use App\Models\ReportingFrequency;
 use App\Models\SubActivity;
 use App\Models\User;
+use App\Support\MeSurvey;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Closure;
 use Illuminate\Http\Request;
@@ -820,16 +821,10 @@ class MeIndicatorController extends Controller
 
     protected function methodologyHasSurveyConfig(IndicatorMethodology $methodology): bool
     {
-        $surveyMeta = (array) data_get($methodology->metadata, 'survey', []);
-        $enabled = (bool) ($surveyMeta['enabled'] ?? false);
-        if (!$enabled) {
-            return false;
-        }
-
-        $questions = collect($surveyMeta['questions'] ?? [])
-            ->filter(fn ($question) => is_array($question) && trim((string) ($question['label'] ?? '')) !== '');
-
-        return $questions->isNotEmpty();
+        return MeSurvey::hasEnabledQuestions(
+            (array) ($methodology->metadata ?? []),
+            trim((string) $methodology->name) !== '' ? ($methodology->name . ' Public Survey') : 'Public Survey'
+        );
     }
 
     protected function resolveSurveyMethodologyByIndicator(Indicator $indicator): ?IndicatorMethodology

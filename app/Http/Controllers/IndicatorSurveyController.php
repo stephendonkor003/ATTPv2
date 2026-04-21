@@ -6,6 +6,7 @@ use App\Models\Indicator;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorSurveyResponse;
+use App\Support\MeSurvey;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -57,6 +58,8 @@ class IndicatorSurveyController extends Controller
 
     public function responses(Indicator $indicator): View
     {
+        $indicator->load('surveyLink');
+
         $responses = IndicatorSurveyResponse::query()
             ->where('indicator_id', $indicator->id)
             ->orderByDesc('submitted_at')
@@ -86,14 +89,12 @@ class IndicatorSurveyController extends Controller
             return [null, null];
         }
 
-        $survey = (array) data_get($methodology->metadata, 'survey', []);
-        $enabled = (bool) ($survey['enabled'] ?? false);
-        $questions = collect($survey['questions'] ?? [])
-            ->filter(fn ($question) => is_array($question) && trim((string) ($question['label'] ?? '')) !== '')
-            ->values()
-            ->all();
+        $survey = MeSurvey::surveyConfigFromMetadata(
+            (array) ($methodology->metadata ?? []),
+            trim((string) $methodology->name) !== '' ? ($methodology->name . ' Public Survey') : 'Public Survey'
+        );
 
-        if (!$enabled || empty($questions)) {
+        if (!(bool) ($survey['enabled'] ?? false) || empty($survey['questions'])) {
             return [null, null];
         }
 

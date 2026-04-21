@@ -6,16 +6,17 @@ use App\Models\IndicatorMethodology;
 use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorSurveyResponse;
 use App\Models\User;
+use App\Support\MeSurvey;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 
 class PublicIndicatorSurveyController extends Controller
 {
     public function show(string $token): View
     {
-        [$link, $methodology, $surveyConfig, $questions] = $this->resolveSurveyContext($token);
+        [$link, $methodology, $surveyConfig, $sections, $questions] = $this->resolveSurveyContext($token);
 
         abort_if(!$link || !$methodology || empty($questions), 404);
 
@@ -23,90 +24,98 @@ class PublicIndicatorSurveyController extends Controller
             'link' => $link,
             'methodology' => $methodology,
             'surveyConfig' => $surveyConfig,
+            'sections' => $sections,
             'questions' => $questions,
         ]);
     }
 
     public function submit(Request $request, string $token): RedirectResponse
     {
-        [$link, $methodology, $surveyConfig, $questions] = $this->resolveSurveyContext($token);
+        [$link, $methodology, $surveyConfig, $sections, $questions] = $this->resolveSurveyContext($token);
 
         abort_if(!$link || !$methodology || empty($questions), 404);
 
-        $rules = [
+        $validator = Validator::make($request->all(), [
             'respondent_name' => 'nullable|string|max:255',
             'respondent_email' => 'nullable|email|max:255',
             'respondent_phone' => 'nullable|string|max:60',
             'respondent_organization' => 'nullable|string|max:255',
-            'answers' => 'required|array',
-        ];
-
-        foreach ($questions as $index => $question) {
-            $type = strtolower((string) ($question['type'] ?? 'text'));
-            $isRequired = (bool) ($question['required'] ?? false);
-            $field = 'answers.' . $index;
-
-            $fieldRules = $isRequired ? ['required'] : ['nullable'];
-
-            if ($type === 'number') {
-                $fieldRules[] = 'numeric';
-            } elseif ($type === 'email') {
-                $fieldRules[] = 'email';
-            } elseif ($type === 'date') {
-                $fieldRules[] = 'date';
-            } elseif ($type === 'checkbox') {
-                $fieldRules[] = 'array';
-            } else {
-                $fieldRules[] = 'string';
-                $fieldRules[] = 'max:2000';
-            }
-
-            if (in_array($type, ['select', 'radio'], true)) {
-                $options = collect($question['options'] ?? [])
-                    ->map(fn ($item) => trim((string) $item))
-                    ->filter()
-                    ->values()
-                    ->all();
-                if (!empty($options)) {
-                    $fieldRules[] = Rule::in($options);
-                }
-            }
-
-            $rules[$field] = $fieldRules;
-
-            if ($type === 'checkbox') {
-                $options = collect($question['options'] ?? [])
-                    ->map(fn ($item) => trim((string) $item))
-                    ->filter()
-                    ->values()
-                    ->all();
-                if (!empty($options)) {
-                    $rules[$field . '.*'] = [Rule::in($options)];
-                }
-            }
-        }
-
-        $validated = $request->validate($rules, [
-            'answers.required' => 'Please complete the survey form before submitting.',
+            'answers' => 'nullable|array',
+        ], [
+            'answers.array' => 'Please complete the survey form before submitting.',
         ]);
 
-        $answers = collect($questions)
-            ->map(function (array $question, int $index) use ($validated) {
-                $rawValue = data_get($validated, 'answers.' . $index);
-                if (is_array($rawValue)) {
-                    $rawValue = collect($rawValue)
-                        ->filter(fn ($item) => is_scalar($item) && trim((string) $item) !== '')
-                        ->map(fn ($item) => trim((string) $item))
-                        ->values()
-                        ->all();
-                } elseif (is_scalar($rawValue)) {
-                    $rawValue = trim((string) $rawValue);
+        $validator->after(function ($validator) use ($request, $surveyConfig, $questions) {
+            $requestAnswers = (array) $request->input('answers', []);
+            $normalizedAnswers = [];
+
+            foreach ($questions as $question) {
+                $normalizedAnswers[$question['key']] = MeSurvey::normalizeAnswer(
+                    $question,
+                    data_get($requestAnswers, $question['key'])
+                );
+            }
+
+            $visibleSectionKeys = collect(MeSurvey::visibleSections($surveyConfig, $normalizedAnswers))
+                ->pluck('key')
+                ->values()
+                ->all();
+
+            if (empty($visibleSectionKeys)) {
+                $validator->errors()->add('answers', 'This survey does not have any visible sections to submit.');
+                return;
+            }
+
+            foreach ($questions as $question) {
+                $sectionVisible = in_array((string) ($question['section_key'] ?? ''), $visibleSectionKeys, true);
+                $questionVisible = $sectionVisible && MeSurvey::isQuestionVisible($question, $normalizedAnswers);
+                $result = MeSurvey::validateAnswer(
+                    $question,
+                    data_get($requestAnswers, $question['key']),
+                    $questionVisible
+                );
+
+                $normalizedAnswers[$question['key']] = $result['value'];
+
+                foreach ($result['errors'] as $error) {
+                    $validator->errors()->add(
+                        'answers.' . $question['key'],
+                        (string) ($question['label'] ?? 'Question') . ': ' . $error
+                    );
                 }
+            }
+        });
+
+        $validated = $validator->validate();
+
+        $requestAnswers = (array) $request->input('answers', []);
+        $normalizedAnswers = [];
+        foreach ($questions as $question) {
+            $normalizedAnswers[$question['key']] = MeSurvey::validateAnswer(
+                $question,
+                data_get($requestAnswers, $question['key']),
+                true
+            )['value'];
+        }
+
+        $visibleSections = MeSurvey::visibleSections($surveyConfig, $normalizedAnswers);
+        $visibleSectionKeys = collect($visibleSections)->pluck('key')->values()->all();
+
+        $answers = collect($questions)
+            ->filter(function (array $question) use ($normalizedAnswers, $visibleSectionKeys) {
+                return in_array((string) ($question['section_key'] ?? ''), $visibleSectionKeys, true)
+                    && MeSurvey::isQuestionVisible($question, $normalizedAnswers);
+            })
+            ->map(function (array $question) use ($normalizedAnswers) {
+                $value = $normalizedAnswers[$question['key']] ?? null;
 
                 return [
-                    'question' => (string) ($question['label'] ?? ('Question ' . ($index + 1))),
+                    'section' => (string) ($question['section_title'] ?? ''),
+                    'section_key' => (string) ($question['section_key'] ?? ''),
+                    'question_key' => (string) ($question['key'] ?? ''),
+                    'question' => (string) ($question['label'] ?? 'Question'),
                     'type' => (string) ($question['type'] ?? 'text'),
-                    'answer' => $rawValue,
+                    'answer' => MeSurvey::displayAnswer($question, $value),
                 ];
             })
             ->values()
@@ -146,7 +155,7 @@ class PublicIndicatorSurveyController extends Controller
             ->first();
 
         if (!$link || !$link->indicator) {
-            return [null, null, [], []];
+            return [null, null, [], [], []];
         }
 
         $methodology = $link->methodology;
@@ -161,21 +170,22 @@ class PublicIndicatorSurveyController extends Controller
         }
 
         if (!$methodology) {
-            return [null, null, [], []];
+            return [null, null, [], [], []];
         }
 
-        $surveyConfig = (array) data_get($methodology->metadata, 'survey', []);
-        $enabled = (bool) ($surveyConfig['enabled'] ?? false);
-        if (!$enabled) {
-            return [null, null, [], []];
+        $surveyConfig = MeSurvey::surveyConfigFromMetadata(
+            (array) ($methodology->metadata ?? []),
+            trim((string) $methodology->name) !== '' ? ($methodology->name . ' Public Survey') : 'Public Survey'
+        );
+
+        if (!(bool) ($surveyConfig['enabled'] ?? false) || empty($surveyConfig['questions'])) {
+            return [null, null, [], [], []];
         }
 
-        $questions = collect($surveyConfig['questions'] ?? [])
-            ->filter(fn ($question) => is_array($question) && trim((string) ($question['label'] ?? '')) !== '')
-            ->values()
-            ->all();
+        $sections = (array) ($surveyConfig['sections'] ?? []);
+        $questions = (array) ($surveyConfig['questions'] ?? []);
 
-        return [$link, $methodology, $surveyConfig, $questions];
+        return [$link, $methodology, $surveyConfig, $sections, $questions];
     }
 
     protected function buildResponsibleSnapshot(string $responsiblePartyJson): array

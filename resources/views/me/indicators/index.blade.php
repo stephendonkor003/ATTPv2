@@ -683,46 +683,31 @@
                                         </select>
                                     </div>
 
-                                    {{-- Survey Builder (visible when methodology contains "survey") --}}
+                                    {{-- Survey design guidance (visible when methodology contains "survey") --}}
                                     <div class="col-12 {{ str_contains(strtolower($methodologyValue), 'survey') ? '' : 'd-none' }}" id="indicatorSurveyBlock">
-                                        <div class="border rounded p-3 bg-light-subtle">
-                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                        <div class="border rounded-4 p-3 bg-light-subtle">
+                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                                                 <div>
-                                                    <div class="fw-semibold mb-1">Public Survey</div>
-                                                    <small class="text-muted">Enable and design the survey respondents will fill for this indicator.</small>
-                                                </div>
-                                                <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" id="indicatorSurveyEnabled"
-                                                        name="survey_public_enabled" value="1" {{ $indicatorSurveyEnabled ? 'checked' : '' }}>
-                                                    <label class="form-check-label" for="indicatorSurveyEnabled">Enable</label>
+                                                    <div class="fw-semibold mb-1">Public Survey Linked To Methodology</div>
+                                                    <small class="text-muted">
+                                                        This indicator can publish a public survey, but the survey sections, questions, skip logic,
+                                                        and intro message are now designed from the methodology record so one survey definition stays consistent.
+                                                    </small>
                                                 </div>
                                             </div>
 
-                                            <div id="indicatorSurveyPanel" class="{{ $indicatorSurveyEnabled ? '' : 'd-none' }}">
-                                                <div class="row g-2 mb-2">
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Survey Title</label>
-                                                        <input type="text" class="form-control" id="indicatorSurveyTitle"
-                                                            name="survey_title" value="{{ $indicatorSurveyTitle }}" placeholder="Public survey title">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">Intro / Instructions</label>
-                                                        <input type="text" class="form-control" id="indicatorSurveyIntro"
-                                                            name="survey_intro" value="{{ $indicatorSurveyIntro }}" placeholder="Short intro for respondents">
+                                            <div class="row g-3 align-items-center">
+                                                <div class="col-md-8">
+                                                    <div class="small text-muted">
+                                                        After saving the indicator, use the survey link action to generate the public URL, QR code,
+                                                        and response collection flow for this survey-enabled methodology.
                                                     </div>
                                                 </div>
-
-                                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                                    <h6 class="mb-0">Survey Questions</h6>
-                                                    <button type="button" class="btn btn-sm btn-outline-primary" id="addIndicatorSurveyQuestionBtn">
-                                                        <i class="feather-plus me-1"></i> Add Question
-                                                    </button>
+                                                <div class="col-md-4 text-md-end">
+                                                    <a href="{{ route('budget.me-configuration.methodologies.index') }}" class="btn btn-sm btn-outline-primary">
+                                                        <i class="feather-settings me-1"></i> Manage Methodologies
+                                                    </a>
                                                 </div>
-
-                                                <input type="hidden" id="indicatorSurveyQuestionsJson" name="survey_questions_json"
-                                                    value="{{ $indicatorSurveyQuestionsJson }}">
-                                                <div id="indicatorSurveyQuestionsContainer" class="d-grid gap-2"></div>
-                                                <small class="text-muted d-block mt-2">Supported: text, textarea, number, email, date, select, radio, checkbox.</small>
                                             </div>
                                         </div>
                                     </div>

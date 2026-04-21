@@ -305,6 +305,7 @@
                                     <td>
                                         @php
                                             $publicUrl = route('public.me.indicators.surveys.show', ['token' => $survey->public_token]);
+                                            $qrUrl = \App\Support\MeSurvey::qrCodeUrl($publicUrl);
                                         @endphp
                                         <div class="d-flex flex-wrap gap-1">
                                             <a href="{{ $publicUrl }}" target="_blank" class="btn btn-sm btn-outline-primary">
@@ -318,8 +319,14 @@
                                                 href="https://wa.me/?text={{ urlencode($publicUrl) }}" target="_blank" rel="noopener">
                                                 <i class="feather-share-2 me-1"></i> Share
                                             </a>
+                                            <button type="button" class="btn btn-sm btn-outline-dark js-open-survey-qr"
+                                                data-link="{{ $publicUrl }}"
+                                                data-qr="{{ $qrUrl }}"
+                                                data-title="{{ $survey->indicator->name ?? 'Survey QR Code' }}">
+                                                <i class="feather-grid me-1"></i> QR Code
+                                            </button>
                                         </div>
-                                        <small class="text-muted">Share on WhatsApp / social / email.</small>
+                                        <small class="text-muted">Share on WhatsApp / social / email, or open a QR code for download.</small>
                                     </td>
                                 </tr>
                             @empty
@@ -604,6 +611,29 @@
             @endif
         </div>
     </div>
+
+    <div class="modal fade" id="surveyQrModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-0 pb-0">
+                    <div>
+                        <h5 class="modal-title mb-1" id="surveyQrModalTitle">Survey QR Code</h5>
+                        <small class="text-muted">Scan to open the public survey.</small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img src="" alt="Survey QR code" id="surveyQrModalImage" class="img-fluid rounded border p-2 bg-white">
+                    <div class="small text-muted mt-3" id="surveyQrModalLink"></div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary js-copy-survey-qr-link">Copy Link</button>
+                    <button type="button" class="btn btn-outline-primary js-share-survey-qr-link">Share</button>
+                    <button type="button" class="btn btn-primary js-download-survey-qr">Download QR</button>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -656,6 +686,80 @@
                         window.prompt('Copy survey link:', link);
                     }
                 });
+            });
+
+            const qrModalElement = document.getElementById('surveyQrModal');
+            const qrModal = qrModalElement && window.bootstrap ? new bootstrap.Modal(qrModalElement) : null;
+            const qrImage = document.getElementById('surveyQrModalImage');
+            const qrTitle = document.getElementById('surveyQrModalTitle');
+            const qrLink = document.getElementById('surveyQrModalLink');
+            const qrState = { link: '', qr: '', title: 'Survey QR Code' };
+
+            document.querySelectorAll('.js-open-survey-qr').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    qrState.link = btn.dataset.link || '';
+                    qrState.qr = btn.dataset.qr || '';
+                    qrState.title = btn.dataset.title || 'Survey QR Code';
+
+                    if (qrTitle) qrTitle.textContent = qrState.title;
+                    if (qrImage) qrImage.src = qrState.qr;
+                    if (qrLink) qrLink.textContent = qrState.link;
+
+                    qrModal?.show();
+                });
+            });
+
+            document.querySelector('.js-copy-survey-qr-link')?.addEventListener('click', async () => {
+                if (!qrState.link) return;
+                try {
+                    await navigator.clipboard.writeText(qrState.link);
+                } catch (error) {
+                    window.prompt('Copy survey link:', qrState.link);
+                }
+            });
+
+            document.querySelector('.js-share-survey-qr-link')?.addEventListener('click', async () => {
+                if (!qrState.link) return;
+
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: qrState.title,
+                            text: qrState.title,
+                            url: qrState.link
+                        });
+                        return;
+                    } catch (error) {
+                        if (error?.name === 'AbortError') {
+                            return;
+                        }
+                    }
+                }
+
+                try {
+                    await navigator.clipboard.writeText(qrState.link);
+                } catch (error) {
+                    window.prompt('Copy survey link:', qrState.link);
+                }
+            });
+
+            document.querySelector('.js-download-survey-qr')?.addEventListener('click', async () => {
+                if (!qrState.qr) return;
+
+                try {
+                    const response = await fetch(qrState.qr);
+                    const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const anchor = document.createElement('a');
+                    anchor.href = objectUrl;
+                    anchor.download = `${(qrState.title || 'survey-qr').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+                    document.body.appendChild(anchor);
+                    anchor.click();
+                    anchor.remove();
+                    URL.revokeObjectURL(objectUrl);
+                } catch (error) {
+                    window.open(qrState.qr, '_blank', 'noopener');
+                }
             });
 
             const defaultCandidates = {

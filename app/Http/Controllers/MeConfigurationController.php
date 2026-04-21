@@ -10,6 +10,7 @@ use App\Models\IndicatorDefinition;
 use App\Models\IndicatorDefinitionVariable;
 use App\Models\Indicator;
 use App\Models\IndicatorSurveyLink;
+use App\Support\MeSurvey;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
@@ -417,15 +418,23 @@ class MeConfigurationController extends Controller
             'survey_public_enabled' => 'nullable|boolean',
             'survey_title' => 'nullable|string|max:255',
             'survey_intro' => 'nullable|string|max:2000',
+            'survey_estimated_minutes' => 'nullable|integer|min:1|max:240',
+            'survey_sections_json' => 'nullable|string',
             'survey_questions_json' => 'nullable|string',
         ]);
 
-        $surveyQuestions = $this->parseSurveyQuestions((string) $request->input('survey_questions_json', ''));
-        if ($this->isSurveyMethodologyName((string) $validated['name']) && empty($surveyQuestions)) {
+        $surveySections = $this->parseSurveySections(
+            (string) $request->input('survey_sections_json', ''),
+            (string) $request->input('survey_questions_json', '')
+        );
+        if (
+            $this->isSurveyMethodologyName((string) $validated['name'])
+            && empty(MeSurvey::flattenQuestions(['sections' => $surveySections]))
+        ) {
             return back()
                 ->withInput()
                 ->withErrors([
-                    'survey_questions_json' => 'Add at least one survey question when methodology name is Survey.',
+                    'survey_sections_json' => 'Add at least one survey section with questions when methodology name is Survey.',
                 ]);
         }
 
@@ -433,7 +442,7 @@ class MeConfigurationController extends Controller
             (string) $validated['name'],
             $request,
             [],
-            $surveyQuestions
+            $surveySections
         );
         $validated['is_active'] = $request->has('is_active');
         $validated['created_by'] = auth()->id();
@@ -462,15 +471,23 @@ class MeConfigurationController extends Controller
             'survey_public_enabled' => 'nullable|boolean',
             'survey_title' => 'nullable|string|max:255',
             'survey_intro' => 'nullable|string|max:2000',
+            'survey_estimated_minutes' => 'nullable|integer|min:1|max:240',
+            'survey_sections_json' => 'nullable|string',
             'survey_questions_json' => 'nullable|string',
         ]);
 
-        $surveyQuestions = $this->parseSurveyQuestions((string) $request->input('survey_questions_json', ''));
-        if ($this->isSurveyMethodologyName((string) $validated['name']) && empty($surveyQuestions)) {
+        $surveySections = $this->parseSurveySections(
+            (string) $request->input('survey_sections_json', ''),
+            (string) $request->input('survey_questions_json', '')
+        );
+        if (
+            $this->isSurveyMethodologyName((string) $validated['name'])
+            && empty(MeSurvey::flattenQuestions(['sections' => $surveySections]))
+        ) {
             return back()
                 ->withInput()
                 ->withErrors([
-                    'survey_questions_json' => 'Add at least one survey question when methodology name is Survey.',
+                    'survey_sections_json' => 'Add at least one survey section with questions when methodology name is Survey.',
                 ]);
         }
 
@@ -478,7 +495,7 @@ class MeConfigurationController extends Controller
             (string) $validated['name'],
             $request,
             (array) ($methodology->metadata ?? []),
-            $surveyQuestions
+            $surveySections
         );
         $validated['is_active'] = $request->has('is_active');
         $validated['updated_by'] = auth()->id();
@@ -493,9 +510,7 @@ class MeConfigurationController extends Controller
 
         $surveyMeta = (array) data_get($validated['metadata'], 'survey', []);
         $surveyEnabled = (bool) ($surveyMeta['enabled'] ?? false);
-        $questionCount = collect($surveyMeta['questions'] ?? [])
-            ->filter(fn ($question) => is_array($question) && trim((string) ($question['label'] ?? '')) !== '')
-            ->count();
+        $questionCount = count(MeSurvey::flattenQuestions($surveyMeta));
 
         if (!$surveyEnabled || $questionCount === 0) {
             IndicatorSurveyLink::query()
@@ -526,7 +541,7 @@ class MeConfigurationController extends Controller
         string $name,
         Request $request,
         array $existingMetadata = [],
-        array $surveyQuestions = []
+        array $surveySections = []
     ): array {
         $metadata = $existingMetadata;
 
@@ -536,55 +551,51 @@ class MeConfigurationController extends Controller
         }
 
         $defaultTitle = trim($name) !== '' ? trim($name) . ' Public Survey' : 'Public Survey';
+        $normalizedSurvey = MeSurvey::surveyConfigFromMetadata([
+            'survey' => [
+                'enabled' => $request->boolean('survey_public_enabled', true),
+                'title' => trim((string) $request->input('survey_title', $defaultTitle)),
+                'intro' => trim((string) $request->input('survey_intro', '')),
+                'estimated_minutes' => $request->input('survey_estimated_minutes'),
+                'sections' => $surveySections,
+            ],
+        ], $defaultTitle);
+
         $metadata['survey'] = [
-            'enabled' => $request->boolean('survey_public_enabled', true),
-            'title' => trim((string) $request->input('survey_title', $defaultTitle)),
-            'intro' => trim((string) $request->input('survey_intro', '')),
-            'questions' => $surveyQuestions,
+            'enabled' => $normalizedSurvey['enabled'],
+            'title' => $normalizedSurvey['title'],
+            'intro' => $normalizedSurvey['intro'],
+            'estimated_minutes' => $normalizedSurvey['estimated_minutes'],
+            'sections' => $normalizedSurvey['sections'],
+            'questions' => $normalizedSurvey['questions'],
             'updated_at' => now()->toDateTimeString(),
         ];
 
         return $metadata;
     }
 
-    protected function parseSurveyQuestions(string $rawJson): array
+    protected function parseSurveySections(string $rawSectionsJson, string $rawQuestionsJson = ''): array
     {
-        $decoded = json_decode($rawJson, true);
-        if (!is_array($decoded)) {
-            return [];
+        $decodedSections = json_decode($rawSectionsJson, true);
+        if (is_array($decodedSections) && !empty($decodedSections)) {
+            return MeSurvey::surveyConfigFromMetadata([
+                'survey' => [
+                    'enabled' => true,
+                    'sections' => $decodedSections,
+                ],
+            ])['sections'];
         }
 
-        $allowedTypes = ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'checkbox'];
+        $decodedQuestions = json_decode($rawQuestionsJson, true);
+        if (is_array($decodedQuestions) && !empty($decodedQuestions)) {
+            return MeSurvey::surveyConfigFromMetadata([
+                'survey' => [
+                    'enabled' => true,
+                    'questions' => $decodedQuestions,
+                ],
+            ])['sections'];
+        }
 
-        return collect($decoded)
-            ->map(function ($question) use ($allowedTypes) {
-                if (!is_array($question)) {
-                    return null;
-                }
-
-                $label = trim((string) ($question['label'] ?? ''));
-                $type = strtolower(trim((string) ($question['type'] ?? 'text')));
-                if ($label === '' || !in_array($type, $allowedTypes, true)) {
-                    return null;
-                }
-
-                $options = collect($question['options'] ?? [])
-                    ->filter(fn ($option) => is_scalar($option) && trim((string) $option) !== '')
-                    ->map(fn ($option) => trim((string) $option))
-                    ->unique()
-                    ->values()
-                    ->all();
-
-                return [
-                    'label' => $label,
-                    'type' => $type,
-                    'required' => (bool) ($question['required'] ?? false),
-                    'options' => in_array($type, ['select', 'radio', 'checkbox'], true) ? $options : [],
-                    'hint' => trim((string) ($question['hint'] ?? '')),
-                ];
-            })
-            ->filter()
-            ->values()
-            ->all();
+        return [];
     }
 }
