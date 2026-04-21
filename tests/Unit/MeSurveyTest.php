@@ -118,6 +118,7 @@ class MeSurveyTest extends TestCase
                 'sections' => [
                     [
                         'title' => 'Response Types',
+                        'color' => '#8c4b2f',
                         'questions' => [
                             [
                                 'label' => 'Reference link',
@@ -163,6 +164,8 @@ class MeSurveyTest extends TestCase
         $this->assertContains('slider', $types);
         $this->assertContains('file', $types);
         $this->assertSame(1, data_get($survey['questions'][3], 'scale.step'));
+        $this->assertSame('#8C4B2F', data_get($survey['sections'][0], 'color'));
+        $this->assertSame('#8C4B2F', data_get($survey['questions'][0], 'section_color'));
     }
 
     public function test_it_validates_link_slider_and_multi_select_answers(): void
@@ -208,5 +211,48 @@ class MeSurveyTest extends TestCase
         $this->assertNotEmpty($invalidSlider['errors']);
         $this->assertSame([], $validMultiSelect['errors']);
         $this->assertNotEmpty($invalidMultiSelect['errors']);
+    }
+
+    public function test_it_supports_follow_up_skip_logic_on_questions(): void
+    {
+        $survey = MeSurvey::surveyConfigFromMetadata([
+            'survey' => [
+                'enabled' => true,
+                'sections' => [
+                    [
+                        'title' => 'Overall Assessment',
+                        'questions' => [
+                            [
+                                'key' => 'goal_met',
+                                'label' => 'To what extent do you think the workshop met its goal?',
+                                'type' => 'radio',
+                                'options' => ['Fully achieved', 'Mostly achieved', 'Partially achieved', 'Not achieved'],
+                            ],
+                            [
+                                'key' => 'goal_met_follow_up',
+                                'label' => 'Please briefly explain why it did not fully meet its goal',
+                                'type' => 'textarea',
+                                'visibility' => [
+                                    'question_key' => 'goal_met',
+                                    'values' => ['Partially achieved', 'Not achieved'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $followUpQuestion = $survey['questions'][1];
+
+        $this->assertTrue(MeSurvey::isQuestionVisible($followUpQuestion, [
+            'goal_met' => 'Partially achieved',
+        ]));
+        $this->assertTrue(MeSurvey::isQuestionVisible($followUpQuestion, [
+            'goal_met' => 'Not achieved',
+        ]));
+        $this->assertFalse(MeSurvey::isQuestionVisible($followUpQuestion, [
+            'goal_met' => 'Fully achieved',
+        ]));
     }
 }

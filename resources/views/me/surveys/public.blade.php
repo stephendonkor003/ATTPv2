@@ -412,6 +412,30 @@
             text-transform: uppercase;
         }
 
+        .step-link--section .step-link__index {
+            background: rgba(20, 62, 90, 0.08);
+            background: color-mix(in srgb, var(--section-accent, var(--primary)) 14%, white);
+            color: var(--section-accent, var(--primary));
+        }
+
+        .step-link--section.is-current {
+            border-color: rgba(20, 62, 90, 0.18);
+            border-color: color-mix(in srgb, var(--section-accent, var(--primary)) 26%, white);
+            background: linear-gradient(180deg,
+                    color-mix(in srgb, var(--section-accent, var(--primary)) 8%, white),
+                    rgba(255, 255, 255, 0.96));
+        }
+
+        .step-link--section.is-complete {
+            background: linear-gradient(180deg,
+                    color-mix(in srgb, var(--section-accent, var(--primary)) 10%, white),
+                    rgba(255, 255, 255, 0.94));
+        }
+
+        .step-link--section .step-link__status {
+            color: var(--section-accent, var(--accent));
+        }
+
         .surface {
             border-radius: 32px;
             overflow: hidden;
@@ -553,6 +577,24 @@
             font-weight: 800;
             letter-spacing: 0.08em;
             text-transform: uppercase;
+        }
+
+        .section-step .step-kicker,
+        .section-step .question-tag {
+            background: rgba(20, 62, 90, 0.06);
+            background: color-mix(in srgb, var(--section-accent, var(--primary)) 10%, white);
+            color: var(--section-accent, var(--primary));
+        }
+
+        .section-step .question-block:focus-within {
+            border-color: rgba(20, 62, 90, 0.2);
+            border-color: color-mix(in srgb, var(--section-accent, var(--primary)) 24%, white);
+        }
+
+        .section-step .scale-item strong,
+        .section-step .slider-output,
+        .section-step .question-tag {
+            color: var(--section-accent, var(--primary));
         }
 
         .step-counter {
@@ -1348,9 +1390,10 @@
                             @foreach ($sections as $sectionIndex => $section)
                                 @php
                                     $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
+                                    $sectionColor = (string) data_get($section, 'color', '#143E5A');
                                     $sectionQuestionCount = count($section['questions'] ?? []);
                                 @endphp
-                                <button type="button" class="step-link" data-step-nav="{{ $sectionKey }}">
+                                <button type="button" class="step-link step-link--section" data-step-nav="{{ $sectionKey }}" style="--section-accent: {{ $sectionColor }};">
                                     <span class="step-link__index">{{ $sectionIndex + 1 }}</span>
                                     <span class="step-link__body">
                                         <strong>{{ $section['title'] }}</strong>
@@ -1485,13 +1528,15 @@
                                     @foreach ($sections as $sectionIndex => $section)
                                         @php
                                             $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
+                                            $sectionColor = (string) data_get($section, 'color', '#143E5A');
                                         @endphp
-                                        <section class="step"
+                                        <section class="step section-step"
                                             data-step-id="{{ $sectionKey }}"
                                             data-step-kind="section"
                                             data-step-label="{{ $section['title'] }}"
                                             data-section-key="{{ $sectionKey }}"
-                                            data-section-visibility='@json($section['visibility'] ?? [])'>
+                                            data-section-visibility='@json($section['visibility'] ?? [])'
+                                            style="--section-accent: {{ $sectionColor }};">
                                             <div class="step-header">
                                                 <div class="step-header__top">
                                                     <span class="step-kicker">Section {{ $sectionIndex + 1 }}</span>

@@ -42,10 +42,13 @@
             }
 
             .survey-section-card {
+                --section-color: #2563eb;
                 border: 1px solid #cbd5e1;
+                border-top: 4px solid var(--section-color);
                 border-radius: 18px;
                 padding: 1rem;
-                background: rgba(255, 255, 255, 0.92);
+                background:
+                    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
                 box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
             }
 
@@ -80,6 +83,34 @@
                 border-radius: 14px;
                 padding: 0.85rem;
                 background: #f8fbff;
+            }
+
+            .survey-section-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                border-radius: 999px;
+                padding: 0.35rem 0.7rem;
+                font-size: 0.76rem;
+                font-weight: 700;
+                background: rgba(15, 23, 42, 0.04);
+                color: #334155;
+            }
+
+            .survey-section-chip__swatch {
+                width: 0.8rem;
+                height: 0.8rem;
+                border-radius: 999px;
+                background: var(--section-color);
+                box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+            }
+
+            .survey-logic-summary {
+                border-radius: 12px;
+                background: rgba(15, 23, 42, 0.04);
+                color: #475569;
+                padding: 0.7rem 0.8rem;
+                font-size: 0.78rem;
             }
 
             .survey-type-note {
@@ -185,6 +216,17 @@
                     { value: 'matrix', label: 'Matrix / Grid' },
                 ];
 
+                const sectionColorPalette = [
+                    '#143E5A',
+                    '#8C4B2F',
+                    '#1E6B57',
+                    '#6B4FA1',
+                    '#A23E52',
+                    '#0F766E',
+                    '#9A6700',
+                    '#3B5B92',
+                ];
+
                 let sections = [];
                 try {
                     const parsed = JSON.parse(sectionsJsonInput.value || '[]');
@@ -215,6 +257,41 @@
                         .split(separatorPattern)
                         .map((item) => item.trim())
                         .filter((item, index, array) => item !== '' && array.indexOf(item) === index);
+                }
+
+                function normalizeHexColor(value, fallback) {
+                    const candidate = (value || '').toString().trim();
+                    const match = candidate.match(/^#?([a-fA-F0-9]{6})$/);
+                    if (!match) {
+                        return fallback;
+                    }
+
+                    return `#${match[1].toUpperCase()}`;
+                }
+
+                function defaultSectionColor(index) {
+                    return sectionColorPalette[index % sectionColorPalette.length];
+                }
+
+                function hexToRgba(hex, alpha) {
+                    const normalized = normalizeHexColor(hex, '#2563EB').replace('#', '');
+                    const red = Number.parseInt(normalized.slice(0, 2), 16);
+                    const green = Number.parseInt(normalized.slice(2, 4), 16);
+                    const blue = Number.parseInt(normalized.slice(4, 6), 16);
+                    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+                }
+
+                function logicSummary(scope, visibility, choices) {
+                    const scopeLabel = scope === 'section' ? 'section' : 'follow-up question';
+                    const selectedChoice = choices.find((item) => item.key === visibility.question_key);
+                    const targetLabel = selectedChoice?.label || 'the selected indicator question';
+                    const values = Array.isArray(visibility.values) ? visibility.values.filter(Boolean) : [];
+
+                    if (!visibility.question_key || values.length === 0) {
+                        return `This ${scopeLabel} is always shown. No skip rule is active.`;
+                    }
+
+                    return `Show this ${scopeLabel} only when "${targetLabel}" has one of these answers: ${values.join(', ')}. Otherwise it is skipped automatically.`;
                 }
 
                 function ensureLabelEntries(list, fallbackPrefix) {
@@ -281,11 +358,12 @@
                     };
                 }
 
-                function defaultSection() {
+                function defaultSection(sectionIndex = sections.length) {
                     return {
                         key: createKey('section'),
                         title: '',
                         description: '',
+                        color: defaultSectionColor(sectionIndex),
                         visibility: {
                             question_key: '',
                             values: [],
@@ -323,10 +401,11 @@
                 function normalizeSections(rawSections) {
                     return rawSections
                         .filter((section) => section && typeof section === 'object')
-                        .map((section) => ({
+                        .map((section, sectionIndex) => ({
                             key: (section.key || '').toString().trim() || createKey('section'),
                             title: (section.title || '').toString(),
                             description: (section.description || section.intro || '').toString(),
+                            color: normalizeHexColor(section.color || section.section_color || '', defaultSectionColor(sectionIndex)),
                             visibility: normalizeVisibility(section.visibility || {
                                 question_key: section.depends_on || '',
                                 values: section.show_if || [],
@@ -404,22 +483,28 @@
                 function visibilityMarkup(scope, sectionIndex, questionIndex, visibility, choices) {
                     const selectedChoice = choices.find((item) => item.key === visibility.question_key);
                     const valuesText = Array.isArray(visibility.values) ? visibility.values.join(', ') : '';
+                    const ruleTitle = scope === 'section' ? 'Section Indicator / Skip Logic' : 'Follow-up Indicator / Skip Logic';
+                    const selectorLabel = scope === 'section' ? 'Indicator question' : 'Ask this follow-up when answer is given in';
+                    const valuePlaceholder = scope === 'section'
+                        ? 'Virtual, In-person'
+                        : 'Not achieved, Partially achieved';
                     const availableValues = selectedChoice?.options?.length
                         ? `Available answers: ${selectedChoice.options.join(', ')}`
                         : 'Use exact answer values separated by commas when this depends on free-text or numeric input.';
+                    const summaryText = logicSummary(scope, visibility, choices);
 
                     return `
                         <div class="survey-condition-box mt-3">
-                            <div class="survey-mini-label">Conditional Display</div>
+                            <div class="survey-mini-label">${ruleTitle}</div>
                             <div class="row g-2">
                                 <div class="col-md-6">
-                                    <label class="form-label">Show when this answer is given in</label>
+                                    <label class="form-label">${selectorLabel}</label>
                                     <select class="form-select form-select-sm"
                                         data-condition-scope="${scope}"
                                         data-condition-section="${sectionIndex}"
                                         data-condition-question="${questionIndex ?? ''}"
                                         data-condition-key="question_key">
-                                        <option value="">Always show</option>
+                                        <option value="">No indicator, always show</option>
                                         ${choices.map((choice) => `
                                             <option value="${escapeHtml(choice.key)}" ${choice.key === visibility.question_key ? 'selected' : ''}>
                                                 ${escapeHtml(choice.label)}
@@ -428,14 +513,17 @@
                                     </select>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Matching Answer Value(s)</label>
+                                    <label class="form-label">Trigger answer value(s)</label>
                                     <input type="text" class="form-control form-control-sm"
                                         data-condition-scope="${scope}"
                                         data-condition-section="${sectionIndex}"
                                         data-condition-question="${questionIndex ?? ''}"
                                         data-condition-key="values"
                                         value="${escapeHtml(valuesText)}"
-                                        placeholder="Virtual, In-person">
+                                        placeholder="${valuePlaceholder}">
+                                </div>
+                                <div class="col-12">
+                                    <div class="survey-logic-summary">${escapeHtml(summaryText)}</div>
                                 </div>
                                 <div class="col-12">
                                     <small class="text-muted">${escapeHtml(availableValues)}</small>
@@ -625,13 +713,23 @@
                     sections.forEach((section, sectionIndex) => {
                         const card = document.createElement('div');
                         card.className = 'survey-section-card';
+                        const sectionColor = normalizeHexColor(section.color, defaultSectionColor(sectionIndex));
+                        card.style.setProperty('--section-color', sectionColor);
+                        card.style.borderColor = hexToRgba(sectionColor, 0.22);
+                        card.style.background = `linear-gradient(180deg, ${hexToRgba(sectionColor, 0.08)}, rgba(255, 255, 255, 0.96) 28%, rgba(248, 250, 252, 0.92))`;
                         const sectionChoices = dependencyChoices(section.key);
 
                         card.innerHTML = `
                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                                 <div>
                                     <div class="survey-mini-label">Section ${sectionIndex + 1}</div>
-                                    <h6 class="fw-semibold mb-0">${escapeHtml(section.title || `Section ${sectionIndex + 1}`)}</h6>
+                                    <div class="d-flex align-items-center flex-wrap gap-2">
+                                        <h6 class="fw-semibold mb-0">${escapeHtml(section.title || `Section ${sectionIndex + 1}`)}</h6>
+                                        <span class="survey-section-chip" style="--section-color: ${sectionColor};">
+                                            <span class="survey-section-chip__swatch"></span>
+                                            <span class="survey-section-chip__label">${escapeHtml(sectionColor)}</span>
+                                        </span>
+                                    </div>
                                 </div>
                                 <div class="d-flex gap-1">
                                     <button type="button" class="btn btn-sm btn-outline-secondary" data-move-section="up" data-section-index="${sectionIndex}" ${sectionIndex === 0 ? 'disabled' : ''}>
@@ -647,7 +745,7 @@
                             </div>
 
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-5">
                                     <label class="form-label">Section Title</label>
                                     <input type="text" class="form-control"
                                         data-section-field="title"
@@ -655,7 +753,15 @@
                                         value="${escapeHtml(section.title || '')}"
                                         placeholder="Section 1: Participant Information">
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-2">
+                                    <label class="form-label">Section Color</label>
+                                    <input type="color" class="form-control form-control-color w-100"
+                                        data-section-field="color"
+                                        data-section-index="${sectionIndex}"
+                                        value="${sectionColor}"
+                                        title="Choose a section color">
+                                </div>
+                                <div class="col-md-5">
                                     <label class="form-label">Section Description</label>
                                     <textarea class="form-control" rows="2"
                                         data-section-field="description"
@@ -689,6 +795,7 @@
                     sections = sections.map((section, sectionIndex) => {
                         const title = form.querySelector(`[data-section-field="title"][data-section-index="${sectionIndex}"]`)?.value || '';
                         const description = form.querySelector(`[data-section-field="description"][data-section-index="${sectionIndex}"]`)?.value || '';
+                        const color = form.querySelector(`[data-section-field="color"][data-section-index="${sectionIndex}"]`)?.value || '';
                         const sectionConditionQuestion = form.querySelector(`[data-condition-scope="section"][data-condition-section="${sectionIndex}"][data-condition-key="question_key"]`)?.value || '';
                         const sectionConditionValues = form.querySelector(`[data-condition-scope="section"][data-condition-section="${sectionIndex}"][data-condition-key="values"]`)?.value || '';
 
@@ -751,6 +858,7 @@
                             key: section.key || createKey('section'),
                             title: title.trim(),
                             description: description.trim(),
+                            color: normalizeHexColor(color, defaultSectionColor(sectionIndex)),
                             visibility: normalizeVisibility({
                                 question_key: sectionConditionQuestion,
                                 values: parseStringList(sectionConditionValues),
@@ -858,6 +966,29 @@
                     if (!event.target) {
                         return;
                     }
+
+                    const target = event.target;
+                    const sectionIndex = target.getAttribute('data-section-index');
+
+                    if (sectionIndex !== null && target.matches('[data-section-field="color"]')) {
+                        const sectionCard = target.closest('.survey-section-card');
+                        const color = normalizeHexColor(target.value, defaultSectionColor(Number(sectionIndex)));
+                        target.value = color;
+
+                            if (sectionCard) {
+                                sectionCard.style.setProperty('--section-color', color);
+                                sectionCard.style.borderColor = hexToRgba(color, 0.22);
+                                sectionCard.style.background = `linear-gradient(180deg, ${hexToRgba(color, 0.08)}, rgba(255, 255, 255, 0.96) 28%, rgba(248, 250, 252, 0.92))`;
+                                const chip = sectionCard.querySelector('.survey-section-chip');
+                                if (chip) {
+                                    chip.style.setProperty('--section-color', color);
+                                    const chipLabel = chip.querySelector('.survey-section-chip__label');
+                                    if (chipLabel) {
+                                        chipLabel.textContent = color;
+                                    }
+                                }
+                            }
+                        }
 
                     syncSectionsFromDom();
                 });

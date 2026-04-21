@@ -26,6 +26,17 @@ class MeSurvey
         'matrix',
     ];
 
+    protected const SECTION_COLORS = [
+        '#143E5A',
+        '#8C4B2F',
+        '#1E6B57',
+        '#6B4FA1',
+        '#A23E52',
+        '#0F766E',
+        '#9A6700',
+        '#3B5B92',
+    ];
+
     public static function surveyConfigFromMetadata(array $metadata, string $fallbackTitle = 'Public Survey'): array
     {
         $survey = (array) data_get($metadata, 'survey', []);
@@ -400,6 +411,10 @@ class MeSurvey
             'key' => $sectionKey,
             'title' => $title !== '' ? $title : 'Section ' . ($sectionIndex + 1),
             'description' => trim((string) ($section['description'] ?? $section['intro'] ?? '')),
+            'color' => self::normalizeHexColor(
+                $section['color'] ?? $section['section_color'] ?? null,
+                self::defaultSectionColor($sectionIndex)
+            ),
             'visibility' => self::normalizeVisibility($section['visibility'] ?? [
                 'question_key' => $section['depends_on'] ?? null,
                 'values' => $section['show_if'] ?? null,
@@ -506,6 +521,7 @@ class MeSurvey
                     ->map(function (array $question, int $questionIndex) use ($section, $sectionIndex) {
                         $question['section_key'] = (string) ($section['key'] ?? '');
                         $question['section_title'] = (string) ($section['title'] ?? ('Section ' . ($sectionIndex + 1)));
+                        $question['section_color'] = (string) ($section['color'] ?? self::defaultSectionColor($sectionIndex));
                         $question['section_index'] = $sectionIndex;
                         $question['question_index'] = $questionIndex;
 
@@ -533,6 +549,25 @@ class MeSurvey
             'question_key' => $questionKey,
             'values' => $values,
         ];
+    }
+
+    protected static function defaultSectionColor(int $sectionIndex): string
+    {
+        return self::SECTION_COLORS[$sectionIndex % count(self::SECTION_COLORS)];
+    }
+
+    protected static function normalizeHexColor(mixed $value, string $fallback): string
+    {
+        $candidate = trim((string) $value);
+        if ($candidate === '') {
+            return $fallback;
+        }
+
+        if (preg_match('/^#?([A-Fa-f0-9]{6})$/', $candidate, $matches) !== 1) {
+            return $fallback;
+        }
+
+        return '#' . strtoupper($matches[1]);
     }
 
     protected static function matchesVisibility(array $visibility, array $answers): bool
