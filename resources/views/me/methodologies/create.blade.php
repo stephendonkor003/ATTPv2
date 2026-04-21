@@ -10,7 +10,7 @@
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-sm border-0" id="questionnaire-builder">
             <div class="card-body">
                 @if ($errors->any())
                     <div class="alert alert-danger">

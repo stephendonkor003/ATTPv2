@@ -812,7 +812,7 @@
                     </div>
                 </div>
                 <div class="col-lg-7">
-                    <div class="card shadow-sm border-0">
+                    <div class="card shadow-sm border-0" id="survey-indicators">
                         <div class="card-header bg-white border-0 pb-0 d-flex justify-content-between align-items-center">
                             <h6 class="mb-0 fw-semibold">Existing Indicators</h6>
                             <span class="badge bg-light text-dark">{{ $indicators->total() }} total</span>
@@ -859,6 +859,9 @@
                                                     'has_link' => false,
                                                     'public_url' => null,
                                                 ];
+                                                $surveyQrUrl = $surveyState['public_url']
+                                                    ? \App\Support\MeSurvey::qrCodeUrl($surveyState['public_url'])
+                                                    : null;
                                             @endphp
                                             <tr>
                                                 <td class="fw-semibold">{{ $indicator->name }}</td>
@@ -878,6 +881,13 @@
                                                                         class="btn btn-sm btn-outline-secondary js-copy-survey-link"
                                                                         data-link="{{ $surveyState['public_url'] }}">
                                                                         <i class="bi bi-clipboard me-1"></i> Copy
+                                                                    </button>
+                                                                    <button type="button"
+                                                                        class="btn btn-sm btn-outline-dark js-open-survey-qr"
+                                                                        data-link="{{ $surveyState['public_url'] }}"
+                                                                        data-qr="{{ $surveyQrUrl }}"
+                                                                        data-title="{{ $indicator->name }}">
+                                                                        <i class="bi bi-qr-code me-1"></i> QR
                                                                     </button>
                                                                     <a href="{{ route('budget.me.indicators.survey-responses', $indicator) }}"
                                                                         class="btn btn-sm btn-outline-dark">
@@ -1307,6 +1317,24 @@
                 </div>
             </div>
         @endif
+    </div>
+    <div class="modal fade" id="indicatorSurveyQrModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title" id="indicatorSurveyQrModalTitle">Survey QR Code</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img src="" alt="Survey QR code" id="indicatorSurveyQrModalImage" class="img-fluid rounded border p-2 bg-white">
+                    <div class="small text-muted mt-3" id="indicatorSurveyQrModalLink"></div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary js-copy-indicator-survey-qr-link">Copy Link</button>
+                    <button type="button" class="btn btn-primary js-download-indicator-survey-qr">Download QR</button>
+                </div>
+            </div>
+        </div>
     </div>
 @endsection
 
@@ -1922,6 +1950,54 @@
                         }, 1800);
                     }
                 });
+            });
+
+            const surveyQrModalElement = document.getElementById('indicatorSurveyQrModal');
+            const surveyQrModal = surveyQrModalElement && window.bootstrap ? new bootstrap.Modal(surveyQrModalElement) : null;
+            const surveyQrImage = document.getElementById('indicatorSurveyQrModalImage');
+            const surveyQrTitle = document.getElementById('indicatorSurveyQrModalTitle');
+            const surveyQrLink = document.getElementById('indicatorSurveyQrModalLink');
+            const surveyQrState = { link: '', qr: '', title: 'Survey QR Code' };
+
+            document.querySelectorAll('.js-open-survey-qr').forEach((button) => {
+                button.addEventListener('click', () => {
+                    surveyQrState.link = button.dataset.link || '';
+                    surveyQrState.qr = button.dataset.qr || '';
+                    surveyQrState.title = button.dataset.title || 'Survey QR Code';
+
+                    if (surveyQrTitle) surveyQrTitle.textContent = surveyQrState.title;
+                    if (surveyQrImage) surveyQrImage.src = surveyQrState.qr;
+                    if (surveyQrLink) surveyQrLink.textContent = surveyQrState.link;
+
+                    surveyQrModal?.show();
+                });
+            });
+
+            document.querySelector('.js-copy-indicator-survey-qr-link')?.addEventListener('click', async () => {
+                if (!surveyQrState.link) return;
+                try {
+                    await navigator.clipboard.writeText(surveyQrState.link);
+                } catch (error) {
+                    window.prompt('Copy survey link:', surveyQrState.link);
+                }
+            });
+
+            document.querySelector('.js-download-indicator-survey-qr')?.addEventListener('click', async () => {
+                if (!surveyQrState.qr) return;
+                try {
+                    const response = await fetch(surveyQrState.qr);
+                    const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const anchor = document.createElement('a');
+                    anchor.href = objectUrl;
+                    anchor.download = `${(surveyQrState.title || 'survey-qr').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+                    document.body.appendChild(anchor);
+                    anchor.click();
+                    anchor.remove();
+                    URL.revokeObjectURL(objectUrl);
+                } catch (error) {
+                    window.open(surveyQrState.qr, '_blank', 'noopener');
+                }
             });
         });
     </script>

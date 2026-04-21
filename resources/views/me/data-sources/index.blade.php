@@ -230,7 +230,7 @@
         </div>
 
         {{-- Surveys & Responses --}}
-        <div class="card shadow-sm mb-3">
+        <div class="card shadow-sm mb-3" id="survey-management">
             <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h6 class="mb-0 fw-semibold">Surveys & Responses</h6>
