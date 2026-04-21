@@ -102,6 +102,7 @@ use App\Http\Controllers\{
 	    MeConfigurationController,
         MeIndicatorController,
         MeDataSourceController,
+        MeSurveyController,
         IndicatorSurveyController,
         PublicIndicatorSurveyController,
         WorldIndicatorsController,
@@ -1025,6 +1026,21 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('me.indicators.survey-link.generate');
         Route::get('me/indicators/{indicator}/survey-responses', [IndicatorSurveyController::class, 'responses'])
             ->name('me.indicators.survey-responses');
+
+        Route::prefix('me/surveys')->name('me.surveys.')->group(function () {
+            Route::get('/', [MeSurveyController::class, 'index'])
+                ->name('index');
+            Route::get('/responses', [MeSurveyController::class, 'responses'])
+                ->name('responses');
+            Route::get('/questionnaires', [MeSurveyController::class, 'questionnaires'])
+                ->name('questionnaires');
+            Route::get('/questionnaires/create', [MeSurveyController::class, 'create'])
+                ->name('questionnaires.create');
+            Route::get('/questionnaires/{methodology}/edit', [MeSurveyController::class, 'edit'])
+                ->name('questionnaires.edit');
+            Route::get('/qr-codes', [MeSurveyController::class, 'qrCodes'])
+                ->name('qr');
+        });
 
         // Data Source Controller
         Route::get('me/data-sources', [MeDataSourceController::class, 'index'])

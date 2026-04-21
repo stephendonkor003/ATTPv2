@@ -428,13 +428,13 @@ class MeConfigurationController extends Controller
             (string) $request->input('survey_questions_json', '')
         );
         if (
-            $this->isSurveyMethodologyName((string) $validated['name'])
+            $this->shouldTreatMethodologyAsSurvey((string) $validated['name'], $request, $surveySections)
             && empty(MeSurvey::flattenQuestions(['sections' => $surveySections]))
         ) {
             return back()
                 ->withInput()
                 ->withErrors([
-                    'survey_sections_json' => 'Add at least one survey section with questions when methodology name is Survey.',
+                    'survey_sections_json' => 'Add at least one survey section with questions before saving this questionnaire.',
                 ]);
         }
 
@@ -450,8 +450,7 @@ class MeConfigurationController extends Controller
 
         IndicatorMethodology::create($validated);
 
-        return redirect()->route('budget.me-configuration.methodologies.index')
-            ->with('success', 'Methodology created successfully');
+        return $this->redirectAfterMethodologySave($request, 'Methodology created successfully');
     }
 
     public function methodologiesEdit(IndicatorMethodology $methodology)
@@ -481,13 +480,13 @@ class MeConfigurationController extends Controller
             (string) $request->input('survey_questions_json', '')
         );
         if (
-            $this->isSurveyMethodologyName((string) $validated['name'])
+            $this->shouldTreatMethodologyAsSurvey((string) $validated['name'], $request, $surveySections)
             && empty(MeSurvey::flattenQuestions(['sections' => $surveySections]))
         ) {
             return back()
                 ->withInput()
                 ->withErrors([
-                    'survey_sections_json' => 'Add at least one survey section with questions when methodology name is Survey.',
+                    'survey_sections_json' => 'Add at least one survey section with questions before saving this questionnaire.',
                 ]);
         }
 
@@ -521,15 +520,13 @@ class MeConfigurationController extends Controller
                 ]);
         }
 
-        return redirect()->route('budget.me-configuration.methodologies.index')
-            ->with('success', 'Methodology updated successfully');
+        return $this->redirectAfterMethodologySave($request, 'Methodology updated successfully');
     }
 
-    public function methodologiesDestroy(IndicatorMethodology $methodology)
+    public function methodologiesDestroy(Request $request, IndicatorMethodology $methodology)
     {
         $methodology->delete();
-        return redirect()->route('budget.me-configuration.methodologies.index')
-            ->with('success', 'Methodology deleted successfully');
+        return $this->redirectAfterMethodologySave($request, 'Methodology deleted successfully');
     }
 
     protected function isSurveyMethodologyName(string $name): bool
@@ -545,7 +542,7 @@ class MeConfigurationController extends Controller
     ): array {
         $metadata = $existingMetadata;
 
-        if (!$this->isSurveyMethodologyName($name)) {
+        if (!$this->shouldTreatMethodologyAsSurvey($name, $request, $surveySections)) {
             unset($metadata['survey']);
             return $metadata;
         }
@@ -572,6 +569,25 @@ class MeConfigurationController extends Controller
         ];
 
         return $metadata;
+    }
+
+    protected function shouldTreatMethodologyAsSurvey(
+        string $name,
+        Request $request,
+        array $surveySections = []
+    ): bool {
+        return $request->boolean('is_survey_methodology')
+            || $this->isSurveyMethodologyName($name)
+            || !empty(MeSurvey::flattenQuestions(['sections' => $surveySections]));
+    }
+
+    protected function redirectAfterMethodologySave(Request $request, string $message)
+    {
+        $route = $request->boolean('from_survey_module')
+            ? 'budget.me.surveys.questionnaires'
+            : 'budget.me-configuration.methodologies.index';
+
+        return redirect()->route($route)->with('success', $message);
     }
 
     protected function parseSurveySections(string $rawSectionsJson, string $rawQuestionsJson = ''): array

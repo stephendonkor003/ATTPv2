@@ -1,3 +1,7 @@
+@php
+    $forceSurveyBuilder = (bool) ($forceSurveyBuilder ?? false);
+@endphp
+
 @once
     @push('styles')
         <style>
@@ -86,7 +90,7 @@
     @endpush
 @endonce
 
-<div class="col-12 d-none" id="surveyBuilderPanel">
+<div class="col-12 {{ $forceSurveyBuilder ? '' : 'd-none' }}" id="surveyBuilderPanel">
     <div class="survey-builder-panel">
         <div class="survey-builder-hero">
             <span class="survey-badge"><i class="feather-zap"></i> Survey Engine Enabled</span>
@@ -157,6 +161,7 @@
                 const sectionsJsonInput = document.getElementById('surveySectionsJson');
                 const addSectionBtn = document.getElementById('addSurveySectionBtn');
                 const surveyTitleInput = document.getElementById('surveyTitleInput');
+                const forceSurveyMode = ['1', 'true'].includes((form.dataset.forceSurveyBuilder || '').toLowerCase());
 
                 if (!nameInput || !surveyPanel || !sectionsContainer || !sectionsJsonInput || !addSectionBtn || !surveyTitleInput) {
                     return;
@@ -326,7 +331,7 @@
                 }
 
                 function isSurveyMode() {
-                    return (nameInput.value || '').toLowerCase().includes('survey');
+                    return forceSurveyMode || (nameInput.value || '').toLowerCase().includes('survey');
                 }
 
                 function dependencyChoices(targetSectionKey, targetQuestionKey = null) {

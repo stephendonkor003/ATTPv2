@@ -553,7 +553,15 @@
                                     <ul class="nxl-submenu">
                                         @canany(['me.configuration.view', 'me.configuration.manage'])
                                             <li class="nxl-item">
-                                                <a href="{{ route('budget.me.data-sources.index') }}#survey-management" class="nxl-link">
+                                                <a href="{{ route('budget.me.surveys.index') }}" class="nxl-link">
+                                                    <i class="feather-home me-2"></i> Overview
+                                                </a>
+                                            </li>
+                                        @endcanany
+
+                                        @canany(['me.configuration.view', 'me.configuration.manage'])
+                                            <li class="nxl-item">
+                                                <a href="{{ route('budget.me.surveys.responses') }}" class="nxl-link">
                                                     <i class="feather-inbox me-2"></i> Responses
                                                 </a>
                                             </li>
@@ -561,7 +569,7 @@
 
                                         @can('me.configuration.manage')
                                             <li class="nxl-item">
-                                                <a href="{{ route('budget.me-configuration.methodologies.create') }}#questionnaire-builder" class="nxl-link">
+                                                <a href="{{ route('budget.me.surveys.questionnaires.create') }}" class="nxl-link">
                                                     <i class="feather-plus-square me-2"></i> Add Questionnaires
                                                 </a>
                                             </li>
@@ -569,7 +577,7 @@
 
                                         @canany(['me.configuration.view', 'me.configuration.manage'])
                                             <li class="nxl-item">
-                                                <a href="{{ route('budget.me-configuration.methodologies.index') }}" class="nxl-link">
+                                                <a href="{{ route('budget.me.surveys.questionnaires') }}" class="nxl-link">
                                                     <i class="feather-book-open me-2"></i> Questionnaire Library
                                                 </a>
                                             </li>
@@ -577,7 +585,7 @@
 
                                         @canany(['me.configuration.view', 'me.configuration.manage'])
                                             <li class="nxl-item">
-                                                <a href="{{ route('budget.me.indicators.index', ['tab' => 'settings']) }}#survey-indicators" class="nxl-link">
+                                                <a href="{{ route('budget.me.surveys.qr') }}" class="nxl-link">
                                                     <i class="feather-grid me-2"></i> Generate QR Code
                                                 </a>
                                             </li>
