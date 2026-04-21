@@ -1030,6 +1030,10 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::prefix('me/surveys')->name('me.surveys.')->group(function () {
             Route::get('/', [MeSurveyController::class, 'index'])
                 ->name('index');
+            Route::get('/reports', [MeSurveyController::class, 'reports'])
+                ->name('reports');
+            Route::post('/reports/export/pdf', [MeSurveyController::class, 'exportReportPdf'])
+                ->name('reports.export.pdf');
             Route::get('/responses', [MeSurveyController::class, 'responses'])
                 ->name('responses');
             Route::get('/questionnaires', [MeSurveyController::class, 'questionnaires'])

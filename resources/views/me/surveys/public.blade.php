@@ -261,7 +261,10 @@
 
         input[type="text"],
         input[type="email"],
+        input[type="url"],
         input[type="date"],
+        input[type="datetime-local"],
+        input[type="file"],
         input[type="number"],
         textarea,
         select {
@@ -277,6 +280,10 @@
         textarea {
             min-height: 110px;
             resize: vertical;
+        }
+
+        select[multiple] {
+            min-height: 132px;
         }
 
         .question-block {
@@ -331,6 +338,28 @@
             gap: 12px;
             color: var(--muted);
             font-size: 0.86rem;
+        }
+
+        .slider-wrap {
+            display: grid;
+            gap: 12px;
+        }
+
+        .slider-output {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: fit-content;
+            border-radius: 999px;
+            background: var(--soft);
+            color: var(--primary);
+            padding: 8px 14px;
+            font-weight: 700;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--primary);
         }
 
         .matrix-wrap {
@@ -557,7 +586,9 @@
                         </div>
                     @endif
 
-                    <form method="POST" action="{{ route('public.me.indicators.surveys.submit', ['token' => $link->public_token]) }}" id="publicSurveyForm" novalidate>
+                    <form method="POST" enctype="multipart/form-data"
+                        action="{{ route('public.me.indicators.surveys.submit', ['token' => $link->public_token]) }}"
+                        id="publicSurveyForm" novalidate>
                         @csrf
 
                         <section class="step is-active" data-step-kind="intro" data-step-label="Introduction">
@@ -623,6 +654,10 @@
                                             $matrixColumns = collect($question['columns'] ?? [])->values();
                                             $scaleMin = (int) data_get($question, 'scale.min', 1);
                                             $scaleMax = (int) data_get($question, 'scale.max', 5);
+                                            $scaleStep = max((int) data_get($question, 'scale.step', 1), 1);
+                                            $sliderValue = is_scalar($oldValue) && trim((string) $oldValue) !== ''
+                                                ? (string) $oldValue
+                                                : (string) $scaleMin;
                                         @endphp
 
                                         <div class="question-block"
@@ -651,6 +686,15 @@
                                                     <option value="">Select an option</option>
                                                     @foreach ($options as $option)
                                                         <option value="{{ $option }}" @selected((string) $oldValue === (string) $option)>{{ $option }}</option>
+                                                    @endforeach
+                                                </select>
+                                            @elseif ($type === 'multiselect')
+                                                @php
+                                                    $oldChoices = is_array($oldValue) ? $oldValue : [];
+                                                @endphp
+                                                <select name="answers[{{ $questionKey }}][]" multiple {{ $required ? 'required' : '' }}>
+                                                    @foreach ($options as $option)
+                                                        <option value="{{ $option }}" @selected(in_array($option, $oldChoices, true))>{{ $option }}</option>
                                                     @endforeach
                                                 </select>
                                             @elseif ($type === 'radio')
@@ -694,6 +738,32 @@
                                                         <span>{{ data_get($question, 'scale.max_label') }}</span>
                                                     </div>
                                                 @endif
+                                            @elseif ($type === 'slider')
+                                                <div class="slider-wrap">
+                                                    <div class="slider-output">
+                                                        <span>Selected</span>
+                                                        <strong data-slider-value="{{ $questionKey }}">{{ $sliderValue }}</strong>
+                                                    </div>
+                                                    <input type="range"
+                                                        min="{{ $scaleMin }}"
+                                                        max="{{ $scaleMax }}"
+                                                        step="{{ $scaleStep }}"
+                                                        name="answers[{{ $questionKey }}]"
+                                                        value="{{ $sliderValue }}"
+                                                        data-slider-input="{{ $questionKey }}">
+                                                </div>
+                                                <div class="scale-labels">
+                                                    <span>{{ data_get($question, 'scale.min_label') ?: $scaleMin }}</span>
+                                                    <span>{{ data_get($question, 'scale.max_label') ?: $scaleMax }}</span>
+                                                </div>
+                                            @elseif ($type === 'file')
+                                                <input type="file" name="answers[{{ $questionKey }}]" {{ $required ? 'required' : '' }}>
+                                            @elseif ($type === 'url')
+                                                <input type="url"
+                                                    name="answers[{{ $questionKey }}]"
+                                                    value="{{ is_scalar($oldValue) ? $oldValue : '' }}"
+                                                    placeholder="https://example.org/reference"
+                                                    {{ $required ? 'required' : '' }}>
                                             @elseif ($type === 'matrix')
                                                 @php
                                                     $oldMatrix = is_array($oldValue) ? $oldValue : [];
@@ -734,7 +804,11 @@
                                                     </table>
                                                 </div>
                                             @else
-                                                <input type="{{ in_array($type, ['number', 'email', 'date'], true) ? $type : 'text' }}"
+                                                <input type="{{ match ($type) {
+                                                    'number', 'email', 'date' => $type,
+                                                    'datetime' => 'datetime-local',
+                                                    default => 'text',
+                                                } }}"
                                                     name="answers[{{ $questionKey }}]"
                                                     value="{{ is_scalar($oldValue) ? $oldValue : '' }}"
                                                     {{ $required ? 'required' : '' }}>
@@ -818,6 +892,11 @@
                             .map((input) => input.value);
                     }
 
+                    if (questionType === 'multiselect') {
+                        return Array.from(questionBlock.querySelectorAll('select option:checked'))
+                            .map((option) => option.value);
+                    }
+
                     if (questionType === 'matrix') {
                         const matrix = {};
                         Array.from(questionBlock.querySelectorAll('tbody tr')).forEach((row) => {
@@ -831,6 +910,11 @@
                             }
                         });
                         return matrix;
+                    }
+
+                    if (questionType === 'file') {
+                        return Array.from(questionBlock.querySelectorAll('input[type="file"]'))
+                            .flatMap((input) => Array.from(input.files || []).map((file) => file.name));
                     }
 
                     const checkedRadio = questionBlock.querySelector('input[type="radio"]:checked');
@@ -942,6 +1026,17 @@
                     step.querySelectorAll('.question-error[data-client-error="1"]').forEach((item) => item.remove());
                 }
 
+                function updateSliderDisplays() {
+                    form.querySelectorAll('[data-slider-input]').forEach((input) => {
+                        const questionKey = input.getAttribute('data-slider-input');
+                        const output = form.querySelector(`[data-slider-value="${questionKey}"]`);
+
+                        if (output) {
+                            output.textContent = input.value;
+                        }
+                    });
+                }
+
                 function appendClientError(questionBlock, message) {
                     const error = document.createElement('div');
                     error.className = 'question-error';
@@ -989,6 +1084,33 @@
                             }
                         }
 
+                        if (questionType === 'multiselect') {
+                            const selected = questionBlock.querySelectorAll('select option:checked').length;
+
+                            if (required && selected === 0) {
+                                appendClientError(questionBlock, 'Select at least one option.');
+                                return false;
+                            }
+
+                            if (!Number.isNaN(minSelections) && selected < minSelections) {
+                                appendClientError(questionBlock, `Select at least ${minSelections} option(s).`);
+                                return false;
+                            }
+
+                            if (!Number.isNaN(maxSelections) && selected > maxSelections) {
+                                appendClientError(questionBlock, `Select no more than ${maxSelections} option(s).`);
+                                return false;
+                            }
+                        }
+
+                        if (questionType === 'file' && required) {
+                            const hasFile = questionBlock.querySelector('input[type="file"]')?.files?.length > 0;
+                            if (!hasFile) {
+                                appendClientError(questionBlock, 'Please upload a file before continuing.');
+                                return false;
+                            }
+                        }
+
                         if ((questionType === 'radio' || questionType === 'scale') && required) {
                             const selected = questionBlock.querySelector('input[type="radio"]:checked');
                             if (!selected) {
@@ -1010,7 +1132,9 @@
                 }
 
                 form.addEventListener('input', refreshVisibility);
+                form.addEventListener('input', updateSliderDisplays);
                 form.addEventListener('change', refreshVisibility);
+                form.addEventListener('change', updateSliderDisplays);
 
                 form.querySelectorAll('[data-step-action="next"]').forEach((button) => {
                     button.addEventListener('click', () => {
@@ -1042,6 +1166,7 @@
                 });
 
                 refreshVisibility();
+                updateSliderDisplays();
 
                 const firstServerError = form.querySelector('.question-error');
                 if (firstServerError) {

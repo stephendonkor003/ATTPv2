@@ -340,6 +340,9 @@
         <a href="{{ route('budget.me.surveys.responses') }}" class="survey-nav__link {{ $active === 'responses' ? 'is-active' : '' }}">
             <i class="feather-inbox"></i> Responses
         </a>
+        <a href="{{ route('budget.me.surveys.reports') }}" class="survey-nav__link {{ $active === 'reports' ? 'is-active' : '' }}">
+            <i class="feather-bar-chart-2"></i> Reports
+        </a>
         <a href="{{ route('budget.me.surveys.questionnaires') }}" class="survey-nav__link {{ $active === 'questionnaires' ? 'is-active' : '' }}">
             <i class="feather-book-open"></i> Questionnaire Library
         </a>

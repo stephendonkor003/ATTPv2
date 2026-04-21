@@ -567,6 +567,14 @@
                                             </li>
                                         @endcanany
 
+                                        @canany(['me.configuration.view', 'me.configuration.manage'])
+                                            <li class="nxl-item">
+                                                <a href="{{ route('budget.me.surveys.reports') }}" class="nxl-link">
+                                                    <i class="feather-bar-chart-2 me-2"></i> Reports
+                                                </a>
+                                            </li>
+                                        @endcanany
+
                                         @can('me.configuration.manage')
                                             <li class="nxl-item">
                                                 <a href="{{ route('budget.me.surveys.questionnaires.create') }}" class="nxl-link">

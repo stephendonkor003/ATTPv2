@@ -117,15 +117,22 @@
                                     <button type="button" class="btn btn-outline-secondary btn-sm w-100" data-copy-text="{{ $surveyLink->public_url }}">
                                         <i class="feather-clipboard me-1"></i> Copy Link
                                     </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm w-100"
+                                        data-download-qr="{{ $surveyLink->qr_url }}"
+                                        data-download-title="{{ $surveyLink->indicator->name ?? 'survey-qr' }}">
+                                        <i class="feather-download me-1"></i> PNG
+                                    </button>
+                                </div>
+                                <div class="d-flex gap-2">
                                     <a href="{{ route('budget.me.data-sources.surveys.show', $surveyLink) }}" class="btn btn-outline-secondary btn-sm w-100">
                                         <i class="feather-inbox me-1"></i> Responses
                                     </a>
+                                    <a class="btn btn-success btn-sm w-100"
+                                        href="https://wa.me/?text={{ urlencode($surveyLink->public_url) }}"
+                                        target="_blank" rel="noopener">
+                                        <i class="feather-share-2 me-1"></i> Share
+                                    </a>
                                 </div>
-                                <a class="btn btn-success btn-sm"
-                                    href="https://wa.me/?text={{ urlencode($surveyLink->public_url) }}"
-                                    target="_blank" rel="noopener">
-                                    <i class="feather-share-2 me-1"></i> Share
-                                </a>
                             </div>
                         </div>
                     </div>

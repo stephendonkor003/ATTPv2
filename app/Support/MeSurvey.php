@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -13,10 +14,15 @@ class MeSurvey
         'number',
         'email',
         'date',
+        'datetime',
+        'url',
         'select',
+        'multiselect',
         'radio',
         'checkbox',
         'scale',
+        'slider',
+        'file',
         'matrix',
     ];
 
@@ -99,7 +105,7 @@ class MeSurvey
         $type = strtolower((string) ($question['type'] ?? 'text'));
 
         return match ($type) {
-            'checkbox' => collect(is_array($rawValue) ? $rawValue : [])
+            'checkbox', 'multiselect' => collect(is_array($rawValue) ? $rawValue : [])
                 ->filter(fn ($item) => is_scalar($item) && trim((string) $item) !== '')
                 ->map(fn ($item) => trim((string) $item))
                 ->unique()
@@ -107,7 +113,8 @@ class MeSurvey
                 ->all(),
             'matrix' => self::normalizeMatrixAnswer($question, $rawValue),
             'number' => self::normalizeScalar($rawValue, true),
-            'scale' => self::normalizeScaleValue($rawValue),
+            'scale', 'slider' => self::normalizeScaleValue($rawValue),
+            'file' => self::normalizeFileValue($rawValue),
             default => self::normalizeScalar($rawValue),
         };
     }
@@ -166,6 +173,26 @@ class MeSurvey
             return ['value' => $normalized, 'errors' => $errors];
         }
 
+        if ($type === 'datetime') {
+            if ($required && self::isBlank($normalized)) {
+                $errors[] = 'This question is required.';
+            } elseif (!self::isBlank($normalized) && strtotime((string) $normalized) === false) {
+                $errors[] = 'Please enter a valid date and time.';
+            }
+
+            return ['value' => $normalized, 'errors' => $errors];
+        }
+
+        if ($type === 'url') {
+            if ($required && self::isBlank($normalized)) {
+                $errors[] = 'This question is required.';
+            } elseif (!self::isBlank($normalized) && !filter_var((string) $normalized, FILTER_VALIDATE_URL)) {
+                $errors[] = 'Please enter a valid link.';
+            }
+
+            return ['value' => $normalized, 'errors' => $errors];
+        }
+
         if (in_array($type, ['select', 'radio'], true)) {
             if ($required && self::isBlank($normalized)) {
                 $errors[] = 'This question is required.';
@@ -176,7 +203,7 @@ class MeSurvey
             return ['value' => $normalized, 'errors' => $errors];
         }
 
-        if ($type === 'checkbox') {
+        if (in_array($type, ['checkbox', 'multiselect'], true)) {
             $selected = collect(is_array($normalized) ? $normalized : [])->values();
 
             if ($required && $selected->isEmpty()) {
@@ -201,9 +228,12 @@ class MeSurvey
             return ['value' => $selected->all(), 'errors' => array_values(array_unique($errors))];
         }
 
-        if ($type === 'scale') {
+        if (in_array($type, ['scale', 'slider'], true)) {
             $min = (int) ($question['scale']['min'] ?? 1);
             $max = (int) ($question['scale']['max'] ?? 5);
+            $step = $type === 'slider'
+                ? (self::normalizePositiveInteger($question['scale']['step'] ?? 1) ?? 1)
+                : 1;
 
             if ($required && self::isBlank($normalized)) {
                 $errors[] = 'This question is required.';
@@ -215,11 +245,36 @@ class MeSurvey
                     if ($value < $min || $value > $max) {
                         $errors[] = 'Please choose a value between ' . $min . ' and ' . $max . '.';
                     }
+
+                    if ($step > 1 && (($value - $min) % $step) !== 0) {
+                        $errors[] = 'Please choose a valid slider value.';
+                    }
+
                     $normalized = $value;
                 }
             }
 
             return ['value' => $normalized, 'errors' => $errors];
+        }
+
+        if ($type === 'file') {
+            if ($required && self::isBlank($normalized)) {
+                $errors[] = 'Please upload a file.';
+            }
+
+            if ($rawValue instanceof UploadedFile) {
+                if (!$rawValue->isValid()) {
+                    $errors[] = 'The uploaded file could not be processed.';
+                }
+
+                if ($rawValue->getSize() > (20 * 1024 * 1024)) {
+                    $errors[] = 'The uploaded file must not exceed 20 MB.';
+                }
+            } elseif (!self::isBlank($normalized) && !is_array($normalized)) {
+                $errors[] = 'Please upload a valid file.';
+            }
+
+            return ['value' => $normalized, 'errors' => array_values(array_unique($errors))];
         }
 
         if ($type === 'matrix') {
@@ -290,6 +345,16 @@ class MeSurvey
                     return [$rowLabel => $columnLabel];
                 })
                 ->all();
+        }
+
+        if ($type === 'file' && is_array($value)) {
+            $filename = trim((string) ($value['original_name'] ?? $value['name'] ?? ''));
+            $url = trim((string) ($value['url'] ?? ''));
+
+            return array_filter([
+                'File' => $filename,
+                'Link' => $url,
+            ]);
         }
 
         return $value;
@@ -373,8 +438,9 @@ class MeSurvey
         $columns = self::normalizeLabelList($question['columns'] ?? []);
         $scaleMin = self::normalizePositiveInteger($question['scale']['min'] ?? $question['scale_min'] ?? $question['min'] ?? null) ?? 1;
         $scaleMax = self::normalizePositiveInteger($question['scale']['max'] ?? $question['scale_max'] ?? $question['max'] ?? null) ?? 5;
+        $scaleStep = self::normalizePositiveInteger($question['scale']['step'] ?? $question['scale_step'] ?? $question['step'] ?? null) ?? 1;
 
-        if ($type === 'checkbox' && !empty($options)) {
+        if (in_array($type, ['checkbox', 'multiselect'], true) && !empty($options)) {
             $maxSelections = self::normalizePositiveInteger($question['max_selections'] ?? $question['maxSelections'] ?? null);
             $minSelections = self::normalizePositiveInteger($question['min_selections'] ?? $question['minSelections'] ?? null);
         } else {
@@ -386,11 +452,15 @@ class MeSurvey
             return null;
         }
 
-        if (in_array($type, ['select', 'radio', 'checkbox'], true) && empty($options)) {
+        if (in_array($type, ['select', 'multiselect', 'radio', 'checkbox'], true) && empty($options)) {
             return null;
         }
 
         if ($type === 'scale' && $scaleMax < $scaleMin) {
+            [$scaleMin, $scaleMax] = [$scaleMax, $scaleMin];
+        }
+
+        if ($type === 'slider' && $scaleMax < $scaleMin) {
             [$scaleMin, $scaleMax] = [$scaleMax, $scaleMin];
         }
 
@@ -400,12 +470,13 @@ class MeSurvey
             'type' => $type,
             'required' => (bool) ($question['required'] ?? false),
             'hint' => trim((string) ($question['hint'] ?? '')),
-            'options' => in_array($type, ['select', 'radio', 'checkbox'], true) ? $options : [],
+            'options' => in_array($type, ['select', 'multiselect', 'radio', 'checkbox'], true) ? $options : [],
             'rows' => $type === 'matrix' ? $rows : [],
             'columns' => $type === 'matrix' ? $columns : [],
-            'scale' => $type === 'scale' ? [
+            'scale' => in_array($type, ['scale', 'slider'], true) ? [
                 'min' => $scaleMin,
                 'max' => $scaleMax,
+                'step' => $scaleStep,
                 'min_label' => trim((string) ($question['scale']['min_label'] ?? $question['scale_min_label'] ?? '')),
                 'max_label' => trim((string) ($question['scale']['max_label'] ?? $question['scale_max_label'] ?? '')),
             ] : null,
@@ -512,6 +583,31 @@ class MeSurvey
         }
 
         return null;
+    }
+
+    protected static function normalizeFileValue(mixed $rawValue): ?array
+    {
+        if ($rawValue instanceof UploadedFile) {
+            return array_filter([
+                'original_name' => trim((string) $rawValue->getClientOriginalName()),
+                'mime_type' => trim((string) $rawValue->getClientMimeType()),
+                'size' => $rawValue->getSize(),
+            ], fn ($value) => $value !== null && $value !== '');
+        }
+
+        if (!is_array($rawValue)) {
+            return null;
+        }
+
+        $normalized = [
+            'original_name' => trim((string) ($rawValue['original_name'] ?? $rawValue['name'] ?? '')),
+            'stored_path' => trim((string) ($rawValue['stored_path'] ?? $rawValue['path'] ?? '')),
+            'url' => trim((string) ($rawValue['url'] ?? '')),
+            'mime_type' => trim((string) ($rawValue['mime_type'] ?? $rawValue['mime'] ?? '')),
+            'size' => is_numeric($rawValue['size'] ?? null) ? (int) $rawValue['size'] : null,
+        ];
+
+        return array_filter($normalized, fn ($value) => $value !== null && $value !== '');
     }
 
     protected static function normalizeScalar(mixed $value, bool $allowNumericString = false): mixed

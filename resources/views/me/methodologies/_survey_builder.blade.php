@@ -133,7 +133,7 @@
             <div>
                 <h6 class="fw-semibold mb-1">Survey Sections</h6>
                 <div class="survey-type-note">
-                    Supported types: text, textarea, number, email, date, dropdown, single choice, checkbox, scale, matrix/grid.
+                    Supported types: text field, long text, number, email, date, date and time, link, dropdown, multi select, single choice, checkbox, slider, scale, file upload, matrix/grid.
                 </div>
             </div>
             <button type="button" class="btn btn-sm btn-outline-primary" id="addSurveySectionBtn">
@@ -168,15 +168,20 @@
                 }
 
                 const questionTypes = [
-                    { value: 'text', label: 'Text' },
+                    { value: 'text', label: 'Text Field' },
                     { value: 'textarea', label: 'Long Text' },
                     { value: 'number', label: 'Number' },
                     { value: 'email', label: 'Email' },
                     { value: 'date', label: 'Date' },
+                    { value: 'datetime', label: 'Date & Time' },
+                    { value: 'url', label: 'Link / URL' },
                     { value: 'select', label: 'Dropdown' },
+                    { value: 'multiselect', label: 'Multi Select' },
                     { value: 'radio', label: 'Single Choice' },
                     { value: 'checkbox', label: 'Checkboxes' },
+                    { value: 'slider', label: 'Slider / Swiper' },
                     { value: 'scale', label: 'Scale (e.g. 1-5)' },
+                    { value: 'file', label: 'File Upload' },
                     { value: 'matrix', label: 'Matrix / Grid' },
                 ];
 
@@ -263,6 +268,7 @@
                         scale: {
                             min: 1,
                             max: 5,
+                            step: 1,
                             min_label: '',
                             max_label: '',
                         },
@@ -301,6 +307,7 @@
                         scale: {
                             min: Number.parseInt(question?.scale?.min ?? question?.scale_min ?? 1, 10) || 1,
                             max: Number.parseInt(question?.scale?.max ?? question?.scale_max ?? 5, 10) || 5,
+                            step: Number.parseInt(question?.scale?.step ?? question?.scale_step ?? 1, 10) || 1,
                             min_label: (question?.scale?.min_label || question?.scale_min_label || '').toString(),
                             max_label: (question?.scale?.max_label || question?.scale_max_label || '').toString(),
                         },
@@ -360,7 +367,7 @@
                 }
 
                 function answerOptionsForQuestion(question) {
-                    if (['select', 'radio', 'checkbox'].includes(question.type)) {
+                    if (['select', 'multiselect', 'radio', 'checkbox'].includes(question.type)) {
                         return Array.isArray(question.options) ? question.options : [];
                     }
 
@@ -369,6 +376,17 @@
                         const max = Number.parseInt(question.scale?.max ?? 5, 10) || 5;
                         const values = [];
                         for (let value = min; value <= max; value += 1) {
+                            values.push(String(value));
+                        }
+                        return values;
+                    }
+
+                    if (question.type === 'slider') {
+                        const min = Number.parseInt(question.scale?.min ?? 1, 10) || 1;
+                        const max = Number.parseInt(question.scale?.max ?? 5, 10) || 5;
+                        const step = Number.parseInt(question.scale?.step ?? 1, 10) || 1;
+                        const values = [];
+                        for (let value = min; value <= max; value += step) {
                             values.push(String(value));
                         }
                         return values;
@@ -432,10 +450,11 @@
                     const optionsText = (question.options || []).join('\n');
                     const rowsText = (question.rows || []).map((row) => row.label).join('\n');
                     const columnsText = (question.columns || []).map((column) => column.label).join('\n');
-                    const showOptions = ['select', 'radio', 'checkbox'].includes(question.type);
-                    const showScale = question.type === 'scale';
+                    const showOptions = ['select', 'multiselect', 'radio', 'checkbox'].includes(question.type);
+                    const showScale = ['scale', 'slider'].includes(question.type);
+                    const showSliderStep = question.type === 'slider';
                     const showMatrix = question.type === 'matrix';
-                    const showCheckboxRules = question.type === 'checkbox';
+                    const showCheckboxRules = ['checkbox', 'multiselect'].includes(question.type);
 
                     return `
                         <div class="survey-question-card">
@@ -541,7 +560,15 @@
                                         data-question-index="${questionIndex}"
                                         value="${question.scale?.max ?? 5}">
                                 </div>
-                                <div class="col-md-3 ${showScale ? '' : 'd-none'}" data-question-scale-wrap="${sectionIndex}_${questionIndex}">
+                                <div class="col-md-2 ${showSliderStep ? '' : 'd-none'}" data-question-scale-wrap="${sectionIndex}_${questionIndex}">
+                                    <label class="form-label">Step</label>
+                                    <input type="number" min="1" class="form-control form-control-sm"
+                                        data-question-field="scale_step"
+                                        data-section-index="${sectionIndex}"
+                                        data-question-index="${questionIndex}"
+                                        value="${question.scale?.step ?? 1}">
+                                </div>
+                                <div class="col-md-2 ${showScale ? '' : 'd-none'}" data-question-scale-wrap="${sectionIndex}_${questionIndex}">
                                     <label class="form-label">Min Label</label>
                                     <input type="text" class="form-control form-control-sm"
                                         data-question-field="scale_min_label"
@@ -550,7 +577,7 @@
                                         value="${escapeHtml(question.scale?.min_label || '')}"
                                         placeholder="Poor">
                                 </div>
-                                <div class="col-md-3 ${showScale ? '' : 'd-none'}" data-question-scale-wrap="${sectionIndex}_${questionIndex}">
+                                <div class="col-md-2 ${showScale ? '' : 'd-none'}" data-question-scale-wrap="${sectionIndex}_${questionIndex}">
                                     <label class="form-label">Max Label</label>
                                     <input type="text" class="form-control form-control-sm"
                                         data-question-field="scale_max_label"
@@ -669,6 +696,7 @@
                             const type = form.querySelector(`[data-question-field="type"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || 'text';
                             const scaleMin = Number.parseInt(form.querySelector(`[data-question-field="scale_min"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '1', 10) || 1;
                             const scaleMax = Number.parseInt(form.querySelector(`[data-question-field="scale_max"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '5', 10) || 5;
+                            const scaleStep = Number.parseInt(form.querySelector(`[data-question-field="scale_step"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '1', 10) || 1;
 
                             return {
                                 key: question.key || createKey('question'),
@@ -676,7 +704,7 @@
                                 type,
                                 required: Boolean(form.querySelector(`[data-question-field="required"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.checked),
                                 hint: form.querySelector(`[data-question-field="hint"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
-                                options: ['select', 'radio', 'checkbox'].includes(type)
+                                options: ['select', 'multiselect', 'radio', 'checkbox'].includes(type)
                                     ? parseStringList(form.querySelector(`[data-question-field="options"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '', /[\r\n]+/)
                                     : [],
                                 rows: type === 'matrix'
@@ -691,23 +719,25 @@
                                         label,
                                     }))
                                     : [],
-                                scale: type === 'scale'
+                                scale: ['scale', 'slider'].includes(type)
                                     ? {
                                         min: Math.max(1, Math.min(scaleMin, scaleMax)),
                                         max: Math.max(scaleMin, scaleMax),
+                                        step: Math.max(1, scaleStep),
                                         min_label: form.querySelector(`[data-question-field="scale_min_label"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
                                         max_label: form.querySelector(`[data-question-field="scale_max_label"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
                                     }
                                     : {
                                         min: 1,
                                         max: 5,
+                                        step: 1,
                                         min_label: '',
                                         max_label: '',
                                     },
-                                min_selections: type === 'checkbox'
+                                min_selections: ['checkbox', 'multiselect'].includes(type)
                                     ? (form.querySelector(`[data-question-field="min_selections"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '').trim() || null
                                     : null,
-                                max_selections: type === 'checkbox'
+                                max_selections: ['checkbox', 'multiselect'].includes(type)
                                     ? (form.querySelector(`[data-question-field="max_selections"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '').trim() || null
                                     : null,
                                 visibility: normalizeVisibility({

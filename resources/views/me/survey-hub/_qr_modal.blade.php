@@ -11,7 +11,7 @@
             </div>
             <div class="modal-footer border-0 pt-0">
                 <button type="button" class="btn btn-outline-secondary js-copy-survey-qr-link">Copy Link</button>
-                <button type="button" class="btn btn-primary js-download-survey-qr">Download QR</button>
+                <button type="button" class="btn btn-primary js-download-survey-qr">Download PNG</button>
             </div>
         </div>
     </div>
@@ -29,6 +29,27 @@
                     }
                 }
 
+                async function downloadQrPng(qrUrl, titleText) {
+                    if (!qrUrl) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(qrUrl);
+                        const blob = await response.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        const anchor = document.createElement('a');
+                        anchor.href = objectUrl;
+                        anchor.download = `${(titleText || 'survey-qr').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+                        document.body.appendChild(anchor);
+                        anchor.click();
+                        anchor.remove();
+                        URL.revokeObjectURL(objectUrl);
+                    } catch (error) {
+                        window.open(qrUrl, '_blank', 'noopener');
+                    }
+                }
+
                 document.querySelectorAll('[data-copy-text]').forEach((button) => {
                     button.addEventListener('click', () => {
                         const text = button.dataset.copyText || '';
@@ -37,6 +58,12 @@
                         }
 
                         copyText(text);
+                    });
+                });
+
+                document.querySelectorAll('[data-download-qr]').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        downloadQrPng(button.dataset.downloadQr || '', button.dataset.downloadTitle || '');
                     });
                 });
 
@@ -82,24 +109,7 @@
                 });
 
                 document.querySelector('.js-download-survey-qr')?.addEventListener('click', async () => {
-                    if (!state.qr) {
-                        return;
-                    }
-
-                    try {
-                        const response = await fetch(state.qr);
-                        const blob = await response.blob();
-                        const objectUrl = URL.createObjectURL(blob);
-                        const anchor = document.createElement('a');
-                        anchor.href = objectUrl;
-                        anchor.download = `${(state.title || 'survey-qr').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
-                        document.body.appendChild(anchor);
-                        anchor.click();
-                        anchor.remove();
-                        URL.revokeObjectURL(objectUrl);
-                    } catch (error) {
-                        window.open(state.qr, '_blank', 'noopener');
-                    }
+                    downloadQrPng(state.qr, state.title);
                 });
             });
         </script>

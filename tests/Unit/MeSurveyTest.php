@@ -109,4 +109,104 @@ class MeSurveyTest extends TestCase
         $this->assertNotEmpty($invalid['errors']);
         $this->assertStringContainsString('no more than 3', strtolower($invalid['errors'][0]));
     }
+
+    public function test_it_supports_extended_questionnaire_response_types(): void
+    {
+        $survey = MeSurvey::surveyConfigFromMetadata([
+            'survey' => [
+                'enabled' => true,
+                'sections' => [
+                    [
+                        'title' => 'Response Types',
+                        'questions' => [
+                            [
+                                'label' => 'Reference link',
+                                'type' => 'url',
+                                'required' => true,
+                            ],
+                            [
+                                'label' => 'Meeting date and time',
+                                'type' => 'datetime',
+                                'required' => true,
+                            ],
+                            [
+                                'label' => 'Priority areas',
+                                'type' => 'multiselect',
+                                'options' => ['Policy', 'Coordination', 'Capacity'],
+                            ],
+                            [
+                                'label' => 'Satisfaction slider',
+                                'type' => 'slider',
+                                'scale' => [
+                                    'min' => 1,
+                                    'max' => 10,
+                                    'step' => 1,
+                                    'min_label' => 'Low',
+                                    'max_label' => 'High',
+                                ],
+                            ],
+                            [
+                                'label' => 'Supporting document',
+                                'type' => 'file',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $types = array_column($survey['questions'], 'type');
+
+        $this->assertContains('url', $types);
+        $this->assertContains('datetime', $types);
+        $this->assertContains('multiselect', $types);
+        $this->assertContains('slider', $types);
+        $this->assertContains('file', $types);
+        $this->assertSame(1, data_get($survey['questions'][3], 'scale.step'));
+    }
+
+    public function test_it_validates_link_slider_and_multi_select_answers(): void
+    {
+        $linkQuestion = [
+            'key' => 'reference_link',
+            'label' => 'Reference link',
+            'type' => 'url',
+            'required' => true,
+        ];
+
+        $sliderQuestion = [
+            'key' => 'satisfaction_slider',
+            'label' => 'Satisfaction slider',
+            'type' => 'slider',
+            'required' => true,
+            'scale' => [
+                'min' => 1,
+                'max' => 10,
+                'step' => 1,
+            ],
+        ];
+
+        $multiSelectQuestion = [
+            'key' => 'priority_areas',
+            'label' => 'Priority areas',
+            'type' => 'multiselect',
+            'required' => true,
+            'options' => ['Policy', 'Coordination', 'Capacity'],
+            'max_selections' => 2,
+        ];
+
+        $validLink = MeSurvey::validateAnswer($linkQuestion, 'https://example.org/report', true);
+        $invalidLink = MeSurvey::validateAnswer($linkQuestion, 'not-a-link', true);
+        $validSlider = MeSurvey::validateAnswer($sliderQuestion, '6', true);
+        $invalidSlider = MeSurvey::validateAnswer($sliderQuestion, '12', true);
+        $validMultiSelect = MeSurvey::validateAnswer($multiSelectQuestion, ['Policy', 'Capacity'], true);
+        $invalidMultiSelect = MeSurvey::validateAnswer($multiSelectQuestion, ['Policy', 'Coordination', 'Capacity'], true);
+
+        $this->assertSame([], $validLink['errors']);
+        $this->assertNotEmpty($invalidLink['errors']);
+        $this->assertSame([], $validSlider['errors']);
+        $this->assertNotEmpty($invalidSlider['errors']);
+        $this->assertSame([], $validMultiSelect['errors']);
+        $this->assertNotEmpty($invalidMultiSelect['errors']);
+    }
 }

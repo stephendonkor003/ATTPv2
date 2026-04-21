@@ -147,6 +147,16 @@
                     </div>
                     <div class="col-md-6 col-xl-12">
                         <div class="survey-action-tile">
+                            <div class="survey-action-tile__icon"><i class="feather-bar-chart-2"></i></div>
+                            <div class="survey-action-tile__title">Build survey reports</div>
+                            <div class="survey-action-tile__text">Filter cumulative responses, review question-field summaries, and export charts and PDF reporting packs.</div>
+                            <a href="{{ route('budget.me.surveys.reports') }}" class="btn btn-outline-primary btn-sm">
+                                Open reports
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-xl-12">
+                        <div class="survey-action-tile">
                             <div class="survey-action-tile__icon"><i class="feather-grid"></i></div>
                             <div class="survey-action-tile__title">Share through QR codes</div>
                             <div class="survey-action-tile__text">Preview generated QR codes, copy links, and download images for workshop or field distribution.</div>

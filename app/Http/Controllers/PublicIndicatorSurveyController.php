@@ -7,9 +7,12 @@ use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorSurveyResponse;
 use App\Models\User;
 use App\Support\MeSurvey;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class PublicIndicatorSurveyController extends Controller
@@ -46,13 +49,12 @@ class PublicIndicatorSurveyController extends Controller
         ]);
 
         $validator->after(function ($validator) use ($request, $surveyConfig, $questions) {
-            $requestAnswers = (array) $request->input('answers', []);
             $normalizedAnswers = [];
 
             foreach ($questions as $question) {
                 $normalizedAnswers[$question['key']] = MeSurvey::normalizeAnswer(
                     $question,
-                    data_get($requestAnswers, $question['key'])
+                    $this->rawAnswerForQuestion($request, $question)
                 );
             }
 
@@ -71,7 +73,7 @@ class PublicIndicatorSurveyController extends Controller
                 $questionVisible = $sectionVisible && MeSurvey::isQuestionVisible($question, $normalizedAnswers);
                 $result = MeSurvey::validateAnswer(
                     $question,
-                    data_get($requestAnswers, $question['key']),
+                    $this->rawAnswerForQuestion($request, $question),
                     $questionVisible
                 );
 
@@ -88,12 +90,15 @@ class PublicIndicatorSurveyController extends Controller
 
         $validated = $validator->validate();
 
-        $requestAnswers = (array) $request->input('answers', []);
         $normalizedAnswers = [];
         foreach ($questions as $question) {
+            $rawValue = $this->rawAnswerForQuestion($request, $question);
+
             $normalizedAnswers[$question['key']] = MeSurvey::validateAnswer(
                 $question,
-                data_get($requestAnswers, $question['key']),
+                $rawValue instanceof UploadedFile
+                    ? $this->storeSurveyUpload($rawValue, $token, (string) ($question['key'] ?? 'file'))
+                    : $rawValue,
                 true
             )['value'];
         }
@@ -219,5 +224,37 @@ class PublicIndicatorSurveyController extends Controller
         })->all();
 
         return [$responsibleUserIds->all(), $snapshot];
+    }
+
+    protected function rawAnswerForQuestion(Request $request, array $question): mixed
+    {
+        $questionKey = (string) ($question['key'] ?? '');
+        $type = strtolower((string) ($question['type'] ?? 'text'));
+
+        if ($questionKey === '') {
+            return null;
+        }
+
+        if ($type === 'file') {
+            return $request->file('answers.' . $questionKey);
+        }
+
+        return $request->input('answers.' . $questionKey);
+    }
+
+    protected function storeSurveyUpload(UploadedFile $file, string $token, string $questionKey): array
+    {
+        $path = $file->store(
+            'me-survey-uploads/' . Str::slug($token) . '/' . Str::slug($questionKey),
+            'public'
+        );
+
+        return array_filter([
+            'original_name' => trim((string) $file->getClientOriginalName()),
+            'stored_path' => $path,
+            'url' => Storage::disk('public')->url($path),
+            'mime_type' => trim((string) $file->getClientMimeType()),
+            'size' => $file->getSize(),
+        ], fn ($value) => $value !== null && $value !== '');
     }
 }
