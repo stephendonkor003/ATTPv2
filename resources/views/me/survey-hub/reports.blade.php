@@ -103,6 +103,123 @@
         .survey-chart-canvas {
             min-height: 300px;
         }
+
+        .survey-response-register {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .survey-response-card {
+            border: 1px solid #dbe4ef;
+            border-radius: 22px;
+            background:
+                linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            box-shadow: 0 16px 30px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .survey-response-card__head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem 1.1rem 0.8rem;
+            border-bottom: 1px solid #e2e8f0;
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(14, 165, 233, 0.05));
+        }
+
+        .survey-response-card__title {
+            color: #0f172a;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .survey-response-card__meta {
+            color: #64748b;
+            font-size: 0.84rem;
+            margin-top: 0.2rem;
+        }
+
+        .survey-response-card__count {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 0.72rem;
+            border-radius: 999px;
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .survey-response-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem;
+            padding: 0.9rem 1.1rem 0;
+        }
+
+        .survey-response-meta__chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.38rem 0.7rem;
+            border-radius: 999px;
+            border: 1px solid #dbe4ef;
+            background: #f8fafc;
+            color: #334155;
+            font-size: 0.79rem;
+            font-weight: 600;
+        }
+
+        .survey-response-answer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 0.85rem;
+            padding: 1rem 1.1rem 1.15rem;
+        }
+
+        .survey-response-answer {
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            background: #ffffff;
+            padding: 0.9rem;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+
+        .survey-response-answer__section {
+            color: #0f766e;
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 0.3rem;
+        }
+
+        .survey-response-answer__question {
+            color: #0f172a;
+            font-size: 0.94rem;
+            font-weight: 700;
+            line-height: 1.4;
+            margin-bottom: 0.45rem;
+        }
+
+        .survey-response-answer__type {
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 600;
+            margin-bottom: 0.55rem;
+        }
+
+        .survey-response-answer__value {
+            color: #334155;
+            font-size: 0.88rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 @endpush
 
@@ -377,6 +494,65 @@
                                 Darker cells indicate higher concentration of answers in that question field or matrix combination.
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="survey-panel mb-4">
+                <div class="survey-panel__header">
+                    <div>
+                        <div class="survey-panel__title">All Filtered Responses</div>
+                        <p class="survey-panel__subtitle">A full response register showing every submission and the answer details captured in the current report filter.</p>
+                    </div>
+                </div>
+                <div class="p-3 p-lg-4">
+                    <div class="survey-response-register">
+                        @foreach ($report['response_register'] as $responseRow)
+                            <article class="survey-response-card">
+                                <div class="survey-response-card__head">
+                                    <div>
+                                        <div class="survey-response-card__title">Response {{ $responseRow['response_number'] }}</div>
+                                        <div class="survey-response-card__meta">
+                                            Submitted {{ $responseRow['submitted_at'] }}
+                                        </div>
+                                    </div>
+                                    <div class="survey-response-card__count">
+                                        {{ $responseRow['answers_count'] }}/{{ $responseRow['question_count'] }} answered
+                                    </div>
+                                </div>
+
+                                <div class="survey-response-meta">
+                                    <span class="survey-response-meta__chip"><i class="feather-user"></i> {{ $responseRow['respondent_name'] }}</span>
+                                    @if ($responseRow['respondent_email'])
+                                        <span class="survey-response-meta__chip"><i class="feather-mail"></i> {{ $responseRow['respondent_email'] }}</span>
+                                    @endif
+                                    @if ($responseRow['respondent_phone'])
+                                        <span class="survey-response-meta__chip"><i class="feather-phone"></i> {{ $responseRow['respondent_phone'] }}</span>
+                                    @endif
+                                    @if ($responseRow['respondent_organization'])
+                                        <span class="survey-response-meta__chip"><i class="feather-briefcase"></i> {{ $responseRow['respondent_organization'] }}</span>
+                                    @endif
+                                    <span class="survey-response-meta__chip"><i class="feather-book-open"></i> {{ $responseRow['methodology_name'] }}</span>
+                                    <span class="survey-response-meta__chip"><i class="feather-target"></i> {{ $responseRow['indicator_name'] }}</span>
+                                    @if ($responseRow['survey_token'])
+                                        <span class="survey-response-meta__chip"><i class="feather-link"></i> {{ $responseRow['survey_token'] }}</span>
+                                    @endif
+                                </div>
+
+                                <div class="survey-response-answer-grid">
+                                    @forelse ($responseRow['answers'] as $answer)
+                                        <div class="survey-response-answer">
+                                            <div class="survey-response-answer__section">{{ $answer['section_title'] }}</div>
+                                            <div class="survey-response-answer__question">{{ $answer['question'] }}</div>
+                                            <div class="survey-response-answer__type">{{ $answer['type'] }}</div>
+                                            <div class="survey-response-answer__value">{{ $answer['value'] }}</div>
+                                        </div>
+                                    @empty
+                                        <div class="survey-report-note">No answer details were captured for this response.</div>
+                                    @endforelse
+                                </div>
+                            </article>
+                        @endforeach
                     </div>
                 </div>
             </div>

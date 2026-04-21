@@ -293,6 +293,7 @@ class MeSurveyController extends Controller
             $focusCharts,
             $methodologies
         );
+        $responseRegister = $this->buildResponseRegister($responses);
 
         $filters = [
             'selected_methodology_id' => $resolvedMethodology?->id ?? $selectedMethodologyId,
@@ -325,6 +326,7 @@ class MeSurveyController extends Controller
             'focus_charts' => $focusCharts,
             'heatmap' => $heatmap,
             'summary' => $summary,
+            'response_register' => $responseRegister,
             'stats' => [
                 'responses' => $responses->count(),
                 'questionnaires' => $responses->pluck('methodology_id')->filter()->unique()->count(),
@@ -985,6 +987,49 @@ class MeSurveyController extends Controller
         return $values->count() . ' response(s) captured.';
     }
 
+    protected function buildResponseRegister(Collection $responses): array
+    {
+        return $responses
+            ->sortByDesc(fn (IndicatorSurveyResponse $response) => optional($response->submitted_at)->timestamp ?? 0)
+            ->values()
+            ->map(function (IndicatorSurveyResponse $response, int $index) {
+                $answerItems = collect((array) ($response->answers ?? []))
+                    ->filter(fn ($answerItem) => is_array($answerItem))
+                    ->map(function (array $answerItem) {
+                        $value = $this->formatReportAnswerValue($answerItem);
+
+                        return [
+                            'section_title' => trim((string) ($answerItem['section'] ?? '')) ?: 'General section',
+                            'question' => trim((string) ($answerItem['question'] ?? 'Question')),
+                            'type' => Str::headline(strtolower((string) ($answerItem['type'] ?? 'text'))),
+                            'value' => $value !== '' ? $value : 'No answer captured.',
+                        ];
+                    })
+                    ->values();
+
+                $answeredCount = $answerItems
+                    ->filter(fn (array $answerItem) => ($answerItem['value'] ?? '') !== 'No answer captured.')
+                    ->count();
+
+                return [
+                    'response_number' => $index + 1,
+                    'response_id' => $response->id,
+                    'submitted_at' => optional($response->submitted_at)->format('d M Y H:i') ?: 'Unknown submission time',
+                    'respondent_name' => trim((string) ($response->respondent_name ?? '')) ?: 'Anonymous respondent',
+                    'respondent_email' => trim((string) ($response->respondent_email ?? '')),
+                    'respondent_phone' => trim((string) ($response->respondent_phone ?? '')),
+                    'respondent_organization' => trim((string) ($response->respondent_organization ?? '')),
+                    'indicator_name' => (string) ($response->indicator->name ?? 'Unassigned indicator'),
+                    'methodology_name' => (string) ($response->methodology->name ?? 'Questionnaire'),
+                    'survey_token' => (string) ($response->surveyLink->public_token ?? ''),
+                    'answers_count' => $answeredCount,
+                    'question_count' => $answerItems->count(),
+                    'answers' => $answerItems->all(),
+                ];
+            })
+            ->all();
+    }
+
     protected function categoricalDistribution(Collection $values, array $preferredOrder = []): array
     {
         $counts = collect($preferredOrder)
@@ -1053,6 +1098,46 @@ class MeSurveyController extends Controller
             ->replaceMatches('/[^a-z0-9]+/', '_')
             ->trim('_')
             ->value();
+    }
+
+    protected function formatReportAnswerValue(array $answerItem): string
+    {
+        $displayValue = $answerItem['answer'] ?? null;
+
+        return $this->stringifyReportValue($displayValue);
+    }
+
+    protected function stringifyReportValue(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Yes' : 'No';
+        }
+
+        if (is_array($value)) {
+            return collect($value)
+                ->map(function ($item, $key) {
+                    $formatted = $this->stringifyReportValue($item);
+                    if ($formatted === '') {
+                        return null;
+                    }
+
+                    return is_string($key)
+                        ? ($key . ': ' . $formatted)
+                        : $formatted;
+                })
+                ->filter()
+                ->implode(' | ');
+        }
+
+        if (is_scalar($value)) {
+            return trim((string) $value);
+        }
+
+        return '';
     }
 
     protected function hasUsableAnswer(mixed $answer): bool

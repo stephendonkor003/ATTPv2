@@ -147,6 +147,48 @@
         .muted {
             color: #64748b;
         }
+
+        .response-card {
+            border: 1px solid #dbe4ef;
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #ffffff;
+            page-break-inside: avoid;
+        }
+
+        .response-card-head {
+            margin-bottom: 8px;
+        }
+
+        .response-card-title {
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 3px;
+        }
+
+        .response-meta {
+            font-size: 10px;
+            color: #475569;
+            margin-bottom: 8px;
+        }
+
+        .response-answer-table th:nth-child(1) {
+            width: 17%;
+        }
+
+        .response-answer-table th:nth-child(2) {
+            width: 29%;
+        }
+
+        .response-answer-table th:nth-child(3) {
+            width: 12%;
+        }
+
+        .response-answer-value {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 </head>
 
@@ -280,6 +322,62 @@
                     @endforeach
                 </tbody>
             </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">All Filtered Responses</div>
+            @foreach ($report['response_register'] as $responseRow)
+                <div class="response-card">
+                    <div class="response-card-head">
+                        <div class="response-card-title">
+                            Response {{ $responseRow['response_number'] }} | Submitted {{ $responseRow['submitted_at'] }}
+                        </div>
+                        <div class="response-meta">
+                            Respondent: {{ $responseRow['respondent_name'] }}
+                            @if ($responseRow['respondent_email'])
+                                | Email: {{ $responseRow['respondent_email'] }}
+                            @endif
+                            @if ($responseRow['respondent_phone'])
+                                | Phone: {{ $responseRow['respondent_phone'] }}
+                            @endif
+                            @if ($responseRow['respondent_organization'])
+                                | Organization: {{ $responseRow['respondent_organization'] }}
+                            @endif
+                            | Questionnaire: {{ $responseRow['methodology_name'] }}
+                            | Indicator: {{ $responseRow['indicator_name'] }}
+                            @if ($responseRow['survey_token'])
+                                | Survey Link: {{ $responseRow['survey_token'] }}
+                            @endif
+                            | Answered: {{ $responseRow['answers_count'] }}/{{ $responseRow['question_count'] }}
+                        </div>
+                    </div>
+
+                    <table class="report-table response-answer-table">
+                        <thead>
+                            <tr>
+                                <th>Section</th>
+                                <th>Question</th>
+                                <th>Type</th>
+                                <th>Answer</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($responseRow['answers'] as $answer)
+                                <tr>
+                                    <td>{{ $answer['section_title'] }}</td>
+                                    <td>{{ $answer['question'] }}</td>
+                                    <td>{{ $answer['type'] }}</td>
+                                    <td class="response-answer-value">{{ $answer['value'] }}</td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="muted">No answer details were captured for this response.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            @endforeach
         </div>
     </div>
 </body>
