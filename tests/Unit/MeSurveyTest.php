@@ -142,8 +142,11 @@ class MeSurveyTest extends TestCase
                                     'min' => 1,
                                     'max' => 10,
                                     'step' => 1,
-                                    'min_label' => 'Low',
-                                    'max_label' => 'High',
+                                    'labels' => [
+                                        '1' => 'Very low',
+                                        '5' => 'Moderate',
+                                        '10' => 'Very high',
+                                    ],
                                 ],
                             ],
                             [
@@ -164,6 +167,8 @@ class MeSurveyTest extends TestCase
         $this->assertContains('slider', $types);
         $this->assertContains('file', $types);
         $this->assertSame(1, data_get($survey['questions'][3], 'scale.step'));
+        $this->assertSame('Very low', data_get($survey['questions'][3], 'scale.labels.1'));
+        $this->assertSame('Very high', data_get($survey['questions'][3], 'scale.labels.10'));
         $this->assertSame('#8C4B2F', data_get($survey['sections'][0], 'color'));
         $this->assertSame('#8C4B2F', data_get($survey['questions'][0], 'section_color'));
     }
@@ -254,5 +259,36 @@ class MeSurveyTest extends TestCase
         $this->assertFalse(MeSurvey::isQuestionVisible($followUpQuestion, [
             'goal_met' => 'Fully achieved',
         ]));
+    }
+
+    public function test_it_maps_legacy_min_and_max_labels_into_scale_point_labels(): void
+    {
+        $survey = MeSurvey::surveyConfigFromMetadata([
+            'survey' => [
+                'enabled' => true,
+                'sections' => [
+                    [
+                        'title' => 'Legacy scale labels',
+                        'questions' => [
+                            [
+                                'label' => 'Overall workshop rating',
+                                'type' => 'scale',
+                                'scale' => [
+                                    'min' => 1,
+                                    'max' => 5,
+                                    'min_label' => 'Poor',
+                                    'max_label' => 'Excellent',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $question = $survey['questions'][0];
+
+        $this->assertSame('Poor', data_get($question, 'scale.labels.1'));
+        $this->assertSame('Excellent', data_get($question, 'scale.labels.5'));
     }
 }

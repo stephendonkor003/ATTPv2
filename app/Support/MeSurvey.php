@@ -479,6 +479,17 @@ class MeSurvey
             [$scaleMin, $scaleMax] = [$scaleMax, $scaleMin];
         }
 
+        $scaleLabels = in_array($type, ['scale', 'slider'], true)
+            ? self::normalizeScaleLabels(
+                $question['scale']['labels'] ?? $question['scale_labels'] ?? [],
+                $scaleMin,
+                $scaleMax,
+                $type === 'slider' ? $scaleStep : 1,
+                trim((string) ($question['scale']['min_label'] ?? $question['scale_min_label'] ?? '')),
+                trim((string) ($question['scale']['max_label'] ?? $question['scale_max_label'] ?? ''))
+            )
+            : [];
+
         return [
             'key' => $questionKey,
             'label' => $label,
@@ -492,6 +503,7 @@ class MeSurvey
                 'min' => $scaleMin,
                 'max' => $scaleMax,
                 'step' => $scaleStep,
+                'labels' => $scaleLabels,
                 'min_label' => trim((string) ($question['scale']['min_label'] ?? $question['scale_min_label'] ?? '')),
                 'max_label' => trim((string) ($question['scale']['max_label'] ?? $question['scale_max_label'] ?? '')),
             ] : null,
@@ -714,6 +726,57 @@ class MeSurvey
             ->unique('key')
             ->values()
             ->all();
+    }
+
+    protected static function normalizeScaleLabels(
+        mixed $labels,
+        int $min,
+        int $max,
+        int $step,
+        string $legacyMinLabel = '',
+        string $legacyMaxLabel = ''
+    ): array {
+        $allowedValues = collect(self::scaleValues($min, $max, $step))
+            ->map(fn (int $value) => (string) $value)
+            ->values();
+
+        $normalized = collect(is_array($labels) ? $labels : [])
+            ->mapWithKeys(function ($label, $value) {
+                $key = trim((string) $value);
+                $text = trim((string) $label);
+
+                if ($key === '' || $text === '') {
+                    return [];
+                }
+
+                return [$key => $text];
+            })
+            ->filter(fn (string $label, string $value) => $allowedValues->contains($value))
+            ->all();
+
+        if ($legacyMinLabel !== '') {
+            $normalized[(string) $min] = $legacyMinLabel;
+        }
+
+        if ($legacyMaxLabel !== '') {
+            $normalized[(string) $max] = $legacyMaxLabel;
+        }
+
+        return collect($normalized)
+            ->filter(fn ($label) => trim((string) $label) !== '')
+            ->all();
+    }
+
+    protected static function scaleValues(int $min, int $max, int $step): array
+    {
+        $values = [];
+        $step = max($step, 1);
+
+        for ($value = $min; $value <= $max; $value += $step) {
+            $values[] = $value;
+        }
+
+        return $values;
     }
 
     protected static function normalizeKey(string $value, string $fallback): string

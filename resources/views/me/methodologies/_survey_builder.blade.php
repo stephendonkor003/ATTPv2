@@ -346,6 +346,7 @@
                             min: 1,
                             max: 5,
                             step: 1,
+                            labels: {},
                             min_label: '',
                             max_label: '',
                         },
@@ -373,6 +374,14 @@
                 }
 
                 function normalizeQuestion(question) {
+                    const scaleMin = Number.parseInt(question?.scale?.min ?? question?.scale_min ?? 1, 10) || 1;
+                    const scaleMax = Number.parseInt(question?.scale?.max ?? question?.scale_max ?? 5, 10) || 5;
+                    const scaleStep = Number.parseInt(question?.scale?.step ?? question?.scale_step ?? 1, 10) || 1;
+                    const normalizedMin = Math.min(scaleMin, scaleMax);
+                    const normalizedMax = Math.max(scaleMin, scaleMax);
+                    const legacyMinLabel = (question?.scale?.min_label || question?.scale_min_label || '').toString();
+                    const legacyMaxLabel = (question?.scale?.max_label || question?.scale_max_label || '').toString();
+
                     return {
                         key: (question?.key || '').toString().trim() || createKey('question'),
                         label: (question?.label || '').toString(),
@@ -383,11 +392,19 @@
                         rows: ensureLabelEntries(question?.rows, 'row'),
                         columns: ensureLabelEntries(question?.columns, 'column'),
                         scale: {
-                            min: Number.parseInt(question?.scale?.min ?? question?.scale_min ?? 1, 10) || 1,
-                            max: Number.parseInt(question?.scale?.max ?? question?.scale_max ?? 5, 10) || 5,
-                            step: Number.parseInt(question?.scale?.step ?? question?.scale_step ?? 1, 10) || 1,
-                            min_label: (question?.scale?.min_label || question?.scale_min_label || '').toString(),
-                            max_label: (question?.scale?.max_label || question?.scale_max_label || '').toString(),
+                            min: normalizedMin,
+                            max: normalizedMax,
+                            step: scaleStep,
+                            labels: normalizeScaleLabels(
+                                question?.scale?.labels ?? question?.scale_labels ?? {},
+                                normalizedMin,
+                                normalizedMax,
+                                question?.type === 'slider' ? scaleStep : 1,
+                                legacyMinLabel,
+                                legacyMaxLabel
+                            ),
+                            min_label: legacyMinLabel,
+                            max_label: legacyMaxLabel,
                         },
                         min_selections: question?.min_selections ? Number.parseInt(question.min_selections, 10) : null,
                         max_selections: question?.max_selections ? Number.parseInt(question.max_selections, 10) : null,
@@ -451,24 +468,11 @@
                     }
 
                     if (question.type === 'scale') {
-                        const min = Number.parseInt(question.scale?.min ?? 1, 10) || 1;
-                        const max = Number.parseInt(question.scale?.max ?? 5, 10) || 5;
-                        const values = [];
-                        for (let value = min; value <= max; value += 1) {
-                            values.push(String(value));
-                        }
-                        return values;
+                        return scaleValues(question, 'scale').map((value) => String(value));
                     }
 
                     if (question.type === 'slider') {
-                        const min = Number.parseInt(question.scale?.min ?? 1, 10) || 1;
-                        const max = Number.parseInt(question.scale?.max ?? 5, 10) || 5;
-                        const step = Number.parseInt(question.scale?.step ?? 1, 10) || 1;
-                        const values = [];
-                        for (let value = min; value <= max; value += step) {
-                            values.push(String(value));
-                        }
-                        return values;
+                        return scaleValues(question, 'slider').map((value) => String(value));
                     }
 
                     if (question.type === 'matrix') {
@@ -478,6 +482,88 @@
                     }
 
                     return [];
+                }
+
+                function scaleValues(question, mode = null) {
+                    const type = mode || question.type || 'scale';
+                    const min = Number.parseInt(question.scale?.min ?? 1, 10) || 1;
+                    const max = Number.parseInt(question.scale?.max ?? 5, 10) || 5;
+                    const step = type === 'slider'
+                        ? (Number.parseInt(question.scale?.step ?? 1, 10) || 1)
+                        : 1;
+                    const start = Math.min(min, max);
+                    const end = Math.max(min, max);
+                    const values = [];
+
+                    for (let value = start; value <= end; value += Math.max(step, 1)) {
+                        values.push(value);
+                    }
+
+                    return values;
+                }
+
+                function normalizeScaleLabels(labels, min, max, step, legacyMinLabel = '', legacyMaxLabel = '') {
+                    const values = [];
+                    for (let value = Math.min(min, max); value <= Math.max(min, max); value += Math.max(step, 1)) {
+                        values.push(String(value));
+                    }
+
+                    const source = labels && typeof labels === 'object' ? labels : {};
+                    const normalized = {};
+
+                    values.forEach((value) => {
+                        const label = (source[value] || '').toString().trim();
+                        if (label) {
+                            normalized[value] = label;
+                        }
+                    });
+
+                    if (legacyMinLabel && values.includes(String(min))) {
+                        normalized[String(min)] = legacyMinLabel.toString().trim();
+                    }
+
+                    if (legacyMaxLabel && values.includes(String(max))) {
+                        normalized[String(max)] = legacyMaxLabel.toString().trim();
+                    }
+
+                    return normalized;
+                }
+
+                function scaleLabelsMarkup(question, sectionIndex, questionIndex) {
+                    const values = scaleValues(question, question.type);
+                    const currentLabels = normalizeScaleLabels(
+                        question.scale?.labels || {},
+                        Number.parseInt(question.scale?.min ?? 1, 10) || 1,
+                        Number.parseInt(question.scale?.max ?? 5, 10) || 5,
+                        question.type === 'slider'
+                            ? (Number.parseInt(question.scale?.step ?? 1, 10) || 1)
+                            : 1,
+                        question.scale?.min_label || '',
+                        question.scale?.max_label || ''
+                    );
+
+                    return `
+                        <div class="col-12" data-question-scale-labels-wrap="${sectionIndex}_${questionIndex}">
+                            <label class="form-label">Scale Point Labels</label>
+                            <div class="row g-2">
+                                ${values.map((value) => `
+                                    <div class="col-md-4">
+                                        <label class="form-label form-label-sm">${escapeHtml(String(value))} Label</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                            data-question-field="scale_label"
+                                            data-scale-value="${value}"
+                                            data-section-index="${sectionIndex}"
+                                            data-question-index="${questionIndex}"
+                                            value="${escapeHtml(currentLabels[String(value)] || '')}"
+                                            placeholder="${value} = Enter label">
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <small class="text-muted">
+                                Add the wording for each point, for example 1 = Poor, 2 = Fair, 3 = Good.
+                            </small>
+                        </div>
+                    `;
                 }
 
                 function visibilityMarkup(scope, sectionIndex, questionIndex, visibility, choices) {
@@ -656,24 +742,7 @@
                                         data-question-index="${questionIndex}"
                                         value="${question.scale?.step ?? 1}">
                                 </div>
-                                <div class="col-md-2 ${showScale ? '' : 'd-none'}" data-question-scale-wrap="${sectionIndex}_${questionIndex}">
-                                    <label class="form-label">Min Label</label>
-                                    <input type="text" class="form-control form-control-sm"
-                                        data-question-field="scale_min_label"
-                                        data-section-index="${sectionIndex}"
-                                        data-question-index="${questionIndex}"
-                                        value="${escapeHtml(question.scale?.min_label || '')}"
-                                        placeholder="Poor">
-                                </div>
-                                <div class="col-md-2 ${showScale ? '' : 'd-none'}" data-question-scale-wrap="${sectionIndex}_${questionIndex}">
-                                    <label class="form-label">Max Label</label>
-                                    <input type="text" class="form-control form-control-sm"
-                                        data-question-field="scale_max_label"
-                                        data-section-index="${sectionIndex}"
-                                        data-question-index="${questionIndex}"
-                                        value="${escapeHtml(question.scale?.max_label || '')}"
-                                        placeholder="Excellent">
-                                </div>
+                                ${showScale ? scaleLabelsMarkup(question, sectionIndex, questionIndex) : ''}
 
                                 <div class="col-md-6 ${showMatrix ? '' : 'd-none'}" data-question-matrix-wrap="${sectionIndex}_${questionIndex}">
                                     <label class="form-label">Rows (one per line)</label>
@@ -804,6 +873,27 @@
                             const scaleMin = Number.parseInt(form.querySelector(`[data-question-field="scale_min"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '1', 10) || 1;
                             const scaleMax = Number.parseInt(form.querySelector(`[data-question-field="scale_max"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '5', 10) || 5;
                             const scaleStep = Number.parseInt(form.querySelector(`[data-question-field="scale_step"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '1', 10) || 1;
+                            const normalizedScaleMin = Math.max(1, Math.min(scaleMin, scaleMax));
+                            const normalizedScaleMax = Math.max(scaleMin, scaleMax);
+                            const normalizedScaleStep = Math.max(1, scaleStep);
+                            const scaleValuesForQuestion = ['scale', 'slider'].includes(type)
+                                ? (() => {
+                                    const values = [];
+                                    const step = type === 'slider' ? normalizedScaleStep : 1;
+                                    for (let value = normalizedScaleMin; value <= normalizedScaleMax; value += step) {
+                                        values.push(String(value));
+                                    }
+                                    return values;
+                                })()
+                                : [];
+                            const scaleLabels = scaleValuesForQuestion.reduce((labels, value) => {
+                                const field = form.querySelector(`[data-question-field="scale_label"][data-scale-value="${value}"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`);
+                                const label = (field?.value || '').trim();
+                                if (label) {
+                                    labels[value] = label;
+                                }
+                                return labels;
+                            }, {});
 
                             return {
                                 key: question.key || createKey('question'),
@@ -828,16 +918,18 @@
                                     : [],
                                 scale: ['scale', 'slider'].includes(type)
                                     ? {
-                                        min: Math.max(1, Math.min(scaleMin, scaleMax)),
-                                        max: Math.max(scaleMin, scaleMax),
-                                        step: Math.max(1, scaleStep),
-                                        min_label: form.querySelector(`[data-question-field="scale_min_label"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
-                                        max_label: form.querySelector(`[data-question-field="scale_max_label"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
+                                        min: normalizedScaleMin,
+                                        max: normalizedScaleMax,
+                                        step: normalizedScaleStep,
+                                        labels: scaleLabels,
+                                        min_label: scaleLabels[String(normalizedScaleMin)] || '',
+                                        max_label: scaleLabels[String(normalizedScaleMax)] || '',
                                     }
                                     : {
                                         min: 1,
                                         max: 5,
                                         step: 1,
+                                        labels: {},
                                         min_label: '',
                                         max_label: '',
                                     },
@@ -1003,6 +1095,9 @@
 
                     if (
                         target.matches('[data-question-field="type"]')
+                        || target.matches('[data-question-field="scale_min"]')
+                        || target.matches('[data-question-field="scale_max"]')
+                        || target.matches('[data-question-field="scale_step"]')
                         || target.matches('[data-condition-key="question_key"]')
                     ) {
                         renderSections();

@@ -896,6 +896,32 @@
             font-size: 0.86rem;
         }
 
+        .scale-points {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        }
+
+        .scale-point {
+            display: grid;
+            gap: 4px;
+            padding: 10px 12px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid rgba(16, 34, 46, 0.08);
+        }
+
+        .scale-point strong {
+            color: var(--primary);
+            font-size: 0.88rem;
+        }
+
+        .scale-point span {
+            color: var(--muted);
+            font-size: 0.83rem;
+            line-height: 1.35;
+        }
+
         .slider-panel {
             display: grid;
             gap: 14px;
@@ -923,6 +949,12 @@
             border: 1px solid rgba(16, 34, 46, 0.08);
             font-weight: 800;
             color: var(--primary);
+        }
+
+        .slider-selected-label {
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 600;
         }
 
         input[type="range"] {
@@ -1559,9 +1591,18 @@
                                                         $scaleMin = (int) data_get($question, 'scale.min', 1);
                                                         $scaleMax = (int) data_get($question, 'scale.max', 5);
                                                         $scaleStep = max((int) data_get($question, 'scale.step', 1), 1);
+                                                        $scaleLabels = collect((array) data_get($question, 'scale.labels', []))
+                                                            ->mapWithKeys(fn ($label, $value) => [(string) $value => trim((string) $label)])
+                                                            ->filter(fn ($label) => $label !== '');
+                                                        $scaleValues = collect(range($scaleMin, $scaleMax));
+                                                        $sliderValues = collect();
+                                                        for ($value = $scaleMin; $value <= $scaleMax; $value += $scaleStep) {
+                                                            $sliderValues->push($value);
+                                                        }
                                                         $sliderValue = is_scalar($oldValue) && trim((string) $oldValue) !== ''
                                                             ? (string) $oldValue
                                                             : (string) $scaleMin;
+                                                        $sliderSelectedLabel = $scaleLabels->get($sliderValue, '');
                                                         $selectionMin = data_get($question, 'min_selections');
                                                         $selectionMax = data_get($question, 'max_selections');
                                                         $questionTag = match ($type) {
@@ -1683,18 +1724,29 @@
                                                                 </div>
                                                             @elseif ($type === 'scale')
                                                                 <div class="scale-grid">
-                                                                    @for ($value = $scaleMin; $value <= $scaleMax; $value++)
+                                                                    @foreach ($scaleValues as $value)
                                                                         <label class="choice-item scale-item" data-choice-item>
                                                                             <input type="radio" name="answers[{{ $questionKey }}]" value="{{ $value }}"
                                                                                 {{ $required ? 'required' : '' }}
                                                                                 @checked((string) $oldValue === (string) $value)>
                                                                             <strong>{{ $value }}</strong>
-                                                                            <span>Rating</span>
+                                                                            <span>{{ $scaleLabels->get((string) $value, 'Rating') }}</span>
                                                                         </label>
-                                                                    @endfor
+                                                                    @endforeach
                                                                 </div>
 
-                                                                @if (data_get($question, 'scale.min_label') || data_get($question, 'scale.max_label'))
+                                                                @if ($scaleLabels->isNotEmpty())
+                                                                    <div class="scale-points">
+                                                                        @foreach ($scaleValues as $value)
+                                                                            @if ($scaleLabels->get((string) $value))
+                                                                                <div class="scale-point">
+                                                                                    <strong>{{ $value }}</strong>
+                                                                                    <span>{{ $scaleLabels->get((string) $value) }}</span>
+                                                                                </div>
+                                                                            @endif
+                                                                        @endforeach
+                                                                    </div>
+                                                                @elseif (data_get($question, 'scale.min_label') || data_get($question, 'scale.max_label'))
                                                                     <div class="scale-labels">
                                                                         <span>{{ data_get($question, 'scale.min_label') }}</span>
                                                                         <span>{{ data_get($question, 'scale.max_label') }}</span>
@@ -1707,7 +1759,9 @@
                                                                             <span>Selected value</span>
                                                                             <strong data-slider-value="{{ $questionKey }}">{{ $sliderValue }}</strong>
                                                                         </div>
-                                                                        <div class="file-caption">Adjust to the most appropriate point on the scale.</div>
+                                                                        <div class="slider-selected-label" data-slider-selected-label="{{ $questionKey }}">
+                                                                            {{ $sliderSelectedLabel ?: 'Adjust to the most appropriate point on the scale.' }}
+                                                                        </div>
                                                                     </div>
 
                                                                     <input type="range"
@@ -1716,12 +1770,24 @@
                                                                         step="{{ $scaleStep }}"
                                                                         name="answers[{{ $questionKey }}]"
                                                                         value="{{ $sliderValue }}"
-                                                                        data-slider-input="{{ $questionKey }}">
+                                                                        data-slider-input="{{ $questionKey }}"
+                                                                        data-slider-label-map='@json($scaleLabels)'>
 
-                                                                    <div class="scale-labels">
+                                                                    @if ($scaleLabels->isNotEmpty())
+                                                                        <div class="scale-points scale-points--slider">
+                                                                            @foreach ($sliderValues as $value)
+                                                                                <div class="scale-point">
+                                                                                    <strong>{{ $value }}</strong>
+                                                                                    <span>{{ $scaleLabels->get((string) $value, '') }}</span>
+                                                                                </div>
+                                                                            @endforeach
+                                                                        </div>
+                                                                    @else
+                                                                        <div class="scale-labels">
                                                                         <span>{{ data_get($question, 'scale.min_label') ?: $scaleMin }}</span>
                                                                         <span>{{ data_get($question, 'scale.max_label') ?: $scaleMax }}</span>
-                                                                    </div>
+                                                                        </div>
+                                                                    @endif
                                                                 </div>
                                                             @elseif ($type === 'file')
                                                                 <input type="file" name="answers[{{ $questionKey }}]" {{ $required ? 'required' : '' }} data-file-input="{{ $questionKey }}">
@@ -2010,15 +2076,28 @@
                     form.querySelectorAll('[data-slider-input]').forEach((input) => {
                         const questionKey = input.getAttribute('data-slider-input');
                         const output = form.querySelector(`[data-slider-value="${questionKey}"]`);
+                        const labelOutput = form.querySelector(`[data-slider-selected-label="${questionKey}"]`);
                         const min = Number(input.min || 0);
                         const max = Number(input.max || 100);
                         const value = Number(input.value || min);
                         const percent = max > min ? ((value - min) / (max - min)) * 100 : 0;
+                        const labelMapRaw = input.getAttribute('data-slider-label-map') || '{}';
+                        let labelMap = {};
+
+                        try {
+                            labelMap = JSON.parse(labelMapRaw);
+                        } catch (error) {
+                            labelMap = {};
+                        }
 
                         input.style.setProperty('--slider-percent', `${percent}%`);
 
                         if (output) {
                             output.textContent = input.value;
+                        }
+
+                        if (labelOutput) {
+                            labelOutput.textContent = labelMap[String(input.value)] || 'Adjust to the most appropriate point on the scale.';
                         }
                     });
                 }
