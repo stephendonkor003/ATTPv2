@@ -533,18 +533,11 @@
                     const values = Array.isArray(route?.values)
                         ? route.values.map((item) => (item || '').toString().trim()).filter(Boolean)
                         : [];
-
-                    if (!['section', 'question'].includes(targetType) || !targetKey || values.length === 0) {
-                        return {
-                            target_type: '',
-                            target_key: '',
-                            values: [],
-                        };
-                    }
+                    const normalizedType = ['section', 'question'].includes(targetType) ? targetType : '';
 
                     return {
-                        target_type: targetType,
-                        target_key: targetKey,
+                        target_type: normalizedType,
+                        target_key: normalizedType ? targetKey : '',
                         values: values.filter((item, index, array) => array.indexOf(item) === index),
                     };
                 }
@@ -650,11 +643,11 @@
 
                     sections.forEach((section) => {
                         if (section.key !== currentSectionKey) {
-                        choices.push({
-                            type: 'section',
-                            key: section.key,
-                            label: `Section: ${section.title || 'Untitled section'}`,
-                        });
+                            choices.push({
+                                type: 'section',
+                                key: section.key,
+                                label: `Section: ${section.title || 'Untitled section'}`,
+                            });
                         }
 
                         (section.questions || []).forEach((question) => {
@@ -1288,6 +1281,11 @@
                                 }
                                 return labels;
                             }, {});
+                            const selectedRouteType = form.querySelector(`[data-route-field="target_type"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '';
+                            const selectedRouteKey = form.querySelector(`[data-route-field="target_key"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '';
+                            const validRouteTargetKeys = specialTargetChoices(question.key || '', section.key || '')
+                                .filter((choice) => choice.type === selectedRouteType)
+                                .map((choice) => choice.key);
 
                             return {
                                 key: question.key || createKey('question'),
@@ -1339,8 +1337,8 @@
                                     values: parseStringList(form.querySelector(`[data-condition-scope="question"][data-condition-section="${sectionIndex}"][data-condition-question="${questionIndex}"][data-condition-key="values"]`)?.value || ''),
                                 }),
                                 route: normalizeRoute({
-                                    target_type: form.querySelector(`[data-route-field="target_type"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
-                                    target_key: form.querySelector(`[data-route-field="target_key"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
+                                    target_type: selectedRouteType,
+                                    target_key: validRouteTargetKeys.includes(selectedRouteKey) ? selectedRouteKey : '',
                                     values: parseStringList(form.querySelector(`[data-route-field="values"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || ''),
                                 }),
                             };

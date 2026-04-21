@@ -589,6 +589,38 @@
             color: var(--section-accent, var(--primary));
         }
 
+        .section-step {
+            padding: 20px;
+            border-radius: 30px;
+            border: 1px solid color-mix(in srgb, var(--section-accent, var(--primary)) 18%, white);
+            background:
+                linear-gradient(180deg,
+                    color-mix(in srgb, var(--section-accent, var(--primary)) 9%, white),
+                    rgba(255, 255, 255, 0.98) 28%,
+                    color-mix(in srgb, var(--section-accent, var(--primary)) 5%, white));
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
+        }
+
+        .section-step .step-header {
+            padding: 22px;
+            border-radius: 26px;
+            border: 1px solid color-mix(in srgb, var(--section-accent, var(--primary)) 18%, white);
+            background:
+                linear-gradient(135deg,
+                    color-mix(in srgb, var(--section-accent, var(--primary)) 14%, white),
+                    rgba(255, 255, 255, 0.97));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        }
+
+        .section-step .question-block {
+            border-color: color-mix(in srgb, var(--section-accent, var(--primary)) 14%, white);
+            background:
+                linear-gradient(180deg,
+                    color-mix(in srgb, var(--section-accent, var(--primary)) 5%, white),
+                    rgba(255, 255, 255, 0.98) 26%,
+                    color-mix(in srgb, var(--section-accent, var(--primary)) 3%, white));
+        }
+
         .section-step .question-block:focus-within {
             border-color: rgba(20, 62, 90, 0.2);
             border-color: color-mix(in srgb, var(--section-accent, var(--primary)) 24%, white);
