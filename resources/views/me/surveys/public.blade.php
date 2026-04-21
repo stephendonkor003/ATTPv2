@@ -7,9 +7,9 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ data_get($surveyConfig, 'title', 'Public Survey') }}</title>
     @php
-        $normalSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'flow_type', 'normal')) !== 'special')->values();
-        $specialSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'flow_type', 'normal')) === 'special')->values();
-        $specialQuestions = collect($questions)->filter(fn ($question) => strtolower((string) data_get($question, 'flow_type', 'normal')) === 'special')->values();
+        $normalSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'effective_flow_type', data_get($section, 'flow_type', 'normal'))) !== 'special')->values();
+        $specialSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'effective_flow_type', data_get($section, 'flow_type', 'normal'))) === 'special')->values();
+        $specialQuestions = collect($questions)->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) === 'special')->values();
         $sectionCount = $normalSections->count();
         $estimatedMinutes = (int) data_get($surveyConfig, 'estimated_minutes', 0);
     @endphp
@@ -1427,7 +1427,7 @@
                                     $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
                                     $sectionColor = (string) data_get($section, 'color', '#143E5A');
                                     $sectionQuestionCount = collect($section['questions'] ?? [])
-                                        ->filter(fn ($question) => strtolower((string) data_get($question, 'flow_type', 'normal')) !== 'special')
+                                        ->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) !== 'special')
                                         ->count();
                                 @endphp
                                 <button type="button" class="step-link step-link--section" data-step-nav="{{ $sectionKey }}" style="--section-accent: {{ $sectionColor }};">
@@ -1567,7 +1567,7 @@
                                             $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
                                             $sectionColor = (string) data_get($section, 'color', '#143E5A');
                                             $normalSectionQuestions = collect($section['questions'] ?? [])
-                                                ->filter(fn ($question) => strtolower((string) data_get($question, 'flow_type', 'normal')) !== 'special')
+                                                ->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) !== 'special')
                                                 ->values();
                                         @endphp
                                         <section class="step section-step"
@@ -1604,7 +1604,7 @@
                                             $sectionKey = (string) ($section['key'] ?? ('special_section_' . $specialSectionIndex));
                                             $sectionColor = (string) data_get($section, 'color', '#143E5A');
                                             $specialSectionQuestions = collect($section['questions'] ?? [])
-                                                ->filter(fn ($question) => strtolower((string) data_get($question, 'flow_type', 'normal')) !== 'special')
+                                                ->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) !== 'special')
                                                 ->values();
                                         @endphp
                                         <section class="step section-step branch-step"

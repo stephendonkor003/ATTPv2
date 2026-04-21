@@ -303,14 +303,12 @@ class MeSurveyTest extends TestCase
                                 'key' => 'goal_reason',
                                 'label' => 'Why was the goal not fully met?',
                                 'type' => 'textarea',
-                                'flow_type' => 'special',
                             ],
                         ],
                     ],
                     [
                         'key' => 'virtual_experience',
                         'title' => 'Virtual Experience',
-                        'flow_type' => 'special',
                         'questions' => [
                             [
                                 'key' => 'internet_quality',
@@ -334,6 +332,11 @@ class MeSurveyTest extends TestCase
             'participation_type' => 'Virtual',
         ]))->pluck('key')->all();
 
+        $goalReasonQuestion = collect($survey['questions'])->firstWhere('key', 'goal_reason');
+        $virtualSection = collect($survey['sections'])->firstWhere('key', 'virtual_experience');
+
+        $this->assertTrue(MeSurvey::isSpecialQuestion($goalReasonQuestion));
+        $this->assertTrue(MeSurvey::isSpecialSection($virtualSection));
         $this->assertSame(['goal_met', 'participation_type'], $normalReachable);
         $this->assertContains('goal_reason', $branchedReachable);
         $this->assertContains('internet_quality', $branchedReachable);

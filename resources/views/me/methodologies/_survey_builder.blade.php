@@ -117,6 +117,134 @@
                 color: #64748b;
                 font-size: 0.78rem;
             }
+
+            .survey-builder-nav {
+                display: flex;
+                gap: 0.65rem;
+                overflow-x: auto;
+                padding-bottom: 0.2rem;
+                margin-bottom: 1rem;
+                scrollbar-width: thin;
+            }
+
+            .survey-builder-nav:empty {
+                display: none;
+            }
+
+            .survey-nav-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.55rem;
+                border-radius: 999px;
+                border: 1px solid rgba(59, 130, 246, 0.18);
+                background: rgba(255, 255, 255, 0.86);
+                color: #1e3a5f;
+                padding: 0.5rem 0.8rem;
+                text-decoration: none;
+                box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+                white-space: nowrap;
+            }
+
+            .survey-nav-chip:hover {
+                color: #1d4ed8;
+                border-color: rgba(37, 99, 235, 0.3);
+                transform: translateY(-1px);
+            }
+
+            .survey-nav-chip__index {
+                width: 1.6rem;
+                height: 1.6rem;
+                border-radius: 999px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(37, 99, 235, 0.12);
+                font-size: 0.76rem;
+                font-weight: 700;
+                color: #1d4ed8;
+            }
+
+            .survey-nav-chip__body {
+                display: grid;
+                gap: 0.1rem;
+            }
+
+            .survey-nav-chip__body strong {
+                font-size: 0.82rem;
+                font-weight: 700;
+            }
+
+            .survey-nav-chip__body span {
+                font-size: 0.72rem;
+                color: #64748b;
+            }
+
+            .survey-section-card {
+                position: relative;
+                scroll-margin-top: 7rem;
+            }
+
+            .survey-section-footer {
+                position: sticky;
+                bottom: 1rem;
+                z-index: 4;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.8rem;
+                margin-top: 1rem;
+                padding: 0.8rem 0.9rem;
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 16px;
+                background: rgba(255, 255, 255, 0.94);
+                backdrop-filter: blur(14px);
+                box-shadow: 0 18px 34px rgba(15, 23, 42, 0.1);
+            }
+
+            .survey-builder-dock {
+                position: sticky;
+                bottom: 1rem;
+                z-index: 5;
+                display: flex;
+                justify-content: flex-end;
+                margin-top: 1rem;
+                pointer-events: none;
+            }
+
+            .survey-builder-dock__inner {
+                pointer-events: auto;
+                display: inline-flex;
+                align-items: center;
+                gap: 0.8rem;
+                border-radius: 999px;
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(14px);
+                padding: 0.55rem 0.7rem 0.55rem 1rem;
+                box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+            }
+
+            .survey-builder-dock__inner .survey-type-note {
+                margin: 0;
+            }
+
+            @media (max-width: 767.98px) {
+                .survey-section-footer {
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+
+                .survey-builder-dock {
+                    justify-content: stretch;
+                }
+
+                .survey-builder-dock__inner {
+                    width: 100%;
+                    border-radius: 18px;
+                    justify-content: space-between;
+                    flex-wrap: wrap;
+                }
+            }
         </style>
     @endpush
 @endonce
@@ -173,7 +301,16 @@
         </div>
 
         <input type="hidden" name="survey_sections_json" id="surveySectionsJson" value="{{ $initialSurveySections }}">
+        <div class="survey-builder-nav" id="surveyBuilderNav"></div>
         <div id="surveySectionsContainer" class="d-grid gap-3"></div>
+        <div class="survey-builder-dock">
+            <div class="survey-builder-dock__inner">
+                <p class="survey-type-note">Long questionnaire? Add a new section from anywhere.</p>
+                <button type="button" class="btn btn-sm btn-primary" id="addSurveySectionDockBtn">
+                    <i class="feather-plus me-1"></i> Add Section
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -190,11 +327,13 @@
                 const surveyPanel = document.getElementById('surveyBuilderPanel');
                 const sectionsContainer = document.getElementById('surveySectionsContainer');
                 const sectionsJsonInput = document.getElementById('surveySectionsJson');
+                const builderNav = document.getElementById('surveyBuilderNav');
                 const addSectionBtn = document.getElementById('addSurveySectionBtn');
+                const addSectionDockBtn = document.getElementById('addSurveySectionDockBtn');
                 const surveyTitleInput = document.getElementById('surveyTitleInput');
                 const forceSurveyMode = ['1', 'true'].includes((form.dataset.forceSurveyBuilder || '').toLowerCase());
 
-                if (!nameInput || !surveyPanel || !sectionsContainer || !sectionsJsonInput || !addSectionBtn || !surveyTitleInput) {
+                if (!nameInput || !surveyPanel || !sectionsContainer || !sectionsJsonInput || !builderNav || !addSectionBtn || !addSectionDockBtn || !surveyTitleInput) {
                     return;
                 }
 
@@ -228,6 +367,10 @@
                 ];
 
                 let sections = [];
+                let routeTargets = {
+                    sectionKeys: new Set(),
+                    questionKeys: new Set(),
+                };
                 try {
                     const parsed = JSON.parse(sectionsJsonInput.value || '[]');
                     if (Array.isArray(parsed)) {
@@ -502,20 +645,20 @@
                     return choices;
                 }
 
-                function specialTargetChoices(currentQuestionKey = '') {
+                function specialTargetChoices(currentQuestionKey = '', currentSectionKey = '') {
                     const choices = [];
 
                     sections.forEach((section) => {
-                        if (section.flow_type === 'special') {
-                            choices.push({
-                                type: 'section',
-                                key: section.key,
-                                label: `Section: ${section.title || 'Untitled section'}`,
-                            });
+                        if (section.key !== currentSectionKey) {
+                        choices.push({
+                            type: 'section',
+                            key: section.key,
+                            label: `Section: ${section.title || 'Untitled section'}`,
+                        });
                         }
 
                         (section.questions || []).forEach((question) => {
-                            if (question.flow_type !== 'special' || question.key === currentQuestionKey) {
+                            if (question.key === currentQuestionKey) {
                                 return;
                             }
 
@@ -528,6 +671,67 @@
                     });
 
                     return choices;
+                }
+
+                function buildRouteTargetState() {
+                    const sectionKeys = new Set();
+                    const questionKeys = new Set();
+
+                    sections.forEach((section) => {
+                        (section.questions || []).forEach((question) => {
+                            const route = normalizeRoute(question.route || {});
+                            if (route.target_type === 'section' && route.target_key) {
+                                sectionKeys.add(route.target_key);
+                            }
+
+                            if (route.target_type === 'question' && route.target_key) {
+                                questionKeys.add(route.target_key);
+                            }
+                        });
+                    });
+
+                    return { sectionKeys, questionKeys };
+                }
+
+                function refreshRouteTargets() {
+                    routeTargets = buildRouteTargetState();
+                }
+
+                function renderSectionNavigator() {
+                    if (!sections.length) {
+                        builderNav.innerHTML = '';
+                        return;
+                    }
+
+                    builderNav.innerHTML = sections.map((section, sectionIndex) => {
+                        const sectionId = `survey-builder-section-${section.key}`;
+                        const title = section.title || `Section ${sectionIndex + 1}`;
+                        const questionCount = Array.isArray(section.questions) ? section.questions.length : 0;
+
+                        return `
+                            <a href="#${sectionId}" class="survey-nav-chip">
+                                <span class="survey-nav-chip__index">${sectionIndex + 1}</span>
+                                <span class="survey-nav-chip__body">
+                                    <strong>${escapeHtml(title)}</strong>
+                                    <span>${questionCount} question${questionCount === 1 ? '' : 's'}</span>
+                                </span>
+                            </a>
+                        `;
+                    }).join('');
+                }
+
+                function scrollToBuilderTarget(selector) {
+                    requestAnimationFrame(() => {
+                        const target = document.querySelector(selector);
+                        if (!target) {
+                            return;
+                        }
+
+                        target.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center',
+                        });
+                    });
                 }
 
                 function answerOptionsForQuestion(question) {
@@ -687,16 +891,16 @@
                     `;
                 }
 
-                function routeMarkup(question, sectionIndex, questionIndex) {
+                function routeMarkup(section, question, sectionIndex, questionIndex) {
                     const route = normalizeRoute(question.route || {});
                     const selectedTargetType = route.target_type || '';
                     const selectedTargetKey = route.target_key || '';
                     const valuesText = Array.isArray(route.values) ? route.values.join(', ') : '';
-                    const targetChoices = specialTargetChoices(question.key);
+                    const targetChoices = specialTargetChoices(question.key, section.key);
                     const filteredTargets = targetChoices.filter((choice) => choice.type === selectedTargetType);
                     const selectedTarget = filteredTargets.find((choice) => choice.key === selectedTargetKey);
                     const summaryText = selectedTargetType && selectedTargetKey && route.values.length
-                        ? `When this answer matches ${route.values.join(', ')}, the respondent is sent directly to ${selectedTarget?.label || 'the selected follow-up page'}.`
+                        ? `When this answer matches ${route.values.join(', ')}, the respondent is sent directly to ${selectedTarget?.label || 'the selected follow-up page'} outside the normal survey flow.`
                         : 'No direct follow-up routing is active for this question.';
 
                     return `
@@ -742,7 +946,7 @@
                                 </div>
                                 <div class="col-12">
                                     <small class="text-muted">
-                                        Targets only appear here after they are marked as <strong>Special follow-up only</strong>.
+                                        Any section or question can be targeted here. The selected target is automatically treated as a follow-up page outside the normal flow.
                                     </small>
                                 </div>
                             </div>
@@ -761,12 +965,14 @@
                     const showMatrix = question.type === 'matrix';
                     const showCheckboxRules = ['checkbox', 'multiselect'].includes(question.type);
                     const questionFlowType = normalizeFlowType(question.flow_type);
-                    const questionFlowNote = questionFlowType === 'special'
+                    const questionAutoSpecial = routeTargets.questionKeys.has(question.key);
+                    const effectiveQuestionFlow = questionFlowType === 'special' || questionAutoSpecial ? 'special' : 'normal';
+                    const questionFlowNote = effectiveQuestionFlow === 'special'
                         ? 'This question is excluded from the normal section page. It opens only when another question routes respondents here.'
                         : 'This question is part of the normal section flow.';
 
                     return `
-                        <div class="survey-question-card">
+                        <div class="survey-question-card" data-question-card-key="${question.key}">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <strong>Question ${questionIndex + 1}</strong>
                                 <div class="d-flex gap-1">
@@ -911,13 +1117,15 @@
                             </div>
 
                             ${visibilityMarkup('question', sectionIndex, questionIndex, question.visibility || { question_key: '', values: [] }, choices)}
-                            ${routeMarkup(question, sectionIndex, questionIndex)}
+                            ${routeMarkup(section, question, sectionIndex, questionIndex)}
                         </div>
                     `;
                 }
 
                 function renderSections() {
                     sectionsContainer.innerHTML = '';
+                    refreshRouteTargets();
+                    renderSectionNavigator();
 
                     if (!sections.length) {
                         sectionsContainer.innerHTML = `
@@ -931,9 +1139,12 @@
                     sections.forEach((section, sectionIndex) => {
                         const card = document.createElement('div');
                         card.className = 'survey-section-card';
+                        card.id = `survey-builder-section-${section.key}`;
                         const sectionColor = normalizeHexColor(section.color, defaultSectionColor(sectionIndex));
                         const sectionFlowType = normalizeFlowType(section.flow_type);
-                        const sectionFlowNote = sectionFlowType === 'special'
+                        const sectionAutoSpecial = routeTargets.sectionKeys.has(section.key);
+                        const effectiveSectionFlow = sectionFlowType === 'special' || sectionAutoSpecial ? 'special' : 'normal';
+                        const sectionFlowNote = effectiveSectionFlow === 'special'
                             ? 'This section is removed from the normal survey sequence and only opens when a routing rule sends respondents here.'
                             : 'This section remains part of the normal survey sequence.';
                         card.style.setProperty('--section-color', sectionColor);
@@ -1019,6 +1230,20 @@
                             <div class="d-grid gap-2" data-section-questions="${sectionIndex}">
                                 ${(section.questions || []).map((question, questionIndex) => questionMarkup(section, question, sectionIndex, questionIndex)).join('')}
                             </div>
+
+                            <div class="survey-section-footer">
+                                <div class="survey-type-note">
+                                    Keep building from the bottom of this section without scrolling back to the top.
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap justify-content-end">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-add-question="${sectionIndex}">
+                                        <i class="feather-plus me-1"></i> Add Question
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-primary" data-add-section-after="${sectionIndex}">
+                                        <i class="feather-layers me-1"></i> Add Section Below
+                                    </button>
+                                </div>
+                            </div>
                         `;
 
                         sectionsContainer.appendChild(card);
@@ -1029,7 +1254,10 @@
                     sections = sections.map((section, sectionIndex) => {
                         const title = form.querySelector(`[data-section-field="title"][data-section-index="${sectionIndex}"]`)?.value || '';
                         const description = form.querySelector(`[data-section-field="description"][data-section-index="${sectionIndex}"]`)?.value || '';
-                        const color = form.querySelector(`[data-section-field="color"][data-section-index="${sectionIndex}"]`)?.value || '';
+                        const color = normalizeHexColor(
+                            form.querySelector(`[data-section-field="color"][data-section-index="${sectionIndex}"]`)?.value || '',
+                            defaultSectionColor(sectionIndex)
+                        );
                         const flowType = form.querySelector(`[data-section-field="flow_type"][data-section-index="${sectionIndex}"]`)?.value || 'normal';
                         const sectionConditionQuestion = form.querySelector(`[data-condition-scope="section"][data-condition-section="${sectionIndex}"][data-condition-key="question_key"]`)?.value || '';
                         const sectionConditionValues = form.querySelector(`[data-condition-scope="section"][data-condition-section="${sectionIndex}"][data-condition-key="values"]`)?.value || '';
@@ -1135,6 +1363,19 @@
                     sectionsJsonInput.value = JSON.stringify(sections);
                 }
 
+                function addSection(afterIndex = null) {
+                    const newSection = defaultSection(Number.isInteger(afterIndex) ? afterIndex + 1 : sections.length);
+                    if (Number.isInteger(afterIndex) && afterIndex >= -1 && afterIndex < sections.length) {
+                        sections.splice(afterIndex + 1, 0, newSection);
+                    } else {
+                        sections.push(newSection);
+                    }
+
+                    renderSections();
+                    syncSectionsFromDom();
+                    scrollToBuilderTarget(`#survey-builder-section-${newSection.key}`);
+                }
+
                 function moveItem(list, fromIndex, direction) {
                     const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
                     if (toIndex < 0 || toIndex >= list.length) {
@@ -1167,11 +1408,8 @@
                     syncSectionsFromDom();
                 }
 
-                addSectionBtn.addEventListener('click', () => {
-                    sections.push(defaultSection());
-                    renderSections();
-                    syncSectionsFromDom();
-                });
+                addSectionBtn.addEventListener('click', () => addSection());
+                addSectionDockBtn.addEventListener('click', () => addSection());
 
                 sectionsContainer.addEventListener('click', (event) => {
                     const removeSectionTrigger = event.target.closest('[data-remove-section]');
@@ -1191,12 +1429,20 @@
                         return;
                     }
 
+                    const addSectionAfterTrigger = event.target.closest('[data-add-section-after]');
+                    if (addSectionAfterTrigger) {
+                        addSection(Number(addSectionAfterTrigger.getAttribute('data-add-section-after')));
+                        return;
+                    }
+
                     const addQuestionTrigger = event.target.closest('[data-add-question]');
                     if (addQuestionTrigger) {
                         const sectionIndex = Number(addQuestionTrigger.getAttribute('data-add-question'));
-                        sections[sectionIndex].questions.push(defaultQuestion());
+                        const newQuestion = defaultQuestion();
+                        sections[sectionIndex].questions.push(newQuestion);
                         renderSections();
                         syncSectionsFromDom();
+                        scrollToBuilderTarget(`[data-question-card-key="${newQuestion.key}"]`);
                         return;
                     }
 

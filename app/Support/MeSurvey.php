@@ -69,6 +69,7 @@ class MeSurvey
             ->filter()
             ->values()
             ->all();
+        $sections = self::applyRouteTargets($sections);
 
         return [
             'enabled' => (bool) ($survey['enabled'] ?? false),
@@ -100,7 +101,7 @@ class MeSurvey
 
     public static function isSpecialSection(array $section): bool
     {
-        return (($section['flow_type'] ?? 'normal') === 'special');
+        return (($section['effective_flow_type'] ?? $section['flow_type'] ?? 'normal') === 'special');
     }
 
     public static function isQuestionVisible(array $question, array $answers): bool
@@ -110,7 +111,7 @@ class MeSurvey
 
     public static function isSpecialQuestion(array $question): bool
     {
-        return (($question['flow_type'] ?? 'normal') === 'special');
+        return (($question['effective_flow_type'] ?? $question['flow_type'] ?? 'normal') === 'special');
     }
 
     public static function matchedRouteTarget(array $question, array $answers): ?array
@@ -640,6 +641,69 @@ class MeSurvey
             ->all();
     }
 
+    protected static function applyRouteTargets(array $sections): array
+    {
+        $validSectionKeys = collect($sections)
+            ->map(fn (array $section) => (string) ($section['key'] ?? ''))
+            ->filter()
+            ->values()
+            ->all();
+
+        $validQuestionKeys = collect($sections)
+            ->flatMap(fn (array $section) => collect((array) ($section['questions'] ?? []))
+                ->map(fn (array $question) => (string) ($question['key'] ?? '')))
+            ->filter()
+            ->values()
+            ->all();
+
+        $sectionTargetKeys = [];
+        $questionTargetKeys = [];
+
+        foreach ($sections as $section) {
+            foreach ((array) ($section['questions'] ?? []) as $question) {
+                $route = (array) ($question['route'] ?? []);
+                $targetType = trim((string) ($route['target_type'] ?? ''));
+                $targetKey = trim((string) ($route['target_key'] ?? ''));
+
+                if ($targetType === 'section' && in_array($targetKey, $validSectionKeys, true)) {
+                    $sectionTargetKeys[] = $targetKey;
+                }
+
+                if ($targetType === 'question' && in_array($targetKey, $validQuestionKeys, true)) {
+                    $questionTargetKeys[] = $targetKey;
+                }
+            }
+        }
+
+        $sectionTargetKeys = array_values(array_unique($sectionTargetKeys));
+        $questionTargetKeys = array_values(array_unique($questionTargetKeys));
+
+        return collect($sections)
+            ->map(function (array $section) use ($sectionTargetKeys, $questionTargetKeys) {
+                $sectionKey = (string) ($section['key'] ?? '');
+                $sectionIsRouteTarget = in_array($sectionKey, $sectionTargetKeys, true);
+                $section['is_route_target'] = $sectionIsRouteTarget;
+                $section['effective_flow_type'] = self::effectiveFlowType($section['flow_type'] ?? 'normal', $sectionIsRouteTarget);
+
+                $section['questions'] = collect((array) ($section['questions'] ?? []))
+                    ->map(function (array $question) use ($questionTargetKeys, $section) {
+                        $questionKey = (string) ($question['key'] ?? '');
+                        $questionIsRouteTarget = in_array($questionKey, $questionTargetKeys, true);
+                        $question['is_route_target'] = $questionIsRouteTarget;
+                        $question['effective_flow_type'] = self::effectiveFlowType($question['flow_type'] ?? 'normal', $questionIsRouteTarget);
+                        $question['section_effective_flow_type'] = (string) ($section['effective_flow_type'] ?? $section['flow_type'] ?? 'normal');
+
+                        return $question;
+                    })
+                    ->values()
+                    ->all();
+
+                return $section;
+            })
+            ->values()
+            ->all();
+    }
+
     protected static function flattenQuestionsFromSections(array $sections): array
     {
         return collect($sections)
@@ -650,6 +714,9 @@ class MeSurvey
                         $question['section_title'] = (string) ($section['title'] ?? ('Section ' . ($sectionIndex + 1)));
                         $question['section_color'] = (string) ($section['color'] ?? self::defaultSectionColor($sectionIndex));
                         $question['section_flow_type'] = (string) ($section['flow_type'] ?? 'normal');
+                        $question['section_effective_flow_type'] = (string) ($section['effective_flow_type'] ?? $section['flow_type'] ?? 'normal');
+                        $question['effective_flow_type'] = (string) ($question['effective_flow_type'] ?? $question['flow_type'] ?? 'normal');
+                        $question['is_route_target'] = (bool) ($question['is_route_target'] ?? false);
                         $question['section_index'] = $sectionIndex;
                         $question['question_index'] = $questionIndex;
 
@@ -703,6 +770,11 @@ class MeSurvey
     protected static function normalizeFlowType(mixed $value): string
     {
         return strtolower(trim((string) $value)) === 'special' ? 'special' : 'normal';
+    }
+
+    protected static function effectiveFlowType(mixed $value, bool $isRouteTarget = false): string
+    {
+        return self::normalizeFlowType($value) === 'special' || $isRouteTarget ? 'special' : 'normal';
     }
 
     protected static function defaultSectionColor(int $sectionIndex): string

@@ -60,7 +60,7 @@
 <div class="question-block"
     data-question-key="{{ $questionKey }}"
     data-question-type="{{ $type }}"
-    data-question-flow="{{ strtolower((string) data_get($question, 'flow_type', 'normal')) }}"
+    data-question-flow="{{ strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) }}"
     data-question-route='@json($question['route'] ?? [])'
     data-question-visibility='@json($question['visibility'] ?? [])'
     data-question-required="{{ $required ? '1' : '0' }}"
