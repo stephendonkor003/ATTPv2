@@ -98,9 +98,117 @@ class MeSurvey
         return self::matchesVisibility((array) ($section['visibility'] ?? []), $answers);
     }
 
+    public static function isSpecialSection(array $section): bool
+    {
+        return (($section['flow_type'] ?? 'normal') === 'special');
+    }
+
     public static function isQuestionVisible(array $question, array $answers): bool
     {
         return self::matchesVisibility((array) ($question['visibility'] ?? []), $answers);
+    }
+
+    public static function isSpecialQuestion(array $question): bool
+    {
+        return (($question['flow_type'] ?? 'normal') === 'special');
+    }
+
+    public static function matchedRouteTarget(array $question, array $answers): ?array
+    {
+        $route = (array) ($question['route'] ?? []);
+        $targetType = trim((string) ($route['target_type'] ?? ''));
+        $targetKey = trim((string) ($route['target_key'] ?? ''));
+
+        if (!in_array($targetType, ['section', 'question'], true) || $targetKey === '') {
+            return null;
+        }
+
+        if (!self::matchesRoute($question, $answers)) {
+            return null;
+        }
+
+        return [
+            'id' => $targetType . ':' . $targetKey,
+            'target_type' => $targetType,
+            'target_key' => $targetKey,
+        ];
+    }
+
+    public static function reachableQuestions(array $surveyConfig, array $answers): array
+    {
+        $sections = collect((array) ($surveyConfig['sections'] ?? []))->values();
+        $questions = collect(self::flattenQuestions($surveyConfig))->values();
+        $sectionMap = $sections->keyBy('key');
+        $questionMap = $questions->keyBy('key');
+        $reachable = [];
+        $queuedTargets = [];
+        $targetQueue = [];
+
+        $queueQuestion = function (array $question) use (&$reachable, &$targetQueue, &$queuedTargets, $answers) {
+            $questionKey = (string) ($question['key'] ?? '');
+            if ($questionKey === '' || isset($reachable[$questionKey])) {
+                return;
+            }
+
+            $reachable[$questionKey] = $question;
+            $target = self::matchedRouteTarget($question, $answers);
+            if (!$target || in_array($target['id'], $queuedTargets, true)) {
+                return;
+            }
+
+            $queuedTargets[] = $target['id'];
+            $targetQueue[] = $target;
+        };
+
+        foreach ($sections as $section) {
+            if (self::isSpecialSection($section) || !self::isSectionVisible($section, $answers)) {
+                continue;
+            }
+
+            foreach ((array) ($section['questions'] ?? []) as $question) {
+                $fullQuestion = $questionMap->get((string) ($question['key'] ?? ''), $question);
+
+                if (self::isSpecialQuestion($fullQuestion) || !self::isQuestionVisible($fullQuestion, $answers)) {
+                    continue;
+                }
+
+                $queueQuestion($fullQuestion);
+            }
+        }
+
+        while (!empty($targetQueue)) {
+            $target = array_shift($targetQueue);
+
+            if (($target['target_type'] ?? null) === 'section') {
+                $targetSection = $sectionMap->get((string) ($target['target_key'] ?? ''));
+                if (!$targetSection) {
+                    continue;
+                }
+
+                foreach ((array) ($targetSection['questions'] ?? []) as $question) {
+                    $fullQuestion = $questionMap->get((string) ($question['key'] ?? ''), $question);
+
+                    if (self::isSpecialQuestion($fullQuestion) || !self::shouldIncludeTriggeredQuestion($fullQuestion, $answers)) {
+                        continue;
+                    }
+
+                    $queueQuestion($fullQuestion);
+                }
+
+                continue;
+            }
+
+            if (($target['target_type'] ?? null) === 'question') {
+                $targetQuestion = $questionMap->get((string) ($target['target_key'] ?? ''));
+                if (!$targetQuestion || !self::shouldIncludeTriggeredQuestion($targetQuestion, $answers)) {
+                    continue;
+                }
+
+                $queueQuestion($targetQuestion);
+            }
+        }
+
+        return array_values($reachable);
     }
 
     public static function visibleSections(array $surveyConfig, array $answers): array
@@ -415,6 +523,7 @@ class MeSurvey
                 $section['color'] ?? $section['section_color'] ?? null,
                 self::defaultSectionColor($sectionIndex)
             ),
+            'flow_type' => self::normalizeFlowType($section['flow_type'] ?? $section['flow'] ?? null),
             'visibility' => self::normalizeVisibility($section['visibility'] ?? [
                 'question_key' => $section['depends_on'] ?? null,
                 'values' => $section['show_if'] ?? null,
@@ -494,6 +603,7 @@ class MeSurvey
             'key' => $questionKey,
             'label' => $label,
             'type' => $type,
+            'flow_type' => self::normalizeFlowType($question['flow_type'] ?? $question['flow'] ?? null),
             'required' => (bool) ($question['required'] ?? false),
             'hint' => trim((string) ($question['hint'] ?? '')),
             'options' => in_array($type, ['select', 'multiselect', 'radio', 'checkbox'], true) ? $options : [],
@@ -512,6 +622,11 @@ class MeSurvey
             'visibility' => self::normalizeVisibility($question['visibility'] ?? [
                 'question_key' => $question['depends_on'] ?? null,
                 'values' => $question['show_if'] ?? null,
+            ]),
+            'route' => self::normalizeRoute($question['route'] ?? $question['jump'] ?? [
+                'target_type' => $question['route_target_type'] ?? null,
+                'target_key' => $question['route_target_key'] ?? null,
+                'values' => $question['route_values'] ?? null,
             ]),
             'section_key' => $sectionKey,
         ];
@@ -534,6 +649,7 @@ class MeSurvey
                         $question['section_key'] = (string) ($section['key'] ?? '');
                         $question['section_title'] = (string) ($section['title'] ?? ('Section ' . ($sectionIndex + 1)));
                         $question['section_color'] = (string) ($section['color'] ?? self::defaultSectionColor($sectionIndex));
+                        $question['section_flow_type'] = (string) ($section['flow_type'] ?? 'normal');
                         $question['section_index'] = $sectionIndex;
                         $question['question_index'] = $questionIndex;
 
@@ -561,6 +677,32 @@ class MeSurvey
             'question_key' => $questionKey,
             'values' => $values,
         ];
+    }
+
+    protected static function normalizeRoute(mixed $route): array
+    {
+        if (!is_array($route)) {
+            return [];
+        }
+
+        $targetType = trim((string) ($route['target_type'] ?? $route['type'] ?? ''));
+        $targetKey = trim((string) ($route['target_key'] ?? $route['key'] ?? ''));
+        $values = self::normalizeStringList($route['values'] ?? $route['when_values'] ?? $route['show_if'] ?? []);
+
+        if (!in_array($targetType, ['section', 'question'], true) || $targetKey === '' || empty($values)) {
+            return [];
+        }
+
+        return [
+            'target_type' => $targetType,
+            'target_key' => $targetKey,
+            'values' => $values,
+        ];
+    }
+
+    protected static function normalizeFlowType(mixed $value): string
+    {
+        return strtolower(trim((string) $value)) === 'special' ? 'special' : 'normal';
     }
 
     protected static function defaultSectionColor(int $sectionIndex): string
@@ -602,6 +744,37 @@ class MeSurvey
         }
 
         return $candidateValues->intersect($values)->isNotEmpty();
+    }
+
+    protected static function matchesRoute(array $question, array $answers): bool
+    {
+        $questionKey = trim((string) ($question['key'] ?? ''));
+        $values = collect((array) data_get($question, 'route.values', []))
+            ->map(fn ($item) => Str::lower(trim((string) $item)))
+            ->filter()
+            ->values();
+
+        if ($questionKey === '' || $values->isEmpty()) {
+            return false;
+        }
+
+        $candidateValues = self::flattenComparableValues($answers[$questionKey] ?? null);
+        if ($candidateValues->isEmpty()) {
+            return false;
+        }
+
+        return $candidateValues->intersect($values)->isNotEmpty();
+    }
+
+    protected static function shouldIncludeTriggeredQuestion(array $question, array $answers): bool
+    {
+        $visibility = (array) ($question['visibility'] ?? []);
+
+        if (empty($visibility)) {
+            return true;
+        }
+
+        return self::isQuestionVisible($question, $answers);
     }
 
     protected static function normalizeMatrixAnswer(array $question, mixed $rawValue): array

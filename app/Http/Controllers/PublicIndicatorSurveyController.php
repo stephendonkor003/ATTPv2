@@ -58,19 +58,18 @@ class PublicIndicatorSurveyController extends Controller
                 );
             }
 
-            $visibleSectionKeys = collect(MeSurvey::visibleSections($surveyConfig, $normalizedAnswers))
+            $reachableQuestionKeys = collect(MeSurvey::reachableQuestions($surveyConfig, $normalizedAnswers))
                 ->pluck('key')
                 ->values()
                 ->all();
 
-            if (empty($visibleSectionKeys)) {
-                $validator->errors()->add('answers', 'This survey does not have any visible sections to submit.');
+            if (empty($reachableQuestionKeys)) {
+                $validator->errors()->add('answers', 'This survey does not have any reachable questions to submit.');
                 return;
             }
 
             foreach ($questions as $question) {
-                $sectionVisible = in_array((string) ($question['section_key'] ?? ''), $visibleSectionKeys, true);
-                $questionVisible = $sectionVisible && MeSurvey::isQuestionVisible($question, $normalizedAnswers);
+                $questionVisible = in_array((string) ($question['key'] ?? ''), $reachableQuestionKeys, true);
                 $result = MeSurvey::validateAnswer(
                     $question,
                     $this->rawAnswerForQuestion($request, $question),
@@ -103,13 +102,14 @@ class PublicIndicatorSurveyController extends Controller
             )['value'];
         }
 
-        $visibleSections = MeSurvey::visibleSections($surveyConfig, $normalizedAnswers);
-        $visibleSectionKeys = collect($visibleSections)->pluck('key')->values()->all();
+        $reachableQuestionKeys = collect(MeSurvey::reachableQuestions($surveyConfig, $normalizedAnswers))
+            ->pluck('key')
+            ->values()
+            ->all();
 
         $answers = collect($questions)
-            ->filter(function (array $question) use ($normalizedAnswers, $visibleSectionKeys) {
-                return in_array((string) ($question['section_key'] ?? ''), $visibleSectionKeys, true)
-                    && MeSurvey::isQuestionVisible($question, $normalizedAnswers);
+            ->filter(function (array $question) use ($reachableQuestionKeys) {
+                return in_array((string) ($question['key'] ?? ''), $reachableQuestionKeys, true);
             })
             ->map(function (array $question) use ($normalizedAnswers) {
                 $value = $normalizedAnswers[$question['key']] ?? null;

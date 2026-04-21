@@ -261,6 +261,84 @@ class MeSurveyTest extends TestCase
         ]));
     }
 
+    public function test_it_reaches_special_follow_up_questions_and_sections_outside_normal_flow(): void
+    {
+        $survey = MeSurvey::surveyConfigFromMetadata([
+            'survey' => [
+                'enabled' => true,
+                'sections' => [
+                    [
+                        'key' => 'overall_assessment',
+                        'title' => 'Overall Assessment',
+                        'questions' => [
+                            [
+                                'key' => 'goal_met',
+                                'label' => 'To what extent did the workshop meet its goal?',
+                                'type' => 'radio',
+                                'options' => ['Fully achieved', 'Partially achieved', 'Not achieved'],
+                                'route' => [
+                                    'target_type' => 'question',
+                                    'target_key' => 'goal_reason',
+                                    'values' => ['Partially achieved', 'Not achieved'],
+                                ],
+                            ],
+                            [
+                                'key' => 'participation_type',
+                                'label' => 'Participation type',
+                                'type' => 'radio',
+                                'options' => ['In-person', 'Virtual'],
+                                'route' => [
+                                    'target_type' => 'section',
+                                    'target_key' => 'virtual_experience',
+                                    'values' => ['Virtual'],
+                                ],
+                            ],
+                        ],
+                    ],
+                    [
+                        'key' => 'follow_up_pool',
+                        'title' => 'Follow-up pool',
+                        'questions' => [
+                            [
+                                'key' => 'goal_reason',
+                                'label' => 'Why was the goal not fully met?',
+                                'type' => 'textarea',
+                                'flow_type' => 'special',
+                            ],
+                        ],
+                    ],
+                    [
+                        'key' => 'virtual_experience',
+                        'title' => 'Virtual Experience',
+                        'flow_type' => 'special',
+                        'questions' => [
+                            [
+                                'key' => 'internet_quality',
+                                'label' => 'Rate the internet quality',
+                                'type' => 'radio',
+                                'options' => ['Poor', 'Average', 'Good'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $normalReachable = collect(MeSurvey::reachableQuestions($survey, [
+            'goal_met' => 'Fully achieved',
+            'participation_type' => 'In-person',
+        ]))->pluck('key')->all();
+
+        $branchedReachable = collect(MeSurvey::reachableQuestions($survey, [
+            'goal_met' => 'Partially achieved',
+            'participation_type' => 'Virtual',
+        ]))->pluck('key')->all();
+
+        $this->assertSame(['goal_met', 'participation_type'], $normalReachable);
+        $this->assertContains('goal_reason', $branchedReachable);
+        $this->assertContains('internet_quality', $branchedReachable);
+    }
+
     public function test_it_maps_legacy_min_and_max_labels_into_scale_point_labels(): void
     {
         $survey = MeSurvey::surveyConfigFromMetadata([

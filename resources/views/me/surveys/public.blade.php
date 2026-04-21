@@ -7,7 +7,10 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ data_get($surveyConfig, 'title', 'Public Survey') }}</title>
     @php
-        $sectionCount = count($sections);
+        $normalSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'flow_type', 'normal')) !== 'special')->values();
+        $specialSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'flow_type', 'normal')) === 'special')->values();
+        $specialQuestions = collect($questions)->filter(fn ($question) => strtolower((string) data_get($question, 'flow_type', 'normal')) === 'special')->values();
+        $sectionCount = $normalSections->count();
         $estimatedMinutes = (int) data_get($surveyConfig, 'estimated_minutes', 0);
     @endphp
     <style>
@@ -1419,11 +1422,13 @@
                                 </span>
                             </button>
 
-                            @foreach ($sections as $sectionIndex => $section)
+                            @foreach ($normalSections as $sectionIndex => $section)
                                 @php
                                     $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
                                     $sectionColor = (string) data_get($section, 'color', '#143E5A');
-                                    $sectionQuestionCount = count($section['questions'] ?? []);
+                                    $sectionQuestionCount = collect($section['questions'] ?? [])
+                                        ->filter(fn ($question) => strtolower((string) data_get($question, 'flow_type', 'normal')) !== 'special')
+                                        ->count();
                                 @endphp
                                 <button type="button" class="step-link step-link--section" data-step-nav="{{ $sectionKey }}" style="--section-accent: {{ $sectionColor }};">
                                     <span class="step-link__index">{{ $sectionIndex + 1 }}</span>
@@ -1557,14 +1562,18 @@
                                         </div>
                                     </section>
 
-                                    @foreach ($sections as $sectionIndex => $section)
+                                    @foreach ($normalSections as $sectionIndex => $section)
                                         @php
                                             $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
                                             $sectionColor = (string) data_get($section, 'color', '#143E5A');
+                                            $normalSectionQuestions = collect($section['questions'] ?? [])
+                                                ->filter(fn ($question) => strtolower((string) data_get($question, 'flow_type', 'normal')) !== 'special')
+                                                ->values();
                                         @endphp
                                         <section class="step section-step"
                                             data-step-id="{{ $sectionKey }}"
                                             data-step-kind="section"
+                                            data-step-flow="normal"
                                             data-step-label="{{ $section['title'] }}"
                                             data-section-key="{{ $sectionKey }}"
                                             data-section-visibility='@json($section['visibility'] ?? [])'
@@ -1579,288 +1588,84 @@
                                             </div>
 
                                             <div class="question-grid">
-                                                @foreach ($section['questions'] as $questionIndex => $question)
-                                                    @php
-                                                        $type = strtolower((string) ($question['type'] ?? 'text'));
-                                                        $questionKey = (string) ($question['key'] ?? ('question_' . $sectionIndex . '_' . $questionIndex));
-                                                        $required = (bool) ($question['required'] ?? false);
-                                                        $oldValue = old('answers.' . $questionKey);
-                                                        $options = collect($question['options'] ?? [])->filter()->values()->all();
-                                                        $matrixRows = collect($question['rows'] ?? [])->values();
-                                                        $matrixColumns = collect($question['columns'] ?? [])->values();
-                                                        $scaleMin = (int) data_get($question, 'scale.min', 1);
-                                                        $scaleMax = (int) data_get($question, 'scale.max', 5);
-                                                        $scaleStep = max((int) data_get($question, 'scale.step', 1), 1);
-                                                        $scaleLabels = collect((array) data_get($question, 'scale.labels', []))
-                                                            ->mapWithKeys(fn ($label, $value) => [(string) $value => trim((string) $label)])
-                                                            ->filter(fn ($label) => $label !== '');
-                                                        $scaleValues = collect(range($scaleMin, $scaleMax));
-                                                        $sliderValues = collect();
-                                                        for ($value = $scaleMin; $value <= $scaleMax; $value += $scaleStep) {
-                                                            $sliderValues->push($value);
-                                                        }
-                                                        $sliderValue = is_scalar($oldValue) && trim((string) $oldValue) !== ''
-                                                            ? (string) $oldValue
-                                                            : (string) $scaleMin;
-                                                        $sliderSelectedLabel = $scaleLabels->get($sliderValue, '');
-                                                        $selectionMin = data_get($question, 'min_selections');
-                                                        $selectionMax = data_get($question, 'max_selections');
-                                                        $questionTag = match ($type) {
-                                                            'textarea' => 'Long text',
-                                                            'select' => 'Dropdown',
-                                                            'multiselect' => 'Multi select',
-                                                            'radio' => 'Single choice',
-                                                            'checkbox' => 'Checkbox',
-                                                            'scale' => 'Scale',
-                                                            'slider' => 'Slider',
-                                                            'file' => 'File upload',
-                                                            'url' => 'Link',
-                                                            'matrix' => 'Grid',
-                                                            'datetime' => 'Date and time',
-                                                            default => ucfirst($type),
-                                                        };
-                                                        $questionNote = null;
-
-                                                        if (in_array($type, ['checkbox', 'multiselect'], true)) {
-                                                            $notes = [];
-                                                            if (is_numeric($selectionMin)) {
-                                                                $notes[] = 'Select at least ' . (int) $selectionMin . '.';
-                                                            }
-                                                            if (is_numeric($selectionMax)) {
-                                                                $notes[] = 'Select no more than ' . (int) $selectionMax . '.';
-                                                            }
-                                                            $questionNote = implode(' ', $notes) ?: 'Choose all that apply.';
-                                                        } elseif ($type === 'matrix') {
-                                                            $questionNote = 'Provide one response for each row.';
-                                                        } elseif ($type === 'slider') {
-                                                            $questionNote = 'Move the slider to the value that best reflects your view.';
-                                                        } elseif ($type === 'file') {
-                                                            $questionNote = 'Attach one supporting file if required.';
-                                                        }
-                                                    @endphp
-
-                                                    <div class="question-block"
-                                                        data-question-key="{{ $questionKey }}"
-                                                        data-question-type="{{ $type }}"
-                                                        data-question-visibility='@json($question['visibility'] ?? [])'
-                                                        data-question-required="{{ $required ? '1' : '0' }}"
-                                                        data-question-max-selections="{{ data_get($question, 'max_selections') }}"
-                                                        data-question-min-selections="{{ data_get($question, 'min_selections') }}">
-                                                        <div class="question-top">
-                                                            <div class="question-label-row">
-                                                                <div class="question-label">
-                                                                    {{ $question['label'] ?? ('Question ' . ($questionIndex + 1)) }}
-                                                                    @if ($required)
-                                                                        <span class="required">*</span>
-                                                                    @endif
-                                                                </div>
-                                                                <span class="question-tag">{{ $questionTag }}</span>
-                                                            </div>
-
-                                                            @if (!empty($question['hint']))
-                                                                <div class="question-hint">{{ $question['hint'] }}</div>
-                                                            @endif
-
-                                                            @if ($questionNote)
-                                                                <div class="question-note">{{ $questionNote }}</div>
-                                                            @endif
-                                                        </div>
-
-                                                        <div class="question-stack">
-                                                            @if ($type === 'textarea')
-                                                                <textarea name="answers[{{ $questionKey }}]" {{ $required ? 'required' : '' }} placeholder="Type your response here">{{ is_scalar($oldValue) ? $oldValue : '' }}</textarea>
-                                                            @elseif ($type === 'select')
-                                                                <select name="answers[{{ $questionKey }}]" {{ $required ? 'required' : '' }}>
-                                                                    <option value="">Select an option</option>
-                                                                    @foreach ($options as $option)
-                                                                        <option value="{{ $option }}" @selected((string) $oldValue === (string) $option)>{{ $option }}</option>
-                                                                    @endforeach
-                                                                </select>
-                                                            @elseif ($type === 'multiselect')
-                                                                @php
-                                                                    $oldChoices = is_array($oldValue) ? $oldValue : [];
-                                                                @endphp
-                                                                <div class="choice-list {{ count($options) > 4 ? '' : 'choice-list--split' }}" data-multiselect-group="{{ $questionKey }}">
-                                                                    @foreach ($options as $option)
-                                                                        <label class="choice-item" data-choice-item>
-                                                                            <input type="checkbox" name="answers[{{ $questionKey }}][]" value="{{ $option }}"
-                                                                                @checked(in_array($option, $oldChoices, true))>
-                                                                            <span class="choice-item__body">
-                                                                                <strong>{{ $option }}</strong>
-                                                                                <span>Select this response</span>
-                                                                            </span>
-                                                                        </label>
-                                                                    @endforeach
-                                                                </div>
-                                                            @elseif ($type === 'radio')
-                                                                <div class="choice-list {{ count($options) > 4 ? '' : 'choice-list--split' }}">
-                                                                    @foreach ($options as $option)
-                                                                        <label class="choice-item" data-choice-item>
-                                                                            <input type="radio" name="answers[{{ $questionKey }}]" value="{{ $option }}"
-                                                                                {{ $required ? 'required' : '' }}
-                                                                                @checked((string) $oldValue === (string) $option)>
-                                                                            <span class="choice-item__body">
-                                                                                <strong>{{ $option }}</strong>
-                                                                                <span>Select one option</span>
-                                                                            </span>
-                                                                        </label>
-                                                                    @endforeach
-                                                                </div>
-                                                            @elseif ($type === 'checkbox')
-                                                                @php
-                                                                    $oldChoices = is_array($oldValue) ? $oldValue : [];
-                                                                @endphp
-                                                                <div class="choice-list {{ count($options) > 4 ? '' : 'choice-list--split' }}" data-checkbox-group="{{ $questionKey }}">
-                                                                    @foreach ($options as $option)
-                                                                        <label class="choice-item" data-choice-item>
-                                                                            <input type="checkbox" name="answers[{{ $questionKey }}][]" value="{{ $option }}"
-                                                                                @checked(in_array($option, $oldChoices, true))>
-                                                                            <span class="choice-item__body">
-                                                                                <strong>{{ $option }}</strong>
-                                                                                <span>Select all that apply</span>
-                                                                            </span>
-                                                                        </label>
-                                                                    @endforeach
-                                                                </div>
-                                                            @elseif ($type === 'scale')
-                                                                <div class="scale-grid">
-                                                                    @foreach ($scaleValues as $value)
-                                                                        <label class="choice-item scale-item" data-choice-item>
-                                                                            <input type="radio" name="answers[{{ $questionKey }}]" value="{{ $value }}"
-                                                                                {{ $required ? 'required' : '' }}
-                                                                                @checked((string) $oldValue === (string) $value)>
-                                                                            <strong>{{ $value }}</strong>
-                                                                            <span>{{ $scaleLabels->get((string) $value, 'Rating') }}</span>
-                                                                        </label>
-                                                                    @endforeach
-                                                                </div>
-
-                                                                @if ($scaleLabels->isNotEmpty())
-                                                                    <div class="scale-points">
-                                                                        @foreach ($scaleValues as $value)
-                                                                            @if ($scaleLabels->get((string) $value))
-                                                                                <div class="scale-point">
-                                                                                    <strong>{{ $value }}</strong>
-                                                                                    <span>{{ $scaleLabels->get((string) $value) }}</span>
-                                                                                </div>
-                                                                            @endif
-                                                                        @endforeach
-                                                                    </div>
-                                                                @elseif (data_get($question, 'scale.min_label') || data_get($question, 'scale.max_label'))
-                                                                    <div class="scale-labels">
-                                                                        <span>{{ data_get($question, 'scale.min_label') }}</span>
-                                                                        <span>{{ data_get($question, 'scale.max_label') }}</span>
-                                                                    </div>
-                                                                @endif
-                                                            @elseif ($type === 'slider')
-                                                                <div class="slider-panel">
-                                                                    <div class="slider-head">
-                                                                        <div class="slider-output">
-                                                                            <span>Selected value</span>
-                                                                            <strong data-slider-value="{{ $questionKey }}">{{ $sliderValue }}</strong>
-                                                                        </div>
-                                                                        <div class="slider-selected-label" data-slider-selected-label="{{ $questionKey }}">
-                                                                            {{ $sliderSelectedLabel ?: 'Adjust to the most appropriate point on the scale.' }}
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <input type="range"
-                                                                        min="{{ $scaleMin }}"
-                                                                        max="{{ $scaleMax }}"
-                                                                        step="{{ $scaleStep }}"
-                                                                        name="answers[{{ $questionKey }}]"
-                                                                        value="{{ $sliderValue }}"
-                                                                        data-slider-input="{{ $questionKey }}"
-                                                                        data-slider-label-map='@json($scaleLabels)'>
-
-                                                                    @if ($scaleLabels->isNotEmpty())
-                                                                        <div class="scale-points scale-points--slider">
-                                                                            @foreach ($sliderValues as $value)
-                                                                                <div class="scale-point">
-                                                                                    <strong>{{ $value }}</strong>
-                                                                                    <span>{{ $scaleLabels->get((string) $value, '') }}</span>
-                                                                                </div>
-                                                                            @endforeach
-                                                                        </div>
-                                                                    @else
-                                                                        <div class="scale-labels">
-                                                                        <span>{{ data_get($question, 'scale.min_label') ?: $scaleMin }}</span>
-                                                                        <span>{{ data_get($question, 'scale.max_label') ?: $scaleMax }}</span>
-                                                                        </div>
-                                                                    @endif
-                                                                </div>
-                                                            @elseif ($type === 'file')
-                                                                <input type="file" name="answers[{{ $questionKey }}]" {{ $required ? 'required' : '' }} data-file-input="{{ $questionKey }}">
-                                                                <div class="file-caption" data-file-caption="{{ $questionKey }}">No file selected yet.</div>
-                                                            @elseif ($type === 'url')
-                                                                <input type="url"
-                                                                    name="answers[{{ $questionKey }}]"
-                                                                    value="{{ is_scalar($oldValue) ? $oldValue : '' }}"
-                                                                    placeholder="https://example.org/reference"
-                                                                    {{ $required ? 'required' : '' }}>
-                                                            @elseif ($type === 'matrix')
-                                                                @php
-                                                                    $oldMatrix = is_array($oldValue) ? $oldValue : [];
-                                                                @endphp
-                                                                <div class="matrix-wrap" data-matrix-group="{{ $questionKey }}">
-                                                                    <table class="matrix-table">
-                                                                        <thead>
-                                                                            <tr>
-                                                                                <th>Item</th>
-                                                                                @foreach ($matrixColumns as $column)
-                                                                                    <th>{{ data_get($column, 'label', $column) }}</th>
-                                                                                @endforeach
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody>
-                                                                            @foreach ($matrixRows as $row)
-                                                                                @php
-                                                                                    $rowKey = (string) data_get($row, 'key', 'row_' . $loop->index);
-                                                                                    $selectedColumn = $oldMatrix[$rowKey] ?? null;
-                                                                                @endphp
-                                                                                <tr>
-                                                                                    <td>{{ data_get($row, 'label', $row) }}</td>
-                                                                                    @foreach ($matrixColumns as $column)
-                                                                                        @php
-                                                                                            $columnKey = (string) data_get($column, 'key', 'column_' . $loop->index);
-                                                                                            $columnValue = (string) data_get($column, 'label', $columnKey);
-                                                                                        @endphp
-                                                                                        <td data-column-label="{{ $columnValue }}">
-                                                                                            <input type="radio"
-                                                                                                name="answers[{{ $questionKey }}][{{ $rowKey }}]"
-                                                                                                value="{{ $columnValue }}"
-                                                                                                @checked((string) $selectedColumn === (string) $columnValue)>
-                                                                                        </td>
-                                                                                    @endforeach
-                                                                                </tr>
-                                                                            @endforeach
-                                                                        </tbody>
-                                                                    </table>
-                                                                </div>
-                                                            @else
-                                                                <input type="{{ match ($type) {
-                                                                    'number', 'email', 'date' => $type,
-                                                                    'datetime' => 'datetime-local',
-                                                                    default => 'text',
-                                                                } }}"
-                                                                    name="answers[{{ $questionKey }}]"
-                                                                    value="{{ is_scalar($oldValue) ? $oldValue : '' }}"
-                                                                    {{ $required ? 'required' : '' }}
-                                                                    placeholder="{{ match ($type) {
-                                                                        'email' => 'name@example.org',
-                                                                        'number' => 'Enter a numeric response',
-                                                                        'date' => 'Select a date',
-                                                                        'datetime' => 'Select date and time',
-                                                                        default => 'Type your response',
-                                                                    } }}">
-                                                            @endif
-                                                        </div>
-
-                                                        @error('answers.' . $questionKey)
-                                                            <div class="question-error">{{ $message }}</div>
-                                                        @enderror
-                                                    </div>
+                                                @foreach ($normalSectionQuestions as $questionIndex => $question)
+                                                    @include('me.surveys._question_block', [
+                                                        'question' => $question,
+                                                        'sectionIndex' => $sectionIndex,
+                                                        'questionIndex' => $questionIndex,
+                                                    ])
                                                 @endforeach
+                                            </div>
+                                        </section>
+                                    @endforeach
+
+                                    @foreach ($specialSections as $specialSectionIndex => $section)
+                                        @php
+                                            $sectionKey = (string) ($section['key'] ?? ('special_section_' . $specialSectionIndex));
+                                            $sectionColor = (string) data_get($section, 'color', '#143E5A');
+                                            $specialSectionQuestions = collect($section['questions'] ?? [])
+                                                ->filter(fn ($question) => strtolower((string) data_get($question, 'flow_type', 'normal')) !== 'special')
+                                                ->values();
+                                        @endphp
+                                        <section class="step section-step branch-step"
+                                            hidden
+                                            data-step-id="special_section__{{ $sectionKey }}"
+                                            data-step-kind="branch-section"
+                                            data-step-flow="special"
+                                            data-step-label="{{ $section['title'] }}"
+                                            data-branch-target-type="section"
+                                            data-branch-target-key="{{ $sectionKey }}"
+                                            style="--section-accent: {{ $sectionColor }};">
+                                            <div class="step-header">
+                                                <div class="step-header__top">
+                                                    <span class="step-kicker">Special Follow-up</span>
+                                                    <span class="step-counter">Triggered page</span>
+                                                </div>
+                                                <h3>{{ $section['title'] }}</h3>
+                                                <p>{{ $section['description'] ?: 'This page opens only when one of your previous answers requires a special follow-up.' }}</p>
+                                            </div>
+
+                                            <div class="question-grid">
+                                                @foreach ($specialSectionQuestions as $questionIndex => $question)
+                                                    @include('me.surveys._question_block', [
+                                                        'question' => $question,
+                                                        'sectionIndex' => $specialSectionIndex,
+                                                        'questionIndex' => $questionIndex,
+                                                    ])
+                                                @endforeach
+                                            </div>
+                                        </section>
+                                    @endforeach
+
+                                    @foreach ($specialQuestions as $specialQuestionIndex => $question)
+                                        @php
+                                            $questionKey = (string) ($question['key'] ?? ('special_question_' . $specialQuestionIndex));
+                                            $sectionColor = (string) data_get($question, 'section_color', '#143E5A');
+                                        @endphp
+                                        <section class="step section-step branch-step"
+                                            hidden
+                                            data-step-id="special_question__{{ $questionKey }}"
+                                            data-step-kind="branch-question"
+                                            data-step-flow="special"
+                                            data-step-label="{{ $question['label'] ?? 'Special follow-up question' }}"
+                                            data-branch-target-type="question"
+                                            data-branch-target-key="{{ $questionKey }}"
+                                            style="--section-accent: {{ $sectionColor }};">
+                                            <div class="step-header">
+                                                <div class="step-header__top">
+                                                    <span class="step-kicker">Special Follow-up</span>
+                                                    <span class="step-counter">{{ data_get($question, 'section_title', 'Follow-up page') }}</span>
+                                                </div>
+                                                <h3>{{ $question['label'] ?? 'Follow-up question' }}</h3>
+                                                <p>{{ $question['hint'] ?: 'This question is outside the normal flow and opens only when a previous answer sends you here.' }}</p>
+                                            </div>
+
+                                            <div class="question-grid">
+                                                @include('me.surveys._question_block', [
+                                                    'question' => $question,
+                                                    'sectionIndex' => data_get($question, 'section_index', 0),
+                                                    'questionIndex' => data_get($question, 'question_index', $specialQuestionIndex),
+                                                ])
                                             </div>
                                         </section>
                                     @endforeach
@@ -1913,7 +1718,11 @@
                 const allSteps = Array.from(form.querySelectorAll('.step'));
                 const navItems = Array.from(document.querySelectorAll('[data-step-nav]'));
                 const respondentFields = Array.from(form.querySelectorAll('[data-respondent-field]'));
-                let currentVisibleStepIndex = 0;
+
+                let currentStepId = 'intro';
+                let navigationHistory = [];
+                let branchContextStack = [];
+                let activeSpecialSteps = new Set();
 
                 function parseJsonAttribute(element, attribute) {
                     try {
@@ -1955,16 +1764,20 @@
                     return allSteps.find((step) => stepId(step) === id) || null;
                 }
 
-                function visibleSteps() {
-                    return allSteps.filter((step) => !step.hidden);
+                function isSpecialStep(step) {
+                    return step?.getAttribute('data-step-flow') === 'special';
                 }
 
-                function visibleSections() {
-                    return visibleSteps().filter((step) => step.getAttribute('data-step-kind') === 'section');
+                function normalSectionSteps() {
+                    return allSteps.filter((step) => step.getAttribute('data-step-kind') === 'section' && step.getAttribute('data-step-flow') !== 'special' && !step.hidden);
+                }
+
+                function currentStep() {
+                    return stepById(currentStepId) || stepById('intro');
                 }
 
                 function answerForQuestion(questionKey) {
-                    const questionBlock = form.querySelector(`[data-question-key="${questionKey}"]`);
+                    const questionBlock = form.querySelector(`.question-block[data-question-key="${questionKey}"]`);
                     if (!questionBlock) {
                         return null;
                     }
@@ -2039,12 +1852,8 @@
                     });
                 }
 
-                function currentStep() {
-                    return visibleSteps()[currentVisibleStepIndex] || visibleSteps()[0] || null;
-                }
-
                 function countVisibleQuestions(step) {
-                    if (!step || step.getAttribute('data-step-kind') !== 'section') {
+                    if (!step || step.getAttribute('data-step-kind') === 'intro') {
                         return 0;
                     }
 
@@ -2052,7 +1861,7 @@
                 }
 
                 function countAnsweredQuestions(step) {
-                    if (!step || step.getAttribute('data-step-kind') !== 'section') {
+                    if (!step || step.getAttribute('data-step-kind') === 'intro') {
                         return 0;
                     }
 
@@ -2115,8 +1924,163 @@
                     });
                 }
 
+                function routeStepId(targetType, targetKey) {
+                    if (targetType === 'section') {
+                        return `special_section__${targetKey}`;
+                    }
+
+                    if (targetType === 'question') {
+                        return `special_question__${targetKey}`;
+                    }
+
+                    return '';
+                }
+
+                function matchedTargetStepIdForQuestionBlock(questionBlock) {
+                    const route = parseJsonAttribute(questionBlock, 'data-question-route');
+                    const targetType = (route?.target_type || '').toString().trim();
+                    const targetKey = (route?.target_key || '').toString().trim();
+                    const values = Array.isArray(route?.values)
+                        ? route.values.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
+                        : [];
+
+                    if (!targetType || !targetKey || values.length === 0) {
+                        return '';
+                    }
+
+                    const answerValues = comparableValues(answerForQuestion(questionBlock.getAttribute('data-question-key')));
+                    if (answerValues.length === 0 || !answerValues.some((item) => values.includes(item))) {
+                        return '';
+                    }
+
+                    const targetStepId = routeStepId(targetType, targetKey);
+                    return stepById(targetStepId) ? targetStepId : '';
+                }
+
+                function reachableNormalQuestionBlocks() {
+                    const blocks = [];
+
+                    allSteps
+                        .filter((step) => step.getAttribute('data-step-kind') === 'section' && step.getAttribute('data-step-flow') !== 'special')
+                        .forEach((step) => {
+                            const sectionVisible = matchesVisibility(parseJsonAttribute(step, 'data-section-visibility'));
+                            if (!sectionVisible) {
+                                return;
+                            }
+
+                            step.querySelectorAll('.question-block').forEach((questionBlock) => {
+                                if (questionBlock.getAttribute('data-question-flow') === 'special') {
+                                    return;
+                                }
+
+                                if (matchesVisibility(parseJsonAttribute(questionBlock, 'data-question-visibility'))) {
+                                    blocks.push(questionBlock);
+                                }
+                            });
+                        });
+
+                    return blocks;
+                }
+
+                function collectTriggeredSpecialSteps() {
+                    const reachable = new Set();
+                    const processedQuestions = new Set();
+                    const pendingBlocks = [...reachableNormalQuestionBlocks()];
+
+                    while (pendingBlocks.length > 0) {
+                        const questionBlock = pendingBlocks.shift();
+                        const questionKey = questionBlock.getAttribute('data-question-key') || '';
+
+                        if (!questionKey || processedQuestions.has(questionKey)) {
+                            continue;
+                        }
+
+                        processedQuestions.add(questionKey);
+
+                        const targetStepId = matchedTargetStepIdForQuestionBlock(questionBlock);
+                        if (!targetStepId || reachable.has(targetStepId)) {
+                            continue;
+                        }
+
+                        reachable.add(targetStepId);
+
+                        const targetStep = stepById(targetStepId);
+                        if (!targetStep) {
+                            continue;
+                        }
+
+                        if (targetStep.getAttribute('data-step-kind') === 'branch-question') {
+                            const branchQuestionKey = targetStep.getAttribute('data-branch-target-key') || '';
+                            const branchQuestionBlock = targetStep.querySelector(`.question-block[data-question-key="${branchQuestionKey}"]`);
+                            if (branchQuestionBlock && matchesVisibility(parseJsonAttribute(branchQuestionBlock, 'data-question-visibility'))) {
+                                pendingBlocks.push(branchQuestionBlock);
+                            }
+                            continue;
+                        }
+
+                        targetStep.querySelectorAll('.question-block').forEach((targetBlock) => {
+                            if (targetBlock.getAttribute('data-question-flow') === 'special') {
+                                return;
+                            }
+
+                            if (matchesVisibility(parseJsonAttribute(targetBlock, 'data-question-visibility'))) {
+                                pendingBlocks.push(targetBlock);
+                            }
+                        });
+                    }
+
+                    return reachable;
+                }
+
+                function refreshStepQuestionVisibility(step) {
+                    let visibleQuestionCount = 0;
+                    const stepKind = step.getAttribute('data-step-kind');
+                    const stepFlow = step.getAttribute('data-step-flow') || 'normal';
+
+                    step.querySelectorAll('.question-block').forEach((questionBlock) => {
+                        let questionVisible = matchesVisibility(parseJsonAttribute(questionBlock, 'data-question-visibility'));
+
+                        if (stepFlow !== 'special' && questionBlock.getAttribute('data-question-flow') === 'special') {
+                            questionVisible = false;
+                        }
+
+                        if (stepKind === 'branch-question') {
+                            questionVisible = questionVisible
+                                && questionBlock.getAttribute('data-question-key') === step.getAttribute('data-branch-target-key');
+                        }
+
+                        questionBlock.hidden = !questionVisible;
+                        setInputsDisabled(questionBlock, !questionVisible);
+
+                        if (questionVisible) {
+                            visibleQuestionCount += 1;
+                        }
+                    });
+
+                    return visibleQuestionCount;
+                }
+
+                function referenceNormalStepId() {
+                    const activeStep = currentStep();
+                    if (activeStep && !isSpecialStep(activeStep) && !activeStep.hidden) {
+                        return stepId(activeStep);
+                    }
+
+                    for (let index = navigationHistory.length - 1; index >= 0; index -= 1) {
+                        const historyStep = stepById(navigationHistory[index]);
+                        if (historyStep && !isSpecialStep(historyStep) && !historyStep.hidden) {
+                            return stepId(historyStep);
+                        }
+                    }
+
+                    return 'intro';
+                }
+
                 function syncStepNavigation() {
-                    const steps = visibleSteps();
+                    const sequence = [stepById('intro'), ...normalSectionSteps()].filter(Boolean);
+                    const referenceId = referenceNormalStepId();
+                    const referenceIndex = Math.max(0, sequence.findIndex((step) => stepId(step) === referenceId));
+                    const specialActive = isSpecialStep(currentStep());
 
                     navItems.forEach((item) => {
                         const targetStep = stepById(item.getAttribute('data-step-nav'));
@@ -2125,10 +2089,10 @@
                             return;
                         }
 
-                        const stepIndex = steps.indexOf(targetStep);
-                        const isCurrent = stepIndex === currentVisibleStepIndex;
-                        const isComplete = stepIndex < currentVisibleStepIndex;
-                        const isAvailable = stepIndex <= currentVisibleStepIndex;
+                        const targetIndex = sequence.findIndex((step) => stepId(step) === stepId(targetStep));
+                        const isCurrent = targetIndex === referenceIndex;
+                        const isComplete = targetIndex < referenceIndex;
+                        const isAvailable = targetIndex <= referenceIndex;
                         const countNode = item.querySelector('[data-nav-count]');
                         const statusNode = item.querySelector('[data-nav-status]');
 
@@ -2148,41 +2112,104 @@
                         }
 
                         if (statusNode) {
-                            statusNode.textContent = isCurrent ? 'Current' : (isComplete ? 'Completed' : 'Upcoming');
+                            statusNode.textContent = specialActive && isCurrent
+                                ? 'Follow-up active'
+                                : (isCurrent ? 'Current' : (isComplete ? 'Completed' : 'Upcoming'));
                         }
                     });
                 }
 
-                function updateProgress() {
-                    const steps = visibleSteps();
+                function nextNormalStepId(fromStepId) {
+                    const sections = normalSectionSteps();
+                    if (fromStepId === 'intro') {
+                        return stepId(sections[0]) || null;
+                    }
+
+                    const currentIndex = sections.findIndex((step) => stepId(step) === fromStepId);
+                    if (currentIndex < 0) {
+                        return null;
+                    }
+
+                    return stepId(sections[currentIndex + 1]) || null;
+                }
+
+                function peekBaseNextDestination() {
                     const activeStep = currentStep();
-                    const totalSections = visibleSections().length;
+                    if (!activeStep) {
+                        return null;
+                    }
+
+                    if (isSpecialStep(activeStep)) {
+                        const context = branchContextStack[branchContextStack.length - 1];
+                        if (!context) {
+                            return nextNormalStepId(referenceNormalStepId());
+                        }
+
+                        return context.pendingTargets[0] || context.returnToId || null;
+                    }
+
+                    return nextNormalStepId(stepId(activeStep));
+                }
+
+                function consumeBaseNextDestination() {
+                    const activeStep = currentStep();
+                    if (!activeStep) {
+                        return null;
+                    }
+
+                    if (isSpecialStep(activeStep)) {
+                        const context = branchContextStack[branchContextStack.length - 1];
+                        if (!context) {
+                            return nextNormalStepId(referenceNormalStepId());
+                        }
+
+                        if (context.pendingTargets.length > 0) {
+                            return context.pendingTargets.shift();
+                        }
+
+                        branchContextStack.pop();
+                        return context.returnToId || null;
+                    }
+
+                    return nextNormalStepId(stepId(activeStep));
+                }
+
+                function updateProgress() {
+                    const activeStep = currentStep();
+                    const totalSections = normalSectionSteps().length;
 
                     if (!activeStep) {
                         return;
                     }
 
                     const activeKind = activeStep.getAttribute('data-step-kind');
-                    const activeSectionIndex = steps
-                        .slice(0, currentVisibleStepIndex + 1)
-                        .filter((step) => step.getAttribute('data-step-kind') === 'section')
-                        .length;
-                    const numerator = activeKind === 'intro' ? 0 : activeSectionIndex;
+                    const referenceId = referenceNormalStepId();
+                    const referenceIndex = normalSectionSteps().findIndex((step) => stepId(step) === referenceId);
+                    const completedNormalSteps = referenceIndex >= 0 ? referenceIndex + 1 : 0;
+                    const numerator = activeKind === 'intro' ? 0 : completedNormalSteps;
                     const denominator = Math.max(totalSections, 1);
                     const percent = Math.max(0, Math.min(100, Math.round((numerator / denominator) * 100)));
-                    const isLastStep = currentVisibleStepIndex >= steps.length - 1;
+                    const hasNextStep = Boolean(peekBaseNextDestination());
                     const questionCount = countVisibleQuestions(activeStep);
                     const answeredCount = countAnsweredQuestions(activeStep);
 
                     progressLabel.textContent = activeStep.getAttribute('data-step-label') || 'Survey';
-                    progressMeta.textContent = activeKind === 'intro'
-                        ? `Step 0 of ${totalSections}`
-                        : `Step ${activeSectionIndex} of ${totalSections}`;
+
+                    if (activeKind === 'intro') {
+                        progressMeta.textContent = `Step 0 of ${totalSections}`;
+                    } else if (isSpecialStep(activeStep)) {
+                        progressMeta.textContent = `Follow-up after step ${Math.max(completedNormalSteps, 1)} of ${totalSections}`;
+                    } else {
+                        progressMeta.textContent = `Step ${completedNormalSteps} of ${totalSections}`;
+                    }
+
                     progressFill.style.width = `${percent}%`;
                     progressPercent.textContent = `${percent}% complete`;
                     progressDescriptor.textContent = activeKind === 'intro'
                         ? 'Review and continue'
-                        : `${answeredCount} of ${questionCount} answered in this section`;
+                        : (isSpecialStep(activeStep)
+                            ? `${answeredCount} of ${questionCount} answered in this follow-up`
+                            : `${answeredCount} of ${questionCount} answered in this section`);
 
                     railSectionCount.textContent = totalSections;
                     railCurrentStep.textContent = activeStep.getAttribute('data-step-label') || 'Survey';
@@ -2196,22 +2223,23 @@
                     actionStepTitle.textContent = activeStep.getAttribute('data-step-label') || 'Survey';
                     actionStepMeta.textContent = activeKind === 'intro'
                         ? 'Review the introduction and continue when ready.'
-                        : (isLastStep ? 'Review this section, then submit your survey.' : 'Complete this section before moving forward.');
+                        : (isSpecialStep(activeStep)
+                            ? 'This is a special follow-up page triggered by one of your previous answers.'
+                            : (hasNextStep ? 'Complete this section before moving forward.' : 'Review this section, then submit your survey.'));
 
-                    backButton.hidden = currentVisibleStepIndex === 0;
-                    nextButton.hidden = isLastStep;
-                    submitButton.hidden = !isLastStep;
-                    nextButton.textContent = activeKind === 'intro' ? 'Start survey' : 'Next section';
+                    backButton.hidden = navigationHistory.length === 0;
+                    nextButton.hidden = !hasNextStep;
+                    submitButton.hidden = hasNextStep;
+                    nextButton.textContent = activeKind === 'intro'
+                        ? 'Start survey'
+                        : (isSpecialStep(activeStep) ? 'Continue' : 'Next section');
                 }
 
                 function updateActiveStepClasses() {
-                    const steps = visibleSteps();
-                    const safeIndex = Math.max(0, Math.min(currentVisibleStepIndex, steps.length - 1));
-                    currentVisibleStepIndex = safeIndex;
-
                     allSteps.forEach((step) => step.classList.remove('is-active'));
-                    if (steps[safeIndex]) {
-                        steps[safeIndex].classList.add('is-active');
+                    const activeStep = currentStep();
+                    if (activeStep) {
+                        activeStep.classList.add('is-active');
                     }
 
                     syncStepNavigation();
@@ -2231,16 +2259,20 @@
                     });
                 }
 
-                function setCurrentStep(index, options = {}) {
-                    const steps = visibleSteps();
-                    if (steps.length === 0) {
+                function navigateToStep(targetStepId, options = {}) {
+                    const targetStep = stepById(targetStepId);
+                    if (!targetStep || targetStep.hidden) {
                         return;
                     }
 
-                    currentVisibleStepIndex = Math.max(0, Math.min(index, steps.length - 1));
+                    if (options.pushHistory !== false && currentStepId && currentStepId !== targetStepId) {
+                        navigationHistory.push(currentStepId);
+                    }
+
+                    currentStepId = targetStepId;
                     updateActiveStepClasses();
 
-                    if (options.scroll) {
+                    if (options.scroll !== false) {
                         scrollStepIntoView();
                     }
                 }
@@ -2354,36 +2386,107 @@
                 }
 
                 function refreshVisibility() {
-                    const activeId = stepId(currentStep());
+                    const activeId = currentStepId;
+                    activeSpecialSteps = collectTriggeredSpecialSteps();
 
                     allSteps.forEach((step) => {
-                        if (step.getAttribute('data-step-kind') !== 'section') {
+                        const kind = step.getAttribute('data-step-kind');
+                        const flow = step.getAttribute('data-step-flow') || 'normal';
+
+                        if (kind === 'intro') {
+                            step.hidden = false;
+                            return;
+                        }
+
+                        if (flow === 'special') {
+                            const visibleQuestionCount = refreshStepQuestionVisibility(step);
+                            step.hidden = !activeSpecialSteps.has(stepId(step)) || visibleQuestionCount === 0;
+                            if (step.hidden) {
+                                setInputsDisabled(step, true);
+                            }
                             return;
                         }
 
                         const sectionVisible = matchesVisibility(parseJsonAttribute(step, 'data-section-visibility'));
-                        let visibleQuestionCount = 0;
-
-                        step.querySelectorAll('.question-block').forEach((questionBlock) => {
-                            const questionVisible = sectionVisible && matchesVisibility(parseJsonAttribute(questionBlock, 'data-question-visibility'));
-                            questionBlock.hidden = !questionVisible;
-                            setInputsDisabled(questionBlock, !questionVisible);
-
-                            if (questionVisible) {
-                                visibleQuestionCount += 1;
-                            }
-                        });
+                        const visibleQuestionCount = sectionVisible ? refreshStepQuestionVisibility(step) : 0;
 
                         step.hidden = !sectionVisible || visibleQuestionCount === 0;
+                        if (step.hidden) {
+                            setInputsDisabled(step, true);
+                        }
                     });
 
-                    const steps = visibleSteps();
-                    const sameStepIndex = steps.findIndex((step) => stepId(step) === activeId);
-                    currentVisibleStepIndex = sameStepIndex >= 0
-                        ? sameStepIndex
-                        : Math.max(0, Math.min(currentVisibleStepIndex, steps.length - 1));
+                    const current = stepById(activeId);
+                    if (!current || current.hidden) {
+                        currentStepId = referenceNormalStepId();
+                    }
 
                     updateActiveStepClasses();
+                }
+
+                function matchedTargetsForStep(step) {
+                    const seen = new Set();
+                    return Array.from(step.querySelectorAll('.question-block:not([hidden])'))
+                        .map((questionBlock) => matchedTargetStepIdForQuestionBlock(questionBlock))
+                        .filter((targetStepId) => {
+                            if (!targetStepId || seen.has(targetStepId) || targetStepId === currentStepId) {
+                                return false;
+                            }
+
+                            const alreadyQueued = branchContextStack.some((context) => context.pendingTargets.includes(targetStepId));
+                            if (alreadyQueued) {
+                                return false;
+                            }
+
+                            seen.add(targetStepId);
+                            return true;
+                        });
+                }
+
+                function advanceSurvey() {
+                    const activeStep = currentStep();
+                    if (!activeStep) {
+                        return;
+                    }
+
+                    const matchedTargets = matchedTargetsForStep(activeStep);
+                    if (matchedTargets.length > 0) {
+                        branchContextStack.push({
+                            originStepId: isSpecialStep(activeStep) ? referenceNormalStepId() : stepId(activeStep),
+                            returnToId: peekBaseNextDestination(),
+                            pendingTargets: matchedTargets.slice(1),
+                        });
+                        navigateToStep(matchedTargets[0], { scroll: true, pushHistory: true });
+                        return;
+                    }
+
+                    const nextStepId = consumeBaseNextDestination();
+                    if (nextStepId) {
+                        navigateToStep(nextStepId, { scroll: true, pushHistory: true });
+                        return;
+                    }
+
+                    form.submit();
+                }
+
+                function goBack() {
+                    while (navigationHistory.length > 0) {
+                        const targetStepId = navigationHistory.pop();
+                        const targetStep = stepById(targetStepId);
+
+                        if (!targetStep || targetStep.hidden) {
+                            continue;
+                        }
+
+                        if (!isSpecialStep(targetStep)) {
+                            branchContextStack = [];
+                        }
+
+                        currentStepId = targetStepId;
+                        updateActiveStepClasses();
+                        scrollStepIntoView();
+                        return;
+                    }
                 }
 
                 function handleLiveUpdates(event) {
@@ -2391,6 +2494,10 @@
                     if (questionBlock) {
                         questionBlock.classList.remove('is-invalid');
                         questionBlock.querySelectorAll('.question-error[data-client-error="1"]').forEach((item) => item.remove());
+                    }
+
+                    if (!isSpecialStep(currentStep())) {
+                        branchContextStack = [];
                     }
 
                     updateSelectionStates();
@@ -2407,11 +2514,11 @@
                         return;
                     }
 
-                    setCurrentStep(currentVisibleStepIndex + 1, { scroll: true });
+                    advanceSurvey();
                 });
 
                 backButton.addEventListener('click', () => {
-                    setCurrentStep(currentVisibleStepIndex - 1, { scroll: true });
+                    goBack();
                 });
 
                 submitButton.addEventListener('click', () => {
@@ -2425,14 +2532,20 @@
                 navItems.forEach((item) => {
                     item.addEventListener('click', () => {
                         const targetStep = stepById(item.getAttribute('data-step-nav'));
-                        const steps = visibleSteps();
-                        const targetIndex = steps.indexOf(targetStep);
-
-                        if (targetIndex < 0 || targetIndex > currentVisibleStepIndex) {
+                        if (!targetStep || targetStep.hidden) {
                             return;
                         }
 
-                        setCurrentStep(targetIndex, { scroll: true });
+                        const sequence = [stepById('intro'), ...normalSectionSteps()].filter(Boolean);
+                        const targetIndex = sequence.findIndex((step) => stepId(step) === stepId(targetStep));
+                        const referenceIndex = sequence.findIndex((step) => stepId(step) === referenceNormalStepId());
+
+                        if (targetIndex < 0 || targetIndex > referenceIndex) {
+                            return;
+                        }
+
+                        branchContextStack = [];
+                        navigateToStep(stepId(targetStep), { scroll: true, pushHistory: true });
                     });
                 });
 
@@ -2444,12 +2557,10 @@
                 const firstServerError = form.querySelector('.question-error, .field-error');
                 if (firstServerError) {
                     const parentStep = firstServerError.closest('.step');
-                    if (parentStep) {
-                        const steps = visibleSteps();
-                        const targetIndex = steps.indexOf(parentStep);
-                        if (targetIndex >= 0) {
-                            setCurrentStep(targetIndex, { scroll: true });
-                        }
+                    if (parentStep && !parentStep.hidden) {
+                        currentStepId = stepId(parentStep);
+                        updateActiveStepClasses();
+                        scrollStepIntoView();
                     }
                 }
             });

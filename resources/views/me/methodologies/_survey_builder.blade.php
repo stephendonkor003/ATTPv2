@@ -337,6 +337,7 @@
                         key: createKey('question'),
                         label: '',
                         type: 'text',
+                        flow_type: 'normal',
                         required: true,
                         hint: '',
                         options: [],
@@ -356,6 +357,11 @@
                             question_key: '',
                             values: [],
                         },
+                        route: {
+                            target_type: '',
+                            target_key: '',
+                            values: [],
+                        },
                     };
                 }
 
@@ -365,11 +371,38 @@
                         title: '',
                         description: '',
                         color: defaultSectionColor(sectionIndex),
+                        flow_type: 'normal',
                         visibility: {
                             question_key: '',
                             values: [],
                         },
                         questions: [defaultQuestion()],
+                    };
+                }
+
+                function normalizeFlowType(value) {
+                    return (value || '').toString().trim().toLowerCase() === 'special' ? 'special' : 'normal';
+                }
+
+                function normalizeRoute(route) {
+                    const targetType = (route?.target_type || route?.type || '').toString().trim();
+                    const targetKey = (route?.target_key || route?.key || '').toString().trim();
+                    const values = Array.isArray(route?.values)
+                        ? route.values.map((item) => (item || '').toString().trim()).filter(Boolean)
+                        : [];
+
+                    if (!['section', 'question'].includes(targetType) || !targetKey || values.length === 0) {
+                        return {
+                            target_type: '',
+                            target_key: '',
+                            values: [],
+                        };
+                    }
+
+                    return {
+                        target_type: targetType,
+                        target_key: targetKey,
+                        values: values.filter((item, index, array) => array.indexOf(item) === index),
                     };
                 }
 
@@ -386,6 +419,7 @@
                         key: (question?.key || '').toString().trim() || createKey('question'),
                         label: (question?.label || '').toString(),
                         type: questionTypes.some((item) => item.value === question?.type) ? question.type : 'text',
+                        flow_type: normalizeFlowType(question?.flow_type || question?.flow),
                         required: Boolean(question?.required ?? true),
                         hint: (question?.hint || '').toString(),
                         options: Array.isArray(question?.options) ? question.options.map((item) => (item || '').toString().trim()).filter(Boolean) : [],
@@ -412,6 +446,11 @@
                             question_key: question?.depends_on || '',
                             values: question?.show_if || [],
                         }),
+                        route: normalizeRoute(question?.route || question?.jump || {
+                            target_type: question?.route_target_type || '',
+                            target_key: question?.route_target_key || '',
+                            values: question?.route_values || [],
+                        }),
                     };
                 }
 
@@ -423,6 +462,7 @@
                             title: (section.title || '').toString(),
                             description: (section.description || section.intro || '').toString(),
                             color: normalizeHexColor(section.color || section.section_color || '', defaultSectionColor(sectionIndex)),
+                            flow_type: normalizeFlowType(section.flow_type || section.flow),
                             visibility: normalizeVisibility(section.visibility || {
                                 question_key: section.depends_on || '',
                                 values: section.show_if || [],
@@ -458,6 +498,34 @@
                             });
                         }
                     }
+
+                    return choices;
+                }
+
+                function specialTargetChoices(currentQuestionKey = '') {
+                    const choices = [];
+
+                    sections.forEach((section) => {
+                        if (section.flow_type === 'special') {
+                            choices.push({
+                                type: 'section',
+                                key: section.key,
+                                label: `Section: ${section.title || 'Untitled section'}`,
+                            });
+                        }
+
+                        (section.questions || []).forEach((question) => {
+                            if (question.flow_type !== 'special' || question.key === currentQuestionKey) {
+                                return;
+                            }
+
+                            choices.push({
+                                type: 'question',
+                                key: question.key,
+                                label: `Question: ${question.label || 'Untitled question'} (${section.title || 'Section'})`,
+                            });
+                        });
+                    });
 
                     return choices;
                 }
@@ -619,6 +687,69 @@
                     `;
                 }
 
+                function routeMarkup(question, sectionIndex, questionIndex) {
+                    const route = normalizeRoute(question.route || {});
+                    const selectedTargetType = route.target_type || '';
+                    const selectedTargetKey = route.target_key || '';
+                    const valuesText = Array.isArray(route.values) ? route.values.join(', ') : '';
+                    const targetChoices = specialTargetChoices(question.key);
+                    const filteredTargets = targetChoices.filter((choice) => choice.type === selectedTargetType);
+                    const selectedTarget = filteredTargets.find((choice) => choice.key === selectedTargetKey);
+                    const summaryText = selectedTargetType && selectedTargetKey && route.values.length
+                        ? `When this answer matches ${route.values.join(', ')}, the respondent is sent directly to ${selectedTarget?.label || 'the selected follow-up page'}.`
+                        : 'No direct follow-up routing is active for this question.';
+
+                    return `
+                        <div class="survey-condition-box mt-3">
+                            <div class="survey-mini-label">Direct Follow-up Routing</div>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label">Route to</label>
+                                    <select class="form-select form-select-sm"
+                                        data-route-field="target_type"
+                                        data-section-index="${sectionIndex}"
+                                        data-question-index="${questionIndex}">
+                                        <option value="">No direct routing</option>
+                                        <option value="section" ${selectedTargetType === 'section' ? 'selected' : ''}>Special section</option>
+                                        <option value="question" ${selectedTargetType === 'question' ? 'selected' : ''}>Special question page</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Follow-up target</label>
+                                    <select class="form-select form-select-sm"
+                                        data-route-field="target_key"
+                                        data-section-index="${sectionIndex}"
+                                        data-question-index="${questionIndex}">
+                                        <option value="">Select target</option>
+                                        ${filteredTargets.map((choice) => `
+                                            <option value="${escapeHtml(choice.key)}" ${choice.key === selectedTargetKey ? 'selected' : ''}>
+                                                ${escapeHtml(choice.label)}
+                                            </option>
+                                        `).join('')}
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Trigger value(s)</label>
+                                    <input type="text" class="form-control form-control-sm"
+                                        data-route-field="values"
+                                        data-section-index="${sectionIndex}"
+                                        data-question-index="${questionIndex}"
+                                        value="${escapeHtml(valuesText)}"
+                                        placeholder="Not achieved, Partially achieved">
+                                </div>
+                                <div class="col-12">
+                                    <div class="survey-logic-summary">${escapeHtml(summaryText)}</div>
+                                </div>
+                                <div class="col-12">
+                                    <small class="text-muted">
+                                        Targets only appear here after they are marked as <strong>Special follow-up only</strong>.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 function questionMarkup(section, question, sectionIndex, questionIndex) {
                     const choices = dependencyChoices(section.key, question.key);
                     const optionsText = (question.options || []).join('\n');
@@ -629,6 +760,10 @@
                     const showSliderStep = question.type === 'slider';
                     const showMatrix = question.type === 'matrix';
                     const showCheckboxRules = ['checkbox', 'multiselect'].includes(question.type);
+                    const questionFlowType = normalizeFlowType(question.flow_type);
+                    const questionFlowNote = questionFlowType === 'special'
+                        ? 'This question is excluded from the normal section page. It opens only when another question routes respondents here.'
+                        : 'This question is part of the normal section flow.';
 
                     return `
                         <div class="survey-question-card">
@@ -680,6 +815,16 @@
                                         <label class="form-check-label">Mandatory</label>
                                     </div>
                                 </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Flow Placement</label>
+                                    <select class="form-select form-select-sm"
+                                        data-question-field="flow_type"
+                                        data-section-index="${sectionIndex}"
+                                        data-question-index="${questionIndex}">
+                                        <option value="normal" ${questionFlowType === 'normal' ? 'selected' : ''}>Normal section flow</option>
+                                        <option value="special" ${questionFlowType === 'special' ? 'selected' : ''}>Special follow-up only</option>
+                                    </select>
+                                </div>
                                 <div class="col-12">
                                     <label class="form-label">Help Text</label>
                                     <input type="text" class="form-control form-control-sm"
@@ -688,6 +833,9 @@
                                         data-question-index="${questionIndex}"
                                         value="${escapeHtml(question.hint || '')}"
                                         placeholder="Optional explanation shown below the question">
+                                </div>
+                                <div class="col-12">
+                                    <small class="text-muted">${escapeHtml(questionFlowNote)}</small>
                                 </div>
 
                                 <div class="col-12 ${showOptions ? '' : 'd-none'}" data-question-options-wrap="${sectionIndex}_${questionIndex}">
@@ -763,6 +911,7 @@
                             </div>
 
                             ${visibilityMarkup('question', sectionIndex, questionIndex, question.visibility || { question_key: '', values: [] }, choices)}
+                            ${routeMarkup(question, sectionIndex, questionIndex)}
                         </div>
                     `;
                 }
@@ -783,6 +932,10 @@
                         const card = document.createElement('div');
                         card.className = 'survey-section-card';
                         const sectionColor = normalizeHexColor(section.color, defaultSectionColor(sectionIndex));
+                        const sectionFlowType = normalizeFlowType(section.flow_type);
+                        const sectionFlowNote = sectionFlowType === 'special'
+                            ? 'This section is removed from the normal survey sequence and only opens when a routing rule sends respondents here.'
+                            : 'This section remains part of the normal survey sequence.';
                         card.style.setProperty('--section-color', sectionColor);
                         card.style.borderColor = hexToRgba(sectionColor, 0.22);
                         card.style.background = `linear-gradient(180deg, ${hexToRgba(sectionColor, 0.08)}, rgba(255, 255, 255, 0.96) 28%, rgba(248, 250, 252, 0.92))`;
@@ -814,7 +967,7 @@
                             </div>
 
                             <div class="row g-3">
-                                <div class="col-md-5">
+                                <div class="col-md-4">
                                     <label class="form-label">Section Title</label>
                                     <input type="text" class="form-control"
                                         data-section-field="title"
@@ -830,12 +983,24 @@
                                         value="${sectionColor}"
                                         title="Choose a section color">
                                 </div>
-                                <div class="col-md-5">
+                                <div class="col-md-3">
+                                    <label class="form-label">Flow Placement</label>
+                                    <select class="form-select"
+                                        data-section-field="flow_type"
+                                        data-section-index="${sectionIndex}">
+                                        <option value="normal" ${sectionFlowType === 'normal' ? 'selected' : ''}>Normal survey flow</option>
+                                        <option value="special" ${sectionFlowType === 'special' ? 'selected' : ''}>Special follow-up only</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
                                     <label class="form-label">Section Description</label>
                                     <textarea class="form-control" rows="2"
                                         data-section-field="description"
                                         data-section-index="${sectionIndex}"
                                         placeholder="Short guidance shown at the top of this section">${escapeHtml(section.description || '')}</textarea>
+                                </div>
+                                <div class="col-12">
+                                    <small class="text-muted">${escapeHtml(sectionFlowNote)}</small>
                                 </div>
                             </div>
 
@@ -865,6 +1030,7 @@
                         const title = form.querySelector(`[data-section-field="title"][data-section-index="${sectionIndex}"]`)?.value || '';
                         const description = form.querySelector(`[data-section-field="description"][data-section-index="${sectionIndex}"]`)?.value || '';
                         const color = form.querySelector(`[data-section-field="color"][data-section-index="${sectionIndex}"]`)?.value || '';
+                        const flowType = form.querySelector(`[data-section-field="flow_type"][data-section-index="${sectionIndex}"]`)?.value || 'normal';
                         const sectionConditionQuestion = form.querySelector(`[data-condition-scope="section"][data-condition-section="${sectionIndex}"][data-condition-key="question_key"]`)?.value || '';
                         const sectionConditionValues = form.querySelector(`[data-condition-scope="section"][data-condition-section="${sectionIndex}"][data-condition-key="values"]`)?.value || '';
 
@@ -899,6 +1065,7 @@
                                 key: question.key || createKey('question'),
                                 label: form.querySelector(`[data-question-field="label"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
                                 type,
+                                flow_type: normalizeFlowType(form.querySelector(`[data-question-field="flow_type"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || 'normal'),
                                 required: Boolean(form.querySelector(`[data-question-field="required"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.checked),
                                 hint: form.querySelector(`[data-question-field="hint"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
                                 options: ['select', 'multiselect', 'radio', 'checkbox'].includes(type)
@@ -943,6 +1110,11 @@
                                     question_key: form.querySelector(`[data-condition-scope="question"][data-condition-section="${sectionIndex}"][data-condition-question="${questionIndex}"][data-condition-key="question_key"]`)?.value || '',
                                     values: parseStringList(form.querySelector(`[data-condition-scope="question"][data-condition-section="${sectionIndex}"][data-condition-question="${questionIndex}"][data-condition-key="values"]`)?.value || ''),
                                 }),
+                                route: normalizeRoute({
+                                    target_type: form.querySelector(`[data-route-field="target_type"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
+                                    target_key: form.querySelector(`[data-route-field="target_key"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || '',
+                                    values: parseStringList(form.querySelector(`[data-route-field="values"][data-section-index="${sectionIndex}"][data-question-index="${questionIndex}"]`)?.value || ''),
+                                }),
                             };
                         });
 
@@ -951,6 +1123,7 @@
                             title: title.trim(),
                             description: description.trim(),
                             color: normalizeHexColor(color, defaultSectionColor(sectionIndex)),
+                            flow_type: normalizeFlowType(flowType),
                             visibility: normalizeVisibility({
                                 question_key: sectionConditionQuestion,
                                 values: parseStringList(sectionConditionValues),
@@ -1095,9 +1268,13 @@
 
                     if (
                         target.matches('[data-question-field="type"]')
+                        || target.matches('[data-question-field="flow_type"]')
+                        || target.matches('[data-section-field="flow_type"]')
                         || target.matches('[data-question-field="scale_min"]')
                         || target.matches('[data-question-field="scale_max"]')
                         || target.matches('[data-question-field="scale_step"]')
+                        || target.matches('[data-route-field="target_type"]')
+                        || target.matches('[data-route-field="target_key"]')
                         || target.matches('[data-condition-key="question_key"]')
                     ) {
                         renderSections();
