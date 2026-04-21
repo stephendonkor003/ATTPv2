@@ -138,6 +138,16 @@
                                         <button type="button" class="btn btn-outline-secondary btn-sm" data-copy-text="{{ $surveyLink->public_url }}">
                                             <i class="feather-clipboard"></i>
                                         </button>
+                                        @can('me.configuration.manage')
+                                            <form action="{{ route('budget.me.surveys.links.destroy', $surveyLink) }}" method="POST" class="d-inline"
+                                                onsubmit="return confirm('Delete this survey and all of its responses?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete survey">
+                                                    <i class="feather-trash-2"></i>
+                                                </button>
+                                            </form>
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>

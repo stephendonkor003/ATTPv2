@@ -10,10 +10,13 @@ use App\Models\IndicatorDefinition;
 use App\Models\IndicatorDefinitionVariable;
 use App\Models\Indicator;
 use App\Models\IndicatorSurveyLink;
+use App\Models\IndicatorSurveyResponse;
+use App\Support\MeSurveyCleanup;
 use App\Support\MeSurvey;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class MeConfigurationController extends Controller
 {
@@ -525,7 +528,30 @@ class MeConfigurationController extends Controller
 
     public function methodologiesDestroy(Request $request, IndicatorMethodology $methodology)
     {
-        $methodology->delete();
+        $attachmentPaths = DB::transaction(function () use ($methodology) {
+            $responses = IndicatorSurveyResponse::query()
+                ->where('methodology_id', $methodology->id)
+                ->get(['id', 'answers']);
+
+            $attachmentPaths = MeSurveyCleanup::attachmentPathsFromResponses($responses);
+
+            IndicatorSurveyResponse::query()
+                ->where('methodology_id', $methodology->id)
+                ->delete();
+
+            IndicatorSurveyLink::query()
+                ->where('methodology_id', $methodology->id)
+                ->delete();
+
+            $methodology->delete();
+
+            return $attachmentPaths;
+        });
+
+        if (!empty($attachmentPaths)) {
+            Storage::disk('public')->delete($attachmentPaths);
+        }
+
         return $this->redirectAfterMethodologySave($request, 'Methodology deleted successfully');
     }
 

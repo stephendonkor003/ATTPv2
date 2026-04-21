@@ -133,7 +133,7 @@
                                         @endcan
                                         @can('me.configuration.manage')
                                             <form action="{{ route('budget.me-configuration.methodologies.destroy', $questionnaire) }}" method="POST" class="d-inline"
-                                                onsubmit="return confirm('Delete this questionnaire?');">
+                                                onsubmit="return confirm('Delete this questionnaire and its linked survey data?');">
                                                 @csrf
                                                 @method('DELETE')
                                                 <input type="hidden" name="from_survey_module" value="1">

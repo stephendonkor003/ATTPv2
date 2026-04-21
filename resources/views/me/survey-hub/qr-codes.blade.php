@@ -133,6 +133,16 @@
                                         <i class="feather-share-2 me-1"></i> Share
                                     </a>
                                 </div>
+                                @can('me.configuration.manage')
+                                    <form action="{{ route('budget.me.surveys.links.destroy', $surveyLink) }}" method="POST"
+                                        onsubmit="return confirm('Delete this survey and all of its responses?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                                            <i class="feather-trash-2 me-1"></i> Delete Survey
+                                        </button>
+                                    </form>
+                                @endcan
                             </div>
                         </div>
                     </div>

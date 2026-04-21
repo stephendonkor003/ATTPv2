@@ -6,12 +6,16 @@ use App\Models\Indicator;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorSurveyResponse;
+use App\Support\MeSurveyCleanup;
 use App\Support\MeSurvey;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use PDF;
 
 class MeSurveyController extends Controller
@@ -30,6 +34,8 @@ class MeSurveyController extends Controller
         $this->middleware('permission:me.configuration.manage')->only([
             'create',
             'edit',
+            'destroySurvey',
+            'destroyResponse',
         ]);
     }
 
@@ -148,6 +154,46 @@ class MeSurveyController extends Controller
         return view('me.survey-hub.edit', [
             'methodology' => $methodology,
         ]);
+    }
+
+    public function destroySurvey(IndicatorSurveyLink $surveyLink): RedirectResponse
+    {
+        $attachmentPaths = DB::transaction(function () use ($surveyLink) {
+            $responses = IndicatorSurveyResponse::query()
+                ->where('survey_link_id', $surveyLink->id)
+                ->get(['id', 'answers']);
+
+            $attachmentPaths = MeSurveyCleanup::attachmentPathsFromResponses($responses);
+
+            IndicatorSurveyResponse::query()
+                ->where('survey_link_id', $surveyLink->id)
+                ->delete();
+
+            $surveyLink->delete();
+
+            return $attachmentPaths;
+        });
+
+        if (!empty($attachmentPaths)) {
+            Storage::disk('public')->delete($attachmentPaths);
+        }
+
+        return redirect()
+            ->route('budget.me.surveys.responses')
+            ->with('success', 'Survey deleted successfully.');
+    }
+
+    public function destroyResponse(IndicatorSurveyResponse $response): RedirectResponse
+    {
+        $attachmentPaths = MeSurveyCleanup::attachmentPathsFromResponse($response);
+
+        $response->delete();
+
+        if (!empty($attachmentPaths)) {
+            Storage::disk('public')->delete($attachmentPaths);
+        }
+
+        return back()->with('success', 'Survey response deleted successfully.');
     }
 
     public function qrCodes(Request $request)

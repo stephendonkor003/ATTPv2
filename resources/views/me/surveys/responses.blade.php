@@ -34,6 +34,18 @@
                         <i class="feather-grid me-1"></i> QR Code
                     </button>
                 @endif
+                @can('me.configuration.manage')
+                    @if ($indicator->surveyLink)
+                        <form action="{{ route('budget.me.surveys.links.destroy', $indicator->surveyLink) }}" method="POST"
+                            onsubmit="return confirm('Delete this survey and all of its responses?');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="feather-trash-2 me-1"></i> Delete Survey
+                            </button>
+                        </form>
+                    @endif
+                @endcan
                 <a href="{{ route('budget.me.indicators.index', ['tab' => 'settings']) }}" class="btn btn-light border btn-sm">
                     <i class="feather-arrow-left me-1"></i> Back to Indicators
                 </a>
@@ -56,6 +68,9 @@
                                 <th>Organization</th>
                                 <th>Assigned Responsible Person/Agency</th>
                                 <th>Answers</th>
+                                @can('me.configuration.manage')
+                                    <th class="text-end">Actions</th>
+                                @endcan
                             </tr>
                         </thead>
                         <tbody>
@@ -131,10 +146,22 @@
                                             <span class="text-muted">No answers</span>
                                         @endif
                                     </td>
+                                    @can('me.configuration.manage')
+                                        <td class="text-end">
+                                            <form action="{{ route('budget.me.surveys.responses.destroy', $response) }}" method="POST"
+                                                onsubmit="return confirm('Delete this response?');" class="d-inline">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                    <i class="feather-trash-2"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    @endcan
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">
+                                    <td colspan="{{ auth()->user()?->can('me.configuration.manage') ? 7 : 6 }}" class="text-center text-muted py-4">
                                         No responses submitted yet.
                                     </td>
                                 </tr>

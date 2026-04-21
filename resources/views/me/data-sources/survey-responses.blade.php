@@ -35,6 +35,16 @@
                         href="{{ route('budget.me.data-sources.surveys.single-export', [$surveyLink, 'format' => 'pdf']) }}">
                         <i class="feather-file-text me-1"></i> Export PDF
                     </a>
+                    @can('me.configuration.manage')
+                        <form action="{{ route('budget.me.surveys.links.destroy', $surveyLink) }}" method="POST"
+                            onsubmit="return confirm('Delete this survey and all of its responses?');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="feather-trash-2 me-1"></i> Delete Survey
+                            </button>
+                        </form>
+                    @endcan
                     <a class="btn btn-outline-secondary btn-sm" href="{{ route('budget.me.data-sources.index') }}">
                         <i class="feather-arrow-left me-1"></i> Back
                     </a>
@@ -53,6 +63,9 @@
                                     <th>Submitted At</th>
                                     <th>Answers (JSON)</th>
                                     <th>IP</th>
+                                    @can('me.configuration.manage')
+                                        <th class="text-end">Actions</th>
+                                    @endcan
                                 </tr>
                             </thead>
                             <tbody>
@@ -64,10 +77,22 @@
                                         <td>{{ optional($resp->submitted_at)->format('d M Y H:i') ?? '-' }}</td>
                                         <td><code class="small">{{ json_encode($resp->answers) }}</code></td>
                                         <td>{{ $resp->ip_address ?? '-' }}</td>
+                                        @can('me.configuration.manage')
+                                            <td class="text-end">
+                                                <form action="{{ route('budget.me.surveys.responses.destroy', $resp) }}" method="POST"
+                                                    onsubmit="return confirm('Delete this response?');" class="d-inline">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                        <i class="feather-trash-2"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        @endcan
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="6" class="text-center text-muted py-3">No responses yet.</td>
+                                        <td colspan="{{ auth()->user()?->can('me.configuration.manage') ? 7 : 6 }}" class="text-center text-muted py-3">No responses yet.</td>
                                     </tr>
                                 @endforelse
                             </tbody>

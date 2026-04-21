@@ -41,6 +41,7 @@ class DatabaseSeeder extends Seeder
             ProcurementStructureSeeder::class,
             ProcurementPermissionsSeeder::class,
             MEConfigurationSeeder::class,
+            AttpWorkshopPostSurveySeeder::class,
             TreatySeeder::class,
             TreatyConstitutiveActStatusSeeder::class,
             ResourceDataSeeder::class,
