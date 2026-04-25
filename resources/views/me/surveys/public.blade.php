@@ -18,6 +18,7 @@
         $showBriefingPanel = (bool) data_get($presentationSettings, 'show_briefing_panel', true);
         $showSidebarGuide = (bool) data_get($presentationSettings, 'show_sidebar_guide', true);
         $showSideNavigation = (bool) data_get($presentationSettings, 'show_side_navigation', true);
+        $showStepNavigation = (bool) data_get($presentationSettings, 'show_step_navigation', true);
         $showIntroGuidance = (bool) data_get($presentationSettings, 'show_intro_guidance', true);
         $showProgressTracker = (bool) data_get($presentationSettings, 'show_progress_tracker', true);
         $useCompactTitle = (bool) data_get($presentationSettings, 'compact_title', false);
@@ -2053,7 +2054,7 @@
                 @csrf
 
                 <div class="workspace{{ $showSideNavigation ? '' : ' workspace--single' }}">
-                    @if ($showSideNavigation)
+                    @if ($showStepNavigation && $showSideNavigation)
                         <aside class="survey-rail">
                             <section class="rail-panel" @if (! $showSidebarGuide) hidden @endif>
                                 <span class="eyebrow" style="background: rgba(20, 62, 90, 0.06); border-color: rgba(20, 62, 90, 0.1); color: var(--primary);">Survey guide</span>
@@ -2114,7 +2115,7 @@
                     @endif
 
                     <main class="main-stage">
-                        @if (! $showSideNavigation)
+                        @if ($showStepNavigation && ! $showSideNavigation)
                             <div class="inline-nav-shell">
                                 <nav class="step-nav step-nav--inline" aria-label="Survey sections" id="stepNav">
                                     <button type="button" class="step-link is-current is-available" data-step-nav="intro">
