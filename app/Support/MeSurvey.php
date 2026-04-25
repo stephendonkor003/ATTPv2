@@ -705,6 +705,7 @@ class MeSurvey
             'show_header_meta' => true,
             'show_briefing_panel' => true,
             'show_sidebar_guide' => true,
+            'show_side_navigation' => true,
             'show_intro_guidance' => true,
             'show_progress_tracker' => true,
             'compact_title' => false,

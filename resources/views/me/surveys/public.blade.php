@@ -17,6 +17,7 @@
         $showHeaderMeta = (bool) data_get($presentationSettings, 'show_header_meta', true);
         $showBriefingPanel = (bool) data_get($presentationSettings, 'show_briefing_panel', true);
         $showSidebarGuide = (bool) data_get($presentationSettings, 'show_sidebar_guide', true);
+        $showSideNavigation = (bool) data_get($presentationSettings, 'show_side_navigation', true);
         $showIntroGuidance = (bool) data_get($presentationSettings, 'show_intro_guidance', true);
         $showProgressTracker = (bool) data_get($presentationSettings, 'show_progress_tracker', true);
         $useCompactTitle = (bool) data_get($presentationSettings, 'compact_title', false);
@@ -156,9 +157,9 @@
 
         .masthead__grid--single {
             grid-template-columns: minmax(0, 1fr);
-            align-items: center;
-            justify-items: center;
-            text-align: center;
+            align-items: end;
+            justify-items: stretch;
+            text-align: left;
         }
 
         .eyebrow {
@@ -185,11 +186,11 @@
         }
 
         .masthead__grid--single .masthead__copy {
-            width: min(100%, 780px);
-            justify-items: center;
-            align-content: center;
+            width: min(100%, 860px);
+            justify-items: start;
+            align-content: end;
             padding-top: 0;
-            margin-inline: auto;
+            margin-inline: 0 auto;
         }
 
         .masthead h1 {
@@ -201,7 +202,7 @@
         }
 
         .masthead--compact-title {
-            min-height: min(64svh, 520px);
+            min-height: min(52svh, 430px);
         }
 
         .masthead--compact-title .masthead__copy {
@@ -230,7 +231,7 @@
 
         .masthead__grid--single .eyebrow,
         .masthead__grid--single .masthead__meta {
-            justify-self: center;
+            justify-self: start;
         }
 
         .masthead__meta {
@@ -329,11 +330,29 @@
             align-items: start;
         }
 
+        .workspace--single {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
         .survey-rail {
             position: sticky;
             top: 18px;
             display: grid;
             gap: 16px;
+        }
+
+        .main-stage {
+            display: grid;
+            gap: 18px;
+        }
+
+        .inline-nav-shell {
+            border: 1px solid rgba(16, 34, 46, 0.08);
+            background: var(--surface);
+            box-shadow: var(--shadow-soft);
+            backdrop-filter: blur(18px);
+            border-radius: 24px;
+            padding: 14px;
         }
 
         .rail-panel,
@@ -399,6 +418,14 @@
             gap: 10px;
         }
 
+        .step-nav--inline {
+            grid-auto-flow: column;
+            grid-auto-columns: minmax(220px, 1fr);
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scroll-snap-type: x proximity;
+        }
+
         .step-link {
             width: 100%;
             display: grid;
@@ -412,6 +439,11 @@
             text-align: left;
             cursor: pointer;
             transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .step-nav--inline .step-link {
+            min-height: 100%;
+            scroll-snap-align: start;
         }
 
         .step-link:disabled {
@@ -717,6 +749,161 @@
         .intro-panel {
             display: grid;
             gap: 18px;
+        }
+
+        .intro-scene {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.15fr);
+            align-items: start;
+        }
+
+        .intro-scene__panel {
+            position: relative;
+            overflow: hidden;
+            border-radius: 28px;
+            padding: clamp(20px, 3vw, 28px);
+            border: 1px solid rgba(16, 34, 46, 0.08);
+            box-shadow: var(--shadow-soft);
+        }
+
+        .intro-scene__panel--welcome {
+            color: #f8fafc;
+            background:
+                radial-gradient(circle at top right, rgba(255, 255, 255, 0.14), transparent 34%),
+                linear-gradient(150deg, #102c42 0%, #1a4a69 52%, #b9782f 100%);
+        }
+
+        .intro-scene__panel--welcome::after {
+            content: "";
+            position: absolute;
+            inset: auto -12% -28% auto;
+            width: 220px;
+            height: 220px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 68%);
+            pointer-events: none;
+        }
+
+        .intro-scene__eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: fit-content;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(248, 250, 252, 0.92);
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .intro-scene__title {
+            margin: 18px 0 10px;
+            max-width: 12ch;
+            font: 700 clamp(1.85rem, 3vw, 2.8rem)/1.06 var(--font-display);
+            letter-spacing: -0.02em;
+        }
+
+        .intro-scene__text {
+            margin: 0;
+            max-width: 34rem;
+            color: rgba(241, 245, 249, 0.9);
+            font-size: 0.98rem;
+            line-height: 1.7;
+        }
+
+        .intro-scene__facts {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-top: 26px;
+        }
+
+        .intro-fact {
+            display: grid;
+            gap: 4px;
+            padding: 14px 14px 12px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.09);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .intro-fact strong {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        .intro-fact span {
+            font-size: 0.76rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: rgba(226, 232, 240, 0.82);
+        }
+
+        .intro-scene__panel--form {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 246, 0.94));
+        }
+
+        .intro-form-head {
+            display: flex;
+            align-items: start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .intro-form-kicker {
+            display: inline-block;
+            margin-bottom: 8px;
+            color: var(--primary);
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .intro-form-head h3 {
+            margin: 0;
+            color: var(--ink);
+            font: 700 clamp(1.35rem, 2vw, 1.9rem)/1.08 var(--font-display);
+            letter-spacing: -0.02em;
+        }
+
+        .intro-form-head p {
+            margin: 8px 0 0;
+            color: var(--muted);
+        }
+
+        .intro-form-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            padding: 9px 12px;
+            border-radius: 999px;
+            background: rgba(20, 62, 90, 0.08);
+            border: 1px solid rgba(20, 62, 90, 0.12);
+            color: var(--primary);
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .intro-grid--profile {
+            gap: 16px;
+        }
+
+        .intro-scene__panel--form .field {
+            padding: 16px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(16, 34, 46, 0.08);
         }
 
         .intro-panel__copy {
@@ -1282,6 +1469,7 @@
                 max-width: 13ch;
             }
 
+            .intro-scene,
             .intro-grid,
             .choice-list--split {
                 grid-template-columns: 1fr;
@@ -1371,6 +1559,12 @@
             .step-header h3,
             .result-surface h2 {
                 line-height: 1.04;
+            }
+
+            .intro-scene__facts,
+            .intro-form-head {
+                grid-template-columns: 1fr;
+                flex-direction: column;
             }
 
             .action-dock {
@@ -1479,66 +1673,101 @@
                 novalidate>
                 @csrf
 
-                <div class="workspace">
-                    <aside class="survey-rail">
-                        <section class="rail-panel" @if (! $showSidebarGuide) hidden @endif>
-                            <span class="eyebrow" style="background: rgba(20, 62, 90, 0.06); border-color: rgba(20, 62, 90, 0.1); color: var(--primary);">Survey guide</span>
-                            <h2>Move through the questionnaire with confidence.</h2>
-                            <p>
-                                Use the section list to revisit completed sections. The current section updates live as you answer.
-                            </p>
+                <div class="workspace{{ $showSideNavigation ? '' : ' workspace--single' }}">
+                    @if ($showSideNavigation)
+                        <aside class="survey-rail">
+                            <section class="rail-panel" @if (! $showSidebarGuide) hidden @endif>
+                                <span class="eyebrow" style="background: rgba(20, 62, 90, 0.06); border-color: rgba(20, 62, 90, 0.1); color: var(--primary);">Survey guide</span>
+                                <h2>Move through the questionnaire with confidence.</h2>
+                                <p>
+                                    Use the section list to revisit completed sections. The current section updates live as you answer.
+                                </p>
 
-                            <div class="rail-stats">
-                                <div class="rail-stat">
-                                    <span>Visible sections</span>
-                                    <strong id="railSectionCount">{{ $sectionCount }}</strong>
+                                <div class="rail-stats">
+                                    <div class="rail-stat">
+                                        <span>Visible sections</span>
+                                        <strong id="railSectionCount">{{ $sectionCount }}</strong>
+                                    </div>
+                                    <div class="rail-stat">
+                                        <span>Current step</span>
+                                        <strong id="railCurrentStep">Introduction</strong>
+                                    </div>
+                                    <div class="rail-stat">
+                                        <span>Questions in view</span>
+                                        <strong id="railQuestionCount">Respondent profile</strong>
+                                    </div>
+                                    <div class="rail-stat">
+                                        <span>Progress detail</span>
+                                        <strong id="railAnsweredCount">0% complete</strong>
+                                    </div>
                                 </div>
-                                <div class="rail-stat">
-                                    <span>Current step</span>
-                                    <strong id="railCurrentStep">Introduction</strong>
-                                </div>
-                                <div class="rail-stat">
-                                    <span>Questions in view</span>
-                                    <strong id="railQuestionCount">Respondent profile</strong>
-                                </div>
-                                <div class="rail-stat">
-                                    <span>Progress detail</span>
-                                    <strong id="railAnsweredCount">0% complete</strong>
-                                </div>
-                            </div>
-                        </section>
+                            </section>
 
-                        <nav class="step-nav" aria-label="Survey sections" id="stepNav">
-                            <button type="button" class="step-link is-current is-available" data-step-nav="intro">
-                                <span class="step-link__index">0</span>
-                                <span class="step-link__body">
-                                    <strong>Introduction</strong>
-                                    <small data-nav-count>Respondent profile</small>
-                                    <span class="step-link__status" data-nav-status>Current</span>
-                                </span>
-                            </button>
-
-                            @foreach ($normalSections as $sectionIndex => $section)
-                                @php
-                                    $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
-                                    $sectionColor = (string) data_get($section, 'color', '#143E5A');
-                                    $sectionQuestionCount = collect($section['questions'] ?? [])
-                                        ->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) !== 'special')
-                                        ->count();
-                                @endphp
-                                <button type="button" class="step-link step-link--section" data-step-nav="{{ $sectionKey }}" style="--section-accent: {{ $sectionColor }};">
-                                    <span class="step-link__index">{{ $sectionIndex + 1 }}</span>
+                            <nav class="step-nav" aria-label="Survey sections" id="stepNav">
+                                <button type="button" class="step-link is-current is-available" data-step-nav="intro">
+                                    <span class="step-link__index">0</span>
                                     <span class="step-link__body">
-                                        <strong>{{ $section['title'] }}</strong>
-                                        <small data-nav-count>{{ $sectionQuestionCount }} question{{ $sectionQuestionCount === 1 ? '' : 's' }}</small>
-                                        <span class="step-link__status" data-nav-status>Upcoming</span>
+                                        <strong>Introduction</strong>
+                                        <small data-nav-count>Respondent profile</small>
+                                        <span class="step-link__status" data-nav-status>Current</span>
                                     </span>
                                 </button>
-                            @endforeach
-                        </nav>
-                    </aside>
 
-                    <main>
+                                @foreach ($normalSections as $sectionIndex => $section)
+                                    @php
+                                        $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
+                                        $sectionColor = (string) data_get($section, 'color', '#143E5A');
+                                        $sectionQuestionCount = collect($section['questions'] ?? [])
+                                            ->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) !== 'special')
+                                            ->count();
+                                    @endphp
+                                    <button type="button" class="step-link step-link--section" data-step-nav="{{ $sectionKey }}" style="--section-accent: {{ $sectionColor }};">
+                                        <span class="step-link__index">{{ $sectionIndex + 1 }}</span>
+                                        <span class="step-link__body">
+                                            <strong>{{ $section['title'] }}</strong>
+                                            <small data-nav-count>{{ $sectionQuestionCount }} question{{ $sectionQuestionCount === 1 ? '' : 's' }}</small>
+                                            <span class="step-link__status" data-nav-status>Upcoming</span>
+                                        </span>
+                                    </button>
+                                @endforeach
+                            </nav>
+                        </aside>
+                    @endif
+
+                    <main class="main-stage">
+                        @if (! $showSideNavigation)
+                            <div class="inline-nav-shell">
+                                <nav class="step-nav step-nav--inline" aria-label="Survey sections" id="stepNav">
+                                    <button type="button" class="step-link is-current is-available" data-step-nav="intro">
+                                        <span class="step-link__index">0</span>
+                                        <span class="step-link__body">
+                                            <strong>Introduction</strong>
+                                            <small data-nav-count>Respondent profile</small>
+                                            <span class="step-link__status" data-nav-status>Current</span>
+                                        </span>
+                                    </button>
+
+                                    @foreach ($normalSections as $sectionIndex => $section)
+                                        @php
+                                            $sectionKey = (string) ($section['key'] ?? ('section_' . $sectionIndex));
+                                            $sectionColor = (string) data_get($section, 'color', '#143E5A');
+                                            $sectionQuestionCount = collect($section['questions'] ?? [])
+                                                ->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) !== 'special')
+                                                ->count();
+                                        @endphp
+                                        <button type="button" class="step-link step-link--section" data-step-nav="{{ $sectionKey }}" style="--section-accent: {{ $sectionColor }};">
+                                            <span class="step-link__index">{{ $sectionIndex + 1 }}</span>
+                                            <span class="step-link__body">
+                                                <strong>{{ $section['title'] }}</strong>
+                                                <small data-nav-count>{{ $sectionQuestionCount }} question{{ $sectionQuestionCount === 1 ? '' : 's' }}</small>
+                                                <span class="step-link__status" data-nav-status>Upcoming</span>
+                                            </span>
+                                        </button>
+                                    @endforeach
+                                </nav>
+                            </div>
+                        @endif
+
                         <section class="surface">
                             <div class="surface__head">
                                 <div class="status-row">
@@ -1577,121 +1806,165 @@
                                         data-step-id="intro"
                                         data-step-kind="intro"
                                         data-step-label="Introduction">
-                                        <div class="step-header">
-                                            <div class="step-header__top">
-                                                <span class="step-kicker">Welcome</span>
-                                                <span class="step-counter">Step 0 of {{ $sectionCount }}</span>
-                                            </div>
-                                            <h2>Before you begin</h2>
-                                            @if ($showIntroGuidance)
-                                                <p>
-                                                    Capture your respondent details, then move through each section below.
-                                                    You can return to any completed section before you submit your response.
-                                                </p>
-                                            @endif
-                                        </div>
-
-                                        <div class="intro-panel">
-                                            @if ($showIntroGuidance)
-                                                <div class="intro-panel__copy">
-                                                    <strong>How this form works</strong>
+                                        @if ($showSideNavigation)
+                                            <div class="step-header">
+                                                <div class="step-header__top">
+                                                    <span class="step-kicker">Welcome</span>
+                                                    <span class="step-counter">Step 0 of {{ $sectionCount }}</span>
+                                                </div>
+                                                <h2>Before you begin</h2>
+                                                @if ($showIntroGuidance)
                                                     <p>
-                                                        Each screen focuses on one section only. Some questions or sections may appear
-                                                        only when they are relevant to your previous responses.
+                                                        Capture your respondent details, then move through each section below.
+                                                        You can return to any completed section before you submit your response.
                                                     </p>
-                                                </div>
-                                            @endif
+                                                @endif
+                                            </div>
 
-                                            <div class="intro-grid">
-                                                <div class="field">
-                                                    <label for="respondent_name">
-                                                        {{ data_get($respondentNameConfig, 'label', 'Your name') }}
-                                                        @if ($respondentNameRequired)
-                                                            <span aria-hidden="true">*</span>
-                                                        @endif
-                                                    </label>
-                                                    <input id="respondent_name"
-                                                        type="text"
-                                                        name="respondent_name"
-                                                        value="{{ old('respondent_name') }}"
-                                                        placeholder="{{ data_get($respondentNameConfig, 'placeholder', 'Enter your full name') }}"
-                                                        data-respondent-field
-                                                        @if ($respondentNameRequired) required aria-required="true" @endif>
-                                                    @if ($showRespondentNotes)
-                                                        <div class="field-note">This helps the team interpret your feedback.</div>
-                                                    @endif
-                                                    @error('respondent_name')
-                                                        <div class="field-error">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
+                                            <div class="intro-panel">
+                                                @if ($showIntroGuidance)
+                                                    <div class="intro-panel__copy">
+                                                        <strong>How this form works</strong>
+                                                        <p>
+                                                            Each screen focuses on one section only. Some questions or sections may appear
+                                                            only when they are relevant to your previous responses.
+                                                        </p>
+                                                    </div>
+                                                @endif
 
-                                                <div class="field">
-                                                    <label for="respondent_email">
-                                                        {{ data_get($respondentEmailConfig, 'label', 'Your email') }}
-                                                        @if ($respondentEmailRequired)
-                                                            <span aria-hidden="true">*</span>
-                                                        @endif
-                                                    </label>
-                                                    <input id="respondent_email"
-                                                        type="email"
-                                                        name="respondent_email"
-                                                        value="{{ old('respondent_email') }}"
-                                                        placeholder="{{ data_get($respondentEmailConfig, 'placeholder', 'name@example.org') }}"
-                                                        data-respondent-field
-                                                        @if ($respondentEmailRequired) required aria-required="true" @endif>
-                                                    @if ($showRespondentNotes)
-                                                        <div class="field-note">Optional, but useful for follow-up clarification.</div>
-                                                    @endif
-                                                    @error('respondent_email')
-                                                        <div class="field-error">{{ $message }}</div>
-                                                    @enderror
+                                                <div class="intro-grid">
+                                        @else
+                                            <div class="intro-scene">
+                                                <div class="intro-scene__panel intro-scene__panel--welcome">
+                                                    <span class="intro-scene__eyebrow">Welcome</span>
+                                                    <h2 class="intro-scene__title">Share your workshop feedback.</h2>
+                                                    <p class="intro-scene__text">
+                                                        Start with your respondent details, then continue through the survey section by section.
+                                                    </p>
+
+                                                    <div class="intro-scene__facts">
+                                                        <div class="intro-fact">
+                                                            <strong>{{ $estimatedMinutes > 0 ? $estimatedMinutes : '10' }}</strong>
+                                                            <span>{{ $estimatedMinutes === 1 ? 'Minute' : 'Minutes' }}</span>
+                                                        </div>
+                                                        <div class="intro-fact">
+                                                            <strong>{{ $sectionCount }}</strong>
+                                                            <span>Sections</span>
+                                                        </div>
+                                                        <div class="intro-fact">
+                                                            <strong>4</strong>
+                                                            <span>Required fields</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
 
-                                                <div class="field">
-                                                    <label for="respondent_phone">
-                                                        {{ data_get($respondentPhoneConfig, 'label', 'Phone') }}
-                                                        @if ($respondentPhoneRequired)
-                                                            <span aria-hidden="true">*</span>
-                                                        @endif
-                                                    </label>
-                                                    <input id="respondent_phone"
-                                                        type="text"
-                                                        name="respondent_phone"
-                                                        value="{{ old('respondent_phone') }}"
-                                                        placeholder="{{ data_get($respondentPhoneConfig, 'placeholder', 'Enter a phone contact') }}"
-                                                        data-respondent-field
-                                                        @if ($respondentPhoneRequired) required aria-required="true" @endif>
-                                                    @if ($showRespondentNotes)
-                                                        <div class="field-note">Optional.</div>
-                                                    @endif
-                                                    @error('respondent_phone')
-                                                        <div class="field-error">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
+                                                <div class="intro-scene__panel intro-scene__panel--form">
+                                                    <div class="intro-form-head">
+                                                        <div>
+                                                            <span class="intro-form-kicker">Respondent details</span>
+                                                            <h3>Complete your details to begin</h3>
+                                                            <p>These details are required before you move into the survey sections.</p>
+                                                        </div>
+                                                        <span class="intro-form-badge">All fields required</span>
+                                                    </div>
 
-                                                <div class="field">
-                                                    <label for="respondent_organization">
-                                                        {{ data_get($respondentOrganizationConfig, 'label', 'Organization or agency') }}
-                                                        @if ($respondentOrganizationRequired)
-                                                            <span aria-hidden="true">*</span>
+                                                    <div class="intro-grid intro-grid--profile">
+                                        @endif
+                                                    <div class="field">
+                                                        <label for="respondent_name">
+                                                            {{ data_get($respondentNameConfig, 'label', 'Your name') }}
+                                                            @if ($respondentNameRequired)
+                                                                <span aria-hidden="true">*</span>
+                                                            @endif
+                                                        </label>
+                                                        <input id="respondent_name"
+                                                            type="text"
+                                                            name="respondent_name"
+                                                            value="{{ old('respondent_name') }}"
+                                                            placeholder="{{ data_get($respondentNameConfig, 'placeholder', 'Enter your full name') }}"
+                                                            data-respondent-field
+                                                            @if ($respondentNameRequired) required aria-required="true" @endif>
+                                                        @if ($showRespondentNotes)
+                                                            <div class="field-note">This helps the team interpret your feedback.</div>
                                                         @endif
-                                                    </label>
-                                                    <input id="respondent_organization"
-                                                        type="text"
-                                                        name="respondent_organization"
-                                                        value="{{ old('respondent_organization') }}"
-                                                        placeholder="{{ data_get($respondentOrganizationConfig, 'placeholder', 'Enter your institution or team') }}"
-                                                        data-respondent-field
-                                                        @if ($respondentOrganizationRequired) required aria-required="true" @endif>
-                                                    @if ($showRespondentNotes)
-                                                        <div class="field-note">This helps group responses by participation context.</div>
-                                                    @endif
-                                                    @error('respondent_organization')
-                                                        <div class="field-error">{{ $message }}</div>
-                                                    @enderror
+                                                        @error('respondent_name')
+                                                            <div class="field-error">{{ $message }}</div>
+                                                        @enderror
+                                                    </div>
+
+                                                    <div class="field">
+                                                        <label for="respondent_email">
+                                                            {{ data_get($respondentEmailConfig, 'label', 'Your email') }}
+                                                            @if ($respondentEmailRequired)
+                                                                <span aria-hidden="true">*</span>
+                                                            @endif
+                                                        </label>
+                                                        <input id="respondent_email"
+                                                            type="email"
+                                                            name="respondent_email"
+                                                            value="{{ old('respondent_email') }}"
+                                                            placeholder="{{ data_get($respondentEmailConfig, 'placeholder', 'name@example.org') }}"
+                                                            data-respondent-field
+                                                            @if ($respondentEmailRequired) required aria-required="true" @endif>
+                                                        @if ($showRespondentNotes)
+                                                            <div class="field-note">Optional, but useful for follow-up clarification.</div>
+                                                        @endif
+                                                        @error('respondent_email')
+                                                            <div class="field-error">{{ $message }}</div>
+                                                        @enderror
+                                                    </div>
+
+                                                    <div class="field">
+                                                        <label for="respondent_phone">
+                                                            {{ data_get($respondentPhoneConfig, 'label', 'Phone') }}
+                                                            @if ($respondentPhoneRequired)
+                                                                <span aria-hidden="true">*</span>
+                                                            @endif
+                                                        </label>
+                                                        <input id="respondent_phone"
+                                                            type="text"
+                                                            name="respondent_phone"
+                                                            value="{{ old('respondent_phone') }}"
+                                                            placeholder="{{ data_get($respondentPhoneConfig, 'placeholder', 'Enter a phone contact') }}"
+                                                            data-respondent-field
+                                                            @if ($respondentPhoneRequired) required aria-required="true" @endif>
+                                                        @if ($showRespondentNotes)
+                                                            <div class="field-note">Optional.</div>
+                                                        @endif
+                                                        @error('respondent_phone')
+                                                            <div class="field-error">{{ $message }}</div>
+                                                        @enderror
+                                                    </div>
+
+                                                    <div class="field">
+                                                        <label for="respondent_organization">
+                                                            {{ data_get($respondentOrganizationConfig, 'label', 'Organization or agency') }}
+                                                            @if ($respondentOrganizationRequired)
+                                                                <span aria-hidden="true">*</span>
+                                                            @endif
+                                                        </label>
+                                                        <input id="respondent_organization"
+                                                            type="text"
+                                                            name="respondent_organization"
+                                                            value="{{ old('respondent_organization') }}"
+                                                            placeholder="{{ data_get($respondentOrganizationConfig, 'placeholder', 'Enter your institution or team') }}"
+                                                            data-respondent-field
+                                                            @if ($respondentOrganizationRequired) required aria-required="true" @endif>
+                                                        @if ($showRespondentNotes)
+                                                            <div class="field-note">This helps group responses by participation context.</div>
+                                                        @endif
+                                                        @error('respondent_organization')
+                                                            <div class="field-error">{{ $message }}</div>
+                                                        @enderror
+                                                    </div>
+                                        @if ($showSideNavigation)
                                                 </div>
                                             </div>
-                                        </div>
+                                        @else
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endif
                                     </section>
 
                                     @foreach ($normalSections as $sectionIndex => $section)
@@ -1855,6 +2128,12 @@
                 let navigationHistory = [];
                 let branchContextStack = [];
                 let activeSpecialSteps = new Set();
+
+                function setText(node, value) {
+                    if (node) {
+                        node.textContent = value;
+                    }
+                }
 
                 function parseJsonAttribute(element, attribute) {
                     try {
@@ -2325,39 +2604,42 @@
                     const questionCount = countVisibleQuestions(activeStep);
                     const answeredCount = countAnsweredQuestions(activeStep);
 
-                    progressLabel.textContent = activeStep.getAttribute('data-step-label') || 'Survey';
+                    setText(progressLabel, activeStep.getAttribute('data-step-label') || 'Survey');
 
                     if (activeKind === 'intro') {
-                        progressMeta.textContent = `Step 0 of ${totalSections}`;
+                        setText(progressMeta, `Step 0 of ${totalSections}`);
                     } else if (isSpecialStep(activeStep)) {
-                        progressMeta.textContent = `Follow-up after step ${Math.max(completedNormalSteps, 1)} of ${totalSections}`;
+                        setText(progressMeta, `Follow-up after step ${Math.max(completedNormalSteps, 1)} of ${totalSections}`);
                     } else {
-                        progressMeta.textContent = `Step ${completedNormalSteps} of ${totalSections}`;
+                        setText(progressMeta, `Step ${completedNormalSteps} of ${totalSections}`);
                     }
 
-                    progressFill.style.width = `${percent}%`;
-                    progressPercent.textContent = `${percent}% complete`;
-                    progressDescriptor.textContent = activeKind === 'intro'
+                    if (progressFill) {
+                        progressFill.style.width = `${percent}%`;
+                    }
+
+                    setText(progressPercent, `${percent}% complete`);
+                    setText(progressDescriptor, activeKind === 'intro'
                         ? 'Review and continue'
                         : (isSpecialStep(activeStep)
                             ? `${answeredCount} of ${questionCount} answered in this follow-up`
-                            : `${answeredCount} of ${questionCount} answered in this section`);
+                            : `${answeredCount} of ${questionCount} answered in this section`));
 
-                    railSectionCount.textContent = totalSections;
-                    railCurrentStep.textContent = activeStep.getAttribute('data-step-label') || 'Survey';
-                    railQuestionCount.textContent = activeKind === 'intro'
+                    setText(railSectionCount, totalSections);
+                    setText(railCurrentStep, activeStep.getAttribute('data-step-label') || 'Survey');
+                    setText(railQuestionCount, activeKind === 'intro'
                         ? 'Respondent profile'
-                        : `${questionCount} visible question${questionCount === 1 ? '' : 's'}`;
-                    railAnsweredCount.textContent = activeKind === 'intro'
+                        : `${questionCount} visible question${questionCount === 1 ? '' : 's'}`);
+                    setText(railAnsweredCount, activeKind === 'intro'
                         ? `${countCompletedRespondentFields()} of ${respondentFields.length} profile fields filled`
-                        : `${answeredCount} of ${questionCount} answered`;
+                        : `${answeredCount} of ${questionCount} answered`);
 
-                    actionStepTitle.textContent = activeStep.getAttribute('data-step-label') || 'Survey';
-                    actionStepMeta.textContent = activeKind === 'intro'
+                    setText(actionStepTitle, activeStep.getAttribute('data-step-label') || 'Survey');
+                    setText(actionStepMeta, activeKind === 'intro'
                         ? 'Review the introduction and continue when ready.'
                         : (isSpecialStep(activeStep)
                             ? 'This is a special follow-up page triggered by one of your previous answers.'
-                            : (hasNextStep ? 'Complete this section before moving forward.' : 'Review this section, then submit your survey.'));
+                            : (hasNextStep ? 'Complete this section before moving forward.' : 'Review this section, then submit your survey.')));
 
                     backButton.hidden = navigationHistory.length === 0;
                     nextButton.hidden = !hasNextStep;
