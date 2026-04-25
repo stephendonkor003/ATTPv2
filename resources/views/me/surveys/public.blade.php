@@ -2191,7 +2191,6 @@
                                         @if ($showSideNavigation)
                                             <div class="step-header">
                                                 <div class="step-header__top">
-                                                    <span class="step-kicker">Welcome</span>
                                                     <span class="step-counter">Step 0 of {{ $sectionCount }}</span>
                                                 </div>
                                                 <h2>Before you begin</h2>
@@ -2218,8 +2217,6 @@
                                         @else
                                             <div class="intro-scene">
                                                 <div class="intro-scene__panel intro-scene__panel--welcome">
-                                                    <span class="intro-scene__eyebrow">Welcome</span>
-
                                                     <div class="intro-scene__facts">
                                                         <div class="intro-fact">
                                                             <strong>{{ $estimatedMinutes > 0 ? $estimatedMinutes : '10' }}</strong>
