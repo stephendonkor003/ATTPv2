@@ -156,6 +156,9 @@
 
         .masthead__grid--single {
             grid-template-columns: minmax(0, 1fr);
+            align-items: center;
+            justify-items: center;
+            text-align: center;
         }
 
         .eyebrow {
@@ -181,17 +184,35 @@
             padding-top: 14px;
         }
 
+        .masthead__grid--single .masthead__copy {
+            width: min(100%, 780px);
+            justify-items: center;
+            align-content: center;
+            padding-top: 0;
+            margin-inline: auto;
+        }
+
         .masthead h1 {
             margin: 0;
             max-width: 12ch;
             font: 700 clamp(2.45rem, 5vw, 5.1rem)/0.94 var(--font-display);
             letter-spacing: -0.03em;
+            text-wrap: balance;
+        }
+
+        .masthead--compact-title {
+            min-height: min(64svh, 520px);
+        }
+
+        .masthead--compact-title .masthead__copy {
+            gap: 14px;
         }
 
         .masthead--compact-title h1 {
-            max-width: 18ch;
-            font-size: clamp(1.95rem, 3.8vw, 3.45rem);
-            line-height: 1.02;
+            max-width: 20ch;
+            font-size: clamp(1.75rem, 3vw, 2.8rem);
+            line-height: 1.08;
+            letter-spacing: -0.02em;
         }
 
         .masthead__lead {
@@ -199,6 +220,17 @@
             max-width: 62ch;
             color: rgba(241, 245, 249, 0.92);
             font-size: 1.03rem;
+            line-height: 1.65;
+        }
+
+        .masthead__grid--single .masthead__lead {
+            max-width: 58ch;
+            font-size: 0.96rem;
+        }
+
+        .masthead__grid--single .eyebrow,
+        .masthead__grid--single .masthead__meta {
+            justify-self: center;
         }
 
         .masthead__meta {
