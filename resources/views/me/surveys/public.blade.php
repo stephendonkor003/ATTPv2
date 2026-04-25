@@ -2219,10 +2219,6 @@
                                             <div class="intro-scene">
                                                 <div class="intro-scene__panel intro-scene__panel--welcome">
                                                     <span class="intro-scene__eyebrow">Welcome</span>
-                                                    <h2 class="intro-scene__title">Share your workshop feedback.</h2>
-                                                    <p class="intro-scene__text">
-                                                        Start with your respondent details, then continue through the survey section by section.
-                                                    </p>
 
                                                     <div class="intro-scene__facts">
                                                         <div class="intro-fact">
