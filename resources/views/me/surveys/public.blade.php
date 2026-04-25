@@ -1981,7 +1981,9 @@
         <section class="masthead{{ $useCompactTitle ? ' masthead--compact-title' : '' }}">
             <div class="masthead__grid{{ $showBriefingPanel ? '' : ' masthead__grid--single' }}">
                 <div class="masthead__copy">
-                    <span class="eyebrow">ATTP Monitoring, Evaluation and Learning</span>
+                    @if (! $useSimpleLayout)
+                        <span class="eyebrow">ATTP Monitoring, Evaluation and Learning</span>
+                    @endif
                     <h1>{{ $surveyTitle }}</h1>
                     <p class="masthead__lead">
                         {{ data_get($surveyConfig, 'intro', 'Please complete the survey carefully. Move section by section, review your answers, and submit once you are satisfied.') }}
