@@ -38,13 +38,9 @@ class PublicIndicatorSurveyController extends Controller
 
         abort_if(!$link || !$methodology || empty($questions), 404);
 
-        $validator = Validator::make($request->all(), [
-            'respondent_name' => 'nullable|string|max:255',
-            'respondent_email' => 'nullable|email|max:255',
-            'respondent_phone' => 'nullable|string|max:60',
-            'respondent_organization' => 'nullable|string|max:255',
+        $validator = Validator::make($request->all(), array_merge($this->respondentValidationRules($surveyConfig), [
             'answers' => 'nullable|array',
-        ], [
+        ]), [
             'answers.array' => 'Please complete the survey form before submitting.',
         ]);
 
@@ -224,6 +220,21 @@ class PublicIndicatorSurveyController extends Controller
         })->all();
 
         return [$responsibleUserIds->all(), $snapshot];
+    }
+
+    protected function respondentValidationRules(array $surveyConfig): array
+    {
+        return [
+            'respondent_name' => [$this->respondentFieldIsRequired($surveyConfig, 'name') ? 'required' : 'nullable', 'string', 'max:255'],
+            'respondent_email' => [$this->respondentFieldIsRequired($surveyConfig, 'email') ? 'required' : 'nullable', 'email', 'max:255'],
+            'respondent_phone' => [$this->respondentFieldIsRequired($surveyConfig, 'phone') ? 'required' : 'nullable', 'string', 'max:60'],
+            'respondent_organization' => [$this->respondentFieldIsRequired($surveyConfig, 'organization') ? 'required' : 'nullable', 'string', 'max:255'],
+        ];
+    }
+
+    protected function respondentFieldIsRequired(array $surveyConfig, string $field): bool
+    {
+        return (bool) data_get($surveyConfig, 'respondent.fields.' . $field . '.required', false);
     }
 
     protected function rawAnswerForQuestion(Request $request, array $question): mixed

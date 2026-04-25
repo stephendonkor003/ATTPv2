@@ -5,14 +5,32 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ data_get($surveyConfig, 'title', 'Public Survey') }}</title>
     @php
+        $surveyTitle = (string) data_get($surveyConfig, 'title', 'Public Survey');
         $normalSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'effective_flow_type', data_get($section, 'flow_type', 'normal'))) !== 'special')->values();
         $specialSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'effective_flow_type', data_get($section, 'flow_type', 'normal'))) === 'special')->values();
         $specialQuestions = collect($questions)->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) === 'special')->values();
         $sectionCount = $normalSections->count();
         $estimatedMinutes = (int) data_get($surveyConfig, 'estimated_minutes', 0);
+        $presentationSettings = (array) data_get($surveyConfig, 'presentation', []);
+        $respondentSettings = (array) data_get($surveyConfig, 'respondent', []);
+        $showHeaderMeta = (bool) data_get($presentationSettings, 'show_header_meta', true);
+        $showBriefingPanel = (bool) data_get($presentationSettings, 'show_briefing_panel', true);
+        $showSidebarGuide = (bool) data_get($presentationSettings, 'show_sidebar_guide', true);
+        $showIntroGuidance = (bool) data_get($presentationSettings, 'show_intro_guidance', true);
+        $showProgressTracker = (bool) data_get($presentationSettings, 'show_progress_tracker', true);
+        $useCompactTitle = (bool) data_get($presentationSettings, 'compact_title', false);
+        $showRespondentNotes = (bool) data_get($respondentSettings, 'show_notes', true);
+        $respondentNameConfig = (array) data_get($respondentSettings, 'fields.name', []);
+        $respondentEmailConfig = (array) data_get($respondentSettings, 'fields.email', []);
+        $respondentPhoneConfig = (array) data_get($respondentSettings, 'fields.phone', []);
+        $respondentOrganizationConfig = (array) data_get($respondentSettings, 'fields.organization', []);
+        $respondentNameRequired = (bool) data_get($respondentNameConfig, 'required', false);
+        $respondentEmailRequired = (bool) data_get($respondentEmailConfig, 'required', false);
+        $respondentPhoneRequired = (bool) data_get($respondentPhoneConfig, 'required', false);
+        $respondentOrganizationRequired = (bool) data_get($respondentOrganizationConfig, 'required', false);
     @endphp
+    <title>{{ $surveyTitle }}</title>
     <style>
         :root {
             --page: #f2f6f3;
@@ -136,6 +154,10 @@
             align-items: end;
         }
 
+        .masthead__grid--single {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
         .eyebrow {
             display: inline-flex;
             align-items: center;
@@ -164,6 +186,12 @@
             max-width: 12ch;
             font: 700 clamp(2.45rem, 5vw, 5.1rem)/0.94 var(--font-display);
             letter-spacing: -0.03em;
+        }
+
+        .masthead--compact-title h1 {
+            max-width: 18ch;
+            font-size: clamp(1.95rem, 3.8vw, 3.45rem);
+            line-height: 1.02;
         }
 
         .masthead__lead {
@@ -1344,53 +1372,57 @@
 
 <body>
     <div class="survey-page">
-        <section class="masthead">
-            <div class="masthead__grid">
+        <section class="masthead{{ $useCompactTitle ? ' masthead--compact-title' : '' }}">
+            <div class="masthead__grid{{ $showBriefingPanel ? '' : ' masthead__grid--single' }}">
                 <div class="masthead__copy">
                     <span class="eyebrow">ATTP Monitoring, Evaluation and Learning</span>
-                    <h1>{{ data_get($surveyConfig, 'title', 'Public Survey') }}</h1>
+                    <h1>{{ $surveyTitle }}</h1>
                     <p class="masthead__lead">
                         {{ data_get($surveyConfig, 'intro', 'Please complete the survey carefully. Move section by section, review your answers, and submit once you are satisfied.') }}
                     </p>
-                    <div class="masthead__meta">
-                        <div class="meta-pill">
-                            <strong>Indicator</strong>
-                            <span>{{ $link->indicator->name }}</span>
+                    @if ($showHeaderMeta)
+                        <div class="masthead__meta">
+                            <div class="meta-pill">
+                                <strong>Indicator</strong>
+                                <span>{{ $link->indicator->name }}</span>
+                            </div>
+                            <div class="meta-pill">
+                                <strong>Methodology</strong>
+                                <span>{{ $methodology->name }}</span>
+                            </div>
+                            <div class="meta-pill">
+                                <strong>Sections</strong>
+                                <span>{{ $sectionCount }}</span>
+                            </div>
                         </div>
-                        <div class="meta-pill">
-                            <strong>Methodology</strong>
-                            <span>{{ $methodology->name }}</span>
-                        </div>
-                        <div class="meta-pill">
-                            <strong>Sections</strong>
-                            <span>{{ $sectionCount }}</span>
-                        </div>
-                    </div>
+                    @endif
                 </div>
 
-                <div class="masthead__panel">
-                    <div class="briefing">
-                        <p class="briefing__title">Survey briefing</p>
-                        <p>
-                            Your responses help strengthen coordination, delivery, and future workshop design.
-                            Questions may adapt based on the answers you provide.
-                        </p>
-                        <ul class="briefing-list">
-                            <li>
-                                <strong>Time needed</strong>
-                                <span>{{ $estimatedMinutes > 0 ? $estimatedMinutes . ' minute' . ($estimatedMinutes === 1 ? '' : 's') : 'Flexible completion time' }}</span>
-                            </li>
-                            <li>
-                                <strong>Completion flow</strong>
-                                <span>One section at a time with clear Back and Next controls.</span>
-                            </li>
-                            <li>
-                                <strong>Confidentiality</strong>
-                                <span>Responses are handled as survey feedback and reviewed in context.</span>
-                            </li>
-                        </ul>
+                @if ($showBriefingPanel)
+                    <div class="masthead__panel">
+                        <div class="briefing">
+                            <p class="briefing__title">Survey briefing</p>
+                            <p>
+                                Your responses help strengthen coordination, delivery, and future workshop design.
+                                Questions may adapt based on the answers you provide.
+                            </p>
+                            <ul class="briefing-list">
+                                <li>
+                                    <strong>Time needed</strong>
+                                    <span>{{ $estimatedMinutes > 0 ? $estimatedMinutes . ' minute' . ($estimatedMinutes === 1 ? '' : 's') : 'Flexible completion time' }}</span>
+                                </li>
+                                <li>
+                                    <strong>Completion flow</strong>
+                                    <span>One section at a time with clear Back and Next controls.</span>
+                                </li>
+                                <li>
+                                    <strong>Confidentiality</strong>
+                                    <span>Responses are handled as survey feedback and reviewed in context.</span>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
-                </div>
+                @endif
             </div>
         </section>
 
@@ -1417,7 +1449,7 @@
 
                 <div class="workspace">
                     <aside class="survey-rail">
-                        <section class="rail-panel">
+                        <section class="rail-panel" @if (! $showSidebarGuide) hidden @endif>
                             <span class="eyebrow" style="background: rgba(20, 62, 90, 0.06); border-color: rgba(20, 62, 90, 0.1); color: var(--primary);">Survey guide</span>
                             <h2>Move through the questionnaire with confidence.</h2>
                             <p>
@@ -1484,7 +1516,7 @@
                                         <span id="progressMeta">Step 0 of {{ $sectionCount }}</span>
                                     </div>
 
-                                    <div class="progress-stack">
+                                    <div class="progress-stack" @if (! $showProgressTracker) hidden @endif>
                                         <div class="progress-meter">
                                             <span id="progressBarFill"></span>
                                         </div>
@@ -1519,73 +1551,109 @@
                                                 <span class="step-counter">Step 0 of {{ $sectionCount }}</span>
                                             </div>
                                             <h2>Before you begin</h2>
-                                            <p>
-                                                Capture your respondent details, then move through each section below.
-                                                You can return to any completed section before you submit your response.
-                                            </p>
+                                            @if ($showIntroGuidance)
+                                                <p>
+                                                    Capture your respondent details, then move through each section below.
+                                                    You can return to any completed section before you submit your response.
+                                                </p>
+                                            @endif
                                         </div>
 
                                         <div class="intro-panel">
-                                            <div class="intro-panel__copy">
-                                                <strong>How this form works</strong>
-                                                <p>
-                                                    Each screen focuses on one section only. Some questions or sections may appear
-                                                    only when they are relevant to your previous responses.
-                                                </p>
-                                            </div>
+                                            @if ($showIntroGuidance)
+                                                <div class="intro-panel__copy">
+                                                    <strong>How this form works</strong>
+                                                    <p>
+                                                        Each screen focuses on one section only. Some questions or sections may appear
+                                                        only when they are relevant to your previous responses.
+                                                    </p>
+                                                </div>
+                                            @endif
 
                                             <div class="intro-grid">
                                                 <div class="field">
-                                                    <label for="respondent_name">Your name</label>
+                                                    <label for="respondent_name">
+                                                        {{ data_get($respondentNameConfig, 'label', 'Your name') }}
+                                                        @if ($respondentNameRequired)
+                                                            <span aria-hidden="true">*</span>
+                                                        @endif
+                                                    </label>
                                                     <input id="respondent_name"
                                                         type="text"
                                                         name="respondent_name"
                                                         value="{{ old('respondent_name') }}"
-                                                        placeholder="Enter your full name"
-                                                        data-respondent-field>
-                                                    <div class="field-note">This helps the team interpret your feedback.</div>
+                                                        placeholder="{{ data_get($respondentNameConfig, 'placeholder', 'Enter your full name') }}"
+                                                        data-respondent-field
+                                                        @if ($respondentNameRequired) required aria-required="true" @endif>
+                                                    @if ($showRespondentNotes)
+                                                        <div class="field-note">This helps the team interpret your feedback.</div>
+                                                    @endif
                                                     @error('respondent_name')
                                                         <div class="field-error">{{ $message }}</div>
                                                     @enderror
                                                 </div>
 
                                                 <div class="field">
-                                                    <label for="respondent_email">Your email</label>
+                                                    <label for="respondent_email">
+                                                        {{ data_get($respondentEmailConfig, 'label', 'Your email') }}
+                                                        @if ($respondentEmailRequired)
+                                                            <span aria-hidden="true">*</span>
+                                                        @endif
+                                                    </label>
                                                     <input id="respondent_email"
                                                         type="email"
                                                         name="respondent_email"
                                                         value="{{ old('respondent_email') }}"
-                                                        placeholder="name@example.org"
-                                                        data-respondent-field>
-                                                    <div class="field-note">Optional, but useful for follow-up clarification.</div>
+                                                        placeholder="{{ data_get($respondentEmailConfig, 'placeholder', 'name@example.org') }}"
+                                                        data-respondent-field
+                                                        @if ($respondentEmailRequired) required aria-required="true" @endif>
+                                                    @if ($showRespondentNotes)
+                                                        <div class="field-note">Optional, but useful for follow-up clarification.</div>
+                                                    @endif
                                                     @error('respondent_email')
                                                         <div class="field-error">{{ $message }}</div>
                                                     @enderror
                                                 </div>
 
                                                 <div class="field">
-                                                    <label for="respondent_phone">Phone</label>
+                                                    <label for="respondent_phone">
+                                                        {{ data_get($respondentPhoneConfig, 'label', 'Phone') }}
+                                                        @if ($respondentPhoneRequired)
+                                                            <span aria-hidden="true">*</span>
+                                                        @endif
+                                                    </label>
                                                     <input id="respondent_phone"
                                                         type="text"
                                                         name="respondent_phone"
                                                         value="{{ old('respondent_phone') }}"
-                                                        placeholder="Enter a phone contact"
-                                                        data-respondent-field>
-                                                    <div class="field-note">Optional.</div>
+                                                        placeholder="{{ data_get($respondentPhoneConfig, 'placeholder', 'Enter a phone contact') }}"
+                                                        data-respondent-field
+                                                        @if ($respondentPhoneRequired) required aria-required="true" @endif>
+                                                    @if ($showRespondentNotes)
+                                                        <div class="field-note">Optional.</div>
+                                                    @endif
                                                     @error('respondent_phone')
                                                         <div class="field-error">{{ $message }}</div>
                                                     @enderror
                                                 </div>
 
                                                 <div class="field">
-                                                    <label for="respondent_organization">Organization or agency</label>
+                                                    <label for="respondent_organization">
+                                                        {{ data_get($respondentOrganizationConfig, 'label', 'Organization or agency') }}
+                                                        @if ($respondentOrganizationRequired)
+                                                            <span aria-hidden="true">*</span>
+                                                        @endif
+                                                    </label>
                                                     <input id="respondent_organization"
                                                         type="text"
                                                         name="respondent_organization"
                                                         value="{{ old('respondent_organization') }}"
-                                                        placeholder="Enter your institution or team"
-                                                        data-respondent-field>
-                                                    <div class="field-note">This helps group responses by participation context.</div>
+                                                        placeholder="{{ data_get($respondentOrganizationConfig, 'placeholder', 'Enter your institution or team') }}"
+                                                        data-respondent-field
+                                                        @if ($respondentOrganizationRequired) required aria-required="true" @endif>
+                                                    @if ($showRespondentNotes)
+                                                        <div class="field-note">This helps group responses by participation context.</div>
+                                                    @endif
                                                     @error('respondent_organization')
                                                         <div class="field-error">{{ $message }}</div>
                                                     @enderror

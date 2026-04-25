@@ -21,7 +21,6 @@ class AttpWorkshopPostSurveySeeder extends Seeder
 
         $sections = [
             $this->section('participant_information', 'Section 1: Participant Information', [
-                $this->textQuestion('participant_name', 'Name of participant', true),
                 $this->textQuestion('participant_affiliation', 'Think tank / Directorate / Consortium', true),
                 $this->textQuestion('participant_role', 'Role / position', true),
                 $this->radioQuestion('participation_type', 'Participation Type', [
@@ -49,16 +48,16 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                     'Mostly achieved',
                     'Partially achieved',
                     'Not achieved',
-                ], true),
+                ], true, $this->routeToQuestion('workshop_goal_follow_up', [
+                    'Partially achieved',
+                    'Not achieved',
+                ])),
                 $this->textareaQuestion(
                     'workshop_goal_follow_up',
                     'Please briefly explain why you think the workshop did not fully meet its goal',
-                    false,
+                    true,
                     [
-                        'visibility' => [
-                            'question_key' => 'workshop_goal_achievement',
-                            'values' => ['Partially achieved', 'Not achieved'],
-                        ],
+                        'flow_type' => 'special',
                     ]
                 ),
                 $this->radioQuestion('workshop_role_relevance', 'How relevant was the workshop to your role?', [
@@ -66,16 +65,15 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                     'Moderately relevant',
                     'Slightly relevant',
                     'Not relevant',
-                ], true),
+                ], true, $this->routeToQuestion('workshop_role_relevance_follow_up', [
+                    'Not relevant',
+                ])),
                 $this->textareaQuestion(
                     'workshop_role_relevance_follow_up',
                     'Please explain why the workshop was not relevant to your role',
-                    false,
+                    true,
                     [
-                        'visibility' => [
-                            'question_key' => 'workshop_role_relevance',
-                            'values' => ['Not relevant'],
-                        ],
+                        'flow_type' => 'special',
                     ]
                 ),
             ]),
@@ -144,16 +142,16 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                     'Somewhat useful',
                     'Not very useful',
                     'Not useful at all',
-                ], true),
+                ], true, $this->routeToQuestion('cross_consortia_exchange_follow_up', [
+                    'Not very useful',
+                    'Not useful at all',
+                ])),
                 $this->textareaQuestion(
                     'cross_consortia_exchange_follow_up',
                     'Please explain why the peer learning or cross-consortia exchange was not useful',
-                    false,
+                    true,
                     [
-                        'visibility' => [
-                            'question_key' => 'cross_consortia_exchange_usefulness',
-                            'values' => ['Not very useful', 'Not useful at all'],
-                        ],
+                        'flow_type' => 'special',
                     ]
                 ),
             ]),
@@ -177,16 +175,15 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                     'Somewhat effective',
                     'Not effective',
                     'Not applicable',
-                ], true),
+                ], true, $this->routeToQuestion('research_harmonization_challenges', [
+                    'Not effective',
+                ])),
                 $this->textareaQuestion(
                     'research_harmonization_challenges',
                     'What challenges did you experience with the harmonization process?',
-                    false,
+                    true,
                     [
-                        'visibility' => [
-                            'question_key' => 'research_harmonization_effectiveness',
-                            'values' => ['Not effective'],
-                        ],
+                        'flow_type' => 'special',
                     ]
                 ),
                 $this->textareaQuestion('workshop_what_worked_well', 'What worked particularly well?'),
@@ -262,6 +259,39 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                 'title' => $title,
                 'intro' => $intro,
                 'estimated_minutes' => 10,
+                'respondent' => [
+                    'show_notes' => false,
+                    'fields' => [
+                        'name' => [
+                            'label' => 'Name',
+                            'placeholder' => 'Enter your full name',
+                            'required' => true,
+                        ],
+                        'email' => [
+                            'label' => 'Email',
+                            'placeholder' => 'name@example.org',
+                            'required' => true,
+                        ],
+                        'phone' => [
+                            'label' => 'Phone number',
+                            'placeholder' => 'Enter a phone contact',
+                            'required' => true,
+                        ],
+                        'organization' => [
+                            'label' => 'Organization',
+                            'placeholder' => 'Enter your institution or team',
+                            'required' => true,
+                        ],
+                    ],
+                ],
+                'presentation' => [
+                    'show_header_meta' => false,
+                    'show_briefing_panel' => false,
+                    'show_sidebar_guide' => false,
+                    'show_intro_guidance' => false,
+                    'show_progress_tracker' => false,
+                    'compact_title' => true,
+                ],
                 'sections' => $sections,
                 'updated_at' => now()->toDateTimeString(),
             ],
@@ -278,6 +308,8 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                         'title' => $normalizedSurvey['title'],
                         'intro' => $normalizedSurvey['intro'],
                         'estimated_minutes' => $normalizedSurvey['estimated_minutes'],
+                        'respondent' => $normalizedSurvey['respondent'],
+                        'presentation' => $normalizedSurvey['presentation'],
                         'sections' => $normalizedSurvey['sections'],
                         'questions' => $normalizedSurvey['questions'],
                         'updated_at' => now()->toDateTimeString(),
@@ -329,6 +361,17 @@ class AttpWorkshopPostSurveySeeder extends Seeder
             'required' => $required,
             'options' => $options,
         ], $attributes);
+    }
+
+    protected function routeToQuestion(string $targetKey, array $values): array
+    {
+        return [
+            'route' => [
+                'target_type' => 'question',
+                'target_key' => $targetKey,
+                'values' => $values,
+            ],
+        ];
     }
 
     protected function checkboxQuestion(

@@ -76,6 +76,8 @@ class MeSurvey
             'title' => $title !== '' ? $title : $fallbackTitle,
             'intro' => $intro,
             'estimated_minutes' => self::normalizePositiveInteger($survey['estimated_minutes'] ?? null),
+            'respondent' => self::normalizeRespondentSettings($survey['respondent'] ?? []),
+            'presentation' => self::normalizeSurveyPresentation($survey['presentation'] ?? $survey['ui'] ?? []),
             'sections' => $sections,
             'questions' => self::flattenQuestionsFromSections($sections),
             'updated_at' => (string) ($survey['updated_at'] ?? ''),
@@ -639,6 +641,86 @@ class MeSurvey
             ->filter(fn ($question) => is_array($question))
             ->values()
             ->all();
+    }
+
+    protected static function normalizeRespondentSettings(mixed $respondent): array
+    {
+        $defaults = [
+            'show_notes' => true,
+            'fields' => [
+                'name' => [
+                    'required' => false,
+                    'label' => 'Your name',
+                    'placeholder' => 'Enter your full name',
+                ],
+                'email' => [
+                    'required' => false,
+                    'label' => 'Your email',
+                    'placeholder' => 'name@example.org',
+                ],
+                'phone' => [
+                    'required' => false,
+                    'label' => 'Phone',
+                    'placeholder' => 'Enter a phone contact',
+                ],
+                'organization' => [
+                    'required' => false,
+                    'label' => 'Organization or agency',
+                    'placeholder' => 'Enter your institution or team',
+                ],
+            ],
+        ];
+
+        if (!is_array($respondent)) {
+            return $defaults;
+        }
+
+        $defaults['show_notes'] = array_key_exists('show_notes', $respondent)
+            ? (bool) $respondent['show_notes']
+            : (array_key_exists('show_field_notes', $respondent) ? (bool) $respondent['show_field_notes'] : true);
+
+        $fieldSettings = is_array($respondent['fields'] ?? null) ? $respondent['fields'] : [];
+
+        foreach ($defaults['fields'] as $fieldKey => $fieldDefaults) {
+            $candidate = is_array($fieldSettings[$fieldKey] ?? null) ? $fieldSettings[$fieldKey] : [];
+
+            $label = trim((string) ($candidate['label'] ?? $fieldDefaults['label']));
+            $placeholder = trim((string) ($candidate['placeholder'] ?? $fieldDefaults['placeholder']));
+
+            $defaults['fields'][$fieldKey] = [
+                'required' => array_key_exists('required', $candidate)
+                    ? (bool) $candidate['required']
+                    : $fieldDefaults['required'],
+                'label' => $label !== '' ? $label : $fieldDefaults['label'],
+                'placeholder' => $placeholder !== '' ? $placeholder : $fieldDefaults['placeholder'],
+            ];
+        }
+
+        return $defaults;
+    }
+
+    protected static function normalizeSurveyPresentation(mixed $presentation): array
+    {
+        $defaults = [
+            'show_header_meta' => true,
+            'show_briefing_panel' => true,
+            'show_sidebar_guide' => true,
+            'show_intro_guidance' => true,
+            'show_progress_tracker' => true,
+            'compact_title' => false,
+        ];
+
+        if (!is_array($presentation)) {
+            return $defaults;
+        }
+
+        foreach ($defaults as $key => $default) {
+            if (array_key_exists($key, $presentation)) {
+                $defaults[$key] = (bool) $presentation[$key];
+            }
+        }
+
+        return $defaults;
     }
 
     protected static function applyRouteTargets(array $sections): array
