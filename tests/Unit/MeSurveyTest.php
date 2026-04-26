@@ -39,6 +39,19 @@ class MeSurveyTest extends TestCase
         $this->assertSame('section_1', $survey['questions'][0]['section_key']);
     }
 
+    public function test_it_humanizes_fully_uppercase_public_survey_titles_for_display(): void
+    {
+        $this->assertSame(
+            'Post Workshop Survey: ATTP Think Tank Consortium Kickoff, Coordination And Capacity Strengthening Workshop',
+            MeSurvey::displayTitle('POST WORKSHOP SURVEY: ATTP THINK TANK CONSORTIUM KICKOFF, COORDINATION AND CAPACITY STRENGTHENING WORKSHOP')
+        );
+
+        $this->assertSame(
+            'Post workshop survey: attp kickoff workshop',
+            MeSurvey::displayTitle('Post workshop survey: attp kickoff workshop')
+        );
+    }
+
     public function test_it_resolves_section_visibility_from_previous_answers(): void
     {
         $survey = MeSurvey::surveyConfigFromMetadata([

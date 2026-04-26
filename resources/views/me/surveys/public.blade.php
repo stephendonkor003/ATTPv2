@@ -7,6 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     @php
         $surveyTitle = (string) data_get($surveyConfig, 'title', 'Public Survey');
+        $surveyDisplayTitle = \App\Support\MeSurvey::displayTitle($surveyTitle);
         $normalSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'effective_flow_type', data_get($section, 'flow_type', 'normal'))) !== 'special')->values();
         $specialSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'effective_flow_type', data_get($section, 'flow_type', 'normal'))) === 'special')->values();
         $specialQuestions = collect($questions)->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) === 'special')->values();
@@ -33,7 +34,7 @@
         $respondentPhoneRequired = (bool) data_get($respondentPhoneConfig, 'required', false);
         $respondentOrganizationRequired = (bool) data_get($respondentOrganizationConfig, 'required', false);
     @endphp
-    <title>{{ $surveyTitle }}</title>
+    <title>{{ $surveyDisplayTitle }}</title>
     <style>
         :root {
             --page: #f2f6f3;
@@ -1986,7 +1987,7 @@
                     @if (! $useSimpleLayout)
                         <span class="eyebrow">ATTP Monitoring, Evaluation and Learning</span>
                     @endif
-                    <h1>{{ $surveyTitle }}</h1>
+                    <h1>{{ $surveyDisplayTitle }}</h1>
                     <p class="masthead__lead">
                         {{ data_get($surveyConfig, 'intro', 'Please complete the survey carefully. Move section by section, review your answers, and submit once you are satisfied.') }}
                     </p>

@@ -37,6 +37,18 @@ class MeSurvey
         '#3B5B92',
     ];
 
+    protected const TITLE_ACRONYMS = [
+        'ATTP',
+        'AU',
+        'EU',
+        'UN',
+        'UNDP',
+        'USAID',
+        'UNESCO',
+        'SDG',
+        'SDGs',
+    ];
+
     public static function surveyConfigFromMetadata(array $metadata, string $fallbackTitle = 'Public Survey'): array
     {
         $survey = (array) data_get($metadata, 'survey', []);
@@ -89,6 +101,32 @@ class MeSurvey
         $survey = self::surveyConfigFromMetadata($metadata, $fallbackTitle);
 
         return (bool) $survey['enabled'] && !empty($survey['questions']);
+    }
+
+    public static function displayTitle(string $title): string
+    {
+        $normalized = trim($title);
+        if ($normalized === '') {
+            return $title;
+        }
+
+        $lettersOnly = preg_replace('/[^\p{L}]+/u', '', $normalized);
+        if (!is_string($lettersOnly) || $lettersOnly === '' || mb_strtoupper($lettersOnly, 'UTF-8') !== $lettersOnly) {
+            return $normalized;
+        }
+
+        $displayTitle = mb_convert_case(mb_strtolower($normalized, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+
+        foreach (self::TITLE_ACRONYMS as $acronym) {
+            $headlineAcronym = mb_convert_case(mb_strtolower($acronym, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+            $displayTitle = preg_replace(
+                '/(?<!\p{L})' . preg_quote($headlineAcronym, '/') . '(?!\p{L})/u',
+                $acronym,
+                $displayTitle
+            ) ?? $displayTitle;
+        }
+
+        return $displayTitle;
     }
 
     public static function flattenQuestions(array $surveyConfig): array
