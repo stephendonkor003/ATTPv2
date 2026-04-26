@@ -2335,6 +2335,7 @@
                                                         </div>
                                                     </div>
                                                 @endif
+                                            </div>
                                         @else
                                             <div class="intro-scene">
                                                 <div class="intro-scene__panel intro-scene__panel--welcome">
@@ -2396,7 +2397,7 @@
                                                             </div>
                                                         @endif
                                                     </div>
-                                        @endif
+                                                </div>
                                             </div>
                                         @endif
                                     </section>
