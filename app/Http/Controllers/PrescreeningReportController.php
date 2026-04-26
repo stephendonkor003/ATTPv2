@@ -47,7 +47,7 @@ class PrescreeningReportController extends Controller
         $submission->load(['procurement', 'submitter', 'values', 'prescreeningResult.evaluator']);
 
         $template = $this->resolveTemplate($submission);
-        $criteria = $template ? $template->criteria()->orderBy('sort_order')->get() : collect();
+        $sections = $template ? $template->sections : collect();
 
         $evaluations = PrescreeningEvaluation::with('criterion')
             ->where('submission_id', $submission->id)
@@ -57,7 +57,7 @@ class PrescreeningReportController extends Controller
         return view('reports.prescreening.submission', compact(
             'submission',
             'template',
-            'criteria',
+            'sections',
             'evaluations'
         ));
     }
@@ -68,7 +68,7 @@ class PrescreeningReportController extends Controller
         $submission->load(['procurement', 'submitter', 'values', 'prescreeningResult.evaluator']);
 
         $template = $this->resolveTemplate($submission);
-        $criteria = $template ? $template->criteria()->orderBy('sort_order')->get() : collect();
+        $sections = $template ? $template->sections : collect();
         $evaluations = PrescreeningEvaluation::with('criterion')
             ->where('submission_id', $submission->id)
             ->get()
@@ -77,7 +77,7 @@ class PrescreeningReportController extends Controller
         $pdf = Pdf::loadView('reports.prescreening.pdf.submission', compact(
             'submission',
             'template',
-            'criteria',
+            'sections',
             'evaluations'
         ));
 
@@ -87,7 +87,7 @@ class PrescreeningReportController extends Controller
     public function procurement(Procurement $procurement)
     {
         $this->assertProcurementInScope($procurement);
-        $procurement->load(['prescreeningTemplate', 'prescreeningTemplate.criteria']);
+        $procurement->load(['prescreeningTemplate', 'prescreeningTemplate.sections.criteria']);
 
         $submissions = FormSubmission::with(['submitter', 'prescreeningResult.evaluator'])
             ->where('procurement_id', $procurement->id)
@@ -110,7 +110,7 @@ class PrescreeningReportController extends Controller
     public function procurementPdf(Procurement $procurement)
     {
         $this->assertProcurementInScope($procurement);
-        $procurement->load(['prescreeningTemplate', 'prescreeningTemplate.criteria']);
+        $procurement->load(['prescreeningTemplate', 'prescreeningTemplate.sections.criteria']);
 
         $submissions = FormSubmission::with(['submitter', 'prescreeningResult.evaluator'])
             ->where('procurement_id', $procurement->id)
@@ -209,11 +209,11 @@ class PrescreeningReportController extends Controller
     private function resolveTemplate(FormSubmission $submission): ?PrescreeningTemplate
     {
         if ($submission->prescreeningResult?->prescreening_template_id) {
-            return PrescreeningTemplate::with('criteria')
+            return PrescreeningTemplate::with('sections.criteria')
                 ->find($submission->prescreeningResult->prescreening_template_id);
         }
 
-        return $submission->procurement?->prescreeningTemplate?->load('criteria');
+        return $submission->procurement?->prescreeningTemplate?->load('sections.criteria');
     }
 
     private function buildSummary($submissions): array
@@ -246,7 +246,10 @@ class PrescreeningReportController extends Controller
             return collect();
         }
 
-        $criteria = $template->criteria()->orderBy('sort_order')->get();
+        $criteria = $template->criteria()
+            ->with('section')
+            ->orderBy('sort_order')
+            ->get();
 
         return $criteria->map(function ($criterion) use ($submissions) {
             $evaluations = PrescreeningEvaluation::where('criterion_id', $criterion->id)
@@ -260,6 +263,7 @@ class PrescreeningReportController extends Controller
             $rate = $total > 0 ? round(($passed / $total) * 100, 1) : 0;
 
             return [
+                'section' => $criterion->section?->name ?? 'General Requirements',
                 'name' => $criterion->name,
                 'total' => $total,
                 'passed' => $passed,

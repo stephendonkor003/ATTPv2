@@ -3,28 +3,28 @@
 namespace App\Http\Controllers;
 
 use App\Models\PrescreeningTemplate;
-use App\Models\PrescreeningCriterion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class PrescreeningTemplateController extends Controller
 {
     /**
-     * List templates
+     * List templates.
      */
     public function index()
     {
-        $templates = PrescreeningTemplate::withCount('criteria')
-            ->orderBy('created_at', 'desc')
+        $templates = PrescreeningTemplate::withCount(['criteria', 'sections'])
+            ->orderByDesc('created_at')
             ->get();
 
         return view('prescreening.templates.index', compact('templates'));
     }
 
     /**
-     * Show create form
+     * Show create form.
      */
     public function create()
     {
@@ -32,32 +32,21 @@ class PrescreeningTemplateController extends Controller
     }
 
     /**
-     * Store template + criteria
+     * Store template with sectioned criteria.
      */
     public function store(Request $request)
     {
         $validated = $this->validateTemplatePayload($request);
 
         DB::transaction(function () use ($validated) {
-
             $template = PrescreeningTemplate::create([
-                'name'        => $validated['name'],
+                'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
-                'is_active'   => $validated['is_active'] ?? false,
-                'created_by'  => auth()->id(),
+                'is_active' => $validated['is_active'] ?? false,
+                'created_by' => auth()->id(),
             ]);
 
-            foreach ($validated['criteria'] as $index => $criterion) {
-                PrescreeningCriterion::create([
-                    'prescreening_template_id' => $template->id,
-                    'name'            => $criterion['name'],
-                    'field_key'       => $criterion['field_key'],
-                    'evaluation_type' => $criterion['evaluation_type'],
-                    'min_value'       => $criterion['min_value'] ?? null,
-                    'is_mandatory'    => $criterion['is_mandatory'] ?? false,
-                    'sort_order'      => $index + 1,
-                ]);
-            }
+            $this->syncSections($template, $validated['sections']);
         });
 
         return redirect()
@@ -66,56 +55,43 @@ class PrescreeningTemplateController extends Controller
     }
 
     /**
-     * Show template (read-only)
+     * Show template.
      */
     public function show(PrescreeningTemplate $template)
     {
-        $template->load('criteria');
+        $template->load('sections.criteria');
 
         return view('prescreening.templates.show', compact('template'));
     }
 
     /**
-     * Show edit form
+     * Show edit form.
      */
     public function edit(PrescreeningTemplate $template)
     {
-        $template->load('criteria');
+        $template->load('sections.criteria');
 
         return view('prescreening.templates.edit', compact('template'));
     }
 
     /**
-     * Update template + criteria
+     * Update template with sectioned criteria.
      */
     public function update(Request $request, PrescreeningTemplate $template)
     {
         $validated = $this->validateTemplatePayload($request);
 
         DB::transaction(function () use ($validated, $template) {
-
-            // Update template
             $template->update([
-                'name'        => $validated['name'],
+                'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
-                'is_active'   => $validated['is_active'] ?? false,
+                'is_active' => $validated['is_active'] ?? false,
             ]);
 
-            // Remove old criteria
             $template->criteria()->delete();
+            $template->sections()->delete();
 
-            // Recreate criteria
-            foreach ($validated['criteria'] as $index => $criterion) {
-                PrescreeningCriterion::create([
-                    'prescreening_template_id' => $template->id,
-                    'name'            => $criterion['name'],
-                    'field_key'       => $criterion['field_key'],
-                    'evaluation_type' => $criterion['evaluation_type'],
-                    'min_value'       => $criterion['min_value'] ?? null,
-                    'is_mandatory'    => $criterion['is_mandatory'] ?? false,
-                    'sort_order'      => $index + 1,
-                ]);
-            }
+            $this->syncSections($template, $validated['sections']);
         });
 
         return redirect()
@@ -123,64 +99,87 @@ class PrescreeningTemplateController extends Controller
             ->with('success', 'Prescreening template updated successfully.');
     }
 
+    private function syncSections(PrescreeningTemplate $template, array $sections): void
+    {
+        foreach ($sections as $sectionIndex => $sectionData) {
+            $section = $template->sections()->create([
+                'name' => $sectionData['name'],
+                'description' => $sectionData['description'] ?? null,
+                'sort_order' => $sectionIndex + 1,
+            ]);
+
+            foreach ($sectionData['items'] as $itemIndex => $item) {
+                $section->criteria()->create([
+                    'prescreening_template_id' => $template->id,
+                    'name' => $item['name'],
+                    'description' => $item['description'] ?? null,
+                    'field_key' => $item['field_key'],
+                    'evaluation_type' => 'yes_no',
+                    'min_value' => null,
+                    'is_mandatory' => $item['is_mandatory'] ?? false,
+                    'sort_order' => $itemIndex + 1,
+                ]);
+            }
+        }
+    }
+
     private function validateTemplatePayload(Request $request): array
     {
-        $criteria = $this->resolveCriteriaPayload($request);
+        $sections = $this->resolveSectionsPayload($request);
 
-        $validator = Validator::make(
+        $validated = Validator::make(
             [
-                'name'        => $request->input('name'),
+                'name' => $request->input('name'),
                 'description' => $request->input('description'),
-                'is_active'   => $request->boolean('is_active'),
-                'criteria'    => $criteria,
+                'is_active' => $request->boolean('is_active'),
+                'sections' => $sections,
             ],
             [
-                'name'                        => 'required|string|max:255',
-                'description'                 => 'nullable|string',
-                'is_active'                   => 'nullable|boolean',
-                'criteria'                    => 'required|array|min:1',
-                'criteria.*.name'             => 'required|string|max:255',
-                'criteria.*.field_key'        => 'required|string|max:191',
-                'criteria.*.evaluation_type'  => 'required|in:yes_no,exists,numeric',
-                'criteria.*.min_value'        => 'nullable|numeric',
-                'criteria.*.is_mandatory'     => 'nullable|boolean',
+                'name' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'is_active' => 'nullable|boolean',
+                'sections' => 'required|array|min:1',
+                'sections.*.name' => 'required|string|max:255',
+                'sections.*.description' => 'nullable|string',
+                'sections.*.items' => 'required|array|min:1',
+                'sections.*.items.*.name' => 'required|string|max:255',
+                'sections.*.items.*.description' => 'nullable|string',
+                'sections.*.items.*.is_mandatory' => 'nullable|boolean',
             ],
             [
-                'criteria.required' => 'Add at least one criterion before saving the template.',
-                'criteria.array'    => 'Criteria payload is invalid. Please refresh and try again.',
-                'criteria.min'      => 'Add at least one criterion before saving the template.',
+                'sections.required' => 'Add at least one section before saving the template.',
+                'sections.min' => 'Add at least one section before saving the template.',
+                'sections.*.items.required' => 'Each section must have at least one item.',
+                'sections.*.items.min' => 'Each section must have at least one item.',
             ]
-        );
+        )->validate();
 
-        $validator->after(function ($validator) use ($criteria) {
-            $fieldKeys = collect($criteria)
-                ->pluck('field_key')
-                ->map(fn ($key) => trim((string) $key))
-                ->filter();
+        $usedFieldKeys = [];
+        $itemIndex = 1;
 
-            if ($fieldKeys->duplicates()->isNotEmpty()) {
-                $validator->errors()->add(
-                    'criteria',
-                    'Duplicate field keys detected. Each criterion must have a unique field key.'
-                );
-            }
-        });
-
-        $validated = $validator->validate();
-
-        $validated['criteria'] = collect($validated['criteria'])
+        $validated['sections'] = collect($validated['sections'])
             ->values()
-            ->map(function (array $criterion): array {
-                $evaluationType = (string) $criterion['evaluation_type'];
-
+            ->map(function (array $section) use (&$usedFieldKeys, &$itemIndex): array {
                 return [
-                    'name'            => trim((string) $criterion['name']),
-                    'field_key'       => trim((string) $criterion['field_key']),
-                    'evaluation_type' => $evaluationType,
-                    'min_value'       => $evaluationType === 'numeric'
-                        ? ($criterion['min_value'] !== null && $criterion['min_value'] !== '' ? $criterion['min_value'] : null)
+                    'name' => trim((string) $section['name']),
+                    'description' => filled($section['description'] ?? null)
+                        ? trim((string) $section['description'])
                         : null,
-                    'is_mandatory'    => filter_var($criterion['is_mandatory'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                    'items' => collect($section['items'])
+                        ->values()
+                        ->map(function (array $item) use (&$usedFieldKeys, &$itemIndex): array {
+                            $name = trim((string) $item['name']);
+
+                            return [
+                                'name' => $name,
+                                'description' => filled($item['description'] ?? null)
+                                    ? trim((string) $item['description'])
+                                    : null,
+                                'field_key' => $this->makeUniqueFieldKey($name, $usedFieldKeys, $itemIndex++),
+                                'is_mandatory' => filter_var($item['is_mandatory'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                            ];
+                        })
+                        ->all(),
                 ];
             })
             ->all();
@@ -188,27 +187,78 @@ class PrescreeningTemplateController extends Controller
         return $validated;
     }
 
-    private function resolveCriteriaPayload(Request $request): array
+    private function resolveSectionsPayload(Request $request): array
     {
-        $payload = $request->input('criteria_payload');
-        if (!is_string($payload) || trim($payload) === '') {
-            return (array) $request->input('criteria', []);
+        $sectionsPayload = $request->input('sections_payload');
+        if (is_string($sectionsPayload) && trim($sectionsPayload) !== '') {
+            return $this->decodeJsonPayload($sectionsPayload, 'sections');
         }
 
+        $sections = $request->input('sections');
+        if (is_array($sections) && !empty($sections)) {
+            return $sections;
+        }
+
+        $criteriaPayload = $request->input('criteria_payload');
+        if (is_string($criteriaPayload) && trim($criteriaPayload) !== '') {
+            return $this->wrapCriteriaAsSection(
+                $this->decodeJsonPayload($criteriaPayload, 'criteria')
+            );
+        }
+
+        $criteria = $request->input('criteria', []);
+        if (is_array($criteria) && !empty($criteria)) {
+            return $this->wrapCriteriaAsSection($criteria);
+        }
+
+        return [];
+    }
+
+    private function wrapCriteriaAsSection(array $criteria): array
+    {
+        return [[
+            'name' => 'General Requirements',
+            'description' => null,
+            'items' => $criteria,
+        ]];
+    }
+
+    private function decodeJsonPayload(string $payload, string $type): array
+    {
         try {
             $decoded = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             throw ValidationException::withMessages([
-                'criteria' => 'Unable to process criteria rows. Please reload the page and try saving again.',
+                $type => 'Unable to process the submitted template. Please refresh and try again.',
             ]);
         }
 
         if (!is_array($decoded)) {
             throw ValidationException::withMessages([
-                'criteria' => 'Unable to process criteria rows. Please reload the page and try saving again.',
+                $type => 'Unable to process the submitted template. Please refresh and try again.',
             ]);
         }
 
         return $decoded;
+    }
+
+    private function makeUniqueFieldKey(string $name, array &$usedFieldKeys, int $index): string
+    {
+        $base = Str::slug($name, '_');
+        if ($base === '') {
+            $base = 'criterion_' . $index;
+        }
+
+        $candidate = $base;
+        $suffix = 2;
+
+        while (in_array($candidate, $usedFieldKeys, true)) {
+            $candidate = $base . '_' . $suffix;
+            $suffix++;
+        }
+
+        $usedFieldKeys[] = $candidate;
+
+        return $candidate;
     }
 }

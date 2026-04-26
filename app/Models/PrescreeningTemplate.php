@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use App\Models\BaseModel;
@@ -21,10 +22,15 @@ class PrescreeningTemplate extends BaseModel
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function criteria()
-{
-    return $this->hasMany(PrescreeningCriterion::class)
-                ->orderBy('sort_order');
-}
+    public function sections()
+    {
+        return $this->hasMany(PrescreeningSection::class, 'prescreening_template_id')
+            ->orderBy('sort_order');
+    }
 
+    public function criteria()
+    {
+        return $this->hasMany(PrescreeningCriterion::class, 'prescreening_template_id')
+            ->orderBy('sort_order');
+    }
 }

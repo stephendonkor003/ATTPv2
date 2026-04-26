@@ -27,11 +27,11 @@ class PrescreeningCompleted extends Mailable
         ]);
 
         $template = $submission->prescreeningResult?->prescreening_template_id
-            ? \App\Models\PrescreeningTemplate::with('criteria')
+            ? \App\Models\PrescreeningTemplate::with('sections.criteria')
                 ->find($submission->prescreeningResult->prescreening_template_id)
-            : $submission->procurement?->prescreeningTemplate?->load('criteria');
+            : $submission->procurement?->prescreeningTemplate?->load('sections.criteria');
 
-        $criteria = $template ? $template->criteria()->orderBy('sort_order')->get() : collect();
+        $sections = $template ? $template->sections : collect();
 
         $evaluations = PrescreeningEvaluation::with('criterion')
             ->where('submission_id', $submission->id)
@@ -41,7 +41,7 @@ class PrescreeningCompleted extends Mailable
         $pdf = Pdf::loadView('reports.prescreening.pdf.submission_watermarked', [
             'submission' => $submission,
             'template' => $template,
-            'criteria' => $criteria,
+            'sections' => $sections,
             'evaluations' => $evaluations,
         ]);
 

@@ -574,25 +574,30 @@ class MeConfigurationController extends Controller
         }
 
         $defaultTitle = trim($name) !== '' ? trim($name) . ' Public Survey' : 'Public Survey';
+        $existingSurvey = is_array($existingMetadata['survey'] ?? null)
+            ? $existingMetadata['survey']
+            : [];
         $normalizedSurvey = MeSurvey::surveyConfigFromMetadata([
-            'survey' => [
-                'enabled' => $request->boolean('survey_public_enabled', true),
-                'title' => trim((string) $request->input('survey_title', $defaultTitle)),
-                'intro' => trim((string) $request->input('survey_intro', '')),
-                'estimated_minutes' => $request->input('survey_estimated_minutes'),
+            'survey' => array_merge($existingSurvey, [
+                'enabled' => $request->has('survey_public_enabled'),
+                'title' => trim((string) $request->input('survey_title', (string) ($existingSurvey['title'] ?? $defaultTitle))),
+                'intro' => trim((string) $request->input('survey_intro', (string) ($existingSurvey['intro'] ?? ''))),
+                'estimated_minutes' => $request->input('survey_estimated_minutes', $existingSurvey['estimated_minutes'] ?? null),
                 'sections' => $surveySections,
-            ],
+            ]),
         ], $defaultTitle);
 
-        $metadata['survey'] = [
+        $metadata['survey'] = array_merge($existingSurvey, [
             'enabled' => $normalizedSurvey['enabled'],
             'title' => $normalizedSurvey['title'],
             'intro' => $normalizedSurvey['intro'],
             'estimated_minutes' => $normalizedSurvey['estimated_minutes'],
+            'respondent' => $normalizedSurvey['respondent'],
+            'presentation' => $normalizedSurvey['presentation'],
             'sections' => $normalizedSurvey['sections'],
             'questions' => $normalizedSurvey['questions'],
             'updated_at' => now()->toDateTimeString(),
-        ];
+        ]);
 
         return $metadata;
     }

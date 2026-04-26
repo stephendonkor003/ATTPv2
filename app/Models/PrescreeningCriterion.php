@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use App\Models\BaseModel;
@@ -9,6 +10,7 @@ class PrescreeningCriterion extends BaseModel
 
     protected $fillable = [
         'prescreening_template_id',
+        'prescreening_section_id',
         'name',
         'description',
         'field_key',
@@ -25,5 +27,10 @@ class PrescreeningCriterion extends BaseModel
     public function template()
     {
         return $this->belongsTo(PrescreeningTemplate::class, 'prescreening_template_id');
+    }
+
+    public function section()
+    {
+        return $this->belongsTo(PrescreeningSection::class, 'prescreening_section_id');
     }
 }

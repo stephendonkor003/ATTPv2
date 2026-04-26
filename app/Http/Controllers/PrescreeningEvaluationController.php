@@ -103,7 +103,7 @@ class PrescreeningEvaluationController extends Controller
 
         $template = $submission->procurement
             ->prescreeningTemplate
-            ?->load('criteria');
+            ?->load('sections.criteria');
 
         abort_if(!$template, 404);
 
@@ -145,6 +145,8 @@ class PrescreeningEvaluationController extends Controller
         $template = $submission->procurement->prescreeningTemplate;
         abort_if(!$template, 404);
 
+        $template->load('sections.criteria');
+
         $result = $submission->prescreeningResult;
 
         // 🔒 Prevent edits when locked
@@ -153,8 +155,20 @@ class PrescreeningEvaluationController extends Controller
         }
 
         DB::transaction(function () use ($request, $submission, $template) {
+            $criteria = $template->sections
+                ->flatMap(fn ($section) => $section->criteria)
+                ->values();
 
-            $criteria = $template->criteria;
+            $rules = [];
+            foreach ($criteria as $criterion) {
+                $rules["criteria.{$criterion->id}.passed"] = 'required|boolean';
+                $rules["criteria.{$criterion->id}.remarks"] = 'nullable|string';
+            }
+
+            validator($request->all(), $rules, [
+                'required' => 'Complete every prescreening item before saving the evaluation.',
+            ])->validate();
+
             $passed = 0;
             $failed = 0;
 

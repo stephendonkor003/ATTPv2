@@ -200,6 +200,7 @@
             max-width: 12ch;
             font: 700 clamp(2.45rem, 5vw, 5.1rem)/0.94 var(--font-display);
             letter-spacing: -0.03em;
+            text-transform: none;
             text-wrap: balance;
         }
 
@@ -1497,6 +1498,7 @@
             color: var(--ink);
             font: 700 clamp(1.45rem, 2.5vw, 2.1rem)/1.25 var(--font-body);
             letter-spacing: -0.02em;
+            text-transform: none;
         }
 
         .survey-page--simple .masthead__lead,
