@@ -16,8 +16,8 @@ class AttpWorkshopPostSurveySeeder extends Seeder
         $creator = User::where('email', 'amodonlimited@gmail.com')->value('id')
             ?? User::query()->value('id');
 
-        $title = 'POST WORKSHOP SURVEY: ATTP THINK TANK CONSORTIUM KICKOFF, COORDINATION AND CAPACITY STRENGTHENING WORKSHOP';
-        $intro = 'Thank you for participating in the ATTP Workshop. Your feedback is essential in helping us improve future coordination, strengthen capacity, and enhance the overall implementation of ATTP activities. This survey aims to gather your insights on the workshop\'s content, delivery, and relevance. It will take approximately 10 minutes to complete, and your responses will be treated in confidence.';
+        $title = 'Post Workshop Survey: ATTP Think Tank Consortium Kickoff, Coordination and Capacity Strengthening Workshop';
+        $intro = 'Thank you for participating in the ATTP Workshop. Your feedback is essential in helping us improve future coordination, strengthen capacity, and enhance the overall implementation of ATTP activities. This survey aims to gather your insights on the workshop\'s content, delivery, and relevance. It will take approximately 10-15 minutes to complete, and your responses will be treated in confidence.';
 
         $sections = [
             $this->section('participant_information', 'Section 1: Participant Information', [
@@ -29,19 +29,17 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                 ], true),
             ]),
             $this->section('overall_workshop_assessment', 'Section 2: Overall Workshop Assessment', [
-                $this->scaleQuestion(
+                $this->radioQuestion(
                     'overall_workshop_rating',
                     'Overall, how would you rate the workshop?',
-                    1,
-                    5,
-                    true,
                     [
-                        1 => 'Poor',
-                        2 => 'Fair',
-                        3 => 'Good',
-                        4 => 'Very Good',
-                        5 => 'Excellent',
-                    ]
+                        'Poor',
+                        'Fair',
+                        'Good',
+                        'Very Good',
+                        'Excellent',
+                    ],
+                    true
                 ),
                 $this->radioQuestion('workshop_goal_achievement', 'To what extent do you think the workshop met its overall goal?', [
                     'Fully achieved',
@@ -228,10 +226,34 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                 'in_person_experience',
                 'Section 8: In-Person Experience',
                 [
-                    $this->scaleQuestion('venue_comfort', 'Venue comfort (space, seating, environment):', 1, 5, true),
-                    $this->scaleQuestion('audio_visual_setup_quality', 'Quality of audio / visual setup:', 1, 5, true),
-                    $this->scaleQuestion('logistics_organization', 'Organization of logistics (registration, coordination):', 1, 5, true),
-                    $this->scaleQuestion('catering_refreshments', 'Catering and refreshments:', 1, 5, true),
+                    $this->radioQuestion('venue_comfort', 'Venue comfort (space, seating, environment):', [
+                        'Very poor',
+                        'Poor',
+                        'Average',
+                        'Good',
+                        'Excellent',
+                    ], true),
+                    $this->radioQuestion('audio_visual_setup_quality', 'Quality of audio / visual setup:', [
+                        'Very poor',
+                        'Poor',
+                        'Average',
+                        'Good',
+                        'Excellent',
+                    ], true),
+                    $this->radioQuestion('logistics_organization', 'Organization of logistics (registration, coordination):', [
+                        'Very poor',
+                        'Poor',
+                        'Average',
+                        'Good',
+                        'Excellent',
+                    ], true),
+                    $this->radioQuestion('catering_refreshments', 'Catering and refreshments:', [
+                        'Very poor',
+                        'Poor',
+                        'Average',
+                        'Good',
+                        'Excellent',
+                    ], true),
                 ],
                 [
                     'description' => 'Visible to in-person attendees only.',
@@ -242,7 +264,13 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                 ]
             ),
             $this->section('engagement_and_experience', 'Section 9: Engagement and Experience', [
-                $this->scaleQuestion('active_engagement_rating', 'Did you feel actively engaged during the workshop?', 1, 5, true),
+                $this->radioQuestion('active_engagement_rating', 'How would you rate your level of active engagement during the workshop?', [
+                    'Very poor',
+                    'Poor',
+                    'Average',
+                    'Good',
+                    'Excellent',
+                ], true),
                 $this->textareaQuestion('most_positive_aspect', 'What was the most positive aspect of the workshop?'),
                 $this->textareaQuestion('future_workshop_improvement', 'What should be improved in future workshops?'),
             ]),
@@ -258,7 +286,8 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                 'enabled' => true,
                 'title' => $title,
                 'intro' => $intro,
-                'estimated_minutes' => 10,
+                'estimated_minutes' => 15,
+                'estimated_time_label' => '10-15 minutes',
                 'respondent' => [
                     'show_notes' => false,
                     'fields' => [
@@ -293,6 +322,8 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                     'show_intro_guidance' => false,
                     'show_progress_tracker' => false,
                     'compact_title' => true,
+                    'show_public_qr' => true,
+                    'unified_typography' => true,
                 ],
                 'sections' => $sections,
                 'updated_at' => now()->toDateTimeString(),
@@ -310,6 +341,7 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                         'title' => $normalizedSurvey['title'],
                         'intro' => $normalizedSurvey['intro'],
                         'estimated_minutes' => $normalizedSurvey['estimated_minutes'],
+                        'estimated_time_label' => $normalizedSurvey['estimated_time_label'],
                         'respondent' => $normalizedSurvey['respondent'],
                         'presentation' => $normalizedSurvey['presentation'],
                         'sections' => $normalizedSurvey['sections'],

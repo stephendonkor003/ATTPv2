@@ -52,6 +52,26 @@ class MeSurveyTest extends TestCase
         );
     }
 
+    public function test_it_preserves_estimated_time_labels_and_extended_presentation_settings(): void
+    {
+        $survey = MeSurvey::surveyConfigFromMetadata([
+            'survey' => [
+                'enabled' => true,
+                'estimated_time_label' => '10-15 minutes',
+                'presentation' => [
+                    'show_public_qr' => true,
+                    'unified_typography' => true,
+                    'compact_title' => true,
+                ],
+            ],
+        ]);
+
+        $this->assertSame('10-15 minutes', $survey['estimated_time_label']);
+        $this->assertTrue(data_get($survey, 'presentation.show_public_qr'));
+        $this->assertTrue(data_get($survey, 'presentation.unified_typography'));
+        $this->assertTrue(data_get($survey, 'presentation.compact_title'));
+    }
+
     public function test_it_resolves_section_visibility_from_previous_answers(): void
     {
         $survey = MeSurvey::surveyConfigFromMetadata([

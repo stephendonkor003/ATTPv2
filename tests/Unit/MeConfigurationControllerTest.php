@@ -28,7 +28,10 @@ class MeConfigurationControllerTest extends TestCase
                     'show_side_navigation' => false,
                     'show_briefing_panel' => false,
                     'compact_title' => true,
+                    'show_public_qr' => true,
+                    'unified_typography' => true,
                 ],
+                'estimated_time_label' => '10-15 minutes',
                 'respondent' => [
                     'show_notes' => false,
                     'fields' => [
@@ -74,6 +77,9 @@ class MeConfigurationControllerTest extends TestCase
         $this->assertFalse(data_get($metadata, 'survey.presentation.show_side_navigation'));
         $this->assertFalse(data_get($metadata, 'survey.presentation.show_briefing_panel'));
         $this->assertTrue(data_get($metadata, 'survey.presentation.compact_title'));
+        $this->assertTrue(data_get($metadata, 'survey.presentation.show_public_qr'));
+        $this->assertTrue(data_get($metadata, 'survey.presentation.unified_typography'));
+        $this->assertSame('10-15 minutes', data_get($metadata, 'survey.estimated_time_label'));
         $this->assertFalse(data_get($metadata, 'survey.respondent.show_notes'));
         $this->assertTrue(data_get($metadata, 'survey.respondent.fields.name.required'));
         $this->assertSame('Participant name', data_get($metadata, 'survey.respondent.fields.name.label'));

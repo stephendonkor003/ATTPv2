@@ -8,11 +8,14 @@
     @php
         $surveyTitle = (string) data_get($surveyConfig, 'title', 'Public Survey');
         $surveyDisplayTitle = \App\Support\MeSurvey::displayTitle($surveyTitle);
+        $surveyIntroText = (string) data_get($surveyConfig, 'intro', 'Please complete the survey carefully. Move section by section, review your answers, and submit once you are satisfied.');
         $normalSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'effective_flow_type', data_get($section, 'flow_type', 'normal'))) !== 'special')->values();
         $specialSections = collect($sections)->filter(fn ($section) => strtolower((string) data_get($section, 'effective_flow_type', data_get($section, 'flow_type', 'normal'))) === 'special')->values();
         $specialQuestions = collect($questions)->filter(fn ($question) => strtolower((string) data_get($question, 'effective_flow_type', data_get($question, 'flow_type', 'normal'))) === 'special')->values();
         $sectionCount = $normalSections->count();
+        $primaryStepCount = $sectionCount + 1;
         $estimatedMinutes = (int) data_get($surveyConfig, 'estimated_minutes', 0);
+        $estimatedTimeLabel = trim((string) data_get($surveyConfig, 'estimated_time_label', ''));
         $presentationSettings = (array) data_get($surveyConfig, 'presentation', []);
         $respondentSettings = (array) data_get($surveyConfig, 'respondent', []);
         $showHeaderMeta = (bool) data_get($presentationSettings, 'show_header_meta', true);
@@ -23,7 +26,17 @@
         $showIntroGuidance = (bool) data_get($presentationSettings, 'show_intro_guidance', true);
         $showProgressTracker = (bool) data_get($presentationSettings, 'show_progress_tracker', true);
         $useCompactTitle = (bool) data_get($presentationSettings, 'compact_title', false);
+        $showPublicQr = (bool) data_get($presentationSettings, 'show_public_qr', false);
+        $useUnifiedTypography = (bool) data_get($presentationSettings, 'unified_typography', false);
         $useSimpleLayout = ! $showSideNavigation;
+        $publicSurveyUrl = route('public.me.indicators.surveys.show', ['token' => $link->public_token]);
+        $publicSurveyQrUrl = \App\Support\MeSurvey::qrCodeUrl($publicSurveyUrl);
+        $estimatedTimePrimary = $estimatedTimeLabel !== ''
+            ? $estimatedTimeLabel
+            : ($estimatedMinutes > 0 ? (string) $estimatedMinutes : '10');
+        $estimatedTimeSecondary = $estimatedTimeLabel !== ''
+            ? 'Estimated time'
+            : ($estimatedMinutes === 1 ? 'Minute' : 'Minutes');
         $showRespondentNotes = (bool) data_get($respondentSettings, 'show_notes', true);
         $respondentNameConfig = (array) data_get($respondentSettings, 'fields.name', []);
         $respondentEmailConfig = (array) data_get($respondentSettings, 'fields.email', []);
@@ -932,6 +945,58 @@
             color: var(--muted);
         }
 
+        .intro-panel__copy--qr {
+            gap: 14px;
+        }
+
+        .survey-qr-card {
+            display: grid;
+            gap: 14px;
+            align-items: center;
+            grid-template-columns: 116px minmax(0, 1fr);
+        }
+
+        .survey-qr-card__image {
+            width: 116px;
+            height: 116px;
+            border-radius: 18px;
+            border: 1px solid rgba(16, 34, 46, 0.12);
+            background: #ffffff;
+            padding: 8px;
+        }
+
+        .survey-qr-card__body {
+            display: grid;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .survey-qr-card__body p {
+            margin: 0;
+        }
+
+        .survey-qr-card__link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: fit-content;
+            max-width: 100%;
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(20, 62, 90, 0.12);
+            background: rgba(20, 62, 90, 0.06);
+            color: var(--primary);
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .survey-qr-card__url {
+            color: var(--muted);
+            font-size: 0.82rem;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+
         .intro-grid {
             display: grid;
             gap: 14px;
@@ -1493,6 +1558,29 @@
             margin-inline: 0;
         }
 
+        .survey-page--unified-type {
+            --font-display: var(--font-body);
+        }
+
+        .survey-page--unified-type .masthead h1,
+        .survey-page--unified-type .masthead--compact-title h1,
+        .survey-page--unified-type .step-header h2,
+        .survey-page--unified-type .step-header h3,
+        .survey-page--unified-type .intro-scene__title,
+        .survey-page--unified-type .intro-form-head h3,
+        .survey-page--unified-type .rail-panel h2,
+        .survey-page--unified-type .briefing__title {
+            font-family: var(--font-body);
+            letter-spacing: -0.01em;
+        }
+
+        .survey-page--unified-type .masthead h1,
+        .survey-page--unified-type .masthead--compact-title h1 {
+            max-width: 28ch;
+            font-size: clamp(1.5rem, 2.4vw, 2.35rem);
+            line-height: 1.18;
+        }
+
         .survey-page--simple .masthead h1,
         .survey-page--simple .masthead--compact-title h1 {
             max-width: none;
@@ -1972,6 +2060,10 @@
                 flex-direction: column;
             }
 
+            .survey-qr-card {
+                grid-template-columns: 1fr;
+            }
+
             .choice-item {
                 padding: 13px 14px;
             }
@@ -1980,7 +2072,7 @@
 </head>
 
 <body class="{{ $useSimpleLayout ? 'survey-body--simple' : '' }}">
-    <div class="survey-page{{ $useSimpleLayout ? ' survey-page--simple' : '' }}">
+    <div class="survey-page{{ $useSimpleLayout ? ' survey-page--simple' : '' }}{{ $useUnifiedTypography ? ' survey-page--unified-type' : '' }}">
         <section class="masthead{{ $useCompactTitle ? ' masthead--compact-title' : '' }}">
             <div class="masthead__grid{{ $showBriefingPanel ? '' : ' masthead__grid--single' }}">
                 <div class="masthead__copy">
@@ -1989,7 +2081,7 @@
                     @endif
                     <h1>{{ $surveyDisplayTitle }}</h1>
                     <p class="masthead__lead">
-                        {{ data_get($surveyConfig, 'intro', 'Please complete the survey carefully. Move section by section, review your answers, and submit once you are satisfied.') }}
+                        {{ $surveyIntroText }}
                     </p>
                     @if ($showHeaderMeta)
                         <div class="masthead__meta">
@@ -2020,7 +2112,7 @@
                             <ul class="briefing-list">
                                 <li>
                                     <strong>Time needed</strong>
-                                    <span>{{ $estimatedMinutes > 0 ? $estimatedMinutes . ' minute' . ($estimatedMinutes === 1 ? '' : 's') : 'Flexible completion time' }}</span>
+                                    <span>{{ $estimatedTimeLabel !== '' ? $estimatedTimeLabel : ($estimatedMinutes > 0 ? $estimatedMinutes . ' minute' . ($estimatedMinutes === 1 ? '' : 's') : 'Flexible completion time') }}</span>
                                 </li>
                                 <li>
                                     <strong>Completion flow</strong>
@@ -2079,7 +2171,7 @@
                                     </div>
                                     <div class="rail-stat">
                                         <span>Questions in view</span>
-                                        <strong id="railQuestionCount">Respondent profile</strong>
+                                        <strong id="railQuestionCount">Welcome screen</strong>
                                     </div>
                                     <div class="rail-stat">
                                         <span>Progress detail</span>
@@ -2093,8 +2185,17 @@
                                     <span class="step-link__index">0</span>
                                     <span class="step-link__body">
                                         <strong>Introduction</strong>
-                                        <small data-nav-count>Respondent profile</small>
+                                        <small data-nav-count>Welcome screen</small>
                                         <span class="step-link__status" data-nav-status>Current</span>
+                                    </span>
+                                </button>
+
+                                <button type="button" class="step-link" data-step-nav="profile">
+                                    <span class="step-link__index">1</span>
+                                    <span class="step-link__body">
+                                        <strong>Respondent details</strong>
+                                        <small data-nav-count>4 profile fields</small>
+                                        <span class="step-link__status" data-nav-status>Upcoming</span>
                                     </span>
                                 </button>
 
@@ -2107,7 +2208,7 @@
                                             ->count();
                                     @endphp
                                     <button type="button" class="step-link step-link--section" data-step-nav="{{ $sectionKey }}" style="--section-accent: {{ $sectionColor }};">
-                                        <span class="step-link__index">{{ $sectionIndex + 1 }}</span>
+                                        <span class="step-link__index">{{ $sectionIndex + 2 }}</span>
                                         <span class="step-link__body">
                                             <strong>{{ $section['title'] }}</strong>
                                             <small data-nav-count>{{ $sectionQuestionCount }} question{{ $sectionQuestionCount === 1 ? '' : 's' }}</small>
@@ -2127,8 +2228,17 @@
                                         <span class="step-link__index">0</span>
                                         <span class="step-link__body">
                                             <strong>Introduction</strong>
-                                            <small data-nav-count>Respondent profile</small>
+                                            <small data-nav-count>Welcome screen</small>
                                             <span class="step-link__status" data-nav-status>Current</span>
+                                        </span>
+                                    </button>
+
+                                    <button type="button" class="step-link" data-step-nav="profile">
+                                        <span class="step-link__index">1</span>
+                                        <span class="step-link__body">
+                                            <strong>Respondent details</strong>
+                                            <small data-nav-count>4 profile fields</small>
+                                            <span class="step-link__status" data-nav-status>Upcoming</span>
                                         </span>
                                     </button>
 
@@ -2141,7 +2251,7 @@
                                                 ->count();
                                         @endphp
                                         <button type="button" class="step-link step-link--section" data-step-nav="{{ $sectionKey }}" style="--section-accent: {{ $sectionColor }};">
-                                            <span class="step-link__index">{{ $sectionIndex + 1 }}</span>
+                                            <span class="step-link__index">{{ $sectionIndex + 2 }}</span>
                                             <span class="step-link__body">
                                                 <strong>{{ $section['title'] }}</strong>
                                                 <small data-nav-count>{{ $sectionQuestionCount }} question{{ $sectionQuestionCount === 1 ? '' : 's' }}</small>
@@ -2159,7 +2269,7 @@
                                     <div class="status-copy">
                                         <span class="eyebrow" style="background: rgba(185, 120, 47, 0.08); border-color: rgba(185, 120, 47, 0.12); color: var(--accent);">Survey progress</span>
                                         <strong id="progressLabel">Introduction</strong>
-                                        <span id="progressMeta">Step 0 of {{ $sectionCount }}</span>
+                                        <span id="progressMeta">Step 0 of {{ $primaryStepCount }}</span>
                                     </div>
 
                                     <div class="progress-stack" @if (! $showProgressTracker) hidden @endif>
@@ -2194,44 +2304,139 @@
                                         @if ($showSideNavigation)
                                             <div class="step-header">
                                                 <div class="step-header__top">
-                                                    <span class="step-counter">Step 0 of {{ $sectionCount }}</span>
+                                                    <span class="step-counter">Step 0 of {{ $primaryStepCount }}</span>
                                                 </div>
-                                                <h2>Before you begin</h2>
-                                                @if ($showIntroGuidance)
-                                                    <p>
-                                                        Capture your respondent details, then move through each section below.
-                                                        You can return to any completed section before you submit your response.
-                                                    </p>
-                                                @endif
+                                                <h2>{{ $surveyDisplayTitle }}</h2>
+                                                <p>{{ $surveyIntroText }}</p>
                                             </div>
 
                                             <div class="intro-panel">
-                                                @if ($showIntroGuidance)
-                                                    <div class="intro-panel__copy">
-                                                        <strong>How this form works</strong>
-                                                        <p>
-                                                            Each screen focuses on one section only. Some questions or sections may appear
-                                                            only when they are relevant to your previous responses.
-                                                        </p>
+                                                <div class="intro-panel__copy">
+                                                    <strong>Workshop introduction</strong>
+                                                    <p>{{ $surveyIntroText }}</p>
+                                                </div>
+                                                <div class="intro-panel__copy">
+                                                    <strong>What happens next</strong>
+                                                    <p>
+                                                        Click <strong>Start</strong> to open the respondent details screen.
+                                                        After that, you will move section by section through the survey.
+                                                    </p>
+                                                </div>
+                                                @if ($showPublicQr)
+                                                    <div class="intro-panel__copy intro-panel__copy--qr">
+                                                        <strong>Alternative access</strong>
+                                                        <div class="survey-qr-card">
+                                                            <img class="survey-qr-card__image" src="{{ $publicSurveyQrUrl }}" alt="Survey QR code">
+                                                            <div class="survey-qr-card__body">
+                                                                <p>Scan the QR code or open the survey link below if direct access gives you any trouble.</p>
+                                                                <a class="survey-qr-card__link" href="{{ $publicSurveyUrl }}" target="_blank" rel="noopener">Open survey link</a>
+                                                                <div class="survey-qr-card__url">{{ $publicSurveyUrl }}</div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 @endif
-
-                                                <div class="intro-grid">
                                         @else
                                             <div class="intro-scene">
                                                 <div class="intro-scene__panel intro-scene__panel--welcome">
+                                                    <span class="intro-scene__eyebrow">ATTP workshop feedback</span>
+                                                    <h3 class="intro-scene__title">{{ $surveyDisplayTitle }}</h3>
+                                                    <p class="intro-scene__text">{{ $surveyIntroText }}</p>
                                                     <div class="intro-scene__facts">
                                                         <div class="intro-fact">
-                                                            <strong>{{ $estimatedMinutes > 0 ? $estimatedMinutes : '10' }}</strong>
-                                                            <span>{{ $estimatedMinutes === 1 ? 'Minute' : 'Minutes' }}</span>
+                                                            <strong>{{ $estimatedTimePrimary }}</strong>
+                                                            <span>{{ $estimatedTimeSecondary }}</span>
                                                         </div>
                                                         <div class="intro-fact">
                                                             <strong>{{ $sectionCount }}</strong>
                                                             <span>Sections</span>
                                                         </div>
                                                         <div class="intro-fact">
+                                                            <strong>Start</strong>
+                                                            <span>Respondent details next</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="intro-scene__panel intro-scene__panel--form">
+                                                    <div class="intro-form-head">
+                                                        <div>
+                                                            <span class="intro-form-kicker">Before you begin</span>
+                                                            <h3>Start from the introduction page</h3>
+                                                            <p>
+                                                                Click <strong>Start</strong> to move to the respondent details screen,
+                                                                then continue into the survey sections.
+                                                            </p>
+                                                        </div>
+                                                        <span class="intro-form-badge">Introduction</span>
+                                                    </div>
+
+                                                    <div class="intro-panel">
+                                                        <div class="intro-panel__copy">
+                                                            <strong>Survey flow</strong>
+                                                            <p>
+                                                                Introduction first, respondent details next, then the survey sections.
+                                                                You can still go back and review earlier screens before you submit.
+                                                            </p>
+                                                        </div>
+                                                        <div class="intro-panel__copy">
+                                                            <strong>Confidentiality</strong>
+                                                            <p>Your responses will be treated in confidence.</p>
+                                                        </div>
+                                                        @if ($showPublicQr)
+                                                            <div class="intro-panel__copy intro-panel__copy--qr">
+                                                                <strong>Alternative access</strong>
+                                                                <div class="survey-qr-card">
+                                                                    <img class="survey-qr-card__image" src="{{ $publicSurveyQrUrl }}" alt="Survey QR code">
+                                                                    <div class="survey-qr-card__body">
+                                                                        <p>Scan the QR code or open the survey link below if direct access gives you any trouble.</p>
+                                                                        <a class="survey-qr-card__link" href="{{ $publicSurveyUrl }}" target="_blank" rel="noopener">Open survey link</a>
+                                                                        <div class="survey-qr-card__url">{{ $publicSurveyUrl }}</div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                        @endif
+                                            </div>
+                                        @endif
+                                    </section>
+
+                                    <section class="step"
+                                        data-step-id="profile"
+                                        data-step-kind="profile"
+                                        data-step-label="Respondent details">
+                                        @if ($showSideNavigation)
+                                            <div class="step-header">
+                                                <div class="step-header__top">
+                                                    <span class="step-counter">Step 1 of {{ $primaryStepCount }}</span>
+                                                </div>
+                                                <h2>Respondent details</h2>
+                                                <p>
+                                                    Complete your details below, then continue into the workshop survey sections.
+                                                </p>
+                                            </div>
+
+                                            <div class="intro-grid">
+                                        @else
+                                            <div class="intro-scene">
+                                                <div class="intro-scene__panel intro-scene__panel--welcome">
+                                                    <span class="intro-scene__eyebrow">Step 1</span>
+                                                    <h3 class="intro-scene__title">Respondent details</h3>
+                                                    <p class="intro-scene__text">
+                                                        Complete this screen first so your feedback can be reviewed in the right workshop context.
+                                                    </p>
+                                                    <div class="intro-scene__facts">
+                                                        <div class="intro-fact">
                                                             <strong>4</strong>
-                                                            <span>Required fields</span>
+                                                            <span>Profile fields</span>
+                                                        </div>
+                                                        <div class="intro-fact">
+                                                            <strong>{{ $sectionCount }}</strong>
+                                                            <span>Survey sections</span>
+                                                        </div>
+                                                        <div class="intro-fact">
+                                                            <strong>Next</strong>
+                                                            <span>Section 1</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2240,10 +2445,10 @@
                                                     <div class="intro-form-head">
                                                         <div>
                                                             <span class="intro-form-kicker">Respondent details</span>
-                                                            <h3>Complete your details to begin</h3>
-                                                            <p>These details are required before you move into the survey sections.</p>
+                                                            <h3>Complete your details to continue</h3>
+                                                            <p>Once this screen is complete, you can move into the main survey.</p>
                                                         </div>
-                                                        <span class="intro-form-badge">All fields required</span>
+                                                        <span class="intro-form-badge">Step 1</span>
                                                     </div>
 
                                                     <div class="intro-grid intro-grid--profile">
@@ -2335,8 +2540,8 @@
                                                             <div class="field-error">{{ $message }}</div>
                                                         @enderror
                                                     </div>
+
                                         @if ($showSideNavigation)
-                                                </div>
                                             </div>
                                         @else
                                                     </div>
@@ -2460,12 +2665,12 @@
                             <div class="action-dock__meta">
                                 <span>Current step</span>
                                 <strong id="actionStepTitle">Introduction</strong>
-                                <small id="actionStepMeta">Review the introduction and continue when ready.</small>
+                                <small id="actionStepMeta">Review the workshop introduction, then click Start.</small>
                             </div>
 
                             <div class="action-dock__buttons">
                                 <button type="button" class="btn btn-secondary" id="globalBackButton" hidden>Back</button>
-                                <button type="button" class="btn btn-primary" id="globalNextButton">Start survey</button>
+                                <button type="button" class="btn btn-primary" id="globalNextButton">Start</button>
                                 <button type="button" class="btn btn-success" id="globalSubmitButton" hidden>Submit survey</button>
                             </div>
                         </section>
@@ -2501,6 +2706,7 @@
                 const allSteps = Array.from(form.querySelectorAll('.step'));
                 const navItems = Array.from(document.querySelectorAll('[data-step-nav]'));
                 const respondentFields = Array.from(form.querySelectorAll('[data-respondent-field]'));
+                const profileStepKey = 'profile';
 
                 let currentStepId = 'intro';
                 let navigationHistory = [];
@@ -2559,6 +2765,10 @@
 
                 function normalSectionSteps() {
                     return allSteps.filter((step) => step.getAttribute('data-step-kind') === 'section' && step.getAttribute('data-step-flow') !== 'special' && !step.hidden);
+                }
+
+                function primarySteps() {
+                    return [stepById(profileStepKey), ...normalSectionSteps()].filter(Boolean);
                 }
 
                 function currentStep() {
@@ -2642,16 +2852,32 @@
                 }
 
                 function countVisibleQuestions(step) {
-                    if (!step || step.getAttribute('data-step-kind') === 'intro') {
+                    if (!step) {
                         return 0;
+                    }
+
+                    if (step.getAttribute('data-step-kind') === 'intro') {
+                        return 0;
+                    }
+
+                    if (step.getAttribute('data-step-kind') === 'profile') {
+                        return respondentFields.length;
                     }
 
                     return step.querySelectorAll('.question-block:not([hidden])').length;
                 }
 
                 function countAnsweredQuestions(step) {
-                    if (!step || step.getAttribute('data-step-kind') === 'intro') {
+                    if (!step) {
                         return 0;
+                    }
+
+                    if (step.getAttribute('data-step-kind') === 'intro') {
+                        return 0;
+                    }
+
+                    if (step.getAttribute('data-step-kind') === 'profile') {
+                        return countCompletedRespondentFields();
                     }
 
                     return Array.from(step.querySelectorAll('.question-block:not([hidden])'))
@@ -2866,7 +3092,7 @@
                 }
 
                 function syncStepNavigation() {
-                    const sequence = [stepById('intro'), ...normalSectionSteps()].filter(Boolean);
+                    const sequence = [stepById('intro'), ...primarySteps()].filter(Boolean);
                     const referenceId = referenceNormalStepId();
                     const referenceIndex = Math.max(0, sequence.findIndex((step) => stepId(step) === referenceId));
                     const specialActive = isSpecialStep(currentStep());
@@ -2892,8 +3118,11 @@
                         item.classList.toggle('is-available', isAvailable);
 
                         if (countNode) {
-                            if (targetStep.getAttribute('data-step-kind') === 'intro') {
-                                countNode.textContent = 'Respondent profile';
+                            const targetKind = targetStep.getAttribute('data-step-kind');
+                            if (targetKind === 'intro') {
+                                countNode.textContent = 'Welcome screen';
+                            } else if (targetKind === 'profile') {
+                                countNode.textContent = `${respondentFields.length} profile field${respondentFields.length === 1 ? '' : 's'}`;
                             } else {
                                 const count = countVisibleQuestions(targetStep);
                                 countNode.textContent = `${count} question${count === 1 ? '' : 's'}`;
@@ -2909,17 +3138,17 @@
                 }
 
                 function nextNormalStepId(fromStepId) {
-                    const sections = normalSectionSteps();
+                    const sequence = primarySteps();
                     if (fromStepId === 'intro') {
-                        return stepId(sections[0]) || null;
+                        return stepId(sequence[0]) || null;
                     }
 
-                    const currentIndex = sections.findIndex((step) => stepId(step) === fromStepId);
+                    const currentIndex = sequence.findIndex((step) => stepId(step) === fromStepId);
                     if (currentIndex < 0) {
                         return null;
                     }
 
-                    return stepId(sections[currentIndex + 1]) || null;
+                    return stepId(sequence[currentIndex + 1]) || null;
                 }
 
                 function peekBaseNextDestination() {
@@ -2965,7 +3194,7 @@
 
                 function updateProgress() {
                     const activeStep = currentStep();
-                    const totalSections = normalSectionSteps().length;
+                    const totalSteps = primarySteps().length;
 
                     if (!activeStep) {
                         return;
@@ -2973,10 +3202,10 @@
 
                     const activeKind = activeStep.getAttribute('data-step-kind');
                     const referenceId = referenceNormalStepId();
-                    const referenceIndex = normalSectionSteps().findIndex((step) => stepId(step) === referenceId);
+                    const referenceIndex = primarySteps().findIndex((step) => stepId(step) === referenceId);
                     const completedNormalSteps = referenceIndex >= 0 ? referenceIndex + 1 : 0;
                     const numerator = activeKind === 'intro' ? 0 : completedNormalSteps;
-                    const denominator = Math.max(totalSections, 1);
+                    const denominator = Math.max(totalSteps, 1);
                     const percent = Math.max(0, Math.min(100, Math.round((numerator / denominator) * 100)));
                     const hasNextStep = Boolean(peekBaseNextDestination());
                     const questionCount = countVisibleQuestions(activeStep);
@@ -2985,11 +3214,11 @@
                     setText(progressLabel, activeStep.getAttribute('data-step-label') || 'Survey');
 
                     if (activeKind === 'intro') {
-                        setText(progressMeta, `Step 0 of ${totalSections}`);
+                        setText(progressMeta, `Step 0 of ${totalSteps}`);
                     } else if (isSpecialStep(activeStep)) {
-                        setText(progressMeta, `Follow-up after step ${Math.max(completedNormalSteps, 1)} of ${totalSections}`);
+                        setText(progressMeta, `Follow-up after step ${Math.max(completedNormalSteps, 1)} of ${totalSteps}`);
                     } else {
-                        setText(progressMeta, `Step ${completedNormalSteps} of ${totalSections}`);
+                        setText(progressMeta, `Step ${completedNormalSteps} of ${totalSteps}`);
                     }
 
                     if (progressFill) {
@@ -2998,33 +3227,43 @@
 
                     setText(progressPercent, `${percent}% complete`);
                     setText(progressDescriptor, activeKind === 'intro'
-                        ? 'Review and continue'
+                        ? 'Review the introduction and click Start'
+                        : (activeKind === 'profile'
+                            ? `${answeredCount} of ${questionCount} profile fields filled`
                         : (isSpecialStep(activeStep)
                             ? `${answeredCount} of ${questionCount} answered in this follow-up`
-                            : `${answeredCount} of ${questionCount} answered in this section`));
+                            : `${answeredCount} of ${questionCount} answered in this section`)));
 
-                    setText(railSectionCount, totalSections);
+                    setText(railSectionCount, normalSectionSteps().length);
                     setText(railCurrentStep, activeStep.getAttribute('data-step-label') || 'Survey');
                     setText(railQuestionCount, activeKind === 'intro'
-                        ? 'Respondent profile'
-                        : `${questionCount} visible question${questionCount === 1 ? '' : 's'}`);
+                        ? 'Welcome screen'
+                        : (activeKind === 'profile'
+                            ? `${questionCount} profile field${questionCount === 1 ? '' : 's'}`
+                            : `${questionCount} visible question${questionCount === 1 ? '' : 's'}`));
                     setText(railAnsweredCount, activeKind === 'intro'
-                        ? `${countCompletedRespondentFields()} of ${respondentFields.length} profile fields filled`
-                        : `${answeredCount} of ${questionCount} answered`);
+                        ? 'Click Start to continue'
+                        : (activeKind === 'profile'
+                            ? `${answeredCount} of ${questionCount} profile fields filled`
+                            : `${answeredCount} of ${questionCount} answered`));
 
                     setText(actionStepTitle, activeStep.getAttribute('data-step-label') || 'Survey');
                     setText(actionStepMeta, activeKind === 'intro'
-                        ? 'Review the introduction and continue when ready.'
+                        ? 'Review the workshop introduction, then click Start.'
+                        : (activeKind === 'profile'
+                            ? 'Complete your respondent details before moving into the survey sections.'
                         : (isSpecialStep(activeStep)
                             ? 'This is a special follow-up page triggered by one of your previous answers.'
-                            : (hasNextStep ? 'Complete this section before moving forward.' : 'Review this section, then submit your survey.')));
+                            : (hasNextStep ? 'Complete this section before moving forward.' : 'Review this section, then submit your survey.'))));
 
                     backButton.hidden = navigationHistory.length === 0;
                     nextButton.hidden = !hasNextStep;
                     submitButton.hidden = hasNextStep;
                     nextButton.textContent = activeKind === 'intro'
-                        ? 'Start survey'
-                        : (isSpecialStep(activeStep) ? 'Continue' : 'Next section');
+                        ? 'Start'
+                        : (activeKind === 'profile'
+                            ? 'Continue'
+                            : (isSpecialStep(activeStep) ? 'Continue' : 'Next section'));
                 }
 
                 function updateActiveStepClasses() {
@@ -3105,7 +3344,9 @@
                         return true;
                     }
 
-                    if (step.getAttribute('data-step-kind') === 'intro') {
+                    const stepKind = step.getAttribute('data-step-kind');
+
+                    if (stepKind === 'intro' || stepKind === 'profile') {
                         for (const field of step.querySelectorAll('input, textarea, select')) {
                             if (!field.reportValidity()) {
                                 field.focus();
@@ -3185,7 +3426,7 @@
                         const kind = step.getAttribute('data-step-kind');
                         const flow = step.getAttribute('data-step-flow') || 'normal';
 
-                        if (kind === 'intro') {
+                        if (kind === 'intro' || kind === 'profile') {
                             step.hidden = false;
                             return;
                         }
@@ -3328,7 +3569,7 @@
                             return;
                         }
 
-                        const sequence = [stepById('intro'), ...normalSectionSteps()].filter(Boolean);
+                        const sequence = [stepById('intro'), ...primarySteps()].filter(Boolean);
                         const targetIndex = sequence.findIndex((step) => stepId(step) === stepId(targetStep));
                         const referenceIndex = sequence.findIndex((step) => stepId(step) === referenceNormalStepId());
 

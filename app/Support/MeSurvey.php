@@ -88,6 +88,7 @@ class MeSurvey
             'title' => $title !== '' ? $title : $fallbackTitle,
             'intro' => $intro,
             'estimated_minutes' => self::normalizePositiveInteger($survey['estimated_minutes'] ?? null),
+            'estimated_time_label' => trim((string) ($survey['estimated_time_label'] ?? '')),
             'respondent' => self::normalizeRespondentSettings($survey['respondent'] ?? []),
             'presentation' => self::normalizeSurveyPresentation($survey['presentation'] ?? $survey['ui'] ?? []),
             'sections' => $sections,
@@ -748,6 +749,8 @@ class MeSurvey
             'show_intro_guidance' => true,
             'show_progress_tracker' => true,
             'compact_title' => false,
+            'show_public_qr' => false,
+            'unified_typography' => false,
         ];
 
         if (!is_array($presentation)) {
