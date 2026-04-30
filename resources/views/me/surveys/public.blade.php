@@ -2449,27 +2449,29 @@
                                             <div class="intro-grid">
                                         @else
                                             <div class="intro-scene">
-                                                <div class="intro-scene__panel intro-scene__panel--welcome">
-                                                    <span class="intro-scene__eyebrow">Step 1</span>
-                                                    <h3 class="intro-scene__title">Respondent details</h3>
-                                                    <p class="intro-scene__text">
-                                                        Complete this screen first so your feedback can be reviewed in the right workshop context.
-                                                    </p>
-                                                    <div class="intro-scene__facts">
-                                                        <div class="intro-fact">
-                                                            <strong>4</strong>
-                                                            <span>Profile fields</span>
-                                                        </div>
-                                                        <div class="intro-fact">
-                                                            <strong>{{ $sectionCount }}</strong>
-                                                            <span>Survey sections</span>
-                                                        </div>
-                                                        <div class="intro-fact">
-                                                            <strong>Next</strong>
-                                                            <span>Section 1</span>
+                                                @if ($showIntroGuidance)
+                                                    <div class="intro-scene__panel intro-scene__panel--welcome">
+                                                        <span class="intro-scene__eyebrow">Step 1</span>
+                                                        <h3 class="intro-scene__title">Respondent details</h3>
+                                                        <p class="intro-scene__text">
+                                                            Complete this screen first so your feedback can be reviewed in the right workshop context.
+                                                        </p>
+                                                        <div class="intro-scene__facts">
+                                                            <div class="intro-fact">
+                                                                <strong>{{ $respondentFieldCount }}</strong>
+                                                                <span>Profile fields</span>
+                                                            </div>
+                                                            <div class="intro-fact">
+                                                                <strong>{{ $sectionCount }}</strong>
+                                                                <span>Survey sections</span>
+                                                            </div>
+                                                            <div class="intro-fact">
+                                                                <strong>Next</strong>
+                                                                <span>Section 1</span>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
+                                                @endif
 
                                                 <div class="intro-scene__panel intro-scene__panel--form">
                                                     <div class="intro-form-head">
