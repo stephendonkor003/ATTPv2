@@ -321,6 +321,7 @@ class AttpWorkshopPostSurveySeeder extends Seeder
                     'show_step_navigation' => false,
                     'show_intro_guidance' => false,
                     'show_progress_tracker' => false,
+                    'show_intro_step_summary' => false,
                     'compact_title' => true,
                     'show_public_qr' => true,
                     'unified_typography' => true,

@@ -748,6 +748,7 @@ class MeSurvey
             'show_step_navigation' => true,
             'show_intro_guidance' => true,
             'show_progress_tracker' => true,
+            'show_intro_step_summary' => true,
             'compact_title' => false,
             'show_public_qr' => false,
             'unified_typography' => false,

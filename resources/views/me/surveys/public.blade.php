@@ -28,6 +28,9 @@
         $useCompactTitle = (bool) data_get($presentationSettings, 'compact_title', false);
         $showPublicQr = (bool) data_get($presentationSettings, 'show_public_qr', false);
         $useUnifiedTypography = (bool) data_get($presentationSettings, 'unified_typography', false);
+        $showIntroStepSummary = array_key_exists('show_intro_step_summary', $presentationSettings)
+            ? (bool) $presentationSettings['show_intro_step_summary']
+            : ! ($useCompactTitle && ! $showSideNavigation && ! $showBriefingPanel);
         $useSimpleLayout = ! $showSideNavigation;
         $publicSurveyUrl = route('public.me.indicators.surveys.show', ['token' => $link->public_token]);
         $publicSurveyQrUrl = \App\Support\MeSurvey::qrCodeUrl($publicSurveyUrl);
@@ -2339,9 +2342,11 @@
                                         @else
                                             <div class="intro-scene">
                                                 <div class="intro-scene__panel intro-scene__panel--welcome">
-                                                    <span class="intro-scene__eyebrow">ATTP workshop feedback</span>
-                                                    <h3 class="intro-scene__title">{{ $surveyDisplayTitle }}</h3>
-                                                    <p class="intro-scene__text">{{ $surveyIntroText }}</p>
+                                                    <span class="intro-scene__eyebrow">{{ $showIntroStepSummary ? 'ATTP workshop feedback' : 'Before you begin' }}</span>
+                                                    <h3 class="intro-scene__title">{{ $showIntroStepSummary ? $surveyDisplayTitle : 'Start with the survey flow' }}</h3>
+                                                    <p class="intro-scene__text">
+                                                        {{ $showIntroStepSummary ? $surveyIntroText : 'The survey overview is already shown above. Review the timing and flow here, then continue to respondent details.' }}
+                                                    </p>
                                                     <div class="intro-scene__facts">
                                                         <div class="intro-fact">
                                                             <strong>{{ $estimatedTimePrimary }}</strong>
