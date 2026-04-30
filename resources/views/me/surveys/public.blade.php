@@ -49,6 +49,24 @@
         $respondentEmailRequired = (bool) data_get($respondentEmailConfig, 'required', false);
         $respondentPhoneRequired = (bool) data_get($respondentPhoneConfig, 'required', false);
         $respondentOrganizationRequired = (bool) data_get($respondentOrganizationConfig, 'required', false);
+        $respondentFieldCount = 4;
+        $initialStepLabel = $showIntroGuidance ? 'Introduction' : 'Respondent details';
+        $initialProgressMeta = $showIntroGuidance
+            ? 'Step 0 of ' . $primaryStepCount
+            : 'Step 1 of ' . $primaryStepCount;
+        $initialQuestionCountLabel = $showIntroGuidance
+            ? 'Welcome screen'
+            : $respondentFieldCount . ' profile fields';
+        $initialAnsweredCountLabel = $showIntroGuidance
+            ? 'Click Start to continue'
+            : '0 of ' . $respondentFieldCount . ' profile fields filled';
+        $initialProgressDescriptor = $showIntroGuidance
+            ? 'Review and continue'
+            : $initialAnsweredCountLabel;
+        $initialActionMeta = $showIntroGuidance
+            ? 'Review the workshop introduction, then click Start.'
+            : 'Complete your respondent details before moving into the survey sections.';
+        $initialNextButtonLabel = $showIntroGuidance ? 'Start' : 'Continue';
     @endphp
     <title>{{ $surveyDisplayTitle }}</title>
     <style>
@@ -2170,35 +2188,37 @@
                                     </div>
                                     <div class="rail-stat">
                                         <span>Current step</span>
-                                        <strong id="railCurrentStep">Introduction</strong>
+                                        <strong id="railCurrentStep">{{ $initialStepLabel }}</strong>
                                     </div>
                                     <div class="rail-stat">
                                         <span>Questions in view</span>
-                                        <strong id="railQuestionCount">Welcome screen</strong>
+                                        <strong id="railQuestionCount">{{ $initialQuestionCountLabel }}</strong>
                                     </div>
                                     <div class="rail-stat">
                                         <span>Progress detail</span>
-                                        <strong id="railAnsweredCount">0% complete</strong>
+                                        <strong id="railAnsweredCount">{{ $initialAnsweredCountLabel }}</strong>
                                     </div>
                                 </div>
                             </section>
 
                             <nav class="step-nav" aria-label="Survey sections" id="stepNav">
-                                <button type="button" class="step-link is-current is-available" data-step-nav="intro">
-                                    <span class="step-link__index">0</span>
-                                    <span class="step-link__body">
-                                        <strong>Introduction</strong>
-                                        <small data-nav-count>Welcome screen</small>
-                                        <span class="step-link__status" data-nav-status>Current</span>
-                                    </span>
-                                </button>
+                                @if ($showIntroGuidance)
+                                    <button type="button" class="step-link is-current is-available" data-step-nav="intro">
+                                        <span class="step-link__index">0</span>
+                                        <span class="step-link__body">
+                                            <strong>Introduction</strong>
+                                            <small data-nav-count>Welcome screen</small>
+                                            <span class="step-link__status" data-nav-status>Current</span>
+                                        </span>
+                                    </button>
+                                @endif
 
-                                <button type="button" class="step-link" data-step-nav="profile">
+                                <button type="button" class="step-link{{ $showIntroGuidance ? '' : ' is-current is-available' }}" data-step-nav="profile">
                                     <span class="step-link__index">1</span>
                                     <span class="step-link__body">
                                         <strong>Respondent details</strong>
-                                        <small data-nav-count>4 profile fields</small>
-                                        <span class="step-link__status" data-nav-status>Upcoming</span>
+                                        <small data-nav-count>{{ $respondentFieldCount }} profile fields</small>
+                                        <span class="step-link__status" data-nav-status>{{ $showIntroGuidance ? 'Upcoming' : 'Current' }}</span>
                                     </span>
                                 </button>
 
@@ -2227,21 +2247,23 @@
                         @if ($showStepNavigation && ! $showSideNavigation)
                             <div class="inline-nav-shell">
                                 <nav class="step-nav step-nav--inline" aria-label="Survey sections" id="stepNav">
-                                    <button type="button" class="step-link is-current is-available" data-step-nav="intro">
-                                        <span class="step-link__index">0</span>
-                                        <span class="step-link__body">
-                                            <strong>Introduction</strong>
-                                            <small data-nav-count>Welcome screen</small>
-                                            <span class="step-link__status" data-nav-status>Current</span>
-                                        </span>
-                                    </button>
+                                    @if ($showIntroGuidance)
+                                        <button type="button" class="step-link is-current is-available" data-step-nav="intro">
+                                            <span class="step-link__index">0</span>
+                                            <span class="step-link__body">
+                                                <strong>Introduction</strong>
+                                                <small data-nav-count>Welcome screen</small>
+                                                <span class="step-link__status" data-nav-status>Current</span>
+                                            </span>
+                                        </button>
+                                    @endif
 
-                                    <button type="button" class="step-link" data-step-nav="profile">
+                                    <button type="button" class="step-link{{ $showIntroGuidance ? '' : ' is-current is-available' }}" data-step-nav="profile">
                                         <span class="step-link__index">1</span>
                                         <span class="step-link__body">
                                             <strong>Respondent details</strong>
-                                            <small data-nav-count>4 profile fields</small>
-                                            <span class="step-link__status" data-nav-status>Upcoming</span>
+                                            <small data-nav-count>{{ $respondentFieldCount }} profile fields</small>
+                                            <span class="step-link__status" data-nav-status>{{ $showIntroGuidance ? 'Upcoming' : 'Current' }}</span>
                                         </span>
                                     </button>
 
@@ -2271,8 +2293,8 @@
                                 <div class="status-row">
                                     <div class="status-copy">
                                         <span class="eyebrow" style="background: rgba(185, 120, 47, 0.08); border-color: rgba(185, 120, 47, 0.12); color: var(--accent);">Survey progress</span>
-                                        <strong id="progressLabel">Introduction</strong>
-                                        <span id="progressMeta">Step 0 of {{ $primaryStepCount }}</span>
+                                        <strong id="progressLabel">{{ $initialStepLabel }}</strong>
+                                        <span id="progressMeta">{{ $initialProgressMeta }}</span>
                                     </div>
 
                                     <div class="progress-stack" @if (! $showProgressTracker) hidden @endif>
@@ -2281,7 +2303,7 @@
                                         </div>
                                         <div class="progress-meta">
                                             <span id="progressPercent">0% complete</span>
-                                            <span id="progressDescriptor">Review and continue</span>
+                                            <span id="progressDescriptor">{{ $initialProgressDescriptor }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2300,114 +2322,116 @@
                                 @endif
 
                                 <div class="steps-stage">
-                                    <section class="step is-active"
-                                        data-step-id="intro"
-                                        data-step-kind="intro"
-                                        data-step-label="Introduction">
-                                        @if ($showSideNavigation)
-                                            <div class="step-header">
-                                                <div class="step-header__top">
-                                                    <span class="step-counter">Step 0 of {{ $primaryStepCount }}</span>
-                                                </div>
-                                                <h2>{{ $surveyDisplayTitle }}</h2>
-                                                <p>{{ $surveyIntroText }}</p>
-                                            </div>
-
-                                            <div class="intro-panel">
-                                                <div class="intro-panel__copy">
-                                                    <strong>Workshop introduction</strong>
+                                    @if ($showIntroGuidance)
+                                        <section class="step is-active"
+                                            data-step-id="intro"
+                                            data-step-kind="intro"
+                                            data-step-label="Introduction">
+                                            @if ($showSideNavigation)
+                                                <div class="step-header">
+                                                    <div class="step-header__top">
+                                                        <span class="step-counter">Step 0 of {{ $primaryStepCount }}</span>
+                                                    </div>
+                                                    <h2>{{ $surveyDisplayTitle }}</h2>
                                                     <p>{{ $surveyIntroText }}</p>
                                                 </div>
-                                                <div class="intro-panel__copy">
-                                                    <strong>What happens next</strong>
-                                                    <p>
-                                                        Click <strong>Start</strong> to open the respondent details screen.
-                                                        After that, you will move section by section through the survey.
-                                                    </p>
-                                                </div>
-                                                @if ($showPublicQr)
-                                                    <div class="intro-panel__copy intro-panel__copy--qr">
-                                                        <strong>Alternative access</strong>
-                                                        <div class="survey-qr-card">
-                                                            <img class="survey-qr-card__image" src="{{ $publicSurveyQrUrl }}" alt="Survey QR code">
-                                                            <div class="survey-qr-card__body">
-                                                                <p>Scan the QR code or open the survey link below if direct access gives you any trouble.</p>
-                                                                <a class="survey-qr-card__link" href="{{ $publicSurveyUrl }}" target="_blank" rel="noopener">Open survey link</a>
-                                                                <div class="survey-qr-card__url">{{ $publicSurveyUrl }}</div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                @endif
-                                            </div>
-                                        @else
-                                            <div class="intro-scene">
-                                                <div class="intro-scene__panel intro-scene__panel--welcome">
-                                                    <span class="intro-scene__eyebrow">{{ $showIntroStepSummary ? 'ATTP workshop feedback' : 'Before you begin' }}</span>
-                                                    <h3 class="intro-scene__title">{{ $showIntroStepSummary ? $surveyDisplayTitle : 'Start with the survey flow' }}</h3>
-                                                    <p class="intro-scene__text">
-                                                        {{ $showIntroStepSummary ? $surveyIntroText : 'The survey overview is already shown above. Review the timing and flow here, then continue to respondent details.' }}
-                                                    </p>
-                                                    <div class="intro-scene__facts">
-                                                        <div class="intro-fact">
-                                                            <strong>{{ $estimatedTimePrimary }}</strong>
-                                                            <span>{{ $estimatedTimeSecondary }}</span>
-                                                        </div>
-                                                        <div class="intro-fact">
-                                                            <strong>{{ $sectionCount }}</strong>
-                                                            <span>Sections</span>
-                                                        </div>
-                                                        <div class="intro-fact">
-                                                            <strong>Start</strong>
-                                                            <span>Respondent details next</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
 
-                                                <div class="intro-scene__panel intro-scene__panel--form">
-                                                    <div class="intro-form-head">
-                                                        <div>
-                                                            <span class="intro-form-kicker">Before you begin</span>
-                                                            <h3>Start from the introduction page</h3>
-                                                            <p>
-                                                                Click <strong>Start</strong> to move to the respondent details screen,
-                                                                then continue into the survey sections.
-                                                            </p>
-                                                        </div>
-                                                        <span class="intro-form-badge">Introduction</span>
+                                                <div class="intro-panel">
+                                                    <div class="intro-panel__copy">
+                                                        <strong>Workshop introduction</strong>
+                                                        <p>{{ $surveyIntroText }}</p>
                                                     </div>
-
-                                                    <div class="intro-panel">
-                                                        <div class="intro-panel__copy">
-                                                            <strong>Survey flow</strong>
-                                                            <p>
-                                                                Introduction first, respondent details next, then the survey sections.
-                                                                You can still go back and review earlier screens before you submit.
-                                                            </p>
-                                                        </div>
-                                                        <div class="intro-panel__copy">
-                                                            <strong>Confidentiality</strong>
-                                                            <p>Your responses will be treated in confidence.</p>
-                                                        </div>
-                                                        @if ($showPublicQr)
-                                                            <div class="intro-panel__copy intro-panel__copy--qr">
-                                                                <strong>Alternative access</strong>
-                                                                <div class="survey-qr-card">
-                                                                    <img class="survey-qr-card__image" src="{{ $publicSurveyQrUrl }}" alt="Survey QR code">
-                                                                    <div class="survey-qr-card__body">
-                                                                        <p>Scan the QR code or open the survey link below if direct access gives you any trouble.</p>
-                                                                        <a class="survey-qr-card__link" href="{{ $publicSurveyUrl }}" target="_blank" rel="noopener">Open survey link</a>
-                                                                        <div class="survey-qr-card__url">{{ $publicSurveyUrl }}</div>
-                                                                    </div>
+                                                    <div class="intro-panel__copy">
+                                                        <strong>What happens next</strong>
+                                                        <p>
+                                                            Click <strong>Start</strong> to open the respondent details screen.
+                                                            After that, you will move section by section through the survey.
+                                                        </p>
+                                                    </div>
+                                                    @if ($showPublicQr)
+                                                        <div class="intro-panel__copy intro-panel__copy--qr">
+                                                            <strong>Alternative access</strong>
+                                                            <div class="survey-qr-card">
+                                                                <img class="survey-qr-card__image" src="{{ $publicSurveyQrUrl }}" alt="Survey QR code">
+                                                                <div class="survey-qr-card__body">
+                                                                    <p>Scan the QR code or open the survey link below if direct access gives you any trouble.</p>
+                                                                    <a class="survey-qr-card__link" href="{{ $publicSurveyUrl }}" target="_blank" rel="noopener">Open survey link</a>
+                                                                    <div class="survey-qr-card__url">{{ $publicSurveyUrl }}</div>
                                                                 </div>
                                                             </div>
-                                                        @endif
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                            @else
+                                                <div class="intro-scene">
+                                                    <div class="intro-scene__panel intro-scene__panel--welcome">
+                                                        <span class="intro-scene__eyebrow">{{ $showIntroStepSummary ? 'ATTP workshop feedback' : 'Before you begin' }}</span>
+                                                        <h3 class="intro-scene__title">{{ $showIntroStepSummary ? $surveyDisplayTitle : 'Start with the survey flow' }}</h3>
+                                                        <p class="intro-scene__text">
+                                                            {{ $showIntroStepSummary ? $surveyIntroText : 'The survey overview is already shown above. Review the timing and flow here, then continue to respondent details.' }}
+                                                        </p>
+                                                        <div class="intro-scene__facts">
+                                                            <div class="intro-fact">
+                                                                <strong>{{ $estimatedTimePrimary }}</strong>
+                                                                <span>{{ $estimatedTimeSecondary }}</span>
+                                                            </div>
+                                                            <div class="intro-fact">
+                                                                <strong>{{ $sectionCount }}</strong>
+                                                                <span>Sections</span>
+                                                            </div>
+                                                            <div class="intro-fact">
+                                                                <strong>Start</strong>
+                                                                <span>Respondent details next</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="intro-scene__panel intro-scene__panel--form">
+                                                        <div class="intro-form-head">
+                                                            <div>
+                                                                <span class="intro-form-kicker">Before you begin</span>
+                                                                <h3>Start from the introduction page</h3>
+                                                                <p>
+                                                                    Click <strong>Start</strong> to move to the respondent details screen,
+                                                                    then continue into the survey sections.
+                                                                </p>
+                                                            </div>
+                                                            <span class="intro-form-badge">Introduction</span>
+                                                        </div>
+
+                                                        <div class="intro-panel">
+                                                            <div class="intro-panel__copy">
+                                                                <strong>Survey flow</strong>
+                                                                <p>
+                                                                    Introduction first, respondent details next, then the survey sections.
+                                                                    You can still go back and review earlier screens before you submit.
+                                                                </p>
+                                                            </div>
+                                                            <div class="intro-panel__copy">
+                                                                <strong>Confidentiality</strong>
+                                                                <p>Your responses will be treated in confidence.</p>
+                                                            </div>
+                                                            @if ($showPublicQr)
+                                                                <div class="intro-panel__copy intro-panel__copy--qr">
+                                                                    <strong>Alternative access</strong>
+                                                                    <div class="survey-qr-card">
+                                                                        <img class="survey-qr-card__image" src="{{ $publicSurveyQrUrl }}" alt="Survey QR code">
+                                                                        <div class="survey-qr-card__body">
+                                                                            <p>Scan the QR code or open the survey link below if direct access gives you any trouble.</p>
+                                                                            <a class="survey-qr-card__link" href="{{ $publicSurveyUrl }}" target="_blank" rel="noopener">Open survey link</a>
+                                                                            <div class="survey-qr-card__url">{{ $publicSurveyUrl }}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            @endif
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        @endif
-                                    </section>
+                                            @endif
+                                        </section>
+                                    @endif
 
-                                    <section class="step"
+                                    <section class="step{{ $showIntroGuidance ? '' : ' is-active' }}"
                                         data-step-id="profile"
                                         data-step-kind="profile"
                                         data-step-label="Respondent details">
@@ -2670,13 +2694,13 @@
                         <section class="action-dock">
                             <div class="action-dock__meta">
                                 <span>Current step</span>
-                                <strong id="actionStepTitle">Introduction</strong>
-                                <small id="actionStepMeta">Review the workshop introduction, then click Start.</small>
+                                <strong id="actionStepTitle">{{ $initialStepLabel }}</strong>
+                                <small id="actionStepMeta">{{ $initialActionMeta }}</small>
                             </div>
 
                             <div class="action-dock__buttons">
                                 <button type="button" class="btn btn-secondary" id="globalBackButton" hidden>Back</button>
-                                <button type="button" class="btn btn-primary" id="globalNextButton">Start</button>
+                                <button type="button" class="btn btn-primary" id="globalNextButton">{{ $initialNextButtonLabel }}</button>
                                 <button type="button" class="btn btn-success" id="globalSubmitButton" hidden>Submit survey</button>
                             </div>
                         </section>
@@ -2713,8 +2737,9 @@
                 const navItems = Array.from(document.querySelectorAll('[data-step-nav]'));
                 const respondentFields = Array.from(form.querySelectorAll('[data-respondent-field]'));
                 const profileStepKey = 'profile';
+                const introStepEnabled = @json($showIntroGuidance);
 
-                let currentStepId = 'intro';
+                let currentStepId = introStepEnabled ? 'intro' : profileStepKey;
                 let navigationHistory = [];
                 let branchContextStack = [];
                 let activeSpecialSteps = new Set();
@@ -2777,8 +2802,12 @@
                     return [stepById(profileStepKey), ...normalSectionSteps()].filter(Boolean);
                 }
 
+                function navigationSequence() {
+                    return [...(introStepEnabled ? [stepById('intro')] : []), ...primarySteps()].filter(Boolean);
+                }
+
                 function currentStep() {
-                    return stepById(currentStepId) || stepById('intro');
+                    return stepById(currentStepId) || stepById(profileStepKey) || stepById('intro');
                 }
 
                 function answerForQuestion(questionKey) {
@@ -3094,11 +3123,11 @@
                         }
                     }
 
-                    return 'intro';
+                    return profileStepKey;
                 }
 
                 function syncStepNavigation() {
-                    const sequence = [stepById('intro'), ...primarySteps()].filter(Boolean);
+                    const sequence = navigationSequence();
                     const referenceId = referenceNormalStepId();
                     const referenceIndex = Math.max(0, sequence.findIndex((step) => stepId(step) === referenceId));
                     const specialActive = isSpecialStep(currentStep());
@@ -3575,7 +3604,7 @@
                             return;
                         }
 
-                        const sequence = [stepById('intro'), ...primarySteps()].filter(Boolean);
+                        const sequence = navigationSequence();
                         const targetIndex = sequence.findIndex((step) => stepId(step) === stepId(targetStep));
                         const referenceIndex = sequence.findIndex((step) => stepId(step) === referenceNormalStepId());
 
