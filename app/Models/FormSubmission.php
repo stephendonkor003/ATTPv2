@@ -82,6 +82,11 @@ public function evaluationSubmissions()
         );
 }
 
+public function thinkTankReview()
+{
+    return $this->hasOne(ThinkTankProcurementReview::class, 'form_submission_id');
+}
+
 public function siteVisits()
 {
     return $this->hasMany(SiteVisit::class, 'form_submission_id');

@@ -19,6 +19,7 @@ class RoleSeeder extends Seeder
             'Auditor',
             'Prescreening Evaluator',
             'Evaluation Evaluator',
+            'Communication Officer',
             'Communications Officer',
             'Member State Focal Point',
         ];

@@ -16,4 +16,14 @@ class ThinkDataset extends BaseModel
         'twitter_handle_link', 'facebook_page', 'youtube_page', 'instagram_acc', 'linkedIn_acc',
         'is_validated', 'created_by'
     ];
+
+    public function consortiumMemberships()
+    {
+        return $this->hasMany(ConsortiumThinkTank::class, 'think_dataset_id');
+    }
+
+    public function ledConsortia()
+    {
+        return $this->hasMany(Consortium::class, 'lead_think_dataset_id');
+    }
 }

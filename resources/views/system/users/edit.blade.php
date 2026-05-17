@@ -104,14 +104,20 @@
                                 </label>
                                 <select name="user_type" id="user_type" class="form-select"
                                     {{ $user->role && $user->role->name === 'Super Admin' ? 'disabled' : '' }} required>
-                                    <option value="staff"
-                                        {{ old('user_type', $user->user_type) === 'staff' ? 'selected' : '' }}>
-                                        Staff
-                                    </option>
-                                    <option value="member_state"
-                                        {{ old('user_type', $user->user_type) === 'member_state' ? 'selected' : '' }}>
-                                        Member State
-                                    </option>
+                                    @foreach ([
+                                        'staff' => 'Staff',
+                                        'member_state' => 'Member State',
+                                        'vendor' => 'Vendor',
+                                        'funding_partner' => 'Funding Partner',
+                                        'think_tank' => 'Think Tank',
+                                        'evaluator' => 'Evaluator',
+                                        'admin' => 'Admin',
+                                    ] as $typeValue => $typeLabel)
+                                        <option value="{{ $typeValue }}"
+                                            {{ old('user_type', $user->user_type) === $typeValue ? 'selected' : '' }}>
+                                            {{ $typeLabel }}
+                                        </option>
+                                    @endforeach
                                 </select>
                                 <small class="text-muted">
                                     Member-state users can update treaty signing and ratification status from their portal.
@@ -165,10 +171,9 @@
                             <div class="col-md-6 mb-3 order-last" id="governance-node-group"
                                 style="{{ $isMemberStateType ? 'display: none;' : '' }}">
                                 <label class="form-label fw-semibold" id="governance-node-label">
-                                    Governance Node <span class="text-danger">*</span>
+                                    Governance Node
                                 </label>
                                 <select name="governance_node_id" id="governance_node_id" class="form-select"
-                                    {{ $isMemberStateType ? '' : 'required' }}
                                     {{ $user->role && $user->role->name === 'Super Admin' ? 'disabled' : '' }}>
                                     <option value="">-- Select Node --</option>
                                     @foreach ($nodes as $node)
@@ -179,7 +184,7 @@
                                     @endforeach
                                 </select>
                                 <small class="text-muted">
-                                    Users can manage accounts in their node and all descendants.
+                                    Optional. Use this only when the user should be scoped to a governance node.
                                 </small>
                             </div>
 
@@ -262,7 +267,7 @@
                 const isMemberState = userTypeSelect.value === 'member_state';
 
                 governanceGroup.style.display = isMemberState ? 'none' : '';
-                governanceSelect.required = !isMemberState;
+                governanceSelect.required = false;
                 if (isMemberState) {
                     governanceSelect.value = '';
                 }

@@ -14,10 +14,14 @@ class ProcurementPurchaseOrder extends BaseModel
         'procurement_id',
         'negotiation_id',
         'invoice_id',
+        'budget_commitment_id',
         'vendor_id',
         'sub_activity_id',
         'governance_node_id',
+        'consortium_id',
+        'think_tank_member_id',
         'reference_no',
+        'po_type',
         'amount',
         'currency',
         'status',
@@ -43,6 +47,11 @@ class ProcurementPurchaseOrder extends BaseModel
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(ProcurementInvoice::class, 'invoice_id');
+    }
+
+    public function budgetCommitment(): BelongsTo
+    {
+        return $this->belongsTo(BudgetCommitment::class, 'budget_commitment_id');
     }
 
     public function disbursements()
@@ -76,6 +85,16 @@ class ProcurementPurchaseOrder extends BaseModel
         return $this->belongsTo(GovernanceNode::class, 'governance_node_id');
     }
 
+    public function consortium(): BelongsTo
+    {
+        return $this->belongsTo(Consortium::class, 'consortium_id');
+    }
+
+    public function thinkTankMember(): BelongsTo
+    {
+        return $this->belongsTo(ConsortiumThinkTank::class, 'think_tank_member_id');
+    }
+
     public static function generateReference(): string
     {
         do {
@@ -83,5 +102,36 @@ class ProcurementPurchaseOrder extends BaseModel
         } while (self::where('reference_no', $reference)->exists());
 
         return $reference;
+    }
+
+    public static function generateThinkTankTransferReference(ConsortiumThinkTank $member): string
+    {
+        $member->loadMissing('consortium');
+
+        $consortiumCode = self::referenceSegment($member->consortium?->code ?: $member->consortium?->name ?: 'CONS');
+        $thinkTankCode = self::referenceSegment($member->name);
+        $period = now()->format('Ym');
+        $prefix = "PO-ATTP-{$period}-{$consortiumCode}-{$thinkTankCode}";
+
+        $sequence = 1;
+        do {
+            $reference = $prefix . '-' . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
+            $sequence++;
+        } while (self::where('reference_no', $reference)->exists());
+
+        return $reference;
+    }
+
+    private static function referenceSegment(string $value): string
+    {
+        $words = preg_split('/[^A-Za-z0-9]+/', Str::upper($value), -1, PREG_SPLIT_NO_EMPTY);
+        $stopWords = ['FOR', 'THE', 'AND', 'OF', 'DE', 'ET', 'DU'];
+
+        $letters = collect($words)
+            ->reject(fn (string $word) => in_array($word, $stopWords, true))
+            ->map(fn (string $word) => Str::substr($word, 0, 1))
+            ->join('');
+
+        return Str::substr($letters ?: Str::upper(Str::slug($value, '')), 0, 8) ?: 'TT';
     }
 }

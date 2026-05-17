@@ -39,7 +39,7 @@
                         <select name="purchase_order_id" id="purchaseOrderSelect" class="form-control" required>
                             @if ($purchaseOrder)
                                 <option value="{{ $purchaseOrder->id }}" selected>
-                                    {{ $purchaseOrder->reference_no ?? 'N/A' }} - {{ $purchaseOrder->procurement?->title ?? 'N/A' }}
+                                    {{ $purchaseOrder->reference_no ?? 'N/A' }} - {{ $purchaseOrder->procurement?->title ?? ($purchaseOrder->thinkTankMember?->name ?? 'Fund Transfer') }}
                                 </option>
                             @else
                                 <option value="">Select Purchase Order</option>
@@ -48,7 +48,7 @@
                                         data-remaining="{{ $order->remainingAmount() }}"
                                         data-currency="{{ $order->currency ?? '' }}"
                                         data-vendor="{{ $order->vendor?->name ?? '' }}">
-                                        {{ $order->reference_no ?? 'N/A' }} - {{ $order->procurement?->title ?? 'N/A' }}
+                                        {{ $order->reference_no ?? 'N/A' }} - {{ $order->procurement?->title ?? ($order->thinkTankMember?->name ?? 'Fund Transfer') }}
                                     </option>
                                 @endforeach
                             @endif

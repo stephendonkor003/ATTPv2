@@ -150,9 +150,9 @@ class MemberStateComparisonController extends Controller
 
         $treatyRows = TreatyMemberStateStatus::query()
             ->selectRaw('member_state_id')
-            ->selectRaw('SUM(CASE WHEN is_signed = 1 THEN 1 ELSE 0 END) as signed_count')
-            ->selectRaw('SUM(CASE WHEN is_ratified = 1 THEN 1 ELSE 0 END) as ratified_count')
-            ->selectRaw('SUM(CASE WHEN is_original_submitted = 1 THEN 1 ELSE 0 END) as original_count')
+            ->selectRaw('SUM(CASE WHEN is_signed IS TRUE THEN 1 ELSE 0 END) as signed_count')
+            ->selectRaw('SUM(CASE WHEN is_ratified IS TRUE THEN 1 ELSE 0 END) as ratified_count')
+            ->selectRaw('SUM(CASE WHEN is_original_submitted IS TRUE THEN 1 ELSE 0 END) as original_count')
             ->selectRaw('COUNT(*) as total_treaties')
             ->whereIn('member_state_id', $stateIds)
             ->groupBy('member_state_id')
@@ -423,7 +423,7 @@ class MemberStateComparisonController extends Controller
         ];
 
         $monthlyRowsQuery = MemberStateNationalData::query()
-            ->selectRaw("member_state_id, DATE_FORMAT(recorded_on, '%Y-%m') as month_key")
+            ->selectRaw("member_state_id, to_char(recorded_on, 'YYYY-MM') as month_key")
             ->selectRaw('AVG(cooperation_score) as avg_cooperation')
             ->whereIn('member_state_id', $stateIds)
             ->where('review_status', 'approved')
@@ -432,7 +432,7 @@ class MemberStateComparisonController extends Controller
         $applyNationalFilters($monthlyRowsQuery);
 
         $monthlyRows = $monthlyRowsQuery
-            ->groupBy('member_state_id', 'month_key')
+            ->groupByRaw("member_state_id, to_char(recorded_on, 'YYYY-MM')")
             ->orderBy('month_key')
             ->get();
 

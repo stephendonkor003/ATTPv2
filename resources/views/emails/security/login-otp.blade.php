@@ -1,45 +1,28 @@
-@extends('emails.layouts.base')
+<!doctype html>
+<html>
+<body style="margin:0;background:#f3f4f6;font-family:Arial,sans-serif;color:#172033;line-height:1.6;">
+    <div style="max-width:620px;margin:0 auto;padding:28px 16px;">
+        <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#0f172a;color:#ffffff;padding:22px 24px;">
+                <h2 style="margin:0;font-size:20px;">ATTP Login Verification</h2>
+                <p style="margin:6px 0 0;color:#cbd5e1;">Use this code to complete your sign in.</p>
+            </div>
 
-@section('content')
-    <h2>Verify Your Identity</h2>
+            <div style="padding:24px;">
+                <p>Hello {{ $user->name ?? 'User' }},</p>
+                <p>Your one-time verification code is:</p>
 
-    <p>Hello <strong>{{ $user->name }}</strong>,</p>
+                <div style="margin:22px 0;padding:18px;text-align:center;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
+                    <span style="font-size:34px;letter-spacing:8px;font-weight:700;color:#1d4ed8;">{{ $otpCode }}</span>
+                </div>
 
-    <p>
-        We received a login request to your {{ config('app.name') }} account.
-        To complete the sign-in process, please use the verification code below:
-    </p>
+                <p>This code expires shortly. If you did not try to sign in, please ignore this email or contact the ATTP administrator.</p>
 
-    <div class="otp-box">
-        <div class="otp-code">{{ $otpCode }}</div>
-        <div class="otp-label">Your Verification Code</div>
+                <p style="margin-top:28px;color:#64748b;font-size:13px;">
+                    This is an automated security message from {{ config('app.name', 'ATTP') }}.
+                </p>
+            </div>
+        </div>
     </div>
-
-    <div class="alert alert-warning">
-        <strong>Important:</strong> This code will expire in <strong>10 minutes</strong>.
-        Do not share this code with anyone, including {{ config('app.name') }} staff.
-    </div>
-
-    <div class="divider"></div>
-
-    <h3 style="color: #1a365d; font-size: 16px; margin-bottom: 15px;">Why am I receiving this?</h3>
-
-    <div class="info-list">
-        <ul>
-            <li>Two-factor authentication helps protect your account from unauthorized access</li>
-            <li>Even if someone knows your password, they can't access your account without this code</li>
-            <li>This verification is required each time you log in from a new session</li>
-        </ul>
-    </div>
-
-    <div class="alert alert-info">
-        <strong>Security Tip:</strong> If you did not attempt to log in, please change your password immediately
-        and contact support. Someone may have access to your credentials.
-    </div>
-
-    <p style="margin-top: 25px; color: #718096; font-size: 13px;">
-        <strong>Request Details:</strong><br>
-        Time: {{ now()->format('d M Y, H:i:s') }} UTC<br>
-        IP Address: {{ request()->ip() }}
-    </p>
-@endsection
+</body>
+</html>

@@ -79,7 +79,7 @@ class MemberStateNationalDataController extends Controller
 
         $years = MemberStateNationalData::query()
             ->where('member_state_id', $memberStateId)
-            ->selectRaw('YEAR(recorded_on) as year')
+            ->selectRaw('EXTRACT(YEAR FROM recorded_on) as year')
             ->distinct()
             ->orderByDesc('year')
             ->pluck('year');
@@ -118,11 +118,11 @@ class MemberStateNationalDataController extends Controller
 
         $monthlyTrend = MemberStateNationalData::query()
             ->where('member_state_id', $memberStateId)
-            ->selectRaw("DATE_FORMAT(recorded_on, '%Y-%m') as month_key")
+            ->selectRaw("to_char(recorded_on, 'YYYY-MM') as month_key")
             ->selectRaw('AVG(cooperation_score) as avg_cooperation')
             ->selectRaw('AVG(outreach_coverage_score) as avg_outreach')
             ->selectRaw('COUNT(*) as entries_count')
-            ->groupBy('month_key')
+            ->groupByRaw("to_char(recorded_on, 'YYYY-MM')")
             ->orderBy('month_key')
             ->get();
 

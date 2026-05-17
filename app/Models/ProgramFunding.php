@@ -103,6 +103,16 @@ class ProgramFunding extends BaseModel
     return $this->hasMany(BudgetCommitment::class, 'program_funding_id');
 }
 
+public function consortia()
+{
+    return $this->hasMany(Consortium::class, 'program_funding_id');
+}
+
+public function consortiumFundAllocations()
+{
+    return $this->hasMany(ConsortiumFundAllocation::class, 'program_funding_id');
+}
+
 
 public function creator()
     {

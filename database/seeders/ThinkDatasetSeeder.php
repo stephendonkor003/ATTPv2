@@ -1,9 +1,10 @@
 <?php
 
+namespace Database\Seeders;
+
 use Illuminate\Database\Seeder;
 use App\Models\ThinkDataset;
 use App\Models\User;
-use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class ThinkDatasetSeeder extends Seeder
@@ -15,6 +16,11 @@ class ThinkDatasetSeeder extends Seeder
             ?? User::query()->value('id');
 
         $filePath = database_path('seeders/thindata.xlsx');
+        if (!file_exists($filePath)) {
+            $this->command?->warn('Think tank dataset workbook not found at database/seeders/thindata.xlsx.');
+            return;
+        }
+
         $spreadsheet = IOFactory::load($filePath);
         $sheet = $spreadsheet->getActiveSheet();
         $rows = $sheet->toArray(null, true, true, true);
@@ -24,10 +30,17 @@ class ThinkDatasetSeeder extends Seeder
 
         foreach ($rows as $row) {
             $data = array_combine($header, array_values($row));
-            ThinkDataset::create([
-                'ottd_id' => $data['Ottd Id'] ?? null,
+            $identity = [
                 'tt_name_en' => $data['Tt Name En'] ?? null,
                 'country' => $data['Country'] ?? null,
+            ];
+
+            if (blank($identity['tt_name_en']) && blank($identity['country'])) {
+                continue;
+            }
+
+            ThinkDataset::updateOrCreate($identity, [
+                'ottd_id' => $data['Ottd Id'] ?? null,
                 'continent' => $data['Continent'] ?? null,
                 'sub_region' => $data['Sub Region'] ?? null,
                 'Count' => $data['Count'] ?? null,

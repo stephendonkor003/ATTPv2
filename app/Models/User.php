@@ -147,6 +147,11 @@ class User extends Authenticatable
         return $this->hasOne(Funder::class, 'user_id');
     }
 
+    public function thinkTankMembership()
+    {
+        return $this->hasOne(ConsortiumThinkTank::class, 'portal_user_id');
+    }
+
     /**
      * Direct permissions (override layer)
      */
@@ -163,6 +168,10 @@ class User extends Authenticatable
      */
     public function hasPermission(string $permission): bool
     {
+        if ($this->isSuperAdmin() || $this->isAdmin()) {
+            return true;
+        }
+
         // 1️⃣ Direct user permission override
         if ($this->permissions->contains('name', $permission)) {
             return true;
@@ -190,6 +199,11 @@ class User extends Authenticatable
     public function isFundingPartner(): bool
     {
         return $this->user_type === 'funding_partner';
+    }
+
+    public function isThinkTankUser(): bool
+    {
+        return $this->user_type === 'think_tank';
     }
 
     public function hasActiveLoginBlock(): bool
@@ -255,6 +269,10 @@ class User extends Authenticatable
      */
     public function requiresOtpVerification(): bool
     {
+        if (app()->environment(['local', 'testing']) && ! (bool) config('security.require_login_otp_locally', false)) {
+            return false;
+        }
+
         // Admin users are exempt from OTP
         if ($this->isSuperAdmin()) {
             return false;

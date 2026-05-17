@@ -74,15 +74,22 @@ class RolePermissionSeeder extends Seeder
             'world.indicators.manage',
         ]);
 
-        // Communications Officer
-        $this->syncRolePermissionsByNames('Communications Officer', [
+        $communicationOfficerPermissions = [
             'communications.view',
             'communications.respond',
+            'news.manage',
+            'news.approve',
             'questions.view',
             'questions.respond',
             'national_data.review',
             'national_data.approve',
-        ]);
+        ];
+
+        // Communication Officer
+        $this->syncRolePermissionsByNames('Communication Officer', $communicationOfficerPermissions);
+
+        // Communications Officer (legacy plural label)
+        $this->syncRolePermissionsByNames('Communications Officer', $communicationOfficerPermissions);
 
         // Member State Focal Point
         $this->syncRolePermissionsByNames('Member State Focal Point', [

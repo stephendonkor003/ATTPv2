@@ -18,7 +18,7 @@
     <meta name="author" content="African Think Tank Platform Administration (ATTP)" />
     <meta name="robots" content="index, follow" />
     <meta name="language" content="en" />
-    <meta name="theme-color" content="#0B4F6C" />
+    <meta name="theme-color" content="#006B3F" />
 
     <!-- Favicon -->
     <link rel="icon" href="{{ asset('assets/images/au3.jpg') }}" type="image/png" />
@@ -74,63 +74,87 @@
     </script>
 </head>
 
-<style>
-    .annoucment {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 24px;
-    }
-
-    .annoucment .flow-card {
-        width: calc(33.333% - 16px);
-    }
-
-    /* Tablet */
-    @media (max-width: 992px) {
-        .annoucment .flow-card {
-            width: calc(50% - 12px);
-        }
-    }
-
-    /* Mobile */
-    @media (max-width: 576px) {
-        .annoucment .flow-card {
-            width: 100%;
-        }
-    }
-</style>
 
 
 
 <body>
-    <!-- ====== NAVBAR ====== -->
-    <header class="navbar">
-        <div class="logo">
-            {{-- ATTP<span>.africa</span> --}}
-            <img src="{{ asset('assets/images/au.png ') }}" alt="ATTP" class="logo logo-sm">
+    <!-- ====== MOBILE NAV OVERLAY ====== -->
+    <div class="mobile-nav-overlay" id="navOverlay" onclick="closeMobileNav()"></div>
 
+    <!-- ====== MOBILE NAV DRAWER ====== -->
+    <nav class="mobile-nav" id="mobileNav">
+        <div class="mobile-nav-header">
+            <img src="{{ asset('assets/images/au.png') }}" alt="ATTP">
+            <button class="mobile-nav-close" onclick="closeMobileNav()" aria-label="Close menu">&times;</button>
         </div>
-        <nav class="nav-links">
-            <a href="{{ route('landing.index') }}">{{ __('navigation.home') }}</a>
-            <a href="#annoucements">{{ __('landing.announcements') }}</a>
-            <a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a>
-            <a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a>
-            <a
-                href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a>
-            {{-- <a href="{{ route('landing.african_map') }}">AFRICAN MAP</a> --}}
+        <a href="{{ route('landing.index') }}" onclick="closeMobileNav()">{{ __('navigation.home') }}</a>
+
+        <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
+            Programs <span class="mobile-dropdown-arrow">▾</span>
+        </button>
+        <div class="mobile-dropdown-items">
+            <a href="{{ route('events') }}" onclick="closeMobileNav()">{{ __('landing.events_webinars') }}</a>
+            <a href="{{ route('careers.index') }}" onclick="closeMobileNav()">{{ __('navigation.careers') }}</a>
+        </div>
+
+        <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
+            Analytics <span class="mobile-dropdown-arrow">▾</span>
+        </button>
+        <div class="mobile-dropdown-items">
+            <a href="{{ route('impact.map') }}" onclick="closeMobileNav()">{{ __('navigation.impact_map') }}</a>
+            <a href="{{ route('world.indicators.performance') }}" onclick="closeMobileNav()">{{ __('navigation.world_indicators_performance') }}</a>
+        </div>
+
+        <a href="{{ route('news.index') }}" onclick="closeMobileNav()">News &amp; Updates</a>
+        <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
+        <div class="mobile-nav-actions">
+            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
+            <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
+        </div>
+    </nav>
+
+    <!-- ====== NAVBAR ====== -->
+    <header class="navbar" role="banner">
+        <a href="{{ route('landing.index') }}" class="logo" aria-label="ATTP Home">
+            <img src="{{ asset('assets/images/au.png') }}" alt="African Think Tank Platform" class="logo-sm">
+        </a>
+
+        <nav class="nav-links" aria-label="Main navigation">
+            <a href="{{ route('landing.index') }}" class="active">{{ __('navigation.home') }}</a>
+
+            <div class="has-dropdown">
+                <a href="#">Programs</a>
+                <ul class="nav-dropdown">
+                    <li><a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a></li>
+                    <li><a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a></li>
+                </ul>
+            </div>
+
+            <div class="has-dropdown">
+                <a href="#">Analytics</a>
+                <ul class="nav-dropdown">
+                    <li><a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a></li>
+                    <li><a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a></li>
+                </ul>
+            </div>
+
+            <a href="{{ route('news.index') }}">News &amp; Updates</a>
             <a href="#contact">{{ __('navigation.contact') }}</a>
-            <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
         </nav>
 
         <div class="nav-actions">
-            <x-language-selector style="landing" />
-            <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
             <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">
                 {{ __('landing.policy_programs') }}
             </a>
-
-
+            <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
+            <x-language-selector style="landing" />
         </div>
+
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="openMobileNav()" aria-label="Open menu" aria-expanded="false">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
     </header>
 
     <!-- ====== HERO SECTION ====== -->
@@ -144,12 +168,8 @@
         </div>
 
         <div class="hero-content">
-            <br>
-            <br>
             <h1 id="typewriter" class="typing-text"></h1>
-            <p>
-                {{ __('landing.hero_subtitle') }}
-            </p>
+            <p id="hero-subtitle" class="hero-subtitle-text"></p>
 
             <a href="{{ route('public.procurement.index') }}" class="cta-btn">
                 {{ __('landing.hero_cta') }}
@@ -157,8 +177,8 @@
         </div>
     </section>
 
-    <!-- ====== SYSTEM PROCESS FLOW ====== -->
-    <!-- ====== SYSTEM PROCESS FLOW ====== -->
+    <div class="section-stripe"></div>
+
     <!-- ====== SYSTEM PROCESS FLOW ====== -->
     <section id="process" class="process-section">
         <h2>{{ __('landing.process_title') }}</h2>
@@ -344,22 +364,21 @@
 
 
     <!-- ====== FOOTER ====== -->
-    <footer id="contact" class="footer">
+    <footer id="contact" class="footer" role="contentinfo">
         <div class="footer-content">
 
             <div class="footer-logo">
                 <h3>ATTP<span> Administration</span></h3>
-                <p>
-                    {{ __('landing.footer_description') }}
-                </p>
+                <p>{{ __('landing.footer_description') }}</p>
             </div>
 
             <div class="footer-links">
                 <h4>{{ __('landing.footer_links_title') }}</h4>
-                <a href="#">{{ __('landing.footer_link_home') }}</a>
+                <a href="{{ route('landing.index') }}">{{ __('landing.footer_link_home') }}</a>
                 <a href="#process">{{ __('landing.footer_link_process') }}</a>
                 <a href="#customization">{{ __('landing.footer_link_oversight') }}</a>
                 <a href="#contact">{{ __('navigation.contact') }}</a>
+                <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
             </div>
 
             <div class="footer-contact">
@@ -370,16 +389,63 @@
 
         </div>
 
-        <p style="margin-top: 10px; font-weight: 600; text-align: center;">
-            Supporting African Union policy coordination, governance reform,
-            and evidence-based decision-making across the continent.
-        </p>
-
+        <div class="footer-bottom">
+            <p>Supporting African Union policy coordination, governance reform, and evidence-based decision-making across the continent.</p>
+        </div>
     </footer>
 
 
 
     <script src="{{ asset('assets/script.js') }}"></script>
+
+    <script>
+        function openMobileNav() {
+            const nav = document.getElementById('mobileNav');
+            const overlay = document.getElementById('navOverlay');
+            const btn = document.getElementById('hamburgerBtn');
+            nav.classList.add('open');
+            overlay.style.display = 'block';
+            requestAnimationFrame(() => overlay.classList.add('visible'));
+            btn.classList.add('open');
+            btn.setAttribute('aria-expanded', 'true');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileNav() {
+            const nav = document.getElementById('mobileNav');
+            const overlay = document.getElementById('navOverlay');
+            const btn = document.getElementById('hamburgerBtn');
+            nav.classList.remove('open');
+            overlay.classList.remove('visible');
+            btn.classList.remove('open');
+            btn.setAttribute('aria-expanded', 'false');
+            document.body.style.overflow = '';
+            setTimeout(() => { overlay.style.display = 'none'; }, 300);
+        }
+
+        function toggleMobileDropdown(btn) {
+            const items = btn.nextElementSibling;
+            const isOpen = items.classList.contains('open');
+            document.querySelectorAll('.mobile-dropdown-items.open').forEach(el => el.classList.remove('open'));
+            document.querySelectorAll('.mobile-dropdown-toggle.open').forEach(el => el.classList.remove('open'));
+            if (!isOpen) { items.classList.add('open'); btn.classList.add('open'); }
+        }
+
+        // Close lang-switcher on outside click
+        document.addEventListener('click', function(e) {
+            document.querySelectorAll('.lang-switcher.open').forEach(function(el) {
+                if (!el.contains(e.target)) el.classList.remove('open');
+            });
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeMobileNav();
+                document.querySelectorAll('.lang-switcher.open').forEach(el => el.classList.remove('open'));
+            }
+        });
+    </script>
     <!--Start of Tawk.to Script-->
     <!--Start of Tawk.to Script-->
     <!--Start of Tawk.to Script-->

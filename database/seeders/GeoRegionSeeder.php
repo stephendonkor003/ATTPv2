@@ -35,12 +35,20 @@ class GeoRegionSeeder extends Seeder
             ]);
 
             if (!isset($unique[$key])) {
-                GeoRegion::create([
+                GeoRegion::updateOrCreate(
+                    [
+                        'continent'     => $row[$continentIndex] ?? null,
+                        'sub_region'    => $row[$subRegionIndex] ?? null,
+                        'country'       => $row[$countryIndex] ?? null,
+                        'region_group'  => $row[$regionGroupIndex] ?? null,
+                    ],
+                    [
                     'continent'     => $row[$continentIndex] ?? null,
                     'sub_region'    => $row[$subRegionIndex] ?? null,
                     'country'       => $row[$countryIndex] ?? null,
                     'region_group'  => $row[$regionGroupIndex] ?? null,
-                ]);
+                    ]
+                );
                 $unique[$key] = true;
             }
         }

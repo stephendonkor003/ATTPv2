@@ -75,16 +75,26 @@
                 <div class="card-body">
                     <div class="d-flex align-items-center">
                         <div class="flex-grow-1">
-                            <h3 class="fw-bold mb-1">{{ $stats['pending_requests'] }}</h3>
-                            <p class="text-muted mb-0 small">{{ __('partner.pending_requests') }}</p>
+                            <h3 class="fw-bold mb-1">{{ $stats['think_tanks'] }}</h3>
+                            <p class="text-muted mb-0 small">Think Tanks</p>
                         </div>
                         <div class="fs-1 text-info">
-                            <i class="feather-message-circle"></i>
+                            <i class="feather-users"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
+
+    <div class="mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="fw-bold mb-0">Funding & Think Tank Report</h5>
+            <a href="{{ route('partner.reports.index') }}" class="btn btn-sm btn-outline-primary">
+                <i class="feather-pie-chart me-1"></i> Full Report
+            </a>
+        </div>
+        @include('partner.partials.funding-report', ['reportingOverview' => $reportingOverview, 'funder' => $funder])
     </div>
 
     <!-- Recent Programs -->

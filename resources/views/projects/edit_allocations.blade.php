@@ -6,7 +6,7 @@
         <div class="page-header d-flex justify-content-between align-items-center">
             <h4 class="fw-bold text-dark">Edit Project Budget — {{ $project->name }}</h4>
 
-            <a href="{{ route('projects.show', $project->id) }}" class="btn btn-secondary">
+            <a href="{{ route('budget.projects.show', $project->id) }}" class="btn btn-secondary">
                 Back
             </a>
         </div>
@@ -18,9 +18,8 @@
                     <div class="alert alert-success">{{ session('success') }}</div>
                 @endif
 
-                <form method="POST" action="{{ route('projects.updateAllocations', $project->id) }}">
+                <form method="POST" action="{{ route('budget.projects.allocations.update', $project->id) }}">
                     @csrf
-                    @method('PUT')
 
                     <table class="table table-bordered align-middle">
                         <thead class="table-light">

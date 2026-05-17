@@ -106,4 +106,8 @@ class BudgetCommitment extends BaseModel
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    public function approvedWorkPlans()
+    {
+        return $this->hasMany(ApprovedWorkPlan::class, 'budget_commitment_id');
+    }
 }

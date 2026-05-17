@@ -31,7 +31,7 @@ class ApplicantController extends Controller
         $query = Applicant::query()
             ->select('*')
             // Compute covered countries count in SQL for ordering, without loading the entire dataset.
-            ->selectRaw("CASE WHEN JSON_VALID(covered_countries) THEN JSON_LENGTH(covered_countries) ELSE 0 END as covered_count")
+            ->selectRaw("CASE WHEN covered_countries IS NULL OR covered_countries = '' THEN 0 ELSE jsonb_array_length(covered_countries::jsonb) END as covered_count")
             ->orderByDesc('covered_count')
             ->orderByDesc('created_at');
 
@@ -243,7 +243,7 @@ class ApplicantController extends Controller
                 ]);
             } catch (\Illuminate\Database\QueryException $e) {
                 // Check if it's a duplicate email error
-                if ($e->errorInfo[1] == 1062) {
+                if (($e->errorInfo[0] ?? null) === '23505') {
                     $applicant->delete(); // Rollback applicant record
                     return redirect()->back()->withErrors(['error' => 'A Think Tank with this email already exists. Please try again later.']);
                 }

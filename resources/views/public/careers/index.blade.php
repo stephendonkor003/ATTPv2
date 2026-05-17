@@ -315,11 +315,9 @@
         </nav>
 
         <div class="nav-actions">
+            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">Policy Programs &amp; Research</a>
             <a href="{{ route('login') }}" class="btn btn-login">Login</a>
-            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">
-                Policy Programs & Research
-            </a>
-
+            <x-language-selector style="careers" />
         </div>
     </header>
 
@@ -530,6 +528,17 @@
                 card.style.display = card.innerText.toLowerCase().includes(q) ? 'block' : 'none';
             });
         }
+
+        document.addEventListener('click', function(e) {
+            document.querySelectorAll('.lang-switcher.open').forEach(function(el) {
+                if (!el.contains(e.target)) el.classList.remove('open');
+            });
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.lang-switcher.open').forEach(el => el.classList.remove('open'));
+            }
+        });
     </script>
 
 

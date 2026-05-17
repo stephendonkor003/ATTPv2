@@ -95,6 +95,11 @@ class Funder extends BaseModel
         return $this->hasMany(PartnerActivityLog::class, 'funder_id');
     }
 
+    public function consortia()
+    {
+        return $this->hasMany(Consortium::class, 'funder_id');
+    }
+
     /* ==========================
      * HELPER METHODS
      * ========================== */

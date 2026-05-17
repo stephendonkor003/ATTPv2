@@ -39,9 +39,7 @@ class WorldBankCatalogSeeder extends Seeder
             $results = $observationSync->syncIndicators($defaultIndicators, $yearFrom, $yearTo);
             $this->command?->info('Seeded default World Bank observations for ' . count($results) . ' indicators.');
         } catch (Throwable $exception) {
-            $this->command?->error('World Bank catalog seeding failed: ' . $exception->getMessage());
-            throw $exception;
+            $this->command?->warn('World Bank catalog seeding skipped: ' . $exception->getMessage());
         }
     }
 }
-

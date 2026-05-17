@@ -51,6 +51,39 @@
             && collect($procurementSidebarPermissions)->contains(
                 fn($permission) => $sidebarUser->can($permission)
             ));
+    $newsCommunicationSidebarPermissions = [
+        'communications.view',
+        'communications.respond',
+        'news.manage',
+        'news.approve',
+        'questions.view',
+        'questions.respond',
+    ];
+    $canSeeNewsCommunicationSidebar = $sidebarUser
+        && collect($newsCommunicationSidebarPermissions)->contains(
+            fn($permission) => $sidebarUser->hasPermission($permission)
+        );
+    $thinkTankManagementPermissions = [
+        'consortiums.view',
+        'consortiums.manage',
+        'consortiums.reports.review',
+        'consortiums.finance.manage',
+        'partner.runtime_overview.view',
+        'think_tank.portal.access',
+        'think_tank.reports.submit',
+        'think_tank.research.submit',
+        'think_tank.procurement.manage',
+        'think_tank.procurement.evaluate',
+        'think_tank.procurement.select',
+    ];
+    $canSeeThinkTankManagement = $sidebarUser
+        && collect($thinkTankManagementPermissions)->contains(
+            fn($permission) => $sidebarUser->can($permission)
+        );
+    $isAdminSidebarUser = (bool) ($sidebarUser?->isSuperAdmin() || $sidebarUser?->isAdmin());
+    $isThinkTankPortalUser = ($sidebarUser?->isThinkTankUser() && (bool) $sidebarUser->thinkTankMembership)
+        || ($isAdminSidebarUser && \App\Models\ConsortiumThinkTank::query()->exists());
+    $isFundingPartnerSidebarUser = $sidebarUser?->isFundingPartner() || $isAdminSidebarUser;
 @endphp
 
 <style>
@@ -128,8 +161,8 @@
         {{-- <div class="m-header">
             <a href="#" class="b-brand">
                 <!-- ========   change your logo hear   ============ -->
-                <img src="{{ asset('assets/agenda_2063_logo.png') }}" alt="" class="logo logo-lg">
-                <img src="{{ asset('assets/agenda_2063_logo.png') }}" alt="" class="logo logo-sm">
+                <img src="{{ asset('assets/img/logo.svg') }}" alt="" class="logo logo-lg">
+                <img src="{{ asset('assets/img/logo.svg') }}" alt="" class="logo logo-sm">
             </a>
         </div> --}}
 
@@ -240,6 +273,129 @@
                     </li>
                 @endcan
 
+                {{-- ================= NEWS & COMMUNICATIONS ================= --}}
+                @if ($canSeeNewsCommunicationSidebar)
+                    <li class="nxl-item nxl-caption">
+                        <label>News & Communications</label>
+                    </li>
+
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-message-square"></i></span>
+                            <span class="nxl-mtext">News & Communications</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+
+                        <ul class="nxl-submenu">
+                            @canany(['news.manage', 'news.approve'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.news.index') }}" class="nxl-link">
+                                        <i class="feather-send me-2"></i> News Posting
+                                    </a>
+                                </li>
+                            @endcanany
+
+                            @can('communications.view')
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.communications.index') }}" class="nxl-link">
+                                        <i class="feather-message-circle me-2"></i> Member State Communications
+                                    </a>
+                                </li>
+                            @endcan
+
+                            @can('questions.view')
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.questions.index') }}" class="nxl-link">
+                                        <i class="feather-help-circle me-2"></i> Respond to Questions
+                                    </a>
+                                </li>
+                            @endcan
+                        </ul>
+                    </li>
+                @endif
+
+
+                {{-- ================= THINK TANK MANAGEMENT ================= --}}
+                @if ($canSeeThinkTankManagement)
+                    <li class="nxl-item nxl-caption">
+                        <label>Think Tank Management</label>
+                    </li>
+
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-users"></i></span>
+                            <span class="nxl-mtext">Think Tank Management</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+
+                        <ul class="nxl-submenu">
+                            @can('consortiums.view')
+                                @if (Route::has('consortium-operations.index'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('consortium-operations.index') }}" class="nxl-link">
+                                            <i class="feather-grid me-2"></i> Consortium Operations
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @if ($isFundingPartnerSidebarUser)
+                            @can('partner.runtime_overview.view')
+                                @if (Route::has('partner.runtime-overview'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('partner.runtime-overview') }}" class="nxl-link">
+                                            <i class="feather-activity me-2"></i> Partner Runtime Overview
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+                            @endif
+
+                            @if ($isThinkTankPortalUser)
+                            @can('think_tank.portal.access')
+                                @if (Route::has('think-tank.dashboard'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tank.dashboard') }}" class="nxl-link">
+                                            <i class="feather-home me-2"></i> Think Tank Dashboard
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @can('think_tank.reports.submit')
+                                @if (Route::has('think-tank.reports'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tank.reports') }}" class="nxl-link">
+                                            <i class="feather-file-text me-2"></i> Activity Reports
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @can('think_tank.research.submit')
+                                @if (Route::has('think-tank.research'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tank.research') }}" class="nxl-link">
+                                            <i class="feather-book-open me-2"></i> Research Outputs
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @canany(['think_tank.procurement.manage', 'think_tank.procurement.evaluate', 'think_tank.procurement.select'])
+                                @if (Route::has('think-tank.procurement'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tank.procurement') }}" class="nxl-link">
+                                            <i class="feather-briefcase me-2"></i> Procurement Plans & Opportunities
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcanany
+                            @endif
+                        </ul>
+                    </li>
+                @endif
+
 
                 {{-- ================= FINANCIAL GOVERNANCE ================= --}}
                 @if ($canSeeFinancialGovernanceSidebar)
@@ -344,7 +500,7 @@
 
 
                 {{-- ================= BUDGET EXECUTION ================= --}}
-                @canany(['finance.commitments.view', 'finance.purchase_requests.view', 'finance.resources.view',
+                @canany(['finance.commitments.view', 'finance.awp.view', 'finance.purchase_requests.view', 'finance.resources.view',
                     'finance.executions.view'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.budget_execution') }}</label>
@@ -361,7 +517,7 @@
                             @can('finance.commitments.view')
                                 <li class="nxl-item">
                                     <a href="{{ route('finance.commitments.index') }}" class="nxl-link">
-                                        <i class="feather-edit me-2"></i> {{ __('admin.budget_commitments') }}
+                                        <i class="feather-edit me-2"></i> Planned Commitments
                                     </a>
                                 </li>
                             @endcan
@@ -384,7 +540,7 @@
                                 </li>
                                 <li class="nxl-item">
                                     <a href="{{ route('procurement.disbursements.index') }}" class="nxl-link">
-                                        <i class="feather-dollar-sign me-2"></i> Disbursements
+                                        <i class="feather-dollar-sign me-2"></i> Planned Disbursements
                                     </a>
                                 </li>
                             @endcan
@@ -405,6 +561,71 @@
                         </ul>
                     </li>
                 @endcanany
+
+                {{-- ================= WORK PLANS REGISTRY ================= --}}
+                @can('finance.awp.view')
+                    <li class="nxl-item nxl-caption">
+                        <label>Work Plans Registry</label>
+                    </li>
+
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-clipboard"></i></span>
+                            <span class="nxl-mtext">Work Plans Registry</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+
+                        <ul class="nxl-submenu">
+                            <li class="nxl-item">
+                                <a href="{{ route('finance.awp.index') }}" class="nxl-link">
+                                    <i class="feather-grid me-2"></i> AWP Overview
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('finance.awp.index', ['filter_mode' => 'yearly', 'year' => now()->year]) }}"
+                                    class="nxl-link">
+                                    <i class="feather-calendar me-2"></i> Current Year
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('finance.awp.index', ['filter_mode' => 'semiannual', 'year' => now()->year, 'half' => 1]) }}"
+                                    class="nxl-link">
+                                    <i class="feather-pie-chart me-2"></i> H1 Review
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('finance.awp.index', ['filter_mode' => 'semiannual', 'year' => now()->year, 'half' => 2]) }}"
+                                    class="nxl-link">
+                                    <i class="feather-pie-chart me-2"></i> H2 Review
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('finance.awp.index', ['filter_mode' => 'quarterly', 'year' => now()->year, 'quarter' => 1]) }}"
+                                    class="nxl-link">
+                                    <i class="feather-bar-chart-2 me-2"></i> Q1 Review
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('finance.awp.index', ['filter_mode' => 'quarterly', 'year' => now()->year, 'quarter' => 2]) }}"
+                                    class="nxl-link">
+                                    <i class="feather-bar-chart-2 me-2"></i> Q2 Review
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('finance.awp.index', ['filter_mode' => 'quarterly', 'year' => now()->year, 'quarter' => 3]) }}"
+                                    class="nxl-link">
+                                    <i class="feather-bar-chart-2 me-2"></i> Q3 Review
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('finance.awp.index', ['filter_mode' => 'quarterly', 'year' => now()->year, 'quarter' => 4]) }}"
+                                    class="nxl-link">
+                                    <i class="feather-bar-chart-2 me-2"></i> Q4 Review
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                @endcan
 
 
                 {{-- ================= REPORTING ================= --}}
@@ -1214,7 +1435,7 @@
 
 
                 {{-- ================= COMMUNICATIONS ================= --}}
-                @canany(['communications.view', 'communications.respond', 'questions.view', 'questions.respond',
+                @canany(['communications.view', 'communications.respond', 'news.manage', 'news.approve', 'questions.view', 'questions.respond',
                     'national_data.review', 'national_data.approve'])
                     <li class="nxl-item nxl-caption">
                         <label>Communications</label>
@@ -1227,6 +1448,13 @@
                             </a>
                         </li>
                     @endcan
+                    @canany(['news.manage', 'news.approve'])
+                        <li class="nxl-item">
+                            <a href="{{ route('system.news.index') }}" class="nxl-link">
+                                <i class="feather-send me-2"></i> News Posting
+                            </a>
+                        </li>
+                    @endcanany
                     @can('questions.view')
                         <li class="nxl-item">
                             <a href="{{ route('system.questions.index') }}" class="nxl-link">

@@ -8,11 +8,11 @@
     <link rel="stylesheet" href="{{ asset('assets/style.css') }}">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <style>
-        :root { --ink:#0f172a; --muted:#64748b; --panel:#fff; --line:#dbe4ef; --brand:#0a3d62; }
-        body { margin:0; color:var(--ink); background:linear-gradient(180deg,#f8fafc 0%,#eef2ff 48%,#edf3fb 100%); padding-top:96px; }
+        :root { --ink:#0f172a; --muted:#64748b; --panel:#fff; --line:#dbe4ef; --brand:#006B3F; --au-green:#006B3F; --au-green-dark:#004d2e; --au-green-light:#009A44; }
+        body { margin:0; color:var(--ink); background:linear-gradient(180deg,#f0f4f0 0%,#e8f2eb 48%,#f0f4f0 100%); padding-top:76px; }
         .navbar { z-index:1200; }
         .hero-world,.summary-grid,.viz-shell,.compare-shell { width:min(1400px,95%); margin-left:auto; margin-right:auto; }
-        .hero-world { margin-top:1.1rem; border-radius:18px; padding:1.3rem 1.4rem; color:#eef6ff; background:linear-gradient(130deg,#0b1327 0%,#0a3d62 48%,#1d4ed8 100%); box-shadow:0 20px 42px rgba(15,23,42,.26); }
+        .hero-world { margin-top:1.1rem; border-radius:18px; padding:1.3rem 1.4rem; color:#eef6ff; background:linear-gradient(130deg,var(--au-green-dark) 0%,var(--au-green) 55%,var(--au-green-light) 100%); box-shadow:0 20px 42px rgba(0,77,46,.30); }
         .hero-world h1 { margin:0 0 .45rem; font-size:clamp(1.3rem,2vw,2rem); }
         .hero-world p { margin:0 0 .85rem; color:rgba(230,243,255,.92); max-width:1000px; line-height:1.45; }
         .hero-meta,.source-pills,.hero-links { display:flex; flex-wrap:wrap; gap:.45rem; align-items:center; }
@@ -35,7 +35,7 @@
         .controls select,.controls input,.controls button { width:100%; border:1px solid #cfd8e6; border-radius:8px; padding:.43rem .48rem; background:#fff; color:var(--ink); font-size:.85rem; }
         .controls button { border:0; font-weight:700; cursor:pointer; }
         .slider-readout { margin-top:.25rem; font-size:.72rem; color:#475569; }
-        .btn-primary { background:linear-gradient(120deg,#65a30d,#854d0e); color:#fff; }
+        .controls .btn-primary { background:linear-gradient(120deg,var(--au-green),var(--au-green-light)); color:#fff; }
         .btn-secondary { background:#e8eef8; color:#0f172a; }
         #worldMap { width:100%; min-height:590px; background:#dbe7f6; }
         .status,.map-status { border:1px solid #d9dfc7; background:#f4f8ea; color:#3f6212; border-radius:10px; padding:.52rem .65rem; font-size:.8rem; line-height:1.35; }
@@ -53,7 +53,7 @@
         th,td { border-bottom:1px solid #edf2f9; padding:.34rem .45rem; text-align:left; vertical-align:top; }
         thead th { position:sticky; top:0; background:#f8fbff; z-index:1; }
         .snapshot-content { padding:.78rem .95rem 1rem; }
-        .snapshot-country { margin:0; color:#7f1d1d; font-size:1.04rem; }
+        .snapshot-country { margin:0; color:var(--au-green); font-size:1.04rem; }
         .snapshot-hint { margin:.35rem 0 .75rem; color:#475569; font-size:.8rem; }
         .snapshot-highlights { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; margin-bottom:.7rem; }
         .highlight-card { border:1px solid #dbe4ef; border-radius:10px; padding:.55rem .6rem; background:#f8fbff; }
@@ -123,26 +123,85 @@
         .empty-box { border:1px dashed #9fb4d2; border-radius:10px; background:#f8fbff; color:#475569; font-size:.8rem; padding:.72rem; }
         @media (max-width:1200px){ .summary-grid{grid-template-columns:repeat(4,minmax(0,1fr));} .viz-shell,.data-grid,.compare-grid,.continent-map-grid{grid-template-columns:1fr;} .viz-card.wide{grid-column:span 1;} }
         @media (max-width:900px){ .controls,.controls.controls-6{grid-template-columns:1fr 1fr;} .controls .span-2,.controls .span-3{grid-column:span 2;} }
-        @media (max-width:768px){ body{padding-top:150px;} .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));} #worldMap{min-height:500px;} }
+        @media (max-width:768px){ body{padding-top:76px;} .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));} #worldMap{min-height:500px;} }
         @media (max-width:560px){ .summary-grid,.controls,.controls.controls-6{grid-template-columns:1fr;} .controls .span-2,.controls .span-3,.controls .span-4{grid-column:span 1;} .snapshot-highlights,.series-cards{grid-template-columns:1fr;} }
     </style>
 </head>
 <body>
-    <header class="navbar">
-        <div class="logo"><img src="{{ asset('assets/images/au.png') }}" class="logo logo-sm" alt="ATTP"></div>
-        <nav class="nav-links">
-            <a href="{{ route('landing.index') }}">{{ __('navigation.home') }}</a>
-            <a href="{{ route('events') }}">{{ __('navigation.events') }}</a>
-            <a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a>
-            <a href="{{ route('world.indicators.performance') }}" class="active">{{ __('navigation.world_indicators_performance') }}</a>
-            <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
-            <a href="{{ route('applicants.faq') }}">{{ __('navigation.faqs') }}</a>
-        </nav>
-        <div class="nav-actions">
-            <x-language-selector style="landing" />
-            <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
-            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
+    <!-- ====== MOBILE NAV OVERLAY ====== -->
+    <div class="mobile-nav-overlay" id="navOverlay" onclick="closeMobileNav()"></div>
+
+    <!-- ====== MOBILE NAV DRAWER ====== -->
+    <nav class="mobile-nav" id="mobileNav">
+        <div class="mobile-nav-header">
+            <img src="{{ asset('assets/images/au.png') }}" alt="ATTP">
+            <button class="mobile-nav-close" onclick="closeMobileNav()" aria-label="Close menu">&times;</button>
         </div>
+        <a href="{{ route('landing.index') }}" onclick="closeMobileNav()">{{ __('navigation.home') }}</a>
+
+        <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
+            Programs <span class="mobile-dropdown-arrow">▾</span>
+        </button>
+        <div class="mobile-dropdown-items">
+            <a href="{{ route('events') }}" onclick="closeMobileNav()">{{ __('landing.events_webinars') }}</a>
+            <a href="{{ route('careers.index') }}" onclick="closeMobileNav()">{{ __('navigation.careers') }}</a>
+        </div>
+
+        <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
+            Analytics <span class="mobile-dropdown-arrow">▾</span>
+        </button>
+        <div class="mobile-dropdown-items">
+            <a href="{{ route('impact.map') }}" onclick="closeMobileNav()">{{ __('navigation.impact_map') }}</a>
+            <a href="{{ route('world.indicators.performance') }}" class="active" onclick="closeMobileNav()">{{ __('navigation.world_indicators_performance') }}</a>
+        </div>
+
+        <a href="{{ route('news.index') }}" onclick="closeMobileNav()">News &amp; Updates</a>
+        <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
+        <div class="mobile-nav-actions">
+            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
+            <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
+            <x-language-selector style="world" />
+        </div>
+    </nav>
+
+    <!-- ====== NAVBAR ====== -->
+    <header class="navbar" role="banner">
+        <a href="{{ route('landing.index') }}" class="logo" aria-label="ATTP Home">
+            <img src="{{ asset('assets/images/au.png') }}" alt="African Think Tank Platform" class="logo-sm">
+        </a>
+
+        <nav class="nav-links" aria-label="Main navigation">
+            <a href="{{ route('landing.index') }}">{{ __('navigation.home') }}</a>
+
+            <div class="has-dropdown">
+                <a href="#">Programs</a>
+                <ul class="nav-dropdown">
+                    <li><a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a></li>
+                    <li><a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a></li>
+                </ul>
+            </div>
+
+            <div class="has-dropdown">
+                <a href="#" class="active">Analytics</a>
+                <ul class="nav-dropdown">
+                    <li><a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a></li>
+                    <li><a href="{{ route('world.indicators.performance') }}" class="active">{{ __('navigation.world_indicators_performance') }}</a></li>
+                </ul>
+            </div>
+
+            <a href="{{ route('news.index') }}">News &amp; Updates</a>
+            <a href="#contact">{{ __('navigation.contact') }}</a>
+        </nav>
+
+        <div class="nav-actions">
+            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
+            <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
+            <x-language-selector style="landing" />
+        </div>
+
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="openMobileNav()" aria-label="Open menu" aria-expanded="false">
+            <span></span><span></span><span></span>
+        </button>
     </header>
 
     <section class="hero-world">
@@ -268,11 +327,28 @@
         </article>
     </section>
 
-    <footer id="contact" class="footer">
+    <footer id="contact" class="footer" role="contentinfo">
         <div class="footer-content">
-            <div class="footer-logo"><h3>ATTP<span> Administration</span></h3><p>{{ __('landing.footer_description') }}</p></div>
-            <div class="footer-links"><h4>{{ __('landing.footer_links_title') }}</h4><a href="{{ route('landing.index') }}">{{ __('landing.footer_link_home') }}</a><a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a><a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a><a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a></div>
-            <div class="footer-contact"><h4>{{ __('landing.footer_contact_title') }}</h4><p>{{ __('landing.footer_email') }}</p><p>{{ __('landing.footer_copyright', ['year' => date('Y')]) }}</p></div>
+            <div class="footer-logo">
+                <h3>ATTP<span> Administration</span></h3>
+                <p>{{ __('landing.footer_description') }}</p>
+            </div>
+            <div class="footer-links">
+                <h4>{{ __('landing.footer_links_title') }}</h4>
+                <a href="{{ route('landing.index') }}">{{ __('landing.footer_link_home') }}</a>
+                <a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a>
+                <a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a>
+                <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
+                <a href="#contact">{{ __('navigation.contact') }}</a>
+            </div>
+            <div class="footer-contact">
+                <h4>{{ __('landing.footer_contact_title') }}</h4>
+                <p>{{ __('landing.footer_email') }}</p>
+                <p>{{ __('landing.footer_copyright', ['year' => date('Y')]) }}</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>Supporting African Union policy coordination, governance reform, and evidence-based decision-making across the continent.</p>
         </div>
     </footer>
 
@@ -1981,6 +2057,53 @@
         }
 
         initializeDashboard();
+    </script>
+
+    <script>
+        function openMobileNav() {
+            const nav = document.getElementById('mobileNav');
+            const overlay = document.getElementById('navOverlay');
+            const btn = document.getElementById('hamburgerBtn');
+            nav.classList.add('open');
+            overlay.style.display = 'block';
+            requestAnimationFrame(() => overlay.classList.add('visible'));
+            btn.classList.add('open');
+            btn.setAttribute('aria-expanded', 'true');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileNav() {
+            const nav = document.getElementById('mobileNav');
+            const overlay = document.getElementById('navOverlay');
+            const btn = document.getElementById('hamburgerBtn');
+            nav.classList.remove('open');
+            overlay.classList.remove('visible');
+            btn.classList.remove('open');
+            btn.setAttribute('aria-expanded', 'false');
+            document.body.style.overflow = '';
+            setTimeout(() => { overlay.style.display = 'none'; }, 300);
+        }
+
+        function toggleMobileDropdown(btn) {
+            const items = btn.nextElementSibling;
+            const isOpen = items.classList.contains('open');
+            document.querySelectorAll('.mobile-dropdown-items.open').forEach(el => el.classList.remove('open'));
+            document.querySelectorAll('.mobile-dropdown-toggle.open').forEach(el => el.classList.remove('open'));
+            if (!isOpen) { items.classList.add('open'); btn.classList.add('open'); }
+        }
+
+        document.addEventListener('click', function(e) {
+            document.querySelectorAll('.lang-switcher.open').forEach(function(el) {
+                if (!el.contains(e.target)) el.classList.remove('open');
+            });
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                closeMobileNav();
+                document.querySelectorAll('.lang-switcher.open').forEach(el => el.classList.remove('open'));
+            }
+        });
     </script>
 </body>
 </html>

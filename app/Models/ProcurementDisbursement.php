@@ -16,6 +16,8 @@ class ProcurementDisbursement extends BaseModel
         'vendor_id',
         'sub_activity_id',
         'governance_node_id',
+        'consortium_id',
+        'think_tank_member_id',
         'reference_no',
         'amount',
         'currency',
@@ -44,6 +46,16 @@ class ProcurementDisbursement extends BaseModel
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'vendor_id');
+    }
+
+    public function consortium(): BelongsTo
+    {
+        return $this->belongsTo(Consortium::class, 'consortium_id');
+    }
+
+    public function thinkTankMember(): BelongsTo
+    {
+        return $this->belongsTo(ConsortiumThinkTank::class, 'think_tank_member_id');
     }
 
     public function subActivity(): BelongsTo

@@ -7,6 +7,7 @@ use App\Models\Program;
 use App\Models\Project;
 use App\Models\Activity;
 use App\Models\BudgetCommitment;
+use App\Models\ProgramFunding;
 use App\Models\ProcurementDisbursement;
 
 use App\Exports\ProgramExport;
@@ -165,6 +166,11 @@ class BudgetReportController extends Controller
             if ($fundings->isEmpty()) {
                 $fundings = $program->fundings;
             }
+            if ($fundings->isEmpty()) {
+                $fundings = ProgramFunding::query()
+                    ->where('program_name', $program->name)
+                    ->get();
+            }
 
             $funders = $fundings->pluck('funder')->filter()->unique('id')->values();
 
@@ -280,6 +286,11 @@ class BudgetReportController extends Controller
         if ($fundings->isEmpty()) {
             $fundings = $program->fundings;
         }
+        if ($fundings->isEmpty()) {
+            $fundings = ProgramFunding::query()
+                ->where('program_name', $program->name)
+                ->get();
+        }
 
         $fundingIds = $fundings->pluck('id')->all();
 
@@ -377,6 +388,11 @@ class BudgetReportController extends Controller
             $fundings = $program->approvedFundings;
             if ($fundings->isEmpty()) {
                 $fundings = $program->fundings;
+            }
+            if ($fundings->isEmpty()) {
+                $fundings = ProgramFunding::query()
+                    ->where('program_name', $program->name)
+                    ->get();
             }
 
             $funders = $fundings->pluck('funder')->filter()->unique('id')->values();
@@ -530,6 +546,11 @@ class BudgetReportController extends Controller
         $fundings = $program->approvedFundings;
         if ($fundings->isEmpty()) {
             $fundings = $program->fundings;
+        }
+        if ($fundings->isEmpty()) {
+            $fundings = ProgramFunding::query()
+                ->where('program_name', $program->name)
+                ->get();
         }
 
         $fundingIds = $fundings->pluck('id')->all();
@@ -732,12 +753,12 @@ class BudgetReportController extends Controller
 
     private function resolveCommitmentDate(BudgetCommitment $commitment): Carbon
     {
-        if ($commitment->purchaseRequest?->commitment_date) {
-            return Carbon::parse($commitment->purchaseRequest->commitment_date)->startOfDay();
-        }
-
         if (!empty($commitment->commitment_year)) {
             return Carbon::create((int) $commitment->commitment_year, 1, 1);
+        }
+
+        if ($commitment->purchaseRequest?->commitment_date) {
+            return Carbon::parse($commitment->purchaseRequest->commitment_date)->startOfDay();
         }
 
         return now()->startOfDay();

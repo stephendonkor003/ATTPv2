@@ -1,42 +1,24 @@
-@extends('emails.layouts.base')
+<!doctype html>
+<html>
+<body style="margin:0;background:#f3f4f6;font-family:Arial,sans-serif;color:#172033;line-height:1.6;">
+    <div style="max-width:620px;margin:0 auto;padding:28px 16px;">
+        <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+            <div style="background:#0f172a;color:#ffffff;padding:22px 24px;">
+                <h2 style="margin:0;font-size:20px;">Password Changed</h2>
+                <p style="margin:6px 0 0;color:#cbd5e1;">Your ATTP account password was updated successfully.</p>
+            </div>
 
-@section('content')
-    <h2>Password Changed Successfully</h2>
+            <div style="padding:24px;">
+                <p>Hello {{ $user->name ?? 'User' }},</p>
+                <p>This confirms that the password for your account was changed.</p>
+                <p>If you made this change, no further action is needed.</p>
+                <p>If you did not make this change, contact the ATTP administrator immediately.</p>
 
-    <p>Hello <strong>{{ $user->name }}</strong>,</p>
-
-    <p>
-        Your {{ config('app.name') }} account password was successfully changed.
-        Your account is now fully active and you can enjoy all platform features.
-    </p>
-
-    <div class="alert alert-success">
-        <strong>Password Updated!</strong><br>
-        Your new password is now active. Please use it for all future logins.
+                <p style="margin-top:28px;color:#64748b;font-size:13px;">
+                    This is an automated security message from {{ config('app.name', 'ATTP') }}.
+                </p>
+            </div>
+        </div>
     </div>
-
-    <div class="divider"></div>
-
-    <h3 style="color: #1a365d; font-size: 16px; margin-bottom: 15px;">Password Policy Reminder</h3>
-
-    <div class="info-list">
-        <ul>
-            <li>Your password will expire in <strong>60 days</strong> ({{ now()->addDays(60)->format('d M Y') }})</li>
-            <li>You will be prompted to create a new password upon expiration</li>
-            <li>For security, we recommend using unique passwords for each account</li>
-            <li>Never share your password with anyone, including support staff</li>
-        </ul>
-    </div>
-
-    <div class="alert alert-warning">
-        <strong>Didn't make this change?</strong><br>
-        If you did not change your password, your account may be compromised.
-        Please contact support immediately at <a href="mailto:support@aubid.org">support@aubid.org</a>.
-    </div>
-
-    <p style="margin-top: 25px; color: #718096; font-size: 13px;">
-        <strong>Change Details:</strong><br>
-        Time: {{ now()->format('d M Y, H:i:s') }} UTC<br>
-        IP Address: {{ request()->ip() }}
-    </p>
-@endsection
+</body>
+</html>

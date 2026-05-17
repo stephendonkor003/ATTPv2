@@ -375,8 +375,8 @@ class BudgetCommitmentController extends Controller
             'committed' => BudgetCommitment::whereIn('status',[
                 self::STATUS_SUBMITTED,
                 self::STATUS_APPROVED
-            ])->selectRaw('MONTH(created_at) m, SUM(commitment_amount) t')
-              ->groupBy('m')->pluck('t'),
+            ])->selectRaw('EXTRACT(MONTH FROM created_at) as m, SUM(commitment_amount) t')
+              ->groupByRaw('EXTRACT(MONTH FROM created_at)')->pluck('t'),
         ]);
     }
 

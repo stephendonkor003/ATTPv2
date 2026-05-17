@@ -11,10 +11,12 @@ use App\Models\GovernanceReportingLine;
 use App\Models\AuMemberState;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\UserAccountCreated;
 use App\Mail\UserPasswordReset;
 use Illuminate\Support\Facades\Auth;
+use Throwable;
 
 class UserAccessController extends Controller
 {
@@ -54,8 +56,8 @@ class UserAccessController extends Controller
             'name'    => 'required|string|max:255',
             'email'   => 'required|email|unique:users,email',
             'role_id' => 'required|exists:roles,id',
-            'user_type' => 'required|in:staff,member_state',
-            'governance_node_id' => 'nullable|required_unless:user_type,member_state|exists:myb_governance_nodes,id',
+            'user_type' => 'required|in:admin,staff,member_state,vendor,funding_partner,think_tank,evaluator',
+            'governance_node_id' => 'nullable|exists:myb_governance_nodes,id',
             'member_state_id' => 'nullable|required_if:user_type,member_state|exists:myb_au_member_states,id',
         ]);
 
@@ -71,18 +73,23 @@ class UserAccessController extends Controller
             'password'             => Hash::make($plainPassword),
             'role_id'              => $request->role_id,
             'governance_node_id'   => $request->input('governance_node_id'),
-            'member_state_id'      => $request->input('member_state_id'),
+            'member_state_id'      => $request->user_type === 'member_state' ? $request->input('member_state_id') : null,
             'user_type'            => $request->user_type,
             'must_change_password' => true,
         ]);
 
-        Mail::to($user->email)->send(
-            new UserAccountCreated($user, $plainPassword)
+        $mailSent = $this->sendUserMailSafely(
+            $user,
+            new UserAccountCreated($user, $plainPassword),
+            'User account created email could not be sent.',
+            $plainPassword
         );
 
         return redirect()
             ->route('system.users.index')
-            ->with('success', 'User account created successfully.');
+            ->with('success', $mailSent
+                ? 'User account created successfully.'
+                : "User account created successfully, but email delivery failed. Temporary password: {$plainPassword}");
     }
 
     /* ======================================================
@@ -110,8 +117,8 @@ class UserAccessController extends Controller
             'name'    => 'required|string|max:255',
             'email'   => 'required|email|unique:users,email,' . $user->id,
             'role_id' => 'required|exists:roles,id',
-            'user_type' => 'required|in:staff,member_state',
-            'governance_node_id' => 'nullable|required_unless:user_type,member_state|exists:myb_governance_nodes,id',
+            'user_type' => 'required|in:admin,staff,member_state,vendor,funding_partner,think_tank,evaluator',
+            'governance_node_id' => 'nullable|exists:myb_governance_nodes,id',
             'member_state_id' => 'nullable|required_if:user_type,member_state|exists:myb_au_member_states,id',
         ]);
 
@@ -125,7 +132,7 @@ class UserAccessController extends Controller
             'role_id' => $request->role_id,
             'user_type' => $request->user_type,
             'governance_node_id' => $request->input('governance_node_id'),
-            'member_state_id' => $request->input('member_state_id'),
+            'member_state_id' => $request->user_type === 'member_state' ? $request->input('member_state_id') : null,
         ]);
 
         return redirect()
@@ -173,11 +180,16 @@ class UserAccessController extends Controller
             'must_change_password' => true,
         ]);
 
-        Mail::to($user->email)->send(
-            new UserPasswordReset($user, $plainPassword)
+        $mailSent = $this->sendUserMailSafely(
+            $user,
+            new UserPasswordReset($user, $plainPassword),
+            'User password reset email could not be sent.',
+            $plainPassword
         );
 
-        return back()->with('success', 'Password reset and emailed successfully.');
+        return back()->with('success', $mailSent
+            ? 'Password reset and emailed successfully.'
+            : "Password reset successfully, but email delivery failed. Temporary password: {$plainPassword}");
     }
 
     public function blockLogin(Request $request, User $user)
@@ -373,5 +385,31 @@ class UserAccessController extends Controller
         }
 
         return array_keys($seen);
+    }
+
+    private function sendUserMailSafely(User $user, $mail, string $logMessage, string $plainPassword): bool
+    {
+        try {
+            Mail::to($user->email)->send($mail);
+
+            return true;
+        } catch (Throwable $exception) {
+            Log::warning($logMessage, [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'mailer' => config('mail.default'),
+                'error' => $exception->getMessage(),
+            ]);
+
+            if (app()->environment(['local', 'testing'])) {
+                Log::info('Local development temporary user password fallback.', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'temporary_password' => $plainPassword,
+                ]);
+            }
+
+            return false;
+        }
     }
 }

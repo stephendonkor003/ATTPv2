@@ -96,6 +96,7 @@ use App\Http\Controllers\{
 	    AllocationSummaryController,
 	    BudgetAllocationController,
 	    BudgetCommitmentController,
+	    ApprovedWorkPlanController,
 	    PurchaseRequestController,
 	    BudgetReportController,
 	    ProjectBudgetController,
@@ -284,7 +285,7 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
                 ->name('destroy');
 
          /* ===============================
-         | ✅ ADD THIS ROUTE
+         | ? ADD THIS ROUTE
          | Inline Role Update
          =============================== */
         Route::put('/{user}/role', [UserAccessController::class, 'updateRole'])
@@ -844,6 +845,46 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
         Route::get('commitments', [BudgetCommitmentController::class, 'index'])
             ->middleware('permission:finance.commitments.view')
             ->name('commitments.index');
+
+        /* =====================================================
+         | AWP - APPROVED WORK PLAN
+         ===================================================== */
+
+        Route::get('awp', [ApprovedWorkPlanController::class, 'index'])
+            ->middleware('permission:finance.awp.view')
+            ->name('awp.index');
+
+        Route::post('awp', [ApprovedWorkPlanController::class, 'store'])
+            ->middleware('permission:finance.awp.create')
+            ->name('awp.store');
+
+        Route::put('awp/{awp}', [ApprovedWorkPlanController::class, 'update'])
+            ->middleware('permission:finance.awp.edit')
+            ->name('awp.update');
+
+        Route::post('awp/{awp}/approve', [ApprovedWorkPlanController::class, 'approve'])
+            ->middleware('permission:finance.awp.approve')
+            ->name('awp.approve');
+
+        Route::post('awp/{awp}/close', [ApprovedWorkPlanController::class, 'close'])
+            ->middleware('permission:finance.awp.approve')
+            ->name('awp.close');
+
+        Route::post('awp/items/{item}/review', [ApprovedWorkPlanController::class, 'reviewItem'])
+            ->middleware('permission:finance.awp.approve')
+            ->name('awp.items.review');
+
+        Route::put('awp/items/{item}', [ApprovedWorkPlanController::class, 'updateItem'])
+            ->middleware('permission:finance.awp.edit')
+            ->name('awp.items.update');
+
+        Route::get('awp/items/{item}/document', [ApprovedWorkPlanController::class, 'downloadItemDocument'])
+            ->middleware('permission:finance.awp.view')
+            ->name('awp.items.document');
+
+        Route::delete('awp/{awp}', [ApprovedWorkPlanController::class, 'destroy'])
+            ->middleware('permission:finance.awp.delete')
+            ->name('awp.destroy');
 
         Route::get('commitments/create', [BudgetCommitmentController::class, 'create'])
             ->middleware('permission:finance.commitments.create')
@@ -1468,7 +1509,7 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:vendor.outreach.send')
             ->name('notify-vendors');
 
-        // ⚠️ GENERIC ROUTE MUST ALWAYS BE LAST
+        // ?? GENERIC ROUTE MUST ALWAYS BE LAST
         Route::get('/{procurement}', [ProcurementController::class, 'show'])
             ->name('show');
     });
@@ -1545,6 +1586,12 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
     ->group(function () {
         Route::get('/', [ProcurementPurchaseOrderController::class, 'index'])
             ->name('index');
+        Route::get('create', [ProcurementPurchaseOrderController::class, 'create'])
+            ->middleware('permission:finance.purchase_orders.create')
+            ->name('create');
+        Route::post('/', [ProcurementPurchaseOrderController::class, 'store'])
+            ->middleware('permission:finance.purchase_orders.create')
+            ->name('store');
         Route::get('{purchaseOrder}', [ProcurementPurchaseOrderController::class, 'show'])
             ->name('show');
         Route::get('{purchaseOrder}/pdf', [ProcurementPurchaseOrderController::class, 'pdf'])
@@ -1663,7 +1710,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:forms.manage'])
 
 
 
-         // 🔗 ATTACH FORM TO PROCUREMENT
+         // ?? ATTACH FORM TO PROCUREMENT
         Route::post('attach-form', [ProcurementController::class, 'attachForm'])
             ->name('attach-form');
 
@@ -1843,7 +1890,7 @@ Route::middleware(['auth', 'not.funding.partner'])
         )->middleware('permission:prescreening.evaluate')
          ->name('prescreening.submissions.store');
 
-        // ✅ NEW: REQUEST REWORK
+        // ? NEW: REQUEST REWORK
         Route::post(
             'submissions/{submission}/rework',
             [PrescreeningEvaluationController::class, 'requestRework']
@@ -2018,7 +2065,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
 
     /*
 |--------------------------------------------------------------------------
-| PROCUREMENT → EVALUATION LINKING (STILL PHASE 1)
+| PROCUREMENT ? EVALUATION LINKING (STILL PHASE 1)
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage'])
@@ -2059,7 +2106,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evalua
         Route::get('/{assignment}/start', [EvaluationSubmissionController::class, 'start'])
             ->name('start');
 
-        // ✅ SAVE SCORES (AUTOSAVE / DRAFT)
+        // ? SAVE SCORES (AUTOSAVE / DRAFT)
         Route::post('/{assignment}/save-scores', [EvaluationSubmissionController::class, 'saveScores'])
             ->name('saveScores');
 
@@ -2421,6 +2468,17 @@ Route::get('/faq', [ApplicantController::class, 'faq'])->name('applicants.faq');
 Route::post('/apply', [ApplicantController::class, 'store'])->name('applicants.store');
 Route::get('/events', [ApplicantController::class, 'events'])->name('events');
 
+/*
+|--------------------------------------------------------------------------
+| NEWS & UPDATES (Public – dummy data template, no auth required)
+|--------------------------------------------------------------------------
+*/
+Route::get('/news', [\App\Http\Controllers\PublicNewsController::class, 'index'])->name('news.index');
+Route::post('/news/subscribe', [\App\Http\Controllers\PublicNewsController::class, 'subscribe'])->name('news.subscribe');
+Route::get('/news/unsubscribe/{token}', [\App\Http\Controllers\PublicNewsController::class, 'unsubscribe'])->name('news.unsubscribe');
+Route::get('/news/{post}', [\App\Http\Controllers\PublicNewsController::class, 'show'])->name('news.show');
+Route::get('/news/{post}/attachments/{attachment}', [\App\Http\Controllers\PublicNewsController::class, 'download'])->name('news.attachments.download');
+
 Route::middleware(['auth', 'not.funding.partner', 'permission:system.audit.view'])
     ->prefix('system/audit')
     ->name('system.audit.')
@@ -2499,6 +2557,15 @@ Route::middleware(['auth', 'funding.partner', 'permission:partner.dashboard.acce
         Route::get('/dashboard', [PartnerDashboardController::class, 'index'])
             ->name('dashboard');
 
+        Route::get('/reports', [PartnerDashboardController::class, 'reports'])
+            ->name('reports.index');
+
+        Route::get('/reports/financial-position', [PartnerDashboardController::class, 'financialPosition'])
+            ->name('reports.financial-position');
+
+        Route::get('/think-tank-deep-search', [PartnerDashboardController::class, 'thinkTankDeepSearch'])
+            ->name('think-tanks.deep-search');
+
         // Funded Programs
         Route::middleware('permission:partner.programs.view')->group(function () {
             Route::get('/programs', [PartnerDashboardController::class, 'programs'])
@@ -2512,6 +2579,15 @@ Route::middleware(['auth', 'funding.partner', 'permission:partner.dashboard.acce
 
             Route::get('/insights', [PartnerDashboardController::class, 'insights'])
                 ->name('insights');
+
+            Route::get('/work-plan', [ApprovedWorkPlanController::class, 'partnerIndex'])
+                ->name('workplan.index');
+
+            Route::post('/work-plan/items/{item}/review', [ApprovedWorkPlanController::class, 'partnerReviewItem'])
+                ->name('workplan.items.review');
+
+            Route::get('/work-plan/items/{item}/document', [ApprovedWorkPlanController::class, 'partnerDownloadItemDocument'])
+                ->name('workplan.items.document');
         });
 
         // Projects (drill-down from programs)
@@ -2907,3 +2983,79 @@ Route::middleware(['auth', 'not.funding.partner'])
 
 
 require __DIR__ . '/auth.php';
+
+/*
+|--------------------------------------------------------------------------
+| ATTP Consortium Operations
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'not.funding.partner', 'permission:consortiums.view'])
+    ->prefix('consortium-operations')
+    ->name('consortium-operations.')
+    ->controller(\App\Http\Controllers\ConsortiumOperationsController::class)
+    ->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('/', 'store')->middleware('permission:consortiums.manage')->name('store');
+        Route::get('/{consortium}', 'show')->name('show');
+        Route::post('/{consortium}/members', 'addMember')->middleware('permission:consortiums.manage')->name('members.store');
+        Route::post('/{consortium}/workplans', 'addWorkplan')->middleware('permission:consortiums.manage')->name('workplans.store');
+        Route::post('/{consortium}/reports', 'storeReport')->middleware('permission:consortiums.reports.submit|consortiums.manage')->name('reports.store');
+        Route::post('/{consortium}/allocations', 'addAllocation')->middleware('permission:consortiums.finance.manage')->name('allocations.store');
+        Route::post('/{consortium}/disbursements', 'requestDisbursement')->middleware('permission:consortiums.disbursements.request|consortiums.finance.manage')->name('disbursements.store');
+        Route::post('/{consortium}/expenses', 'storeExpense')->middleware('permission:consortiums.expenses.submit|consortiums.finance.manage')->name('expenses.store');
+        Route::post('/{consortium}/risks', 'addRisk')->middleware('permission:consortiums.risks.manage')->name('risks.store');
+    });
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:consortiums.reports.review'])
+    ->post('/consortium-operations/reports/{report}/review', [\App\Http\Controllers\ConsortiumOperationsController::class, 'reviewReport'])
+    ->name('consortium-operations.reports.review');
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:consortiums.finance.manage'])
+    ->post('/consortium-operations/disbursements/{disbursement}/review', [\App\Http\Controllers\ConsortiumOperationsController::class, 'reviewDisbursement'])
+    ->name('consortium-operations.disbursements.review');
+
+Route::middleware(['auth', 'funding.partner', 'permission:partner.runtime_overview.view'])
+    ->get('/partner/runtime-overview', [\App\Http\Controllers\ConsortiumOperationsController::class, 'runtimeOverview'])
+    ->name('partner.runtime-overview');
+
+Route::middleware(['auth', 'not.funding.partner', 'permission:news.manage|news.approve|communications.respond'])
+    ->prefix('system/news')
+    ->name('system.news.')
+    ->controller(\App\Http\Controllers\NewsAdminController::class)
+    ->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('/create', 'create')->middleware('permission:news.manage|communications.respond')->name('create');
+        Route::post('/', 'store')->middleware('permission:news.manage|communications.respond')->name('store');
+        Route::get('/{post}/edit', 'edit')->name('edit');
+        Route::put('/{post}', 'update')->middleware('permission:news.manage|communications.respond')->name('update');
+        Route::post('/{post}/approval', 'approve')->middleware('permission:news.approve|communications.respond')->name('approve');
+        Route::delete('/{post}/attachments/{attachment}', 'destroyAttachment')->middleware('permission:news.manage|communications.respond')->name('attachments.destroy');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| Think Tank Portal
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
+    ->prefix('think-tank')
+    ->name('think-tank.')
+    ->controller(\App\Http\Controllers\ThinkTankPortalController::class)
+    ->group(function () {
+        Route::get('/dashboard', 'dashboard')->name('dashboard');
+        Route::get('/reports', 'reports')->name('reports');
+        Route::post('/reports', 'storeReport')->middleware('permission:think_tank.reports.submit')->name('reports.store');
+        Route::get('/research', 'research')->name('research');
+        Route::post('/research', 'storeResearch')->middleware('permission:think_tank.research.submit')->name('research.store');
+        Route::get('/purchase-orders', 'purchaseOrders')->name('purchase-orders');
+        Route::post('/purchase-orders', 'storePurchaseOrder')->middleware('permission:think_tank.procurement.manage')->name('purchase-orders.store');
+        Route::get('/purchase-orders/{purchaseOrder}', 'showPurchaseOrder')->name('purchase-orders.show');
+        Route::get('/purchase-orders/{purchaseOrder}/pdf', 'purchaseOrderPdf')->name('purchase-orders.pdf');
+        Route::get('/purchase-orders/{purchaseOrder}/download', 'downloadPurchaseOrder')->name('purchase-orders.download');
+        Route::get('/procurement', 'procurement')->name('procurement');
+        Route::post('/procurement/plans', 'storeProcurementPlan')->middleware('permission:think_tank.procurement.manage')->name('procurement.plans.store');
+        Route::post('/procurement', 'storeProcurement')->middleware('permission:think_tank.procurement.manage')->name('procurement.store');
+        Route::get('/procurement/{procurement}/submissions', 'submissions')->middleware('permission:think_tank.procurement.evaluate')->name('procurement.submissions');
+        Route::post('/procurement/{procurement}/submissions/{submission}/review', 'reviewSubmission')->middleware('permission:think_tank.procurement.evaluate')->name('procurement.submissions.review');
+        Route::post('/procurement/{procurement}/submissions/{submission}/select', 'selectSubmission')->middleware('permission:think_tank.procurement.select')->name('procurement.submissions.select');
+    });

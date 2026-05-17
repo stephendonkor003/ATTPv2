@@ -48,7 +48,7 @@ class AuMasterDataPermissionsSeeder extends Seeder
         }
 
         // Assign to Admin role if exists
-        $adminRole = Role::where('name', 'Admin')->first();
+        $adminRole = Role::whereIn('name', ['System Admin', 'Admin'])->first();
         if ($adminRole) {
             $permissionIds = Permission::where('name', 'like', 'settings.au_master_data.%')
                 ->pluck('id')

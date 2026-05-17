@@ -10,6 +10,11 @@ class Procurement extends BaseModel
 {
     protected $fillable = [
         'resource_id',
+        'consortium_id',
+        'think_tank_member_id',
+        'think_tank_procurement_plan_id',
+        'procurement_owner_type',
+        'oversight_status',
         'governance_node_id',
         'title',
         'slug',
@@ -74,6 +79,21 @@ class Procurement extends BaseModel
         return $this->belongsTo(Resource::class, 'resource_id');
     }
 
+    public function consortium()
+    {
+        return $this->belongsTo(Consortium::class, 'consortium_id');
+    }
+
+    public function thinkTankMember()
+    {
+        return $this->belongsTo(ConsortiumThinkTank::class, 'think_tank_member_id');
+    }
+
+    public function thinkTankProcurementPlan()
+    {
+        return $this->belongsTo(ThinkTankProcurementPlan::class, 'think_tank_procurement_plan_id');
+    }
+
     /**
      * Procurement has many dynamic forms
      * (linked via dynamic_forms.procurement_id)
@@ -86,6 +106,11 @@ class Procurement extends BaseModel
     public function submissions()
     {
         return $this->hasMany(FormSubmission::class);
+    }
+
+    public function thinkTankReviews()
+    {
+        return $this->hasMany(ThinkTankProcurementReview::class, 'procurement_id');
     }
 
     public function contractNegotiations()

@@ -16,6 +16,8 @@ use App\Models\AuMemberState;
 use App\Models\AuRegionalBlock;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ProcurementStructureSeeder extends Seeder
 {
@@ -208,14 +210,38 @@ class ProcurementStructureSeeder extends Seeder
                 );
 
                 if ($fundingCounter % 2 === 0) {
-                    $funding->memberStates()->syncWithoutDetaching($memberStateIds);
+                    $this->syncPivotWithUuids($funding->memberStates(), $memberStateIds, false);
                 } else {
-                    $funding->regionalBlocks()->syncWithoutDetaching($regionalBlockIds);
+                    $this->syncPivotWithUuids($funding->regionalBlocks(), $regionalBlockIds, false);
                 }
 
                 $fundingCounter++;
                 $programIndex++;
             }
         }
+    }
+
+    private function syncPivotWithUuids($relation, array $ids, bool $detaching = true): void
+    {
+        $cleanIds = collect($ids)->filter()->unique()->values();
+
+        if ($cleanIds->isEmpty()) {
+            if ($detaching) {
+                $relation->sync([]);
+            }
+
+            return;
+        }
+
+        $existing = DB::table($relation->getTable())
+            ->where($relation->getForeignPivotKeyName(), $relation->getParent()->getKey())
+            ->whereIn($relation->getRelatedPivotKeyName(), $cleanIds)
+            ->pluck('id', $relation->getRelatedPivotKeyName());
+
+        $payload = $cleanIds->mapWithKeys(
+            fn ($id) => [$id => ['id' => (string) ($existing[$id] ?? Str::uuid())]]
+        )->toArray();
+
+        $relation->sync($payload, $detaching);
     }
 }

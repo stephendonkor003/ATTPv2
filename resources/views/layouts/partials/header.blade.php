@@ -1,5 +1,50 @@
+<style>
+    .attp-header-strip {
+        min-width: 0;
+    }
+
+    .attp-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 7px 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #fff;
+        color: #111827;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.2;
+        white-space: nowrap;
+        box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
+    }
+
+    .attp-chip.muted {
+        color: #4b5563;
+        font-weight: 500;
+    }
+
+    .attp-chip .label {
+        color: #6b7280;
+        font-weight: 600;
+    }
+
+    .attp-chip.brand {
+        background: #0f172a;
+        border-color: #0f172a;
+        color: #fff;
+    }
+
+    @media (max-width: 1399.98px) {
+        .attp-chip.optional {
+            display: none;
+        }
+    }
+</style>
+
 <header class="nxl-header"
-    style="backdrop-filter: blur(6px); background: rgba(255,255,255,0.92); border-bottom: 1px solid #e5e7eb;">
+    style="backdrop-filter: blur(6px); background: rgba(255,255,255,0.96); border-bottom: 1px solid #e5e7eb;">
     <div class="header-wrapper" style="padding: 8px 16px;">
         <!--! [Start] Header Left !-->
         <div class="header-left d-flex align-items-center gap-4">
@@ -48,24 +93,24 @@
         <div class="header-right ms-auto w-100">
             <div class="d-flex align-items-center justify-content-end gap-3 flex-wrap">
 
-                <div class="d-none d-lg-flex align-items-center gap-2 me-auto flex-wrap">
-                    <span class="attp-chip">
+                <div class="attp-header-strip d-none d-lg-flex align-items-center gap-2 me-auto flex-nowrap overflow-hidden">
+                    <span class="attp-chip brand">
                         <i class="feather-cpu"></i>
-                        ATTP – African Think Tank Platform Control Center
+                        ATTP Control Center
                     </span>
                     <span class="attp-chip muted">
                         <i class="feather-clock"></i>
                         <span class="label">Time:</span> <span id="attp-time">--:--:--</span>
                     </span>
-                    <span class="attp-chip muted">
+                    <span class="attp-chip muted optional">
                         <i class="feather-map-pin"></i>
                         <span class="label">City:</span> <span id="attp-city">Resolving...</span>
                     </span>
-                    <span class="attp-chip muted">
+                    <span class="attp-chip muted optional">
                         <i class="feather-thermometer"></i>
                         <span class="label">Weather:</span> <span id="attp-weather">--</span>
                     </span>
-                    <span class="attp-chip muted">
+                    <span class="attp-chip muted optional">
                         <i class="feather-wifi"></i>
                         <span class="label">IP Tracker:</span> <span id="attp-ip">...</span>
                     </span>

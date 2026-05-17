@@ -6,16 +6,16 @@
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
-                <h4 class="fw-bold mb-1">Budget Commitments</h4>
+                <h4 class="fw-bold mb-1">Planned Commitments</h4>
                 <p class="text-muted mb-0">
-                    All committed resources across projects, activities, and sub-activities
+                    Planned committed resources across projects, activities, and sub-activities
                 </p>
             </div>
 
             @can('finance.commitments.create')
                 <a href="{{ route('finance.commitments.create') }}" class="btn btn-primary">
                     <i class="feather-plus-circle me-1"></i>
-                    New Commitment
+                    New Planned Commitment
                 </a>
             @endcan
         </div>

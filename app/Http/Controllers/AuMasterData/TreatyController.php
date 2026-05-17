@@ -30,8 +30,8 @@ class TreatyController extends Controller
     {
         $statusCounts = TreatyMemberStateStatus::query()
             ->select('treaty_id')
-            ->selectRaw('SUM(CASE WHEN is_signed = 1 THEN 1 ELSE 0 END) as signed_count')
-            ->selectRaw('SUM(CASE WHEN is_ratified = 1 THEN 1 ELSE 0 END) as ratified_count')
+            ->selectRaw('SUM(CASE WHEN is_signed IS TRUE THEN 1 ELSE 0 END) as signed_count')
+            ->selectRaw('SUM(CASE WHEN is_ratified IS TRUE THEN 1 ELSE 0 END) as ratified_count')
             ->groupBy('treaty_id');
 
         $treaties = Treaty::query()

@@ -1,3 +1,0 @@
-name,step_stage,governance_node,description,approval_order,is_required,is_active
-Initial Review,Planning,Council,Review initial data,1,yes,yes
-Final Signoff,Evaluation,Council,Final approval,2,yes,no

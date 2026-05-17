@@ -82,6 +82,44 @@
             filter: none !important;
         }
 
+        :root {
+            --attp-backoffice-header-offset: 104px;
+        }
+
+        .content-wrapper {
+            min-height: 100vh;
+            margin-left: 280px;
+            transition: all .3s ease;
+        }
+
+        .minimenu .content-wrapper {
+            margin-left: 100px;
+        }
+
+        .content-wrapper .content {
+            min-height: calc(100vh - var(--attp-backoffice-header-offset));
+            padding-top: calc(var(--attp-backoffice-header-offset) + 1.5rem) !important;
+        }
+
+        .content .nxl-container {
+            position: static !important;
+            top: auto !important;
+            margin-left: 0 !important;
+            min-height: auto !important;
+        }
+
+        .content > .nxl-container:first-child,
+        .content > .page-header:first-child,
+        .content > .dash-hero:first-child {
+            margin-top: 0 !important;
+        }
+
+        @media (max-width: 1199.98px) {
+            .content-wrapper {
+                margin-left: 0;
+            }
+        }
+
         /* Header info chips */
         .attp-chip {
             display: inline-flex;
@@ -208,6 +246,68 @@
                 border-radius: 12px !important;
                 padding: 0.9rem !important;
             }
+        }
+
+        .content .attp-management-tabs {
+            gap: 0.45rem;
+            border-bottom: 0 !important;
+            padding: 0.35rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+        }
+
+        .content .attp-management-tabs .nav-item {
+            margin-bottom: 0;
+        }
+
+        .content .attp-management-tabs .nav-link {
+            border: 1px solid transparent !important;
+            border-radius: 9px !important;
+            color: #475569 !important;
+            background: transparent !important;
+            font-weight: 700;
+            padding: 0.65rem 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            opacity: 1 !important;
+            pointer-events: auto;
+        }
+
+        .content .attp-management-tabs .nav-link:hover,
+        .content .attp-management-tabs .nav-link:focus {
+            color: #0f172a !important;
+            background: #f1f5f9 !important;
+            border-color: #cbd5e1 !important;
+        }
+
+        .content .attp-management-tabs .nav-link.active,
+        .content .attp-management-tabs .nav-link[aria-current="page"] {
+            color: #ffffff !important;
+            background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 58%, #0ea5e9 100%) !important;
+            border-color: #1d4ed8 !important;
+            box-shadow: 0 10px 20px rgba(29, 78, 216, 0.22);
+            position: relative;
+        }
+
+        .content .attp-management-tabs .nav-link.active::before,
+        .content .attp-management-tabs .nav-link[aria-current="page"]::before {
+            content: "";
+            width: 0.45rem;
+            height: 0.45rem;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+        }
+
+        .content .attp-management-tabs .nav-link.disabled {
+            color: #94a3b8 !important;
+            background: #f8fafc !important;
+            border-color: #e2e8f0 !important;
+            cursor: not-allowed;
+            pointer-events: none;
         }
 
         /* Tawk.to Widget Styles - Override Theme Effects */

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Throwable;
 
 class SecurityController extends Controller
 {
@@ -81,7 +82,16 @@ class SecurityController extends Controller
         $user->markPasswordAsChanged();
 
         // Send confirmation email (queued for scalability)
-        Mail::to($user->email)->queue(new PasswordChangedMail($user));
+        try {
+            Mail::to($user->email)->queue(new PasswordChangedMail($user));
+        } catch (Throwable $exception) {
+            Log::warning('Password changed email could not be queued.', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'mailer' => config('mail.default'),
+                'error' => $exception->getMessage(),
+            ]);
+        }
 
         // Log the activity
         Log::info('Password changed successfully', [
@@ -92,10 +102,16 @@ class SecurityController extends Controller
 
         // Send OTP right after password change for all non-admin users
         if ($user->requiresOtpVerification()) {
-            $this->sendOtpCode($user);
-            return redirect()->route('security.otp.show')
-                ->with('otpSent', true)
+            $otpSent = $this->sendOtpCode($user);
+            $redirect = redirect()->route('security.otp.show')
+                ->with('otpSent', $otpSent)
                 ->with('success', 'Your password has been updated. Please verify the OTP sent to your email.');
+
+            if (! $otpSent) {
+                $redirect->with('warning', 'The email service is currently unavailable. In local development, use the verification code shown below or in the Laravel log.');
+            }
+
+            return $redirect;
         }
 
         // Redirect funding partners to their portal
@@ -111,6 +127,11 @@ class SecurityController extends Controller
 
         if ($user->user_type === 'member_state') {
             return redirect()->intended(route('member-state.dashboard'))
+                ->with('success', 'Your password has been updated successfully. Your account is now active.');
+        }
+
+        if ($user->user_type === 'think_tank') {
+            return redirect()->intended(route('think-tank.dashboard'))
                 ->with('success', 'Your password has been updated successfully. Your account is now active.');
         }
 
@@ -136,8 +157,10 @@ class SecurityController extends Controller
             ->first();
 
         if (!$recentOtp) {
-            $this->sendOtpCode($user);
-            $otpSent = true;
+            $otpSent = $this->sendOtpCode($user);
+            if (! $otpSent) {
+                session()->flash('warning', 'The email service is currently unavailable. In local development, use the verification code shown below or in the Laravel log.');
+            }
         } else {
             $otpSent = false;
         }
@@ -215,6 +238,11 @@ class SecurityController extends Controller
                 ->with('success', 'Identity verified successfully. Welcome back!');
         }
 
+        if ($user->user_type === 'think_tank') {
+            return redirect()->intended(route('think-tank.dashboard'))
+                ->with('success', 'Identity verified successfully. Welcome back!');
+        }
+
         return redirect()->intended(route('dashboard'))
             ->with('success', 'Identity verified successfully. Welcome back!');
     }
@@ -235,7 +263,9 @@ class SecurityController extends Controller
             return back()->with('warning', 'Please wait at least 60 seconds before requesting a new code.');
         }
 
-        $this->sendOtpCode($user);
+        if (! $this->sendOtpCode($user)) {
+            return back()->with('warning', 'The email service is currently unavailable. In local development, use the verification code shown below or in the Laravel log.');
+        }
 
         return back()->with('success', 'A new verification code has been sent to your email.');
     }
@@ -243,19 +273,41 @@ class SecurityController extends Controller
     /**
      * Send OTP code to user's email
      */
-    protected function sendOtpCode($user): void
+    protected function sendOtpCode($user): bool
     {
         $otp = UserLoginOtp::generateFor($user, session()->getId());
 
-        Mail::to($user->email)->send(
-            new LoginOtpMail($user, $otp->otp_code)
-        );
+        try {
+            Mail::to($user->email)->send(
+                new LoginOtpMail($user, $otp->otp_code)
+            );
 
-        // Log the activity
-        Log::info('Login OTP code sent', [
-            'user_id' => $user->id,
-            'email' => $user->email,
-            'ip' => request()->ip(),
-        ]);
+            // Log the activity
+            Log::info('Login OTP code sent', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'ip' => request()->ip(),
+            ]);
+
+            return true;
+        } catch (Throwable $exception) {
+            Log::warning('Login OTP email could not be sent.', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'mailer' => config('mail.default'),
+                'error' => $exception->getMessage(),
+            ]);
+
+            if (app()->environment(['local', 'testing'])) {
+                session()->flash('devOtpCode', $otp->otp_code);
+                Log::info('Local development OTP fallback code.', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'otp_code' => $otp->otp_code,
+                ]);
+            }
+
+            return false;
+        }
     }
 }

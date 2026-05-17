@@ -23,6 +23,9 @@ class PurchaseRequest extends BaseModel
         'total_amount',
         'description',
         'status',
+        'work_plan_source',
+        'work_plan_component',
+        'work_plan_sub_component',
         'created_by',
     ];
 

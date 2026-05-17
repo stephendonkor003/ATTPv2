@@ -64,4 +64,14 @@ class Applicant extends BaseModel
     {
         return $this->hasMany(SiteVisitEvaluation::class, 'consortium_id');
     }
+
+    public function consortium()
+    {
+        return $this->hasOne(Consortium::class, 'lead_applicant_id');
+    }
+
+    public function consortiumMemberships()
+    {
+        return $this->hasMany(ConsortiumThinkTank::class, 'applicant_id');
+    }
 }

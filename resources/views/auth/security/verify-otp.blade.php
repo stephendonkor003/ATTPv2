@@ -1,461 +1,315 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify Your Identity - {{ config('app.name') }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Verify Login | {{ config('app.name', 'ATTP') }}</title>
+    <link rel="icon" href="{{ asset('assets/images/au.png') }}" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #1a365d;
-            --secondary-color: #2d4a7c;
-            --accent-color: #3182ce;
+            --green: #006B3F;
+            --green-dark: #004d2e;
+            --blue: #1d4ed8;
+            --slate: #0f172a;
+            --muted: #64748b;
+            --border: #e5e7eb;
+            --danger: #dc2626;
+            --success: #15803d;
+        }
+
+        * {
+            box-sizing: border-box;
         }
 
         body {
+            margin: 0;
             min-height: 100vh;
-            background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Inter, Arial, sans-serif;
+            color: var(--slate);
+            background:
+                radial-gradient(circle at top left, rgba(14, 165, 233, .16), transparent 34%),
+                linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+            display: grid;
+            place-items: center;
+            padding: 24px;
         }
 
-        .auth-container {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
+        .shell {
+            width: min(100%, 940px);
+            display: grid;
+            grid-template-columns: 0.9fr 1.1fr;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, .16);
         }
 
-        .auth-card {
-            width: 100%;
-            max-width: 480px;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        .brand {
+            padding: 38px;
+            color: #fff;
+            background: linear-gradient(145deg, var(--green-dark) 0%, var(--green) 58%, #0ea5e9 100%);
+            position: relative;
             overflow: hidden;
         }
 
-        .auth-header {
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+        .brand::after {
+            content: "";
+            position: absolute;
+            width: 260px;
+            height: 260px;
+            right: -90px;
+            bottom: -90px;
+            border-radius: 999px;
+            border: 44px solid rgba(255, 255, 255, .08);
         }
 
-        .auth-header .icon-circle {
-            width: 70px;
-            height: 70px;
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 15px;
+        .brand-content {
+            position: relative;
+            z-index: 1;
         }
 
-        .auth-header h1 {
+        .logo {
+            width: 78px;
+            height: 78px;
+            object-fit: contain;
+            margin-bottom: 20px;
+        }
+
+        .brand h1 {
+            margin: 0 0 12px;
+            font-size: clamp(28px, 4vw, 40px);
+            line-height: 1.05;
+            color: #fff;
+        }
+
+        .brand p {
+            margin: 0;
+            color: rgba(255, 255, 255, .84);
+            line-height: 1.7;
+        }
+
+        .panel {
+            padding: 38px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            padding: 6px 12px;
+            border-radius: 999px;
+            color: var(--blue);
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        h2 {
+            margin: 18px 0 8px;
+            font-size: 28px;
+            color: var(--slate);
+        }
+
+        .muted {
+            margin: 0 0 22px;
+            color: var(--muted);
+            line-height: 1.65;
+        }
+
+        .notice {
+            padding: 12px 14px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            border: 1px solid var(--border);
+        }
+
+        .notice.success {
+            color: var(--success);
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+        }
+
+        .notice.warning {
+            color: #92400e;
+            background: #fffbeb;
+            border-color: #fde68a;
+        }
+
+        .notice.error {
+            color: var(--danger);
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        input {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 15px 16px;
             font-size: 22px;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-
-        .auth-header p {
-            font-size: 14px;
-            opacity: 0.9;
-            margin: 0;
-        }
-
-        .auth-body {
-            padding: 35px;
-        }
-
-        .user-info {
-            background: #f8fafc;
-            border-radius: 10px;
-            padding: 16px;
-            margin-bottom: 25px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .user-avatar {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            font-size: 18px;
-        }
-
-        .user-details h5 {
-            font-size: 15px;
-            font-weight: 600;
-            color: var(--primary-color);
-            margin: 0;
-        }
-
-        .user-details p {
-            font-size: 13px;
-            color: #64748b;
-            margin: 0;
-        }
-
-        .otp-sent-info {
-            background: #ecfdf5;
-            border: 1px solid #a7f3d0;
-            border-radius: 10px;
-            padding: 16px;
-            margin-bottom: 25px;
+            font-weight: 800;
+            letter-spacing: .32em;
             text-align: center;
-        }
-
-        .otp-sent-info .icon {
-            color: #10b981;
-            margin-bottom: 8px;
-        }
-
-        .otp-sent-info p {
-            font-size: 14px;
-            color: #065f46;
-            margin: 0;
-        }
-
-        .otp-input-container {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-bottom: 25px;
-        }
-
-        .otp-input {
-            width: 50px;
-            height: 60px;
-            text-align: center;
-            font-size: 24px;
-            font-weight: 600;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            transition: all 0.2s;
-        }
-
-        .otp-input:focus {
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.15);
+            color: var(--slate);
             outline: none;
         }
 
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-            border: none;
-            padding: 14px 28px;
-            font-weight: 600;
-            border-radius: 8px;
-            width: 100%;
+        input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 4px rgba(29, 78, 216, .12);
         }
 
-        .btn-primary:hover {
-            opacity: 0.95;
-            transform: translateY(-1px);
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 18px;
         }
 
-        .resend-section {
-            text-align: center;
-            margin-top: 25px;
-            padding-top: 20px;
-            border-top: 1px solid #e2e8f0;
+        button,
+        .link-button {
+            border: 0;
+            border-radius: 12px;
+            padding: 13px 16px;
+            font-weight: 800;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        .resend-section p {
-            font-size: 14px;
-            color: #64748b;
-            margin-bottom: 10px;
+        button.primary {
+            color: #fff;
+            background: var(--blue);
         }
 
-        .countdown {
-            font-weight: 600;
-            color: var(--primary-color);
+        button.secondary,
+        .link-button {
+            color: var(--slate);
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
         }
 
-        .security-info {
-            background: #eff6ff;
-            border-radius: 10px;
-            padding: 16px;
-            margin-top: 25px;
-        }
-
-        .security-info h6 {
+        .hint {
+            margin-top: 16px;
+            color: var(--muted);
             font-size: 13px;
-            font-weight: 600;
-            color: #1e40af;
-            margin-bottom: 10px;
+            line-height: 1.5;
         }
 
-        .security-info ul {
-            margin: 0;
-            padding-left: 18px;
+        .signout-row {
+            margin-top: 18px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border);
         }
 
-        .security-info li {
-            font-size: 12px;
-            color: #3b82f6;
-            margin-bottom: 4px;
+        button.danger {
+            color: #b91c1c;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
         }
 
-        .alert {
-            border-radius: 8px;
-            font-size: 14px;
-        }
+        @media (max-width: 820px) {
+            .shell {
+                grid-template-columns: 1fr;
+            }
 
-        /* Hidden real input */
-        #otp_code {
-            position: absolute;
-            opacity: 0;
-            pointer-events: none;
+            .brand,
+            .panel {
+                padding: 28px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="auth-container">
-        <div class="auth-card">
-            <div class="auth-header">
-                <div class="icon-circle">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                        <polyline points="22,6 12,13 2,6"></polyline>
-                    </svg>
-                </div>
-                <h1>Verify Your Identity</h1>
-                <p>Two-Factor Authentication</p>
+    <main class="shell">
+        <section class="brand">
+            <div class="brand-content">
+                <img class="logo" src="{{ asset('assets/images/au.png') }}" alt="ATTP">
+                <h1>Secure Login Verification</h1>
+                <p>Enter the six-digit code sent to your email address to continue into the ATTP portal.</p>
             </div>
+        </section>
 
-            <div class="auth-body">
-                {{-- User Info --}}
-                <div class="user-info">
-                    <div class="user-avatar">
-                        {{ strtoupper(substr($user->name, 0, 1)) }}
-                    </div>
-                    <div class="user-details">
-                        <h5>{{ $user->name }}</h5>
-                        <p>{{ $user->email }}</p>
-                    </div>
-                </div>
+        <section class="panel">
+            <span class="eyebrow">One-Time Code</span>
+            <h2>Check your email</h2>
+            <p class="muted">
+                We sent a verification code to <strong>{{ $user->email }}</strong>.
+                The code protects your account and expires shortly.
+            </p>
 
-                {{-- OTP Sent Notification --}}
-                @if ($otpSent)
-                    <div class="otp-sent-info">
-                        <div class="icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                            </svg>
-                        </div>
-                        <p>A 6-digit verification code has been sent to your email</p>
-                    </div>
-                @endif
-
-                {{-- Alerts --}}
-                @if (session('success'))
-                    <div class="alert alert-success">{{ session('success') }}</div>
-                @endif
-
-                @if (session('warning'))
-                    <div class="alert alert-warning">{{ session('warning') }}</div>
-                @endif
-
-                @if (session('info'))
-                    <div class="alert alert-info">{{ session('info') }}</div>
-                @endif
-
-                @if ($errors->any())
-                    <div class="alert alert-danger">
-                        @foreach ($errors->all() as $error)
-                            <div>{{ $error }}</div>
-                        @endforeach
-                    </div>
-                @endif
-
-                <p class="text-center text-muted mb-3">Enter the 6-digit code from your email</p>
-
-                <form method="POST" action="{{ route('security.otp.verify') }}" id="otpForm">
-                    @csrf
-
-                    {{-- Visual OTP Inputs --}}
-                    <div class="otp-input-container">
-                        <input type="text" class="otp-input" maxlength="1" data-index="0" inputmode="numeric" pattern="[0-9]">
-                        <input type="text" class="otp-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]">
-                        <input type="text" class="otp-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]">
-                        <input type="text" class="otp-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]">
-                        <input type="text" class="otp-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]">
-                        <input type="text" class="otp-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]">
-                    </div>
-
-                    {{-- Hidden real input --}}
-                    <input type="hidden" name="otp_code" id="otp_code">
-
-                    <button type="submit" class="btn btn-primary">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                        Verify & Continue
-                    </button>
-                </form>
-
-                {{-- Resend Section --}}
-                <div class="resend-section">
-                    <p>Didn't receive the code?</p>
-                    <form method="POST" action="{{ route('security.otp.resend') }}" id="resendForm">
-                        @csrf
-                        <button type="submit" class="btn btn-link p-0" id="resendBtn">
-                            Resend Code
-                        </button>
-                        <span id="countdown" style="display: none;"></span>
-                    </form>
-                </div>
-
-                {{-- Security Info --}}
-                <div class="security-info">
-                    <h6>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                        </svg>
-                        Why Two-Factor Authentication?
-                    </h6>
-                    <ul>
-                        <li>Adds an extra layer of security beyond your password</li>
-                        <li>Protects your account even if your password is compromised</li>
-                        <li>Verification codes expire after 10 minutes</li>
-                        <li>Never share your verification code with anyone</li>
-                    </ul>
-                </div>
-
-                {{-- Logout Option --}}
-                <div class="logout-section" style="text-align: center; margin-top: 25px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
-                    <p style="font-size: 13px; color: #64748b; margin-bottom: 10px;">Not you? Or want to try a different account?</p>
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-secondary btn-sm" style="border-radius: 6px;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
-                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                                <polyline points="16 17 21 12 16 7"></polyline>
-                                <line x1="21" y1="12" x2="9" y2="12"></line>
-                            </svg>
-                            Sign Out
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const otpInputs = document.querySelectorAll('.otp-input');
-            const hiddenInput = document.getElementById('otp_code');
-            const form = document.getElementById('otpForm');
-
-            // Auto-focus first input
-            otpInputs[0].focus();
-
-            // Handle input
-            otpInputs.forEach((input, index) => {
-                input.addEventListener('input', function(e) {
-                    // Only allow numbers
-                    this.value = this.value.replace(/[^0-9]/g, '');
-
-                    if (this.value.length === 1) {
-                        // Move to next input
-                        if (index < otpInputs.length - 1) {
-                            otpInputs[index + 1].focus();
-                        }
-                    }
-
-                    // Update hidden input
-                    updateHiddenInput();
-                });
-
-                input.addEventListener('keydown', function(e) {
-                    // Handle backspace
-                    if (e.key === 'Backspace' && !this.value && index > 0) {
-                        otpInputs[index - 1].focus();
-                    }
-
-                    // Handle paste
-                    if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
-                        e.preventDefault();
-                        navigator.clipboard.readText().then(text => {
-                            const digits = text.replace(/[^0-9]/g, '').slice(0, 6);
-                            digits.split('').forEach((digit, i) => {
-                                if (otpInputs[i]) {
-                                    otpInputs[i].value = digit;
-                                }
-                            });
-                            updateHiddenInput();
-                            if (digits.length === 6) {
-                                otpInputs[5].focus();
-                            }
-                        });
-                    }
-                });
-
-                // Handle paste on any input
-                input.addEventListener('paste', function(e) {
-                    e.preventDefault();
-                    const text = (e.clipboardData || window.clipboardData).getData('text');
-                    const digits = text.replace(/[^0-9]/g, '').slice(0, 6);
-                    digits.split('').forEach((digit, i) => {
-                        if (otpInputs[i]) {
-                            otpInputs[i].value = digit;
-                        }
-                    });
-                    updateHiddenInput();
-                    if (digits.length === 6) {
-                        otpInputs[5].focus();
-                    }
-                });
-            });
-
-            function updateHiddenInput() {
-                let otp = '';
-                otpInputs.forEach(input => {
-                    otp += input.value;
-                });
-                hiddenInput.value = otp;
-            }
-
-            // Countdown for resend button
-            let countdown = 60;
-            const resendBtn = document.getElementById('resendBtn');
-            const countdownSpan = document.getElementById('countdown');
-
-            function startCountdown() {
-                resendBtn.style.display = 'none';
-                countdownSpan.style.display = 'inline';
-                countdownSpan.classList.add('countdown');
-
-                const timer = setInterval(() => {
-                    countdown--;
-                    countdownSpan.textContent = `Resend available in ${countdown}s`;
-
-                    if (countdown <= 0) {
-                        clearInterval(timer);
-                        resendBtn.style.display = 'inline';
-                        countdownSpan.style.display = 'none';
-                        countdown = 60;
-                    }
-                }, 1000);
-            }
-
-            // Start countdown on page load if OTP was just sent
-            @if ($otpSent)
-                startCountdown();
+            @if (session('success'))
+                <div class="notice success">{{ session('success') }}</div>
             @endif
-        });
-    </script>
+
+            @if (session('warning'))
+                <div class="notice warning">{{ session('warning') }}</div>
+            @endif
+
+            @if (session('otpSent') || $otpSent)
+                <div class="notice success">A fresh verification code has been sent.</div>
+            @endif
+
+            @if (app()->environment(['local', 'testing']) && session('devOtpCode'))
+                <div class="notice warning">
+                    Local development OTP: <strong>{{ session('devOtpCode') }}</strong>
+                </div>
+            @endif
+
+            @if (isset($errors) && $errors->any())
+                <div class="notice error">{{ $errors->first() }}</div>
+            @endif
+
+            <form method="POST" action="{{ route('security.otp.verify') }}">
+                @csrf
+                <label for="otp_code">Verification code</label>
+                <input
+                    id="otp_code"
+                    name="otp_code"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    maxlength="6"
+                    pattern="[0-9]{6}"
+                    placeholder="000000"
+                    required
+                    autofocus
+                >
+
+                <div class="actions">
+                    <button class="primary" type="submit">Verify and continue</button>
+                </div>
+            </form>
+
+            <form method="POST" action="{{ route('security.otp.resend') }}" class="actions">
+                @csrf
+                <button class="secondary" type="submit">Send a new code</button>
+                <a class="link-button" href="{{ url()->previous() ?: route('login') }}">Go back</a>
+            </form>
+
+            <form method="POST" action="{{ route('logout') }}" class="signout-row">
+                @csrf
+                <button class="danger" type="submit">Sign out and return to login</button>
+            </form>
+
+            <p class="hint">
+                If the code is not in your inbox, check spam or wait a few seconds before requesting a new one.
+            </p>
+        </section>
+    </main>
 </body>
 </html>

@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsureMemberState;
 use App\Http\Middleware\EnsureNotFundingPartner;
 use App\Http\Middleware\EnsureOtpVerified;
 use App\Http\Middleware\EnsurePasswordNotExpired;
+use App\Http\Middleware\EnsureThinkTankUser;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use App\Jobs\IndicatorReminderJob;
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'funding.partner' => EnsureFundingPartner::class,
             'not.funding.partner' => EnsureNotFundingPartner::class,
             'member.state' => EnsureMemberState::class,
+            'think.tank' => EnsureThinkTankUser::class,
             'password.not.expired' => EnsurePasswordNotExpired::class,
             'otp.verified' => EnsureOtpVerified::class,
         ]);

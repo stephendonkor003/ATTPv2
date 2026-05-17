@@ -28,7 +28,7 @@ class ProcurementDisbursementController extends Controller
             abort(403, 'You do not have access to disbursements.');
         }
 
-        $disbursements = ProcurementDisbursement::with(['purchaseOrder', 'vendor', 'procurement'])
+        $disbursements = ProcurementDisbursement::with(['purchaseOrder', 'vendor', 'procurement', 'thinkTankMember', 'consortium'])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
@@ -58,12 +58,12 @@ class ProcurementDisbursementController extends Controller
         ];
 
         if ($purchaseOrderId) {
-            $purchaseOrder = ProcurementPurchaseOrder::with(['procurement', 'vendor', 'subActivity', 'disbursements'])
+            $purchaseOrder = ProcurementPurchaseOrder::with(['procurement', 'vendor', 'subActivity', 'disbursements', 'thinkTankMember', 'consortium'])
                 ->findOrFail($purchaseOrderId);
             $this->assertPurchaseOrderInScope($purchaseOrder);
         } else {
             $scopedNodeIds = $this->scopedNodeIds();
-            $purchaseOrders = ProcurementPurchaseOrder::with(['procurement', 'vendor', 'disbursements'])
+            $purchaseOrders = ProcurementPurchaseOrder::with(['procurement', 'vendor', 'disbursements', 'thinkTankMember', 'consortium'])
                 ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
@@ -93,7 +93,7 @@ class ProcurementDisbursementController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        $purchaseOrder = ProcurementPurchaseOrder::with(['procurement', 'vendor', 'subActivity', 'disbursements'])
+        $purchaseOrder = ProcurementPurchaseOrder::with(['procurement', 'vendor', 'subActivity', 'disbursements', 'thinkTankMember', 'consortium'])
             ->findOrFail($data['purchase_order_id']);
         $this->assertPurchaseOrderInScope($purchaseOrder);
 
@@ -116,6 +116,8 @@ class ProcurementDisbursementController extends Controller
             'vendor_id' => $purchaseOrder->vendor_id,
             'sub_activity_id' => $purchaseOrder->sub_activity_id,
             'governance_node_id' => $purchaseOrder->governance_node_id,
+            'consortium_id' => $purchaseOrder->consortium_id,
+            'think_tank_member_id' => $purchaseOrder->think_tank_member_id,
             'reference_no' => ProcurementDisbursement::generateReference(),
             'amount' => $data['amount'],
             'currency' => $purchaseOrder->currency,

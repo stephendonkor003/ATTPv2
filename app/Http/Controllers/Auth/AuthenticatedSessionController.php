@@ -9,8 +9,10 @@ use App\Models\UserLoginOtp;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
+use Throwable;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -27,6 +29,12 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
+        // Honeypot: legitimate users never fill this hidden field; bots do.
+        if ($request->filled('website')) {
+            return redirect()->route('login')
+                ->withErrors(['email' => trans('auth.failed')]);
+        }
+
         $request->authenticate();
         $request->session()->regenerate();
         $request->session()->forget([
@@ -88,9 +96,15 @@ class AuthenticatedSessionController extends Controller
 
         // Generate and send OTP for non-admin users
         if ($user->requiresOtpVerification()) {
-            $this->sendLoginOtp($user, $request->session()->getId());
-            return redirect()->route('security.otp.show')
-                ->with('otpSent', true);
+            $otpSent = $this->sendLoginOtp($user, $request->session()->getId());
+            $redirect = redirect()->route('security.otp.show')
+                ->with('otpSent', $otpSent);
+
+            if (! $otpSent) {
+                $redirect->with('warning', 'The email service is currently unavailable. In local development, use the verification code shown below or in the Laravel log.');
+            }
+
+            return $redirect;
         }
 
         // Redirect funding partners to their portal
@@ -108,6 +122,10 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('member-state.dashboard', absolute: false));
         }
 
+        if ($user->user_type === 'think_tank') {
+            return redirect()->intended(route('think-tank.dashboard', absolute: false));
+        }
+
         // Default redirect to admin dashboard for all other users
         return redirect()->intended(route('dashboard', absolute: false));
     }
@@ -115,15 +133,36 @@ class AuthenticatedSessionController extends Controller
     /**
      * Generate and send OTP to the user's email.
      */
-    protected function sendLoginOtp($user, ?string $sessionId = null): void
+    protected function sendLoginOtp($user, ?string $sessionId = null): bool
     {
         // Generate new OTP
         $otp = UserLoginOtp::generateFor($user, $sessionId);
 
-        // Send email with OTP
-        Mail::to($user->email)->send(
-            new LoginOtpMail($user, $otp->otp_code)
-        );
+        try {
+            Mail::to($user->email)->send(
+                new LoginOtpMail($user, $otp->otp_code)
+            );
+
+            return true;
+        } catch (Throwable $exception) {
+            Log::warning('Login OTP email could not be sent.', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'mailer' => config('mail.default'),
+                'error' => $exception->getMessage(),
+            ]);
+
+            if (app()->environment(['local', 'testing'])) {
+                session()->flash('devOtpCode', $otp->otp_code);
+                Log::info('Local development OTP fallback code.', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'otp_code' => $otp->otp_code,
+                ]);
+            }
+
+            return false;
+        }
     }
 
     /**

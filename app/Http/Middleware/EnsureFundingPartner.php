@@ -19,6 +19,10 @@ class EnsureFundingPartner
     {
         $user = $request->user();
 
+        if ($user && ($user->isSuperAdmin() || $user->isAdmin())) {
+            return $next($request);
+        }
+
         // Check if user is a funding partner
         if (!$user || ($user->user_type !== 'funding_partner' && !$user->isFundingPartner())) {
             abort(403, 'Access denied. This area is restricted to funding partners only.');

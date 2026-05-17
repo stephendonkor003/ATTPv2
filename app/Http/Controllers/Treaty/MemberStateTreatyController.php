@@ -97,7 +97,7 @@ class MemberStateTreatyController extends Controller
         $availableYears = Treaty::query()
             ->whereIn('status', ['active', 'draft'])
             ->whereNotNull('adoption_date')
-            ->selectRaw('YEAR(adoption_date) as year')
+            ->selectRaw('EXTRACT(YEAR FROM adoption_date) as year')
             ->distinct()
             ->orderByDesc('year')
             ->pluck('year');

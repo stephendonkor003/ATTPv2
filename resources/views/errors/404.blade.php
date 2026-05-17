@@ -1,189 +1,108 @@
 @php
-    $redirectUrl = url('/');
+    $previousUrl = url()->previous();
+    $fallbackUrl = auth()->check() && Route::has('dashboard') ? route('dashboard') : url('/');
+    $backUrl = $previousUrl && $previousUrl !== request()->fullUrl() ? $previousUrl : $fallbackUrl;
 @endphp
-<!DOCTYPE html>
+
+<!doctype html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="robots" content="noindex,nofollow" />
-        <title>{{ config('app.name', 'Application') }} - Page Not Found</title>
-        <style>
-            :root {
-                --bg: #0f172a;
-                --card: #111827;
-                --text: #e5e7eb;
-                --muted: #9ca3af;
-                --accent: #60a5fa;
-                --border: rgba(255, 255, 255, 0.08);
-            }
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Page Not Found | {{ config('app.name', 'ATTP') }}</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: #f3f4f6;
+            color: #0f172a;
+            font-family: Arial, sans-serif;
+        }
 
-            * {
-                box-sizing: border-box;
-            }
+        .error-card {
+            width: min(92vw, 680px);
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 18px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, .14);
+            overflow: hidden;
+        }
 
-            body {
-                margin: 0;
-                font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
-                    "Segoe UI Emoji";
-                background: radial-gradient(1200px 600px at 10% 10%, rgba(96, 165, 250, 0.15), transparent 60%),
-                    radial-gradient(800px 500px at 90% 20%, rgba(167, 139, 250, 0.12), transparent 60%), var(--bg);
-                color: var(--text);
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 24px;
-            }
+        .error-hero {
+            padding: 30px;
+            color: #fff;
+            background: linear-gradient(135deg, #0f172a 0%, #0f766e 55%, #0ea5e9 100%);
+        }
 
-            .card {
-                width: 100%;
-                max-width: 560px;
-                background: rgba(17, 24, 39, 0.85);
-                border: 1px solid var(--border);
-                border-radius: 16px;
-                padding: 28px;
-                box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-            }
+        .code {
+            display: inline-flex;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .16);
+            border: 1px solid rgba(255, 255, 255, .28);
+            font-weight: 700;
+            letter-spacing: .08em;
+        }
 
-            .badge {
-                display: inline-block;
-                padding: 6px 10px;
-                border-radius: 999px;
-                background: rgba(96, 165, 250, 0.16);
-                border: 1px solid rgba(96, 165, 250, 0.35);
-                color: var(--text);
-                font-size: 12px;
-                font-weight: 700;
-                letter-spacing: 0.6px;
-            }
+        .body {
+            padding: 30px;
+        }
 
-            .title {
-                font-size: 22px;
-                font-weight: 800;
-                margin: 12px 0 8px 0;
-                letter-spacing: 0.2px;
-            }
+        h1 {
+            margin: 14px 0 8px;
+            font-size: clamp(28px, 5vw, 42px);
+        }
 
-            .subtitle {
-                margin: 0 0 18px 0;
-                color: var(--muted);
-                line-height: 1.5;
-            }
+        p {
+            margin: 0 0 18px;
+            color: #64748b;
+            line-height: 1.65;
+        }
 
-            .row {
-                display: flex;
-                gap: 14px;
-                align-items: center;
-                padding: 14px 0 4px 0;
-            }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
 
-            .spinner {
-                width: 28px;
-                height: 28px;
-                border-radius: 999px;
-                border: 3px solid rgba(255, 255, 255, 0.18);
-                border-top-color: var(--accent);
-                animation: spin 0.9s linear infinite;
-                flex: 0 0 auto;
-            }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 11px 16px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 700;
+            border: 1px solid #cbd5e1;
+            color: #0f172a;
+            background: #fff;
+        }
 
-            @keyframes spin {
-                to {
-                    transform: rotate(360deg);
-                }
-            }
-
-            .countdown {
-                color: var(--muted);
-                font-size: 14px;
-                line-height: 1.4;
-            }
-
-            .actions {
-                margin-top: 18px;
-                display: flex;
-                gap: 10px;
-                flex-wrap: wrap;
-            }
-
-            .btn {
-                display: inline-block;
-                padding: 10px 14px;
-                border-radius: 10px;
-                text-decoration: none;
-                font-weight: 600;
-                font-size: 14px;
-                border: 1px solid var(--border);
-                color: var(--text);
-                background: rgba(255, 255, 255, 0.04);
-            }
-
-            .btn-primary {
-                background: rgba(96, 165, 250, 0.16);
-                border-color: rgba(96, 165, 250, 0.35);
-            }
-
-            .btn:hover {
-                filter: brightness(1.1);
-            }
-
-            .small {
-                margin-top: 14px;
-                color: var(--muted);
-                font-size: 12px;
-                line-height: 1.5;
-            }
-        </style>
-    </head>
-    <body>
-        <main class="card" role="main" aria-live="polite">
-            <span class="badge">404</span>
-            <h1 class="title">Page not found</h1>
-            <p class="subtitle">
-                The page you are looking for does not exist, or it may have been moved.
+        .btn.primary {
+            color: #fff;
+            border-color: #1d4ed8;
+            background: #1d4ed8;
+        }
+    </style>
+</head>
+<body>
+    <main class="error-card">
+        <section class="error-hero">
+            <span class="code">404</span>
+            <h1>This page could not be found</h1>
+        </section>
+        <section class="body">
+            <p>
+                The page may have been moved, renamed, or the link may no longer be available.
+                Please return to the previous page and continue from there.
             </p>
-
-            <div class="row">
-                <div class="spinner" aria-hidden="true"></div>
-                <div class="countdown">
-                    Taking you to the homepage in <strong><span id="countdown">3</span></strong> seconds...
-                </div>
-            </div>
-
             <div class="actions">
-                <a class="btn btn-primary" href="{{ $redirectUrl }}">Go to homepage now</a>
-                <a class="btn" href="{{ url()->previous() }}" onclick="window.history.back(); return false;">Go back</a>
+                <a class="btn primary" href="{{ $backUrl }}">Go back</a>
+                <a class="btn" href="{{ $fallbackUrl }}">Open dashboard</a>
             </div>
-
-            <div class="small">
-                If you believe this is an error, please contact support.
-            </div>
-        </main>
-
-        <script>
-            (function () {
-                var redirectUrl = @json($redirectUrl);
-                var seconds = 3;
-                var el = document.getElementById('countdown');
-
-                function render() {
-                    if (el) el.textContent = String(Math.max(seconds, 0));
-                }
-
-                render();
-
-                var timer = setInterval(function () {
-                    seconds -= 1;
-                    render();
-
-                    if (seconds <= 0) {
-                        clearInterval(timer);
-                        window.location.href = redirectUrl;
-                    }
-                }, 1000);
-            })();
-        </script>
-    </body>
+        </section>
+    </main>
+</body>
 </html>
-

@@ -1,50 +1,24 @@
-<!DOCTYPE html>
-<html>
+@component('mail::message')
+# Password Reset
 
-<head>
-    <meta charset="UTF-8">
-    <title>Password Reset</title>
-</head>
+Hello {{ $user->name ?? 'User' }},
 
-<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 40px;">
-    <div
-        style="max-width: 650px; margin: auto; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+Your ATTP account password has been reset by an administrator.
 
-        <div style="background-color: #007144; padding: 20px; text-align: center; color: white;">
-            <h2>Your Password Has Been Reset</h2>
-        </div>
+@component('mail::panel')
+Email: {{ $user->email }}
 
-        <div style="padding: 30px; color: #333;">
-            <p>Dear {{ $user->name }},</p>
+Temporary password: {{ $plainPassword }}
+@endcomponent
 
-            <p>Your account password has been reset by an administrator.</p>
+Please sign in and change this password immediately if the system asks you to do so.
 
-            <div style="margin-top: 30px; padding: 20px; background-color: #f0f9f5; border-left: 4px solid #007144;">
-                <h4 style="margin-top: 0;">Your New Login Credentials</h4>
-                <p><strong>Email:</strong> {{ $user->email }}</p>
-                <p><strong>Password:</strong> {{ $plainPassword }}</p>
-                <p><em>Please change this password after logging in.</em></p>
-            </div>
+@component('mail::button', ['url' => route('login')])
+Sign in to ATTP
+@endcomponent
 
-            <p style="margin-top: 30px;">Log in here:
-                <a href="https://uat.africathinktankplatform.africa/login" style="color: #007144;">
-                    Access Your Account
-                </a>
-            </p>
+If you did not request this reset, please contact the ATTP administrator.
 
-            <p>If you have any questions, contact:
-                <a href="mailto:attpinfo@africanunion.org" style="color: #007144;">attpinfo@africanunion.org</a>.
-            </p>
-
-            <p style="margin-top: 30px;">Best regards,<br>
-                <strong>ATTP Secretariat</strong>
-            </p>
-        </div>
-
-        <div style="background-color: #007144; color: white; text-align: center; padding: 15px;">
-            Africa Think Tank Platform - African Union Commission
-        </div>
-    </div>
-</body>
-
-</html>
+Thanks,<br>
+{{ config('app.name', 'ATTP') }}
+@endcomponent

@@ -27,15 +27,15 @@
         <div class="card hero-card mb-4">
             <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-start">
                 <div>
-                    <h4 class="fw-bold mb-1">Disbursements</h4>
-                    <p class="mb-0">Track payments made against purchase orders.</p>
+                    <h4 class="fw-bold mb-1">Planned Disbursements</h4>
+                    <p class="mb-0">Track planned payments against purchase orders.</p>
                 </div>
                 <div class="d-flex flex-wrap gap-2 mt-3 mt-lg-0">
                     <span class="badge bg-light text-dark px-3 py-2">
                         Budget Execution
                     </span>
                     <a href="{{ route('procurement.disbursements.create') }}" class="btn btn-light btn-sm">
-                        <i class="feather-plus-circle me-1"></i> New Disbursement
+                        <i class="feather-plus-circle me-1"></i> New Planned Disbursement
                     </a>
                 </div>
             </div>

@@ -6,8 +6,10 @@ use App\Models\User;
 use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\UserAccountCreated;
+use Throwable;
 
 class UserController extends Controller
 {
@@ -59,14 +61,13 @@ class UserController extends Controller
             'must_change_password' => true,
         ]);
 
-        // Send credentials email
-        Mail::to($user->email)->send(
-            new UserAccountCreated($user, $plainPassword)
-        );
+        $mailSent = $this->sendUserMailSafely($user, new UserAccountCreated($user, $plainPassword), $plainPassword);
 
         return redirect()
             ->route('system.users.index')
-            ->with('success', 'User account created successfully.');
+            ->with('success', $mailSent
+                ? 'User account created successfully.'
+                : "User account created successfully, but email delivery failed. Temporary password: {$plainPassword}");
     }
 
     /**
@@ -122,5 +123,31 @@ class UserController extends Controller
         return redirect()
             ->route('system.users.index')
             ->with('success', 'User deleted successfully.');
+    }
+
+    private function sendUserMailSafely(User $user, $mail, string $plainPassword): bool
+    {
+        try {
+            Mail::to($user->email)->send($mail);
+
+            return true;
+        } catch (Throwable $exception) {
+            Log::warning('User account created email could not be sent.', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'mailer' => config('mail.default'),
+                'error' => $exception->getMessage(),
+            ]);
+
+            if (app()->environment(['local', 'testing'])) {
+                Log::info('Local development temporary user password fallback.', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'temporary_password' => $plainPassword,
+                ]);
+            }
+
+            return false;
+        }
     }
 }

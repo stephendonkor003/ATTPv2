@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -22,72 +23,60 @@ class DatabaseHealthCheck extends Command
      *
      * @var string
      */
-    protected $description = 'Check database health and identify potential issues';
+    protected $description = 'Check PostgreSQL database health and identify potential issues';
 
     /**
      * Execute the console command.
      */
     public function handle()
     {
-        $this->info('🏥 Running Database Health Check...');
+        $this->info('Running PostgreSQL Database Health Check...');
         $this->newLine();
 
         $issues = 0;
         $warnings = 0;
 
-        // 1. Check database connection
-        if (!$this->checkDatabaseConnection()) {
-            $this->error('❌ Database connection failed!');
+        if (! $this->checkDatabaseConnection()) {
+            $this->error('Database connection failed!');
             return 1;
         }
 
-        // 2. Get all tables
         $tables = $this->getAllTables();
-        $this->info("✅ Found {$tables->count()} tables in database");
+        $this->info("Found {$tables->count()} tables in database");
         $this->newLine();
 
-        // 3. Check each table
-        foreach ($tables as $table) {
-            $tableName = $table->{"Tables_in_" . config('database.connections.mysql.database')};
-
+        foreach ($tables as $tableName) {
             if ($this->option('detailed')) {
-                $this->line("📋 Checking table: <comment>{$tableName}</comment>");
+                $this->line("Checking table: <comment>{$tableName}</comment>");
             }
 
-            // Check for timestamps
-            if (!$this->hasTimestamps($tableName)) {
+            if (! $this->hasTimestamps($tableName)) {
                 $warnings++;
-                $this->warn("⚠️  Table '{$tableName}' missing created_at/updated_at timestamps");
+                $this->warn("Table '{$tableName}' missing created_at/updated_at timestamps");
             }
 
-            // Check for indexes on foreign keys
             $missingIndexes = $this->checkForeignKeyIndexes($tableName);
-            if (!empty($missingIndexes)) {
+            if (! empty($missingIndexes)) {
                 $issues++;
-                $this->error("❌ Table '{$tableName}' missing indexes: " . implode(', ', $missingIndexes));
+                $this->error("Table '{$tableName}' missing indexes: " . implode(', ', $missingIndexes));
             }
 
-            // Check for orphaned records
             $orphaned = $this->checkOrphanedRecords($tableName);
             if ($orphaned > 0) {
                 $issues++;
-                $this->error("❌ Table '{$tableName}' has {$orphaned} orphaned records");
+                $this->error("Table '{$tableName}' has {$orphaned} orphaned records");
             }
         }
 
         $this->newLine();
-
-        // 4. Summary
-        $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        $this->info('📊 Database Health Check Summary');
-        $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        $this->info('Database Health Check Summary');
         $this->line("Total Tables: <info>{$tables->count()}</info>");
-        $this->line("Issues Found: " . ($issues > 0 ? "<error>{$issues}</error>" : "<info>0</info>"));
-        $this->line("Warnings: " . ($warnings > 0 ? "<comment>{$warnings}</comment>" : "<info>0</info>"));
+        $this->line('Issues Found: ' . ($issues > 0 ? "<error>{$issues}</error>" : '<info>0</info>'));
+        $this->line('Warnings: ' . ($warnings > 0 ? "<comment>{$warnings}</comment>" : '<info>0</info>'));
 
         if ($issues === 0 && $warnings === 0) {
             $this->newLine();
-            $this->info('✨ Database is healthy! No issues found.');
+            $this->info('Database is healthy. No issues found.');
         }
 
         $this->newLine();
@@ -95,9 +84,6 @@ class DatabaseHealthCheck extends Command
         return $issues > 0 ? 1 : 0;
     }
 
-    /**
-     * Check database connection
-     */
     private function checkDatabaseConnection(): bool
     {
         try {
@@ -108,17 +94,13 @@ class DatabaseHealthCheck extends Command
         }
     }
 
-    /**
-     * Get all tables in database
-     */
-    private function getAllTables()
+    private function getAllTables(): Collection
     {
-        return DB::select('SHOW TABLES');
+        return collect(Schema::getTableListing())
+            ->reject(fn (string $table) => str_starts_with($table, 'pg_') || $table === 'information_schema')
+            ->values();
     }
 
-    /**
-     * Check if table has timestamps
-     */
     private function hasTimestamps(string $table): bool
     {
         try {
@@ -128,79 +110,95 @@ class DatabaseHealthCheck extends Command
         }
     }
 
-    /**
-     * Check for indexes on foreign key columns
-     */
     private function checkForeignKeyIndexes(string $table): array
     {
         $missing = [];
 
         try {
-            $columns = DB::select("SHOW COLUMNS FROM {$table}");
+            $columns = Schema::getColumnListing($table);
+            $indexedColumns = $this->indexedColumns($table);
 
             foreach ($columns as $column) {
-                // Check if column name ends with _id (potential foreign key)
-                if (str_ends_with($column->Field, '_id')) {
-                    // Check if it has an index
-                    $indexes = DB::select("SHOW INDEXES FROM {$table} WHERE Column_name = ?", [$column->Field]);
-
-                    if (empty($indexes)) {
-                        $missing[] = $column->Field;
-                    }
+                if (str_ends_with($column, '_id') && ! in_array($column, $indexedColumns, true)) {
+                    $missing[] = $column;
                 }
             }
         } catch (\Exception $e) {
-            // Table might not exist or error accessing it
+            // Ignore inaccessible tables.
         }
 
         return $missing;
     }
 
-    /**
-     * Check for orphaned records (records with foreign keys pointing to non-existent records)
-     */
+    private function indexedColumns(string $table): array
+    {
+        $rows = DB::select("
+            SELECT a.attname AS column_name
+            FROM pg_class t
+            JOIN pg_index ix ON t.oid = ix.indrelid
+            JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = current_schema()
+              AND t.relname = ?
+        ", [$table]);
+
+        return collect($rows)->pluck('column_name')->unique()->values()->all();
+    }
+
     private function checkOrphanedRecords(string $table): int
     {
         $orphaned = 0;
 
         try {
-            // Get foreign key constraints
             $foreignKeys = DB::select("
                 SELECT
-                    COLUMN_NAME,
-                    REFERENCED_TABLE_NAME,
-                    REFERENCED_COLUMN_NAME
-                FROM
-                    information_schema.KEY_COLUMN_USAGE
-                WHERE
-                    TABLE_SCHEMA = ? AND
-                    TABLE_NAME = ? AND
-                    REFERENCED_TABLE_NAME IS NOT NULL
-            ", [config('database.connections.mysql.database'), $table]);
+                    kcu.column_name,
+                    ccu.table_name AS referenced_table_name,
+                    ccu.column_name AS referenced_column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                   AND tc.table_schema = kcu.table_schema
+                JOIN information_schema.constraint_column_usage ccu
+                    ON ccu.constraint_name = tc.constraint_name
+                   AND ccu.table_schema = tc.table_schema
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                  AND tc.table_schema = current_schema()
+                  AND tc.table_name = ?
+            ", [$table]);
 
             foreach ($foreignKeys as $fk) {
-                // Check for orphaned records
-                $count = DB::select("
-                    SELECT COUNT(*) as count
-                    FROM {$table} t
-                    LEFT JOIN {$fk->REFERENCED_TABLE_NAME} ref
-                        ON t.{$fk->COLUMN_NAME} = ref.{$fk->REFERENCED_COLUMN_NAME}
-                    WHERE t.{$fk->COLUMN_NAME} IS NOT NULL
-                        AND ref.{$fk->REFERENCED_COLUMN_NAME} IS NULL
+                $tableSql = $this->wrapIdentifier($table);
+                $columnSql = $this->wrapIdentifier($fk->column_name);
+                $refTableSql = $this->wrapIdentifier($fk->referenced_table_name);
+                $refColumnSql = $this->wrapIdentifier($fk->referenced_column_name);
+
+                $count = DB::selectOne("
+                    SELECT COUNT(*) AS count
+                    FROM {$tableSql} t
+                    LEFT JOIN {$refTableSql} ref
+                        ON t.{$columnSql} = ref.{$refColumnSql}
+                    WHERE t.{$columnSql} IS NOT NULL
+                      AND ref.{$refColumnSql} IS NULL
                 ");
 
-                if (isset($count[0]) && $count[0]->count > 0) {
-                    $orphaned += $count[0]->count;
+                if ($count && (int) $count->count > 0) {
+                    $orphaned += (int) $count->count;
 
                     if ($this->option('detailed')) {
-                        $this->warn("  ⚠️  {$count[0]->count} orphaned records in {$table}.{$fk->COLUMN_NAME}");
+                        $this->warn("  {$count->count} orphaned records in {$table}.{$fk->column_name}");
                     }
                 }
             }
         } catch (\Exception $e) {
-            // Error checking orphaned records
+            // Ignore tables that cannot be checked.
         }
 
         return $orphaned;
+    }
+
+    private function wrapIdentifier(string $identifier): string
+    {
+        return '"' . str_replace('"', '""', $identifier) . '"';
     }
 }
