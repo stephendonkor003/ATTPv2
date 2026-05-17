@@ -31,7 +31,7 @@ class AttpWorkPlan2025Seeder extends Seeder
             ?? User::where('email', 'stephendonkor03@outlook.com')->value('id')
             ?? User::query()->value('id');
 
-        $program = Program::where('name', 'Africa Think Tank Platform (ATTP) Project')->firstOrFail();
+        $program = $this->resolveProgram($createdBy);
         $funder = Funder::firstOrCreate(
             ['name' => 'World Bank'],
             ['type' => 'donor', 'currency' => 'USD']
@@ -155,6 +155,25 @@ class AttpWorkPlan2025Seeder extends Seeder
                 ]
             );
         }
+    }
+
+    private function resolveProgram(?string $createdBy): Program
+    {
+        return Program::firstOrCreate(
+            ['name' => 'Africa Think Tank Platform (ATTP) Project'],
+            [
+                'program_id' => 'PROG00001',
+                'description' => 'The Africa Think Tank Platform (ATTP) project is a strategic initiative designed to enhance the capacity and influence of think tanks across Africa.',
+                'expected_outcome_type' => 'text',
+                'expected_outcome_value' => 'To establish a sustainable platform that strengthens the capacity for effective policy research and policymaking on cross-border priorities in Africa',
+                'currency' => 'USD',
+                'start_year' => 2024,
+                'end_year' => 2028,
+                'total_years' => 5,
+                'total_budget' => 50000000,
+                'created_by' => $createdBy,
+            ]
+        );
     }
 
     private function resolveProgramFunding(Program $program, Funder $funder, ?string $createdBy): ProgramFunding
