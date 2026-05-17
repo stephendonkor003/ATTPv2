@@ -48,9 +48,7 @@
     <link rel="stylesheet" href="{{ asset('assets/style.css') }}" />
 
     <!-- RTL CSS for Arabic -->
-    @if (app()->getLocale() === 'ar')
-        <link rel="stylesheet" href="{{ asset('assets/css/rtl.css') }}">
-    @endif
+    {!! app()->getLocale() === 'ar' ? '<link rel="stylesheet" href="' . asset('assets/css/rtl.css') . '">' : '' !!}
 
     <!-- Schema.org Markup -->
     <script type="application/ld+json">
