@@ -1,27 +1,23 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('myb_projects', function (Blueprint $table) {
-            $table->string('project_id', 50)->nullable()->change();
-        });
+        DB::statement('ALTER TABLE myb_projects ALTER COLUMN project_id TYPE VARCHAR(50) USING project_id::VARCHAR(50)');
+        DB::statement('ALTER TABLE myb_projects ALTER COLUMN project_id DROP NOT NULL');
     }
 
     public function down(): void
     {
         DB::table('myb_projects')
-            ->whereRaw('project_id REGEXP "[^0-9]"')
+            ->whereRaw("project_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'")
             ->update(['project_id' => null]);
 
-        Schema::table('myb_projects', function (Blueprint $table) {
-            $table->foreignUuid('project_id')->nullable()->change();
-        });
+        DB::statement('ALTER TABLE myb_projects ALTER COLUMN project_id TYPE UUID USING project_id::UUID');
+        DB::statement('ALTER TABLE myb_projects ALTER COLUMN project_id DROP NOT NULL');
     }
 };
