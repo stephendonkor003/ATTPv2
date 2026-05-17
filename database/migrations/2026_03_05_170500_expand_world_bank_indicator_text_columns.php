@@ -16,9 +16,10 @@ return new class extends Migration
             return;
         }
 
-        // Using raw SQL keeps this migration independent from doctrine/dbal.
-        DB::statement('ALTER TABLE world_bank_indicators MODIFY name TEXT NOT NULL');
-        DB::statement('ALTER TABLE world_bank_indicators MODIFY source_name TEXT NULL');
+        DB::statement('ALTER TABLE world_bank_indicators ALTER COLUMN name TYPE TEXT');
+        DB::statement('ALTER TABLE world_bank_indicators ALTER COLUMN name SET NOT NULL');
+        DB::statement('ALTER TABLE world_bank_indicators ALTER COLUMN source_name TYPE TEXT');
+        DB::statement('ALTER TABLE world_bank_indicators ALTER COLUMN source_name DROP NOT NULL');
     }
 
     /**
@@ -30,8 +31,9 @@ return new class extends Migration
             return;
         }
 
-        DB::statement('ALTER TABLE world_bank_indicators MODIFY name VARCHAR(255) NOT NULL');
-        DB::statement('ALTER TABLE world_bank_indicators MODIFY source_name VARCHAR(255) NULL');
+        DB::statement('ALTER TABLE world_bank_indicators ALTER COLUMN name TYPE VARCHAR(255)');
+        DB::statement('ALTER TABLE world_bank_indicators ALTER COLUMN name SET NOT NULL');
+        DB::statement('ALTER TABLE world_bank_indicators ALTER COLUMN source_name TYPE VARCHAR(255)');
+        DB::statement('ALTER TABLE world_bank_indicators ALTER COLUMN source_name DROP NOT NULL');
     }
 };
-

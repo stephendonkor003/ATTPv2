@@ -60,11 +60,11 @@ return new class extends Migration
 
     private function foreignKeyExists(string $tableName, string $constraintName): bool
     {
-        return DB::table('information_schema.TABLE_CONSTRAINTS')
-            ->where('TABLE_SCHEMA', DB::getDatabaseName())
-            ->where('TABLE_NAME', $tableName)
-            ->where('CONSTRAINT_NAME', $constraintName)
-            ->where('CONSTRAINT_TYPE', 'FOREIGN KEY')
+        return DB::table('information_schema.table_constraints')
+            ->whereRaw('table_schema = current_schema()')
+            ->where('table_name', $tableName)
+            ->where('constraint_name', $constraintName)
+            ->where('constraint_type', 'FOREIGN KEY')
             ->exists();
     }
 };

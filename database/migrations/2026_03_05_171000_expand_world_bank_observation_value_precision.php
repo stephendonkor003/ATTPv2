@@ -16,7 +16,8 @@ return new class extends Migration
         }
 
         // Handle very large aggregates (e.g., GDP totals for large regions/world).
-        DB::statement('ALTER TABLE world_bank_indicator_observations MODIFY value DECIMAL(30,10) NULL');
+        DB::statement('ALTER TABLE world_bank_indicator_observations ALTER COLUMN value TYPE DECIMAL(30,10)');
+        DB::statement('ALTER TABLE world_bank_indicator_observations ALTER COLUMN value DROP NOT NULL');
     }
 
     /**
@@ -28,7 +29,7 @@ return new class extends Migration
             return;
         }
 
-        DB::statement('ALTER TABLE world_bank_indicator_observations MODIFY value DECIMAL(20,6) NULL');
+        DB::statement('ALTER TABLE world_bank_indicator_observations ALTER COLUMN value TYPE DECIMAL(20,6)');
+        DB::statement('ALTER TABLE world_bank_indicator_observations ALTER COLUMN value DROP NOT NULL');
     }
 };
-

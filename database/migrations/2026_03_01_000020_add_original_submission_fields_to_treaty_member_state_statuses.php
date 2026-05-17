@@ -85,18 +85,21 @@ return new class extends Migration
         }
 
         $rows = DB::select(
-            'SELECT CONSTRAINT_NAME
-             FROM information_schema.KEY_COLUMN_USAGE
-             WHERE TABLE_SCHEMA = ?
-               AND TABLE_NAME = ?
-               AND COLUMN_NAME = ?
-               AND REFERENCED_TABLE_NAME IS NOT NULL',
-            [DB::getDatabaseName(), $table, $column]
+            "SELECT tc.constraint_name
+             FROM information_schema.table_constraints tc
+             JOIN information_schema.key_column_usage kcu
+               ON tc.constraint_name = kcu.constraint_name
+              AND tc.table_schema = kcu.table_schema
+             WHERE tc.constraint_type = 'FOREIGN KEY'
+               AND tc.table_schema = current_schema()
+               AND tc.table_name = ?
+               AND kcu.column_name = ?",
+            [$table, $column]
         );
 
         return collect($rows)
             ->map(function ($row) {
-                return (string) ($row->CONSTRAINT_NAME ?? '');
+                return (string) ($row->constraint_name ?? '');
             })
             ->filter()
             ->unique()

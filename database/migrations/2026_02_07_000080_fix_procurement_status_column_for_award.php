@@ -14,9 +14,10 @@ return new class extends Migration
 
         // Ensure status can store "awarded" (avoid enum truncation).
         try {
-            DB::statement("ALTER TABLE procurements MODIFY status VARCHAR(50) NULL");
+            DB::statement('ALTER TABLE procurements ALTER COLUMN status TYPE VARCHAR(50) USING status::VARCHAR(50)');
+            DB::statement('ALTER TABLE procurements ALTER COLUMN status DROP NOT NULL');
         } catch (\Throwable $exception) {
-            // Ignore if the platform doesn't support MODIFY or column already compatible.
+            // Ignore if the column is already compatible.
         }
 
         // Backfill status for awarded records if it was truncated or empty.

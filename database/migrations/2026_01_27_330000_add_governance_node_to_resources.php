@@ -9,22 +9,33 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('myb_resources', function (Blueprint $table) {
-            $table->foreignUuid('governance_node_id')
-                ->nullable()
-                ->after('resource_category_id')
-                ->constrained('myb_governance_nodes')
-                ->nullOnDelete();
-        });
+        if (!Schema::hasColumn('myb_resources', 'governance_node_id')) {
+            Schema::table('myb_resources', function (Blueprint $table) {
+                $table->foreignUuid('governance_node_id')
+                    ->nullable()
+                    ->after('resource_category_id')
+                    ->constrained('myb_governance_nodes')
+                    ->nullOnDelete();
+            });
+        }
 
-        DB::statement("\n            UPDATE myb_resources r\n            INNER JOIN myb_resource_categories c ON r.resource_category_id = c.id\n            SET r.governance_node_id = c.governance_node_id\n            WHERE r.governance_node_id IS NULL\n        ");
+        DB::statement("
+            UPDATE myb_resources r
+            SET governance_node_id = c.governance_node_id
+            FROM myb_resource_categories c
+            WHERE r.resource_category_id = c.id
+              AND r.governance_node_id IS NULL
+              AND c.governance_node_id IS NOT NULL
+        ");
     }
 
     public function down(): void
     {
-        Schema::table('myb_resources', function (Blueprint $table) {
-            $table->dropForeign(['governance_node_id']);
-            $table->dropColumn('governance_node_id');
-        });
+        if (Schema::hasColumn('myb_resources', 'governance_node_id')) {
+            Schema::table('myb_resources', function (Blueprint $table) {
+                $table->dropForeign(['governance_node_id']);
+                $table->dropColumn('governance_node_id');
+            });
+        }
     }
 };
