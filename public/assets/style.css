@@ -221,15 +221,21 @@ html {
 }
 
 .mobile-dropdown-items {
-    display: none;
+    max-height: 0;
     flex-direction: column;
     background: rgba(0,0,0,0.18);
     border-radius: 0 0 6px 6px;
     overflow: hidden;
+    visibility: hidden;
+    opacity: 0;
+    transition: max-height 0.25s ease, opacity 0.2s ease, visibility 0.2s ease;
 }
 
 .mobile-dropdown-items.open {
     display: flex;
+    max-height: 240px;
+    visibility: visible;
+    opacity: 1;
 }
 
 .mobile-dropdown-items a {

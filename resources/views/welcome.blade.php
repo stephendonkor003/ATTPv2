@@ -87,18 +87,18 @@
         </div>
         <a href="{{ route('landing.index') }}" onclick="closeMobileNav()">{{ __('navigation.home') }}</a>
 
-        <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
+        <button type="button" class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)" aria-expanded="false">
             Programs <span class="mobile-dropdown-arrow">▾</span>
         </button>
-        <div class="mobile-dropdown-items">
+        <div class="mobile-dropdown-items" aria-hidden="true">
             <a href="{{ route('events') }}" onclick="closeMobileNav()">{{ __('landing.events_webinars') }}</a>
             <a href="{{ route('careers.index') }}" onclick="closeMobileNav()">{{ __('navigation.careers') }}</a>
         </div>
 
-        <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
+        <button type="button" class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)" aria-expanded="false">
             Analytics <span class="mobile-dropdown-arrow">▾</span>
         </button>
-        <div class="mobile-dropdown-items">
+        <div class="mobile-dropdown-items" aria-hidden="true">
             <a href="{{ route('impact.map') }}" onclick="closeMobileNav()">{{ __('navigation.impact_map') }}</a>
             <a href="{{ route('world.indicators.performance') }}" onclick="closeMobileNav()">{{ __('navigation.world_indicators_performance') }}</a>
         </div>
@@ -421,12 +421,32 @@
             setTimeout(() => { overlay.style.display = 'none'; }, 300);
         }
 
-        function toggleMobileDropdown(btn) {
-            const items = btn.nextElementSibling;
+        function toggleMobileDropdown(trigger) {
+            const btn = trigger.closest('.mobile-dropdown-toggle');
+            const items = btn ? btn.nextElementSibling : null;
+
+            if (!btn || !items || !items.classList.contains('mobile-dropdown-items')) {
+                return;
+            }
+
             const isOpen = items.classList.contains('open');
-            document.querySelectorAll('.mobile-dropdown-items.open').forEach(el => el.classList.remove('open'));
-            document.querySelectorAll('.mobile-dropdown-toggle.open').forEach(el => el.classList.remove('open'));
-            if (!isOpen) { items.classList.add('open'); btn.classList.add('open'); }
+
+            document.querySelectorAll('.mobile-dropdown-items.open').forEach(el => {
+                el.classList.remove('open');
+                el.setAttribute('aria-hidden', 'true');
+            });
+
+            document.querySelectorAll('.mobile-dropdown-toggle.open').forEach(el => {
+                el.classList.remove('open');
+                el.setAttribute('aria-expanded', 'false');
+            });
+
+            if (!isOpen) {
+                items.classList.add('open');
+                items.setAttribute('aria-hidden', 'false');
+                btn.classList.add('open');
+                btn.setAttribute('aria-expanded', 'true');
+            }
         }
 
         // Close lang-switcher on outside click
