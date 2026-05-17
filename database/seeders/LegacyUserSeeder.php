@@ -408,21 +408,25 @@ class LegacyUserSeeder extends Seeder
             ];
         }
 
-        DB::table('users')->upsert(
-            $rows,
-            ['email'],
-            [
-                'name',
-                'password',
-                'password_changed_at',
-                'user_type',
-                'must_change_password',
-                'otp_verified_at',
-                'role_id',
-                'governance_node_id',
-                'updated_at',
-            ]
-        );
+        foreach ($rows as $row) {
+            $existingUser = DB::table('users')
+                ->where('id', $row['id'])
+                ->orWhereRaw('LOWER(email) = ?', [mb_strtolower($row['email'])])
+                ->first();
+
+            if ($existingUser) {
+                $update = $row;
+                unset($update['id'], $update['created_at']);
+
+                DB::table('users')
+                    ->where('id', $existingUser->id)
+                    ->update($update);
+
+                continue;
+            }
+
+            DB::table('users')->insert($row);
+        }
 
         $adminRoleId = $roles['System Admin'] ?? null;
         if ($adminRoleId) {
