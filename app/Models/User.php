@@ -2,19 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Notifications\QueuedResetPasswordNotification;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-// ✅ ADD THESE
-use App\Models\Role;
-use App\Models\Permission;
-use App\Models\GovernanceNode;
-
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasUuids;
+    use HasFactory, HasUuids, Notifiable;
 
     public $incrementing = false;
 
@@ -68,16 +64,16 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at'     => 'datetime',
-            'password'              => 'hashed',
-            'must_change_password'  => 'boolean',
-            'password_changed_at'   => 'datetime',
-            'otp_verified_at'       => 'datetime',
-            'is_disabled'           => 'boolean',
-            'disabled_at'           => 'datetime',
-            'disabled_until'        => 'datetime',
-            'is_blacklisted'        => 'boolean',
-            'blacklisted_at'        => 'datetime',
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'must_change_password' => 'boolean',
+            'password_changed_at' => 'datetime',
+            'otp_verified_at' => 'datetime',
+            'is_disabled' => 'boolean',
+            'disabled_at' => 'datetime',
+            'disabled_until' => 'datetime',
+            'is_blacklisted' => 'boolean',
+            'blacklisted_at' => 'datetime',
         ];
     }
 
@@ -208,12 +204,12 @@ class User extends Authenticatable
 
     public function hasActiveLoginBlock(): bool
     {
-        if (!$this->is_disabled) {
+        if (! $this->is_disabled) {
             return false;
         }
 
         // No end date means permanent block.
-        if (!$this->disabled_until) {
+        if (! $this->disabled_until) {
             return true;
         }
 
@@ -230,6 +226,11 @@ class User extends Authenticatable
     public function loginOtps()
     {
         return $this->hasMany(UserLoginOtp::class);
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new QueuedResetPasswordNotification($token));
     }
 
     /**
@@ -256,7 +257,7 @@ class User extends Authenticatable
         }
 
         // If never changed, not expired (but must_change_password will catch it)
-        if (!$this->password_changed_at) {
+        if (! $this->password_changed_at) {
             return false;
         }
 
@@ -292,7 +293,7 @@ class User extends Authenticatable
     public function hasVerifiedOtpRecently(): bool
     {
         // Check if OTP was verified within last 24 hours
-        if (!$this->otp_verified_at) {
+        if (! $this->otp_verified_at) {
             return false;
         }
 
@@ -325,7 +326,7 @@ class User extends Authenticatable
      */
     public function daysUntilPasswordExpires(): ?int
     {
-        if (!$this->password_changed_at) {
+        if (! $this->password_changed_at) {
             return null;
         }
 

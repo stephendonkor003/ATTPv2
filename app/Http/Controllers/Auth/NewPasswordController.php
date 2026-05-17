@@ -5,13 +5,17 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Throwable;
 
 class NewPasswordController extends Controller
 {
@@ -36,20 +40,33 @@ class NewPasswordController extends Controller
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        // Here we will attempt to reset the user's password. If it is successful we
-        // will update the password on an actual user model and persist it to the
-        // database. Otherwise we will parse the error and return the response.
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (User $user) use ($request) {
-                $user->forceFill([
-                    'password' => Hash::make($request->password),
-                    'remember_token' => Str::random(60),
-                ])->save();
+        if (! $this->passwordResetTokensTableExists()) {
+            $this->logPasswordResetFailure('Password reset token table is missing.');
 
-                event(new PasswordReset($user));
-            }
-        );
+            return $this->temporaryPasswordResetFailure($request);
+        }
+
+        try {
+            $status = Password::reset(
+                $request->only('email', 'password', 'password_confirmation', 'token'),
+                function (User $user) use ($request) {
+                    $user->forceFill([
+                        'password' => Hash::make($request->password),
+                        'remember_token' => Str::random(60),
+                    ])->save();
+
+                    event(new PasswordReset($user));
+                }
+            );
+        } catch (QueryException $exception) {
+            $this->logPasswordResetFailure('Password reset database failure.', $exception);
+
+            return $this->temporaryPasswordResetFailure($request);
+        } catch (Throwable $exception) {
+            $this->logPasswordResetFailure('Password reset failure.', $exception);
+
+            return $this->temporaryPasswordResetFailure($request);
+        }
 
         // If the password was successfully reset, we will redirect the user back to
         // the application's home authenticated view. If there is an error we can
@@ -58,5 +75,32 @@ class NewPasswordController extends Controller
                     ? redirect()->route('login')->with('status', __($status))
                     : back()->withInput($request->only('email'))
                         ->withErrors(['email' => __($status)]);
+    }
+
+    private function passwordResetTokensTableExists(): bool
+    {
+        try {
+            return Schema::hasTable(config('auth.passwords.'.config('auth.defaults.passwords').'.table', 'password_reset_tokens'));
+        } catch (Throwable $exception) {
+            $this->logPasswordResetFailure('Password reset token table check failed.', $exception);
+
+            return false;
+        }
+    }
+
+    private function temporaryPasswordResetFailure(Request $request): RedirectResponse
+    {
+        return back()
+            ->withInput($request->only('email'))
+            ->withErrors([
+                'email' => 'Password reset is temporarily unavailable. Please request a new link shortly or contact ATTP support.',
+            ]);
+    }
+
+    private function logPasswordResetFailure(string $message, ?Throwable $exception = null): void
+    {
+        Log::error($message, [
+            'exception' => $exception?->getMessage(),
+        ]);
     }
 }
