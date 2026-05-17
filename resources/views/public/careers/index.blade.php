@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
 
 <head>
     <meta charset="UTF-8">
@@ -17,49 +17,11 @@
     <link rel="stylesheet" href="{{ asset('assets/style.css') }}">
 
     <style>
-        /* =====================================================
-           VARIABLES
-        ===================================================== */
-        :root {
-            --gold: #fbbc05;
-            --orange: #e16435;
-            --magenta: #a70d53;
-            --wine: #522b39;
-            --light: #f7f4f2;
-            --dark: #1f1f1f;
-        }
-
         body {
             margin: 0;
             font-family: 'Inter', sans-serif;
             background: var(--light);
-            color: #333;
-        }
-
-        /* =====================================================
-           NAVBAR
-        ===================================================== */
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 14px 6%;
-            background: #fff;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, .08);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .nav-links a {
-            margin-left: 22px;
-            font-weight: 600;
-            color: var(--wine);
-        }
-
-        .nav-links a.active,
-        .nav-links a:hover {
-            color: var(--magenta);
+            color: var(--text-dark);
         }
 
         /* =====================================================
@@ -80,8 +42,8 @@
             content: "";
             position: absolute;
             inset: 0;
-            background: linear-gradient(rgba(82, 43, 57, .85),
-                    rgba(82, 43, 57, .7));
+            background: linear-gradient(rgba(0, 77, 46, .86),
+                    rgba(0, 107, 63, .72));
         }
 
         .career-hero-content {
@@ -105,7 +67,7 @@
             margin: -45px auto 3rem;
             background: #fff;
             padding: 1.6rem;
-            border-radius: 16px;
+            border-radius: 8px;
             box-shadow: 0 15px 30px rgba(0, 0, 0, .12);
             display: flex;
             gap: 1rem;
@@ -116,22 +78,22 @@
             flex: 1;
             max-width: 360px;
             padding: .9rem 1.1rem;
-            border-radius: 10px;
+            border-radius: 8px;
             border: 1px solid #ccc;
         }
 
         .filter-bar button {
             padding: .9rem 2rem;
-            border-radius: 30px;
+            border-radius: 8px;
             border: none;
-            background: var(--magenta);
+            background: var(--au-green);
             color: #fff;
             font-weight: 600;
             cursor: pointer;
         }
 
         .filter-bar button:hover {
-            background: var(--orange);
+            background: var(--au-green-hover);
         }
 
         /* =====================================================
@@ -149,7 +111,7 @@
         .vacancy-card {
             position: relative;
             height: 360px;
-            border-radius: 18px;
+            border-radius: 8px;
             overflow: hidden;
             background: url('{{ asset('assets/images/au3.jpg') }}') center/cover no-repeat;
             box-shadow: 0 18px 40px rgba(0, 0, 0, .18);
@@ -218,18 +180,27 @@
             transform: translateY(0);
         }
 
-        .vacancy-actions button {
-            background: var(--magenta);
+        .vacancy-content > button,
+        .vacancy-actions button,
+        .apply-btn {
+            background: var(--au-green);
             border: none;
             color: #fff;
             padding: .6rem 1.4rem;
-            border-radius: 10px;
+            border-radius: 8px;
             font-weight: 600;
             cursor: pointer;
         }
 
-        .vacancy-actions button:hover {
-            background: var(--orange);
+        .vacancy-content > button {
+            margin-top: 1rem;
+            width: fit-content;
+        }
+
+        .vacancy-content > button:hover,
+        .vacancy-actions button:hover,
+        .apply-btn:hover {
+            background: var(--au-green-hover);
         }
 
         /* =====================================================
@@ -254,7 +225,7 @@
             background: #fff;
             width: 100%;
             max-width: 1100px;
-            border-radius: 18px;
+            border-radius: 8px;
             padding: 2.5rem;
             display: grid;
             grid-template-columns: 1.3fr 1fr;
@@ -272,7 +243,7 @@
             border: none;
             background: none;
             cursor: pointer;
-            color: var(--magenta);
+            color: var(--au-green);
         }
 
         .modal-box input,
@@ -298,27 +269,83 @@
 
 <body>
 
-    <!-- ====== NAVBAR ====== -->
-    <header class="navbar">
-        <div class="logo">
-            {{-- ATTP<span>.africa</span> --}}
-            <img src="{{ asset('assets/images/au.png') }}" alt="" class="logo logo-sm">
+    <!-- ====== MOBILE NAV OVERLAY ====== -->
+    <div class="mobile-nav-overlay" id="navOverlay" onclick="closeMobileNav()"></div>
 
+    <!-- ====== MOBILE NAV DRAWER ====== -->
+    <nav class="mobile-nav" id="mobileNav">
+        <div class="mobile-nav-header">
+            <img src="{{ asset('assets/images/au.png') }}" alt="ATTP">
+            <button class="mobile-nav-close" onclick="closeMobileNav()" aria-label="Close menu">&times;</button>
         </div>
-        <nav class="nav-links">
-            <a href="{{ route('landing.index') }}">Home</a>
-            <a href="#process">System Flow</a>
-            {{-- <a href="#customization">Customization</a> --}}
-            <a href="#contact">Contact</a>
-            <a href="{{ route('events') }}">Events</a>
-            <a href="{{ route('careers.index') }}">Career</a>
+        <a href="{{ route('landing.index') }}" onclick="closeMobileNav()">{{ __('navigation.home') }}</a>
+
+        <button type="button" class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)" aria-expanded="false">
+            Programs <span class="mobile-dropdown-arrow">▾</span>
+        </button>
+        <div class="mobile-dropdown-items" aria-hidden="true">
+            <a href="{{ route('events') }}" onclick="closeMobileNav()">{{ __('landing.events_webinars') }}</a>
+            <a href="{{ route('careers.index') }}" onclick="closeMobileNav()">{{ __('navigation.careers') }}</a>
+        </div>
+
+        <button type="button" class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)" aria-expanded="false">
+            Analytics <span class="mobile-dropdown-arrow">▾</span>
+        </button>
+        <div class="mobile-dropdown-items" aria-hidden="true">
+            <a href="{{ route('impact.map') }}" onclick="closeMobileNav()">{{ __('navigation.impact_map') }}</a>
+            <a href="{{ route('world.indicators.performance') }}" onclick="closeMobileNav()">{{ __('navigation.world_indicators_performance') }}</a>
+        </div>
+
+        <a href="{{ route('news.index') }}" onclick="closeMobileNav()">News &amp; Updates</a>
+        <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
+        <div class="mobile-nav-actions">
+            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
+            <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
+        </div>
+    </nav>
+
+    <!-- ====== NAVBAR ====== -->
+    <header class="navbar" role="banner">
+        <a href="{{ route('landing.index') }}" class="logo" aria-label="ATTP Home">
+            <img src="{{ asset('assets/images/au.png') }}" alt="African Think Tank Platform" class="logo-sm">
+        </a>
+
+        <nav class="nav-links" aria-label="Main navigation">
+            <a href="{{ route('landing.index') }}">{{ __('navigation.home') }}</a>
+
+            <div class="has-dropdown">
+                <a href="#" class="active">Programs</a>
+                <ul class="nav-dropdown">
+                    <li><a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a></li>
+                    <li><a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a></li>
+                </ul>
+            </div>
+
+            <div class="has-dropdown">
+                <a href="#">Analytics</a>
+                <ul class="nav-dropdown">
+                    <li><a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a></li>
+                    <li><a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a></li>
+                </ul>
+            </div>
+
+            <a href="{{ route('news.index') }}">News &amp; Updates</a>
+            <a href="#contact">{{ __('navigation.contact') }}</a>
         </nav>
 
         <div class="nav-actions">
-            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">Policy Programs &amp; Research</a>
-            <a href="{{ route('login') }}" class="btn btn-login">Login</a>
+            <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">
+                {{ __('landing.policy_programs') }}
+            </a>
+            <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
             <x-language-selector style="careers" />
         </div>
+
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="openMobileNav()" aria-label="Open menu" aria-expanded="false">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
     </header>
 
     {{-- HERO --}}
@@ -326,18 +353,14 @@
         <div class="career-hero-content">
             <h1>Build Your Career With ATTP</h1>
             <p>
-                Join a mission-driven team transforming public procurement across Africa
-                through innovation and transparency.
+                Join a mission-driven team strengthening African policy research,
+                evidence-based decision-making, and continental collaboration.
             </p>
         </div>
     </section>
-    <p>
-        <br>
-        <br>
-        <br>
-        {{-- FILTER --}}
+    {{-- FILTER --}}
     <div class="filter-bar" id="vacancies">
-        <input type="text" id="searchInput" placeholder="Search Avaliable Vacant Positions...">
+        <input type="text" id="searchInput" placeholder="Search available vacant positions...">
         <button onclick="filterVacancies()">Search</button>
     </div>
 
@@ -450,7 +473,7 @@
 
 
     <!-- ====== FOOTER ====== -->
-    <footer id="contact" class="footer">
+    <footer id="contact" class="footer" role="contentinfo">
         <div class="footer-content">
 
             <div class="footer-logo">
@@ -463,30 +486,29 @@
             </div>
 
             <div class="footer-links">
-                <h4>Quick Links</h4>
-                <a href="#">Home</a>
-                <a href="#process">Institutional Process Flow</a>
-                <a href="#customization">Centralized Oversight</a>
-                <a href="#contact">Contact</a>
+                <h4>{{ __('landing.footer_links_title') }}</h4>
+                <a href="{{ route('landing.index') }}">{{ __('landing.footer_link_home') }}</a>
+                <a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a>
+                <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
+                <a href="#contact">{{ __('navigation.contact') }}</a>
             </div>
 
             <div class="footer-contact">
-                <h4>Contact</h4>
-                <p>Email: attpinfo@africanunion.org</p>
-                <p>© 2026 African Think Tank Platform Administration (ATTP)</p>
+                <h4>{{ __('landing.footer_contact_title') }}</h4>
+                <p>{{ __('landing.footer_email') }}</p>
+                <p>{{ __('landing.footer_copyright', ['year' => date('Y')]) }}</p>
             </div>
 
         </div>
 
-        <p style="margin-top: 10px; font-weight: 600; text-align: center;">
-            Supporting African Union policy coordination, governance reform,
-            and evidence-based decision-making across the continent.
-        </p>
+        <div class="footer-bottom">
+            <p>Supporting African Union policy coordination, governance reform, and evidence-based decision-making across the continent.</p>
+        </div>
 
     </footer>
 
 
-    <script src="assets/script.js"></script>
+    <script src="{{ asset('assets/script.js') }}"></script>
     <!--Start of Tawk.to Script-->
     <!--Start of Tawk.to Script-->
     <script type="text/javascript">
@@ -506,6 +528,58 @@
     <!--End of Tawk.to Script-->
     {{-- JS --}}
     <script>
+        function openMobileNav() {
+            const nav = document.getElementById('mobileNav');
+            const overlay = document.getElementById('navOverlay');
+            const btn = document.getElementById('hamburgerBtn');
+            nav.classList.add('open');
+            overlay.style.display = 'block';
+            requestAnimationFrame(() => overlay.classList.add('visible'));
+            btn.classList.add('open');
+            btn.setAttribute('aria-expanded', 'true');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileNav() {
+            const nav = document.getElementById('mobileNav');
+            const overlay = document.getElementById('navOverlay');
+            const btn = document.getElementById('hamburgerBtn');
+            nav.classList.remove('open');
+            overlay.classList.remove('visible');
+            btn.classList.remove('open');
+            btn.setAttribute('aria-expanded', 'false');
+            document.body.style.overflow = '';
+            setTimeout(() => { overlay.style.display = 'none'; }, 300);
+        }
+
+        function toggleMobileDropdown(trigger) {
+            const btn = trigger.closest('.mobile-dropdown-toggle');
+            const items = btn ? btn.nextElementSibling : null;
+
+            if (!btn || !items || !items.classList.contains('mobile-dropdown-items')) {
+                return;
+            }
+
+            const isOpen = items.classList.contains('open');
+
+            document.querySelectorAll('.mobile-dropdown-items.open').forEach(el => {
+                el.classList.remove('open');
+                el.setAttribute('aria-hidden', 'true');
+            });
+
+            document.querySelectorAll('.mobile-dropdown-toggle.open').forEach(el => {
+                el.classList.remove('open');
+                el.setAttribute('aria-expanded', 'false');
+            });
+
+            if (!isOpen) {
+                items.classList.add('open');
+                items.setAttribute('aria-hidden', 'false');
+                btn.classList.add('open');
+                btn.setAttribute('aria-expanded', 'true');
+            }
+        }
+
         function openApplyModal(btn) {
             document.getElementById('applyModal').classList.add('active');
 
@@ -536,6 +610,8 @@
         });
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
+                closeMobileNav();
+                closeApplyModal();
                 document.querySelectorAll('.lang-switcher.open').forEach(el => el.classList.remove('open'));
             }
         });
