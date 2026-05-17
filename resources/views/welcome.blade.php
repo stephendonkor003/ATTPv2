@@ -53,7 +53,7 @@
     <!-- Schema.org Markup -->
     <script type="application/ld+json">
     {
-      "@context": "https://schema.org",
+      "@@context": "https://schema.org",
       "@type": "Organization",
       "name": "African Think Tank Platform Administration",
       "alternateName": "ATTP",
