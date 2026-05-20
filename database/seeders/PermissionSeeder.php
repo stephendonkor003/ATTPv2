@@ -99,6 +99,7 @@ class PermissionSeeder extends Seeder
             ['name' => 'budget.activities.manage', 'module' => 'Budget', 'description' => 'Manage budget activities'],
             ['name' => 'budget.allocations.manage', 'module' => 'Budget', 'description' => 'Manage budget allocations'],
             ['name' => 'budget.reports.view', 'module' => 'Budget', 'description' => 'View budget reports'],
+            ['name' => 'budget.project_financial_position.view', 'module' => 'Budget', 'description' => 'View project financial position report'],
             ['name' => 'budget.summary.view', 'module' => 'Budget', 'description' => 'View budget summary dashboard'],
             ['name' => 'sector.view', 'module' => 'Budget', 'description' => 'View sectors'],
             ['name' => 'sector.create', 'module' => 'Budget', 'description' => 'Create sectors'],

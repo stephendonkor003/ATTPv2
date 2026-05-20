@@ -7,7 +7,10 @@ use App\Models\Funder;
 use App\Models\FormSubmission;
 use App\Models\Permission;
 use App\Models\Procurement;
+use App\Models\ProcurementDisbursement;
+use App\Models\ProgramFunding;
 use App\Models\Role;
+use App\Models\SubActivity;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankResearchOutput;
 use App\Models\User;
@@ -69,8 +72,9 @@ class ThinkTankPortalSmoke
             $this->asThinkTank($data['thinkTankUser'])
                 ->get('/think-tank/dashboard')
                 ->assertOk()
-                ->assertSee('Dashboard')
-                ->assertSee('Allocated');
+                ->assertSee('Think Tank Report Search')
+                ->assertSee('Run Search')
+                ->assertSee('Download Report');
 
             $this->asThinkTank($data['thinkTankUser'])
                 ->postWithCsrf('/think-tank/research', [
@@ -86,6 +90,13 @@ class ThinkTankPortalSmoke
                 ThinkTankResearchOutput::where('think_tank_member_id', $data['member']->id)->exists(),
                 'Research output was not created.'
             );
+
+            $this->asThinkTank($data['thinkTankUser'])
+                ->get('/think-tank/research')
+                ->assertOk()
+                ->assertSee('Research Output Search')
+                ->assertSee('Run Search')
+                ->assertSee('Download Report');
 
             $this->asThinkTank($data['thinkTankUser'])
                 ->postWithCsrf('/think-tank/procurement/plans', [
@@ -117,6 +128,14 @@ class ThinkTankPortalSmoke
 
             $procurement = Procurement::where('think_tank_member_id', $data['member']->id)->latest()->first();
             $this->assertTrue((bool) $procurement, 'Procurement opportunity was not created.');
+
+            $this->asThinkTank($data['thinkTankUser'])
+                ->get('/think-tank/procurement')
+                ->assertOk()
+                ->assertSee('Procurement Search')
+                ->assertSee('Run Search')
+                ->assertSee('Download Report')
+                ->assertSee($procurement->title);
 
             $this->get(route('public.procurement.show', $procurement))
                 ->assertOk()
@@ -173,37 +192,139 @@ class ThinkTankPortalSmoke
                 ])
                 ->assertRedirect();
 
+            $this->asThinkTank($data['thinkTankUser'])
+                ->get('/think-tank/reports')
+                ->assertOk()
+                ->assertSee('Activity Report Search')
+                ->assertSee('Run Search')
+                ->assertSee('Download Report');
+
             $this->asAdmin($data['adminUser'])
                 ->get(route('consortium-operations.show', $data['consortium']))
                 ->assertOk()
                 ->assertSee('Think Tank Portal Oversight')
+                ->assertDontSee('Partner Runtime Overview')
                 ->assertSee($procurement->title)
                 ->assertSee('Research Submitted');
 
             $this->asAdmin($data['adminUser'])
+                ->get(route('consortium-operations.index'))
+                ->assertOk()
+                ->assertSee('Graphical Components')
+                ->assertSee('Comparison Selector')
+                ->assertSee('Selection style')
+                ->assertSee('Records to compare')
+                ->assertDontSee('Partner Runtime Overview');
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tanks-admin.directory'))
+                ->assertOk()
+                ->assertSee('System Think Tank Database')
+                ->assertSee('Linked to System DB')
+                ->assertSee($data['member']->name);
+
+            $fundingSubActivity = SubActivity::where('name', 'like', '%Funding to Think Tanks%')->first();
+            $hasApprovedProgramFunding = ProgramFunding::where('status', 'approved')->exists();
+            $remainingFundingBudget = $fundingSubActivity
+                ? (float) $fundingSubActivity->allocations()->sum('amount')
+                    - (float) ProcurementDisbursement::where('sub_activity_id', $fundingSubActivity->id)
+                        ->whereNotNull('think_tank_member_id')
+                        ->sum('amount')
+                : 0;
+
+            if ($fundingSubActivity && $hasApprovedProgramFunding && $remainingFundingBudget >= 25) {
+                $this->asAdmin($data['adminUser'])
+                    ->postWithCsrf(route('think-tanks-admin.funding.store'), [
+                        'think_tank_member_id' => $data['member']->id,
+                        'amount' => 25,
+                        'currency' => 'USD',
+                        'payment_method' => 'Bank Transfer',
+                        'transfer_reference' => 'E2E-TT-FUND-' . Str::upper(Str::random(5)),
+                        'paid_at' => now()->format('Y-m-d H:i:s'),
+                        'notes' => 'E2E Funding to Think Tanks transfer.',
+                    ])
+                    ->assertRedirect(route('think-tanks-admin.funding.history'));
+
+                $fundingTransfer = ProcurementDisbursement::with('purchaseOrder.invoice')
+                    ->where('think_tank_member_id', $data['member']->id)
+                    ->where('created_by', $data['adminUser']->id)
+                    ->latest()
+                    ->first();
+
+                $this->assertTrue((bool) $fundingTransfer, 'Funding transfer was not created.');
+                $this->assertSame('pending', $fundingTransfer->purchaseOrder?->status, 'Funding transfer purchase order was not pending before receipt confirmation.');
+                $this->assertSame('paid', $fundingTransfer->purchaseOrder?->invoice?->status, 'Funding transfer invoice was not marked paid.');
+
+                $this->asAdmin($data['adminUser'])
+                    ->get(route('procurement.invoices.index'))
+                    ->assertOk()
+                    ->assertSee($fundingTransfer->purchaseOrder->invoice->reference_no)
+                    ->assertSee('Funding to Think Tanks');
+
+                $this->asThinkTank($data['thinkTankUser'])
+                    ->postWithCsrf(route('think-tank.purchase-orders.disbursements.confirm', [
+                        'purchaseOrder' => $fundingTransfer->purchaseOrder,
+                        'disbursement' => $fundingTransfer,
+                    ]), [
+                        'recipient_confirmation_notes' => 'E2E receipt confirmed.',
+                    ])
+                    ->assertRedirect();
+
+                $fundingTransfer->purchaseOrder->refresh();
+                $fundingTransfer->purchaseOrder->invoice->refresh();
+                $this->assertSame('fully_paid', $fundingTransfer->purchaseOrder->status, 'Funding transfer purchase order was not fully paid after receipt confirmation.');
+                $this->assertSame('paid', $fundingTransfer->purchaseOrder->invoice->status, 'Funding transfer invoice did not remain paid after receipt confirmation.');
+            }
+
+            $this->asAdmin($data['adminUser'])
                 ->get(route('think-tank.dashboard', ['think_tank_member_id' => $data['member']->id]))
                 ->assertOk()
-                ->assertSee('Dashboard')
+                ->assertSee('Think Tank Report Search')
+                ->assertSee('Graphs and Analysis')
                 ->assertSee($data['member']->name);
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tank.dashboard.download', ['think_tank_member_id' => $data['member']->id]))
+                ->assertOk();
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tank.reports', ['think_tank_member_id' => $data['member']->id]))
+                ->assertOk()
+                ->assertSee('Activity Report Search')
+                ->assertSee('Graphs and Report Analysis')
+                ->assertSee('E2E Monthly Activity Report');
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tank.reports.download', ['think_tank_member_id' => $data['member']->id]))
+                ->assertOk();
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tank.research', ['think_tank_member_id' => $data['member']->id]))
+                ->assertOk()
+                ->assertSee('Research Output Search')
+                ->assertSee('Graphs and Research Analysis')
+                ->assertSee('E2E Agricultural Policy Research');
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tank.research.download', ['think_tank_member_id' => $data['member']->id]))
+                ->assertOk();
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tank.procurement', ['think_tank_member_id' => $data['member']->id]))
+                ->assertOk()
+                ->assertSee('Procurement Search')
+                ->assertSee('Procurement Analysis')
+                ->assertSee($procurement->title);
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tank.procurement.download', ['think_tank_member_id' => $data['member']->id]))
+                ->assertOk();
 
             $this->asAdmin($data['adminUser'])
                 ->get(route('think-tank.procurement.submissions', $procurement))
                 ->assertOk()
                 ->assertSee('Applications')
                 ->assertSee('E2E Vendor');
-
-            $this->asAdmin($data['adminUser'])
-                ->get(route('partner.runtime-overview'))
-                ->assertOk()
-                ->assertSee('Runtime Partner Overview')
-                ->assertSee('Research Outputs');
-
-            $this->asPartner($data['partnerUser'])
-                ->get(route('partner.runtime-overview'))
-                ->assertOk()
-                ->assertSee('Runtime Partner Overview')
-                ->assertSee('Research Outputs')
-                ->assertSee('Applications');
 
             echo "THINK_TANK_E2E_OK\n";
         } finally {
@@ -217,15 +338,28 @@ class ThinkTankPortalSmoke
         $partnerRole = Role::firstOrCreate(['name' => 'Funding Partner'], ['description' => 'Funding partner']);
         $thinkTankRole = Role::firstOrCreate(['name' => 'Think Tank User'], ['description' => 'Think tank user']);
 
-        $adminRole->permissions()->syncWithoutDetaching(Permission::pluck('id')->all());
+        collect([
+            'think_tank.portal.access',
+            'think_tank.reports.submit',
+            'think_tank.research.submit',
+            'think_tank.procurement.view',
+            'think_tank.procurement.download',
+            'think_tank.procurement.manage',
+            'think_tank.procurement.evaluate',
+            'think_tank.procurement.select',
+        ])->each(fn ($permission) => Permission::firstOrCreate(
+            ['name' => $permission],
+            ['module' => 'Think Tank Portal', 'description' => $permission]
+        ));
 
-        $partnerRuntimePermission = Permission::where('name', 'partner.runtime_overview.view')->firstOrFail();
-        $partnerRole->permissions()->syncWithoutDetaching([$partnerRuntimePermission->id]);
+        $adminRole->permissions()->syncWithoutDetaching(Permission::pluck('id')->all());
 
         $thinkTankPermissions = Permission::whereIn('name', [
             'think_tank.portal.access',
             'think_tank.reports.submit',
             'think_tank.research.submit',
+            'think_tank.procurement.view',
+            'think_tank.procurement.download',
             'think_tank.procurement.manage',
             'think_tank.procurement.evaluate',
             'think_tank.procurement.select',

@@ -75,6 +75,7 @@ class EvaluationReportController extends Controller
             ->get();
 
         $summary = $this->buildSummary($submissions);
+        $rankings = $this->buildApplicantRankings($submissions);
         $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
         $evaluationStats = $this->buildEvaluationStats($submissions);
 
@@ -82,6 +83,7 @@ class EvaluationReportController extends Controller
             'procurement',
             'submissions',
             'summary',
+            'rankings',
             'evaluatorBreakdown',
             'evaluationStats'
         ));
@@ -103,6 +105,7 @@ class EvaluationReportController extends Controller
             ->get();
 
         $summary = $this->buildSummary($submissions);
+        $rankings = $this->buildApplicantRankings($submissions);
         $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
         $evaluationStats = $this->buildEvaluationStats($submissions);
 
@@ -110,6 +113,7 @@ class EvaluationReportController extends Controller
             'procurement',
             'submissions',
             'summary',
+            'rankings',
             'evaluatorBreakdown',
             'evaluationStats'
         ));
@@ -203,6 +207,34 @@ class EvaluationReportController extends Controller
                     'total' => $group->count(),
                     'avg_overall' => $avg ? round($avg, 2) : 0,
                 ];
+            });
+    }
+
+    private function buildApplicantRankings($submissions)
+    {
+        return $submissions
+            ->groupBy('form_submission_id')
+            ->map(function ($group) {
+                $scores = $group->whereNotNull('overall_score')->pluck('overall_score');
+                $average = $scores->count() ? round($scores->avg(), 2) : 0;
+                $highest = $scores->count() ? round($scores->max(), 2) : 0;
+                $lowest = $scores->count() ? round($scores->min(), 2) : 0;
+
+                return [
+                    'submission' => $group->first()->applicant,
+                    'average' => $average,
+                    'highest' => $highest,
+                    'lowest' => $lowest,
+                    'spread' => round($highest - $lowest, 2),
+                    'evaluators' => $group->pluck('evaluator_id')->filter()->unique()->count(),
+                    'evaluations' => $group->count(),
+                ];
+            })
+            ->sortByDesc('average')
+            ->values()
+            ->map(function ($row, $index) {
+                $row['rank'] = $index + 1;
+                return $row;
             });
     }
 

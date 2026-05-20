@@ -88,6 +88,38 @@
         </table>
     </div>
 
+    <div class="section">
+        <h2>Applicant Ranking</h2>
+        <table>
+            <tr>
+                <th>Rank</th>
+                <th>Submission</th>
+                <th>Applicant</th>
+                <th>Average</th>
+                <th>Highest</th>
+                <th>Lowest</th>
+                <th>Spread</th>
+                <th>Evaluators</th>
+            </tr>
+            @forelse ($rankings as $row)
+                <tr>
+                    <td>#{{ $row['rank'] }}</td>
+                    <td>{{ $row['submission']?->procurement_submission_code ?? 'N/A' }}</td>
+                    <td>{{ $row['submission']?->submitter?->name ?? 'N/A' }}</td>
+                    <td>{{ number_format($row['average'], 2) }}</td>
+                    <td>{{ number_format($row['highest'], 2) }}</td>
+                    <td>{{ number_format($row['lowest'], 2) }}</td>
+                    <td>{{ number_format($row['spread'], 2) }}</td>
+                    <td>{{ $row['evaluators'] }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="8">No ranked applicants.</td>
+                </tr>
+            @endforelse
+        </table>
+    </div>
+
     @foreach ($evaluationStats as $stat)
         <div class="section">
             <h2>{{ $stat['evaluation']->name }} <span class="badge">{{ strtoupper($stat['type']) }}</span></h2>

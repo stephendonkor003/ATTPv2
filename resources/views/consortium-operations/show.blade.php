@@ -21,11 +21,6 @@
         <li class="nav-item"><a class="nav-link" href="{{ route('consortium-operations.index') }}">Consortium Operations</a></li>
         <li class="nav-item"><span class="nav-link active" aria-current="page">Oversight Detail</span></li>
         <li class="nav-item"><a class="nav-link" href="#research-procurement">Research & Procurement</a></li>
-        @can('partner.runtime_overview.view')
-            @if (Route::has('partner.runtime-overview'))
-                <li class="nav-item"><a class="nav-link" href="{{ route('partner.runtime-overview') }}">Partner Runtime Overview</a></li>
-            @endif
-        @endcan
     </ul>
 
     @if (session('success'))

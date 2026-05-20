@@ -16,74 +16,26 @@
     <div class="section grid two">
         <div class="card">
             <div class="card-body">
-                <h5 class="fw-bold mb-3">Create Purchase Order</h5>
-                <form method="POST" action="{{ route('think-tank.purchase-orders.store', $portalRouteParams) }}" class="stack">
-                    @csrf
-                    <div>
-                        <label class="form-label">AU SAP Vendor Number</label>
-                        <input type="text" name="au_sap_vendor_number"
-                            value="{{ old('au_sap_vendor_number', $member->au_sap_vendor_number) }}"
-                            placeholder="Enter once, for example SAP-00012345"
-                            @if($member->au_sap_vendor_number) readonly @endif>
-                        @if ($member->au_sap_vendor_number)
-                            <div class="text-muted small mt-1">Saved for this think tank and reused on future purchase orders.</div>
-                        @endif
-                    </div>
-                    <div>
-                        <label class="form-label">Funding Allocation</label>
-                        <select name="fund_allocation_id">
-                            <option value="">General transfer</option>
-                            @foreach ($allocations as $allocation)
-                                <option value="{{ $allocation->id }}" @selected(old('fund_allocation_id') === $allocation->id)>
-                                    {{ $allocation->budget_line }} - {{ $allocation->currency }} {{ number_format($allocation->amount_allocated, 2) }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="row">
-                        <div>
-                            <label class="form-label">Amount</label>
-                            <input type="number" step="0.01" min="0.01" name="amount" value="{{ old('amount') }}" required>
-                        </div>
-                        <div>
-                            <label class="form-label">Currency</label>
-                            <input type="text" name="currency" maxlength="10" value="{{ old('currency', $currency) }}">
-                        </div>
-                    </div>
-                    <div>
-                        <label class="form-label">Issued At</label>
-                        <input type="date" name="issued_at" value="{{ old('issued_at', now()->toDateString()) }}">
-                    </div>
-                    <div>
-                        <label class="form-label">Notes</label>
-                        <textarea name="notes" placeholder="Purpose of the transfer">{{ old('notes') }}</textarea>
-                    </div>
-                    <button class="btn btn-primary">
-                        <i class="feather-save me-1"></i> Create Purchase Order
-                    </button>
-                </form>
+                <h5 class="fw-bold mb-3">Receipt Confirmation</h5>
+                <p class="text-muted mb-0">ATTP Secretariat records transfers after funds are sent. Use the detail page to confirm when the payment has arrived in your bank account.</p>
             </div>
         </div>
-
         <div class="card">
             <div class="card-body">
-                <h5 class="fw-bold mb-3">PO Code Format</h5>
-                <p class="text-muted mb-2">
-                    Each purchase order uses ATTP year/month, consortium code, and think tank code.
-                </p>
-                <div class="p-3 bg-light rounded fw-bold">
-                    PO-ATTP-{{ now()->format('Ym') }}-{{ $member->consortium?->code ?? 'CONS' }}-THINKTANK-001
-                </div>
-                <p class="text-muted small mt-3 mb-0">
-                    The final sequence is generated automatically so every PO remains unique.
-                </p>
+                <h5 class="fw-bold mb-3">Vendor Details</h5>
+                <table>
+                    <tbody>
+                        <tr><td>AU SAP Vendor Number</td><td>{{ $member->au_sap_vendor_number ?? '-' }}</td></tr>
+                        <tr><td>Portal Email</td><td>{{ $member->portalUser?->email ?? $member->email ?? '-' }}</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
     <div class="section card">
         <div class="card-body">
-            <h5 class="fw-bold mb-3">Purchase Orders Submitted to ATTP Secretariat</h5>
+            <h5 class="fw-bold mb-3">Funding Transfers from ATTP Secretariat</h5>
             <div class="table-responsive">
                 <table>
                     <thead>
@@ -92,6 +44,7 @@
                             <th>Amount</th>
                             <th>Disbursed</th>
                             <th>Remaining</th>
+                            <th>Receipt</th>
                             <th>Status</th>
                             <th>Issued</th>
                             <th>Action</th>
@@ -104,6 +57,10 @@
                                 <td>{{ $purchaseOrder->currency }} {{ number_format($purchaseOrder->amount, 2) }}</td>
                                 <td>{{ $purchaseOrder->currency }} {{ number_format($purchaseOrder->paidAmount(), 2) }}</td>
                                 <td>{{ $purchaseOrder->currency }} {{ number_format($purchaseOrder->remainingAmount(), 2) }}</td>
+                                <td>
+                                    @php $pendingReceipt = $purchaseOrder->disbursements->where('recipient_confirmation_status', '!=', 'confirmed')->count(); @endphp
+                                    <span class="badge {{ $pendingReceipt ? '' : 'good' }}">{{ $pendingReceipt ? 'pending' : 'confirmed' }}</span>
+                                </td>
                                 <td><span class="badge">{{ str_replace('_', ' ', $purchaseOrder->status) }}</span></td>
                                 <td>{{ $purchaseOrder->issued_at?->format('M d, Y') ?? '-' }}</td>
                                 <td>
@@ -117,7 +74,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">No purchase orders created yet.</td>
+                                <td colspan="8" class="text-center text-muted py-4">No funding transfers recorded yet.</td>
                             </tr>
                         @endforelse
                     </tbody>

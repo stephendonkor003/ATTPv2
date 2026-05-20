@@ -47,4 +47,55 @@
             </table>
         </div>
     </div>
+
+    <div class="section card">
+        <div class="card-body">
+            <h5 class="fw-bold mb-3">Transfer Receipt Confirmation</h5>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Transfer Ref</th>
+                            <th>Amount</th>
+                            <th>Method</th>
+                            <th>Paid At</th>
+                            <th>Receipt Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($purchaseOrder->disbursements as $disbursement)
+                            <tr>
+                                <td><strong>{{ $disbursement->transfer_reference ?: $disbursement->reference_no }}</strong></td>
+                                <td>{{ $disbursement->currency }} {{ number_format($disbursement->amount, 2) }}</td>
+                                <td>{{ $disbursement->payment_method ?? '-' }}</td>
+                                <td>{{ $disbursement->paid_at?->format('M d, Y H:i') ?? '-' }}</td>
+                                <td>
+                                    <span class="badge {{ $disbursement->recipient_confirmation_status === 'confirmed' ? 'good' : '' }}">
+                                        {{ str_replace('_', ' ', $disbursement->recipient_confirmation_status ?? 'pending') }}
+                                    </span>
+                                    @if ($disbursement->recipient_confirmed_at)
+                                        <div class="text-muted small">{{ $disbursement->recipient_confirmed_at->format('M d, Y H:i') }}</div>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($disbursement->recipient_confirmation_status === 'confirmed')
+                                        <span class="text-muted small">Confirmed</span>
+                                    @else
+                                        <form method="POST" action="{{ route('think-tank.purchase-orders.disbursements.confirm', array_merge($portalRouteParams, ['purchaseOrder' => $purchaseOrder, 'disbursement' => $disbursement])) }}" class="stack">
+                                            @csrf
+                                            <textarea name="recipient_confirmation_notes" rows="2" placeholder="Optional receipt note"></textarea>
+                                            <button class="btn btn-primary btn-sm" type="submit">Confirm Received</button>
+                                        </form>
+                                    @endif
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="6" class="text-center text-muted py-4">No disbursement record is linked to this order yet.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </x-think-tank.partials.shell>

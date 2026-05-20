@@ -69,7 +69,7 @@
                     <div class="col-md-4">
                         <div class="stat-tile">
                             <div class="stat-label">Status</div>
-                            <div class="stat-value text-capitalize">{{ $purchaseOrder->status ?? 'draft' }}</div>
+                            <div class="stat-value text-capitalize">{{ str_replace('_', ' ', $purchaseOrder->status ?? 'draft') }}</div>
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -138,7 +138,9 @@
                     </div>
                 @endif
                 <div class="mt-4">
-                    @if ($purchaseOrder->remainingAmount() > 0)
+                    @if ($purchaseOrder->po_type === 'think_tank_transfer' && $purchaseOrder->status === 'pending')
+                        <span class="badge bg-warning-subtle text-warning">Payment Sent - Pending Think Tank Receipt</span>
+                    @elseif ($purchaseOrder->remainingAmount() > 0)
                         <a href="{{ route('procurement.disbursements.create', ['purchase_order_id' => $purchaseOrder->id]) }}"
                             class="btn btn-success">
                             <i class="feather-dollar-sign me-1"></i> Record Disbursement

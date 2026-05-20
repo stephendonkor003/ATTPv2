@@ -1,124 +1,255 @@
 @php
-    $portalRouteParams = (auth()->user()?->isSuperAdmin() || auth()->user()?->isAdmin())
-        ? ['think_tank_member_id' => $member->id]
-        : [];
+    $isAdminView = auth()->user()?->isSuperAdmin() || auth()->user()?->isAdmin();
     $researchAction = route('think-tank.research.store', $portalRouteParams);
+    $resetParams = $isAdminView ? ['think_tank_member_id' => $member->id] : [];
 @endphp
 
 @push('styles')
     <style>
-        .tt-research-hero {
+        .think-tank-workspace > .card.shadow-sm.border-0.overflow-hidden.mb-4 {
+            display: none;
+        }
+
+        .tt-research-shell {
             display: grid;
-            grid-template-columns: minmax(0, 1.35fr) minmax(290px, .65fr);
             gap: 18px;
-            margin-bottom: 18px;
         }
 
-        .tt-research-banner,
-        .tt-research-side,
-        .tt-research-stat,
-        .tt-research-tabs,
-        .tt-research-card {
+        .tt-research-search,
+        .tt-research-hero,
+        .tt-kpi-card,
+        .tt-research-panel,
+        .tt-chart-box {
             border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            background: #fff;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
         }
 
-        .tt-research-banner {
-            min-height: 220px;
-            padding: 26px;
-            color: #fff;
-            background:
-                linear-gradient(120deg, rgba(15, 23, 42, .96), rgba(13, 148, 136, .84)),
-                url("{{ asset('admin/assets/images/gallery/3.png') }}");
-            background-size: cover;
-            background-position: center;
+        .tt-research-search {
+            padding: 16px;
         }
 
-        .tt-research-banner h1 {
-            max-width: 790px;
-            margin: 10px 0;
-            color: #fff;
-            font-size: 30px;
-            line-height: 1.18;
-            letter-spacing: 0;
-        }
-
-        .tt-research-banner p {
-            max-width: 840px;
+        .tt-search-title {
+            color: #0f172a;
+            font-size: 17px;
+            font-weight: 900;
             margin: 0;
-            color: rgba(255, 255, 255, .86);
         }
 
-        .tt-research-kicker {
+        .tt-search-subtitle {
+            color: #64748b;
+            font-size: 13px;
+            margin: 4px 0 0;
+        }
+
+        .tt-search-grid {
+            display: grid;
+            grid-template-columns: minmax(240px, 1.25fr) minmax(170px, .8fr) minmax(140px, .65fr) minmax(140px, .65fr) minmax(135px, .65fr) minmax(135px, .65fr) minmax(130px, .65fr) auto;
+            gap: 12px;
+            align-items: end;
+            margin-top: 14px;
+        }
+
+        .tt-field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .tt-field label {
+            color: #334155;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .tt-field input,
+        .tt-field select,
+        .tt-field textarea {
+            min-height: 42px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #0f172a;
+            padding: 9px 10px;
+            width: 100%;
+        }
+
+        .tt-field textarea {
+            min-height: 140px;
+            resize: vertical;
+        }
+
+        .tt-search-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tt-research-hero {
+            padding: 24px;
+            overflow: hidden;
+            color: #f8fafc;
+            background:
+                linear-gradient(120deg, rgba(15, 23, 42, .96), rgba(15, 118, 110, .9)),
+                linear-gradient(45deg, rgba(245, 158, 11, .2), rgba(14, 165, 233, .12));
+        }
+
+        .tt-hero-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+            gap: 18px;
+            align-items: center;
+        }
+
+        .tt-kicker {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            border: 1px solid rgba(255, 255, 255, .28);
-            background: rgba(255, 255, 255, .13);
+            gap: 7px;
+            border: 1px solid rgba(248, 250, 252, .32);
             border-radius: 999px;
-            padding: 7px 11px;
-            font-weight: 850;
+            background: rgba(248, 250, 252, .12);
+            color: #fde68a;
             font-size: 12px;
-            text-transform: uppercase;
+            font-weight: 900;
+            padding: 7px 11px;
         }
 
-        .tt-research-side {
-            padding: 22px;
+        .tt-research-hero h1 {
+            color: #ffffff;
+            font-size: 30px;
+            font-weight: 900;
+            line-height: 1.15;
+            margin: 12px 0 8px;
+        }
+
+        .tt-research-hero p,
+        .tt-hero-meta {
+            color: rgba(248, 250, 252, .86);
+        }
+
+        .tt-hero-facts {
             display: grid;
-            gap: 14px;
-            align-content: center;
-            background: linear-gradient(180deg, #f8fafc, #fff);
-        }
-
-        .tt-output-list {
-            display: grid;
-            gap: 9px;
-            margin: 0;
-            padding: 0;
-            list-style: none;
-        }
-
-        .tt-output-list li {
-            display: flex;
-            justify-content: space-between;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 10px 12px;
-            background: #fff;
-            color: #334155;
+        }
+
+        .tt-hero-fact {
+            border: 1px solid rgba(248, 250, 252, .26);
+            border-radius: 10px;
+            background: rgba(15, 23, 42, .22);
+            padding: 12px;
+        }
+
+        .tt-hero-fact span {
+            display: block;
+            color: rgba(248, 250, 252, .72);
+            font-size: 12px;
             font-weight: 800;
         }
 
-        .tt-research-stats {
+        .tt-hero-fact strong {
+            color: #ffffff;
+            font-size: 15px;
+        }
+
+        .tt-kpi-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 14px;
-            margin-bottom: 18px;
         }
 
-        .tt-research-stat {
-            padding: 18px;
-            min-height: 108px;
+        .tt-kpi-card {
+            padding: 16px;
+            min-height: 126px;
         }
 
-        .tt-research-stat .label {
+        .tt-kpi-icon {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            margin-bottom: 12px;
+        }
+
+        .tt-kpi-card.green .tt-kpi-icon { background: #dcfce7; color: #166534; }
+        .tt-kpi-card.amber .tt-kpi-icon { background: #fef3c7; color: #92400e; }
+        .tt-kpi-card.teal .tt-kpi-icon { background: #ccfbf1; color: #0f766e; }
+
+        .tt-kpi-value {
+            color: #0f172a;
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1.18;
+        }
+
+        .tt-kpi-label {
             color: #64748b;
             font-size: 13px;
-            font-weight: 850;
+            font-weight: 750;
+            margin-top: 6px;
         }
 
-        .tt-research-stat .value {
+        .tt-main-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr);
+            gap: 18px;
+        }
+
+        .tt-research-panel {
+            padding: 18px;
+        }
+
+        .tt-panel-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .tt-panel-head h2 {
             color: #0f172a;
-            font-size: 25px;
+            font-size: 18px;
             font-weight: 900;
-            margin-top: 8px;
+            margin: 0;
+        }
+
+        .tt-panel-head p {
+            color: #64748b;
+            font-size: 13px;
+            margin: 3px 0 0;
+        }
+
+        .tt-chart-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .tt-chart-box {
+            min-height: 305px;
+            padding: 14px;
+            background: #fbfdff;
+            box-shadow: none;
+        }
+
+        .tt-chart-box h3 {
+            color: #334155;
+            font-size: 14px;
+            font-weight: 900;
+            margin: 0 0 10px;
         }
 
         .tt-research-tabs {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #ffffff;
             overflow: hidden;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
         }
 
         .tt-research-tabs .nav {
@@ -138,97 +269,111 @@
 
         .tt-research-tabs .nav-link.active {
             color: #0f172a;
-            background: #fff;
-            border-color: #e2e8f0 #e2e8f0 #fff;
-            box-shadow: 0 -4px 10px rgba(15, 23, 42, .04);
+            background: #ffffff;
+            border-color: #e2e8f0 #e2e8f0 #ffffff;
         }
 
-        .tt-research-tab-body {
-            padding: 20px;
+        .tt-tab-body {
+            padding: 18px;
         }
 
-        .tt-research-form-grid {
+        .tt-table-wrap {
+            overflow-x: auto;
+        }
+
+        .tt-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .tt-table th {
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0;
+            padding: 10px;
+            border-bottom: 1px solid #cbd5e1;
+            white-space: nowrap;
+        }
+
+        .tt-table td {
+            padding: 11px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: top;
+        }
+
+        .tt-status {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 4px 8px;
+            background: #e0f2fe;
+            color: #075985;
+            font-size: 12px;
+            font-weight: 850;
+            text-transform: capitalize;
+            white-space: nowrap;
+        }
+
+        .tt-status.approved { background: #dcfce7; color: #166534; }
+        .tt-status.revisions_requested,
+        .tt-status.rejected { background: #fee2e2; color: #991b1b; }
+
+        .tt-form-grid {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(280px, .55fr);
-            gap: 20px;
+            gap: 18px;
             align-items: start;
         }
 
-        .tt-research-card {
-            padding: 18px;
-            margin-bottom: 16px;
+        .tt-form-card,
+        .tt-side-note,
+        .tt-status-row {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 14px;
         }
 
-        .tt-research-card h2 {
+        .tt-form-card {
+            margin-bottom: 14px;
+        }
+
+        .tt-form-card h3,
+        .tt-side-note h3 {
             color: #0f172a;
-            font-size: 17px;
+            font-size: 16px;
             font-weight: 900;
-            margin: 0 0 4px;
+            margin: 0 0 5px;
         }
 
-        .tt-research-card .hint {
+        .tt-form-card p,
+        .tt-side-note p {
             color: #64748b;
             font-size: 13px;
-            margin: 0 0 16px;
+            margin: 0 0 14px;
         }
 
         .tt-field-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .tt-field {
-            display: grid;
-            gap: 7px;
+            gap: 12px;
         }
 
         .tt-field.full {
             grid-column: 1 / -1;
         }
 
-        .tt-field label {
-            color: #334155;
-            font-size: 13px;
-            font-weight: 850;
-        }
-
-        .tt-field small {
-            color: #64748b;
-        }
-
-        .tt-field input,
-        .tt-field select,
-        .tt-field textarea {
-            width: 100%;
-            border: 1px solid #d8dee8;
-            border-radius: 7px;
-            padding: 11px 12px;
-            background: #fff;
-            color: #0f172a;
-        }
-
-        .tt-field textarea {
-            min-height: 150px;
-            resize: vertical;
-        }
-
-        .tt-research-note {
-            border: 1px solid #ccfbf1;
-            border-radius: 9px;
-            padding: 16px;
+        .tt-side-note {
             background: #f0fdfa;
+            border-color: #99f6e4;
             color: #134e4a;
         }
 
-        .tt-research-note h3 {
-            color: #134e4a;
-            font-size: 15px;
-            font-weight: 900;
-            margin: 0 0 10px;
-        }
-
-        .tt-research-note ul {
+        .tt-check-list,
+        .tt-status-list {
             display: grid;
             gap: 10px;
             margin: 0;
@@ -236,304 +381,487 @@
             list-style: none;
         }
 
-        .tt-research-note li {
+        .tt-status-row {
             display: flex;
-            gap: 9px;
-            line-height: 1.45;
-        }
-
-        .tt-research-note i {
-            margin-top: 3px;
-            color: #0f766e;
-        }
-
-        .tt-research-table-wrap {
-            overflow-x: auto;
-        }
-
-        .tt-research-table th {
-            background: #f8fafc;
-            color: #475569;
-        }
-
-        .tt-output-title {
-            color: #0f172a;
-            font-weight: 850;
-        }
-
-        .tt-muted {
-            color: #64748b;
-            font-size: 13px;
-        }
-
-        .tt-status {
-            display: inline-flex;
-            align-items: center;
-            border-radius: 999px;
-            padding: 5px 9px;
-            font-size: 12px;
-            font-weight: 850;
-            background: #e0f2fe;
-            color: #075985;
-            text-transform: capitalize;
-            white-space: nowrap;
-        }
-
-        .tt-status.approved {
-            background: #dcfce7;
-            color: #166534;
-        }
-
-        .tt-status.rejected,
-        .tt-status.revisions_requested {
-            background: #fee2e2;
-            color: #991b1b;
+            justify-content: space-between;
+            gap: 12px;
         }
 
         .tt-empty {
             border: 1px dashed #cbd5e1;
-            border-radius: 9px;
-            padding: 26px;
+            border-radius: 10px;
+            padding: 18px;
             text-align: center;
             color: #64748b;
             background: #f8fafc;
         }
 
-        @media (max-width: 1100px) {
-            .tt-research-hero,
-            .tt-research-form-grid {
+        @media (max-width: 1200px) {
+            .tt-search-grid,
+            .tt-hero-grid,
+            .tt-main-grid,
+            .tt-form-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .tt-kpi-grid,
+            .tt-chart-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
-        @media (max-width: 900px) {
-            .tt-research-stats,
-            .tt-field-grid {
+        @media (max-width: 767.98px) {
+            .tt-kpi-grid,
+            .tt-chart-grid,
+            .tt-field-grid,
+            .tt-hero-facts {
                 grid-template-columns: 1fr;
             }
 
-            .tt-research-banner h1 {
-                font-size: 23px;
+            .tt-research-hero h1 {
+                font-size: 24px;
             }
         }
     </style>
 @endpush
 
 <x-think-tank.partials.shell :member="$member" title="Research Outputs">
-    <section class="tt-research-hero">
-        <div class="tt-research-banner">
-            <span class="tt-research-kicker"><i class="feather-book-open"></i> Research Submission</span>
-            <h1>Submit research, datasets, working papers, and policy outputs for Secretariat review.</h1>
-            <p>
-                Keep the ATTP Secretariat and funding partners informed with a clean record of every
-                knowledge product produced by your think tank under the consortium.
-            </p>
-        </div>
-        <aside class="tt-research-side">
+    <div class="tt-research-shell">
+        <section class="tt-research-search">
+            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                <div>
+                    <h2 class="tt-search-title">Research Output Search</h2>
+                    <p class="tt-search-subtitle">Select a think tank and run the search to generate a full research output profile.</p>
+                </div>
+                <a class="btn btn-dark fw-bold" href="{{ route('think-tank.research.download', $researchQueryParams) }}">
+                    <i class="feather-download me-1"></i> Download Report
+                </a>
+            </div>
+
+            <form method="GET" action="{{ route('think-tank.research') }}">
+                <div class="tt-search-grid">
+                    <div class="tt-field">
+                        <label for="think_tank_member_id">Think tank</label>
+                        @if($isAdminView)
+                            <select id="think_tank_member_id" name="think_tank_member_id" required>
+                                @foreach($membersForSearch as $searchMember)
+                                    <option value="{{ $searchMember->id }}" @selected((string) $member->id === (string) $searchMember->id)>
+                                        {{ $searchMember->name }}{{ $searchMember->consortium ? ' - ' . $searchMember->consortium->name : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        @else
+                            <input value="{{ $member->name }}" readonly>
+                        @endif
+                    </div>
+                    <div class="tt-field">
+                        <label for="q">Search text</label>
+                        <input id="q" name="q" value="{{ $keyword }}" placeholder="Title, abstract, link">
+                    </div>
+                    <div class="tt-field">
+                        <label for="output_type">Type</label>
+                        <select id="output_type" name="output_type">
+                            <option value="">All types</option>
+                            @foreach([
+                                'research' => 'Research',
+                                'policy_brief' => 'Policy brief',
+                                'report' => 'Report',
+                                'working_paper' => 'Working paper',
+                                'dataset' => 'Dataset',
+                                'publication' => 'Publication',
+                            ] as $value => $label)
+                                <option value="{{ $value }}" @selected($typeFilter === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="tt-field">
+                        <label for="status">Status</label>
+                        <select id="status" name="status">
+                            <option value="">All statuses</option>
+                            @foreach(['submitted', 'approved', 'revisions_requested', 'rejected'] as $status)
+                                <option value="{{ $status }}" @selected($statusFilter === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="tt-field">
+                        <label for="filter_month">Month</label>
+                        <input id="filter_month" type="month" name="filter_month" value="{{ $dashboardFilter['month'] }}">
+                    </div>
+                    <div class="tt-field">
+                        <label for="date_from">From</label>
+                        <input id="date_from" type="date" name="date_from" value="{{ $dashboardFilter['date_from'] }}">
+                    </div>
+                    <div class="tt-field">
+                        <label for="date_to">To</label>
+                        <input id="date_to" type="date" name="date_to" value="{{ $dashboardFilter['date_to'] }}">
+                    </div>
+                    <div class="tt-search-actions">
+                        <button class="btn btn-primary fw-bold" type="submit">
+                            <i class="feather-search me-1"></i> Run Search
+                        </button>
+                        <a class="btn btn-light border fw-bold" href="{{ route('think-tank.research', $resetParams) }}">Reset</a>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        <section class="tt-research-hero">
+            <div class="tt-hero-grid">
+                <div>
+                    <span class="tt-kicker"><i class="feather-book-open"></i> {{ $dashboardFilter['label'] }} research profile</span>
+                    <h1>{{ $member->name }}</h1>
+                    <p class="mb-2">{{ $member->consortium?->name ?? 'Consortium not linked' }}{{ $member->country ? ' / ' . $member->country : '' }}</p>
+                    <div class="tt-hero-meta">Research outputs, publication status, attached files, and review outcomes generated from selected think tank records.</div>
+                </div>
+                <div class="tt-hero-facts">
+                    <div class="tt-hero-fact">
+                        <span>Most common type</span>
+                        <strong>{{ $outputTypes->first()?->output_type ? ucfirst(str_replace('_', ' ', $outputTypes->first()->output_type)) : 'No output yet' }}</strong>
+                    </div>
+                    <div class="tt-hero-fact">
+                        <span>Files attached</span>
+                        <strong>{{ number_format($researchStats['with_files']) }}</strong>
+                    </div>
+                    <div class="tt-hero-fact">
+                        <span>External links</span>
+                        <strong>{{ number_format($researchStats['with_links']) }}</strong>
+                    </div>
+                    <div class="tt-hero-fact">
+                        <span>Generated</span>
+                        <strong>{{ now()->format('M d, Y H:i') }}</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="tt-kpi-grid">
+            <article class="tt-kpi-card">
+                <span class="tt-kpi-icon"><i class="feather-book-open"></i></span>
+                <div class="tt-kpi-value">{{ number_format($researchStats['total']) }}</div>
+                <div class="tt-kpi-label">Outputs in selected view</div>
+            </article>
+            <article class="tt-kpi-card green">
+                <span class="tt-kpi-icon"><i class="feather-check-circle"></i></span>
+                <div class="tt-kpi-value">{{ number_format($researchStats['approved']) }}</div>
+                <div class="tt-kpi-label">Approved outputs</div>
+            </article>
+            <article class="tt-kpi-card amber">
+                <span class="tt-kpi-icon"><i class="feather-paperclip"></i></span>
+                <div class="tt-kpi-value">{{ number_format($researchStats['with_files']) }}</div>
+                <div class="tt-kpi-label">Outputs with attached files</div>
+            </article>
+            <article class="tt-kpi-card teal">
+                <span class="tt-kpi-icon"><i class="feather-globe"></i></span>
+                <div class="tt-kpi-value">{{ number_format($researchStats['published']) }}</div>
+                <div class="tt-kpi-label">Publication dates captured</div>
+            </article>
+        </section>
+
+        <section class="tt-main-grid">
             <div>
-                <div class="tt-muted fw-bold mb-2">Output mix</div>
-                <ul class="tt-output-list">
-                    @forelse($outputTypes as $type)
-                        <li>
-                            <span>{{ str_replace('_', ' ', ucfirst($type->output_type ?? 'Research')) }}</span>
-                            <strong>{{ number_format($type->total) }}</strong>
-                        </li>
-                    @empty
-                        <li><span>No submitted output yet</span><strong>0</strong></li>
-                    @endforelse
-                </ul>
-            </div>
-            <a class="btn btn-primary" href="#submit-research">
-                <i class="feather-upload-cloud me-1"></i> Submit research
-            </a>
-        </aside>
-    </section>
-
-    <section class="tt-research-stats">
-        <div class="tt-research-stat">
-            <div class="label">Total outputs</div>
-            <div class="value">{{ number_format($researchStats['total']) }}</div>
-        </div>
-        <div class="tt-research-stat">
-            <div class="label">Awaiting review</div>
-            <div class="value">{{ number_format($researchStats['submitted']) }}</div>
-        </div>
-        <div class="tt-research-stat">
-            <div class="label">Approved outputs</div>
-            <div class="value">{{ number_format($researchStats['approved']) }}</div>
-        </div>
-        <div class="tt-research-stat">
-            <div class="label">With attached files</div>
-            <div class="value">{{ number_format($researchStats['with_files']) }}</div>
-        </div>
-    </section>
-
-    <section class="tt-research-tabs" id="submit-research">
-        <ul class="nav nav-tabs" id="ttResearchTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="research-submit-tab" data-bs-toggle="tab" data-bs-target="#research-submit-pane" type="button" role="tab" aria-controls="research-submit-pane" aria-selected="true">
-                    <i class="feather-edit-3 me-1"></i> Submit Research
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="research-history-tab" data-bs-toggle="tab" data-bs-target="#research-history-pane" type="button" role="tab" aria-controls="research-history-pane" aria-selected="false">
-                    <i class="feather-list me-1"></i> Research Submitted
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="research-guide-tab" data-bs-toggle="tab" data-bs-target="#research-guide-pane" type="button" role="tab" aria-controls="research-guide-pane" aria-selected="false">
-                    <i class="feather-help-circle me-1"></i> Submission Guide
-                </button>
-            </li>
-        </ul>
-
-        <div class="tab-content tt-research-tab-body">
-            <div class="tab-pane fade show active" id="research-submit-pane" role="tabpanel" aria-labelledby="research-submit-tab" tabindex="0">
-                <form method="POST" action="{{ $researchAction }}" enctype="multipart/form-data">
-                    @csrf
-                    <div class="tt-research-form-grid">
+                <div class="tt-research-panel">
+                    <div class="tt-panel-head">
                         <div>
-                            <div class="tt-research-card">
-                                <h2>Output details</h2>
-                                <p class="hint">Capture the identity, type, and publication status of the research output.</p>
-                                <div class="tt-field-grid">
-                                    <div class="tt-field full">
-                                        <label for="title">Research title</label>
-                                        <input id="title" name="title" value="{{ old('title') }}" placeholder="Policy options for regional food systems financing" required>
-                                    </div>
-                                    <div class="tt-field">
-                                        <label for="output_type">Output type</label>
-                                        <select id="output_type" name="output_type" required>
-                                            @foreach([
-                                                'research' => 'Research',
-                                                'policy_brief' => 'Policy brief',
-                                                'report' => 'Report',
-                                                'working_paper' => 'Working paper',
-                                                'dataset' => 'Dataset',
-                                                'publication' => 'Publication',
-                                            ] as $value => $label)
-                                                <option value="{{ $value }}" @selected(old('output_type', 'research') === $value)>{{ $label }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                    <div class="tt-field">
-                                        <label for="published_on">Publication date</label>
-                                        <input id="published_on" type="date" name="published_on" value="{{ old('published_on') }}">
-                                    </div>
-                                    <div class="tt-field full">
-                                        <label for="external_url">External link</label>
-                                        <input id="external_url" type="url" name="external_url" value="{{ old('external_url') }}" placeholder="https://example.org/research-output">
-                                        <small>Use this when the research is already published on your website or a journal platform.</small>
-                                    </div>
-                                    <div class="tt-field full">
-                                        <label for="file">Attach research file</label>
-                                        <input id="file" type="file" name="file">
-                                        <small>Accepted: PDF, Word, Excel, PowerPoint, or ZIP up to 20MB.</small>
-                                    </div>
-                                </div>
-                            </div>
+                            <h2>Graphs and Research Analysis</h2>
+                            <p>Output mix, review status, submission timeline, access format, and publication readiness.</p>
+                        </div>
+                    </div>
+                    <div class="tt-chart-grid">
+                        <div class="tt-chart-box">
+                            <h3>Output Type Mix</h3>
+                            <div id="ttResearchTypeChart"></div>
+                        </div>
+                        <div class="tt-chart-box">
+                            <h3>Review Status</h3>
+                            <div id="ttResearchStatusChart"></div>
+                        </div>
+                        <div class="tt-chart-box">
+                            <h3>Monthly Submissions</h3>
+                            <div id="ttResearchTimelineChart"></div>
+                        </div>
+                        <div class="tt-chart-box">
+                            <h3>File and Link Coverage</h3>
+                            <div id="ttResearchAccessChart"></div>
+                        </div>
+                    </div>
+                </div>
 
-                            <div class="tt-research-card">
-                                <h2>Abstract and relevance</h2>
-                                <p class="hint">Help reviewers understand the output and its link to the consortium work.</p>
-                                <div class="tt-field full">
-                                    <label for="abstract">Abstract</label>
-                                    <textarea id="abstract" name="abstract" placeholder="Summarize the research question, method, key findings, and policy relevance.">{{ old('abstract') }}</textarea>
-                                </div>
-                            </div>
-
-                            <div class="d-flex flex-wrap justify-content-end gap-2">
-                                <button type="reset" class="btn btn-light border">Clear form</button>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="feather-send me-1"></i> Submit to Secretariat
+                <section class="tt-research-tabs" id="research-workspace">
+                    <ul class="nav nav-tabs" id="ttResearchTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="research-history-tab" data-bs-toggle="tab" data-bs-target="#research-history-pane" type="button" role="tab" aria-controls="research-history-pane" aria-selected="true">
+                                <i class="feather-list me-1"></i> Research Register
+                            </button>
+                        </li>
+                        @can('think_tank.research.submit')
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="research-submit-tab" data-bs-toggle="tab" data-bs-target="#research-submit-pane" type="button" role="tab" aria-controls="research-submit-pane" aria-selected="false">
+                                    <i class="feather-edit-3 me-1"></i> Submit Research
                                 </button>
+                            </li>
+                        @endcan
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="research-guide-tab" data-bs-toggle="tab" data-bs-target="#research-guide-pane" type="button" role="tab" aria-controls="research-guide-pane" aria-selected="false">
+                                <i class="feather-help-circle me-1"></i> Submission Guide
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content tt-tab-body">
+                        <div class="tab-pane fade show active" id="research-history-pane" role="tabpanel" aria-labelledby="research-history-tab" tabindex="0">
+                            <div class="tt-table-wrap">
+                                <table class="tt-table">
+                                    <thead>
+                                    <tr>
+                                        <th>Output</th>
+                                        <th>Type</th>
+                                        <th>File or link</th>
+                                        <th>Status</th>
+                                        <th>Published</th>
+                                        <th>Submitted</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    @forelse($outputs as $output)
+                                        <tr>
+                                            <td>
+                                                <strong>{{ $output->title }}</strong>
+                                                <div class="text-muted small">{{ \Illuminate\Support\Str::limit(strip_tags($output->abstract ?? 'No abstract provided.'), 100) }}</div>
+                                            </td>
+                                            <td>{{ str_replace('_', ' ', ucfirst($output->output_type)) }}</td>
+                                            <td>
+                                                @if($output->file_path)
+                                                    <span class="tt-status approved">Attached</span>
+                                                @elseif($output->external_url)
+                                                    <a href="{{ $output->external_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-light border">Open link</a>
+                                                @else
+                                                    <span class="text-muted">No file</span>
+                                                @endif
+                                            </td>
+                                            <td><span class="tt-status {{ $output->status }}">{{ str_replace('_', ' ', $output->status) }}</span></td>
+                                            <td>{{ $output->published_on?->format('d M Y') ?? 'N/A' }}</td>
+                                            <td>{{ $output->submitted_at?->format('d M Y') ?? $output->created_at?->format('d M Y') }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="6"><div class="tt-empty">No research outputs match the selected search.</div></td></tr>
+                                    @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="mt-3">{{ $outputs->links() }}</div>
+                        </div>
+
+                        @can('think_tank.research.submit')
+                            <div class="tab-pane fade" id="research-submit-pane" role="tabpanel" aria-labelledby="research-submit-tab" tabindex="0">
+                                <form method="POST" action="{{ $researchAction }}" enctype="multipart/form-data">
+                                    @csrf
+                                    <div class="tt-form-grid">
+                                        <div>
+                                            <div class="tt-form-card">
+                                                <h3>Output details</h3>
+                                                <p>Capture the identity, type, and publication status of the research output.</p>
+                                                <div class="tt-field-grid">
+                                                    <div class="tt-field full">
+                                                        <label for="title">Research title</label>
+                                                        <input id="title" name="title" value="{{ old('title') }}" placeholder="Policy options for regional food systems financing" required>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="submit_output_type">Output type</label>
+                                                        <select id="submit_output_type" name="output_type" required>
+                                                            @foreach([
+                                                                'research' => 'Research',
+                                                                'policy_brief' => 'Policy brief',
+                                                                'report' => 'Report',
+                                                                'working_paper' => 'Working paper',
+                                                                'dataset' => 'Dataset',
+                                                                'publication' => 'Publication',
+                                                            ] as $value => $label)
+                                                                <option value="{{ $value }}" @selected(old('output_type', 'research') === $value)>{{ $label }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="published_on">Publication date</label>
+                                                        <input id="published_on" type="date" name="published_on" value="{{ old('published_on') }}">
+                                                    </div>
+                                                    <div class="tt-field full">
+                                                        <label for="external_url">External link</label>
+                                                        <input id="external_url" type="url" name="external_url" value="{{ old('external_url') }}" placeholder="https://example.org/research-output">
+                                                    </div>
+                                                    <div class="tt-field full">
+                                                        <label for="file">Attach research file</label>
+                                                        <input id="file" type="file" name="file">
+                                                    </div>
+                                                    <div class="tt-field full">
+                                                        <label for="abstract">Abstract</label>
+                                                        <textarea id="abstract" name="abstract" placeholder="Summarize the research question, method, key findings, and policy relevance.">{{ old('abstract') }}</textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex justify-content-end gap-2 flex-wrap">
+                                                <button type="reset" class="btn btn-light border">Clear form</button>
+                                                <button type="submit" class="btn btn-primary"><i class="feather-send me-1"></i> Submit to Secretariat</button>
+                                            </div>
+                                        </div>
+
+                                        <aside class="tt-side-note">
+                                            <h3>Quality checklist</h3>
+                                            <p>Make sure the Secretariat can review and report the output.</p>
+                                            <ul class="tt-check-list">
+                                                <li><i class="feather-check-circle me-1"></i> Use a clear title that matches the document.</li>
+                                                <li><i class="feather-check-circle me-1"></i> Choose the correct output type.</li>
+                                                <li><i class="feather-check-circle me-1"></i> Attach the file or add a public URL.</li>
+                                                <li><i class="feather-check-circle me-1"></i> Explain the policy value in the abstract.</li>
+                                            </ul>
+                                        </aside>
+                                    </div>
+                                </form>
+                            </div>
+                        @endcan
+
+                        <div class="tab-pane fade" id="research-guide-pane" role="tabpanel" aria-labelledby="research-guide-tab" tabindex="0">
+                            <div class="tt-chart-grid">
+                                <div class="tt-form-card">
+                                    <h3>What to submit</h3>
+                                    <p>Research papers, policy briefs, working papers, datasets, technical reports, and published articles linked to consortium work.</p>
+                                </div>
+                                <div class="tt-form-card">
+                                    <h3>Review purpose</h3>
+                                    <p>The Secretariat uses these outputs to verify delivery, report to partners, and maintain the knowledge product record.</p>
+                                </div>
+                                <div class="tt-form-card">
+                                    <h3>Good abstract</h3>
+                                    <p>State the policy issue, method, key findings, target audience, and contribution to ATTP objectives.</p>
+                                </div>
+                                <div class="tt-form-card">
+                                    <h3>Access standards</h3>
+                                    <p>Attach a file or provide a stable external link so reviewers can inspect the product.</p>
+                                </div>
                             </div>
                         </div>
-
-                        <aside class="tt-research-note">
-                            <h3>Quality checklist</h3>
-                            <ul>
-                                <li><i class="feather-check-circle"></i><span>Use a clear title that matches the document or publication.</span></li>
-                                <li><i class="feather-check-circle"></i><span>Choose the correct output type for partner reporting.</span></li>
-                                <li><i class="feather-check-circle"></i><span>Attach the file or add a public URL so reviewers can access it.</span></li>
-                                <li><i class="feather-check-circle"></i><span>Include an abstract that explains the policy value of the output.</span></li>
-                            </ul>
-                        </aside>
                     </div>
-                </form>
+                </section>
             </div>
 
-            <div class="tab-pane fade" id="research-history-pane" role="tabpanel" aria-labelledby="research-history-tab" tabindex="0">
-                <div class="tt-research-table-wrap">
-                    <table class="tt-research-table">
-                        <thead>
-                            <tr>
-                                <th>Output</th>
-                                <th>Type</th>
-                                <th>File</th>
-                                <th>Status</th>
-                                <th>Published</th>
-                                <th>Submitted</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @forelse($outputs as $output)
-                            <tr>
-                                <td>
-                                    <div class="tt-output-title">{{ $output->title }}</div>
-                                    <div class="tt-muted">{{ \Illuminate\Support\Str::limit(strip_tags($output->abstract ?? 'No abstract provided.'), 95) }}</div>
-                                </td>
-                                <td>{{ str_replace('_', ' ', ucfirst($output->output_type)) }}</td>
-                                <td>
-                                    @if($output->file_path)
-                                        <span class="tt-status approved">Attached</span>
-                                    @elseif($output->external_url)
-                                        <a href="{{ $output->external_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-light border">Open link</a>
-                                    @else
-                                        <span class="tt-muted">No file</span>
-                                    @endif
-                                </td>
-                                <td><span class="tt-status {{ $output->status }}">{{ str_replace('_', ' ', $output->status) }}</span></td>
-                                <td>{{ $output->published_on?->format('d M Y') ?? 'N/A' }}</td>
-                                <td>{{ $output->submitted_at?->format('d M Y') ?? $output->created_at?->format('d M Y') }}</td>
-                            </tr>
+            <aside>
+                <div class="tt-research-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Output Mix</h2>
+                            <p>Research products grouped by output type.</p>
+                        </div>
+                    </div>
+                    <div class="tt-status-list">
+                        @forelse($outputTypes as $type)
+                            <div class="tt-status-row">
+                                <span>{{ ucfirst(str_replace('_', ' ', $type->output_type ?? 'Research')) }}</span>
+                                <strong>{{ number_format($type->total) }}</strong>
+                            </div>
                         @empty
-                            <tr>
-                                <td colspan="6">
-                                    <div class="tt-empty">No research output has been submitted yet.</div>
-                                </td>
-                            </tr>
+                            <div class="tt-empty">No output types yet.</div>
                         @endforelse
-                        </tbody>
-                    </table>
+                    </div>
                 </div>
-                <div class="mt-3">
-                    {{ $outputs->links() }}
-                </div>
-            </div>
 
-            <div class="tab-pane fade" id="research-guide-pane" role="tabpanel" aria-labelledby="research-guide-tab" tabindex="0">
-                <div class="row g-3">
-                    <div class="col-lg-4">
-                        <div class="tt-research-card h-100">
-                            <h2>What to submit</h2>
-                            <p class="hint mb-0">Research papers, policy briefs, working papers, datasets, technical reports, and published articles linked to consortium work.</p>
+                <div class="tt-research-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Review Status</h2>
+                            <p>Current review status split for selected outputs.</p>
                         </div>
                     </div>
-                    <div class="col-lg-4">
-                        <div class="tt-research-card h-100">
-                            <h2>Review purpose</h2>
-                            <p class="hint mb-0">The Secretariat uses these submissions to verify outputs, report to partners, and maintain a full knowledge product record.</p>
-                        </div>
-                    </div>
-                    <div class="col-lg-4">
-                        <div class="tt-research-card h-100">
-                            <h2>Good abstract</h2>
-                            <p class="hint mb-0">State the policy issue, method, key findings, target audience, and how the work contributes to ATTP objectives.</p>
-                        </div>
+                    <div class="tt-status-list">
+                        @forelse($statusCounts as $status => $count)
+                            <div class="tt-status-row">
+                                <span>{{ ucfirst(str_replace('_', ' ', $status)) }}</span>
+                                <strong>{{ number_format($count) }}</strong>
+                            </div>
+                        @empty
+                            <div class="tt-empty">No status data yet.</div>
+                        @endforelse
                     </div>
                 </div>
-            </div>
-        </div>
-    </section>
+
+                <div class="tt-research-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Access Summary</h2>
+                            <p>File and publication access readiness.</p>
+                        </div>
+                    </div>
+                    <div class="tt-status-list">
+                        <div class="tt-status-row"><span>Attached files</span><strong>{{ number_format($researchStats['with_files']) }}</strong></div>
+                        <div class="tt-status-row"><span>External links</span><strong>{{ number_format($researchStats['with_links']) }}</strong></div>
+                        <div class="tt-status-row"><span>Published date set</span><strong>{{ number_format($researchStats['published']) }}</strong></div>
+                        <div class="tt-status-row"><span>Missing publication date</span><strong>{{ number_format($researchStats['draft_unpublished']) }}</strong></div>
+                    </div>
+                </div>
+
+                <div class="tt-research-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Quick Links</h2>
+                            <p>Move between research reporting surfaces.</p>
+                        </div>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <a class="btn btn-primary" href="#research-workspace"><i class="feather-edit-3 me-1"></i> Open research workspace</a>
+                        <a class="btn btn-light border" href="{{ route('think-tank.dashboard', $portalRouteParams) }}"><i class="feather-activity me-1"></i> Dashboard overview</a>
+                        <a class="btn btn-dark" href="{{ route('think-tank.research.download', $researchQueryParams) }}"><i class="feather-download me-1"></i> Download research PDF</a>
+                    </div>
+                </div>
+            </aside>
+        </section>
+    </div>
 </x-think-tank.partials.shell>
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof ApexCharts === 'undefined') {
+                return;
+            }
+
+            const chartData = @json($chartData);
+            const baseOptions = {
+                chart: { toolbar: { show: false }, fontFamily: 'Inter, Arial, sans-serif' },
+                dataLabels: { enabled: false },
+                colors: ['#0f766e', '#2563eb', '#f59e0b', '#ef4444'],
+                grid: { borderColor: '#e2e8f0' },
+                legend: { position: 'bottom' }
+            };
+
+            new ApexCharts(document.querySelector('#ttResearchTypeChart'), {
+                ...baseOptions,
+                chart: { ...baseOptions.chart, type: 'donut', height: 250 },
+                series: chartData.types.values,
+                labels: chartData.types.labels
+            }).render();
+
+            new ApexCharts(document.querySelector('#ttResearchStatusChart'), {
+                ...baseOptions,
+                chart: { ...baseOptions.chart, type: 'donut', height: 250 },
+                series: chartData.status.values,
+                labels: chartData.status.labels
+            }).render();
+
+            new ApexCharts(document.querySelector('#ttResearchTimelineChart'), {
+                ...baseOptions,
+                chart: { ...baseOptions.chart, type: 'area', height: 250 },
+                stroke: { curve: 'smooth', width: 3 },
+                fill: { opacity: .18 },
+                series: [{ name: 'Research outputs', data: chartData.timeline.values }],
+                xaxis: { categories: chartData.timeline.labels }
+            }).render();
+
+            new ApexCharts(document.querySelector('#ttResearchAccessChart'), {
+                ...baseOptions,
+                chart: { ...baseOptions.chart, type: 'bar', height: 250 },
+                series: [{ name: 'Outputs', data: chartData.access.values }],
+                xaxis: { categories: chartData.access.labels },
+                plotOptions: { bar: { horizontal: true, borderRadius: 5 } }
+            }).render();
+        });
+    </script>
+@endpush

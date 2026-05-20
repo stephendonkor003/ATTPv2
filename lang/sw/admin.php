@@ -42,6 +42,7 @@ return [
     'budget_reports' => 'Ripoti za Bajeti',
     'commitment_report' => 'Ripoti ya Ahadi',
     'ifr_report' => 'Ripoti ya IFR',
+    'project_financial_position' => 'Project Financial Position',
     'execution_dashboard' => 'Dashibodi ya Utekelezaji',
     'program_allocation' => 'Ugawaji wa Programu',
     'allocations_reports' => 'Ripoti za Ugawaji',

@@ -241,6 +241,15 @@ private function resolveAuditModule(Model $model): string
         // Communications
         'MemberStateCommunication' => 'communications',
         'MemberStateCommunicationAttachment' => 'communications',
+
+        // Think Tank Management
+        'Consortium' => 'think_tank_management',
+        'ConsortiumThinkTank' => 'think_tank_management',
+        'ConsortiumFundAllocation' => 'think_tank_management',
+        'ConsortiumDisbursementRequest' => 'think_tank_management',
+        'ConsortiumActivityReport' => 'think_tank_management',
+        'ThinkTankResearchOutput' => 'think_tank_management',
+        'ThinkTankProcurementPlan' => 'think_tank_management',
     ];
 
     return $map[$class] ?? 'system';

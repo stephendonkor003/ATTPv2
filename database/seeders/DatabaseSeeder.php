@@ -28,6 +28,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             LegacySqlDumpSeeder::class,
+            OldDataSqlImportSeeder::class,
+            LegacyThinkTankProcurementLifecycleSeeder::class,
             PermissionSeeder::class,
             AuMasterDataPermissionsSeeder::class,
             PartnerPortalPermissionsSeeder::class,

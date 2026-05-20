@@ -15,6 +15,7 @@ use App\Models\AuMemberState;
 use App\Models\Funder;
 use App\Models\ProgramFunding;
 use App\Models\Procurement;
+use App\Models\ProcurementDisbursement;
 use App\Models\Role;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankResearchOutput;
@@ -34,8 +35,25 @@ class ConsortiumOperationsController extends Controller
     {
         $query = Consortium::query()
             ->with(['funder', 'programFunding.program', 'secretariatManager'])
-            ->withCount(['members', 'activityReports', 'riskFlags'])
-            ->withSum('fundAllocations', 'amount_disbursed');
+            ->withCount([
+                'members',
+                'activityReports as reports_total_count',
+                'activityReports as reports_approved_count' => fn ($reportQuery) => $reportQuery->where('status', 'approved'),
+                'activityReports as reports_rejected_count' => fn ($reportQuery) => $reportQuery->whereIn('status', ['rejected', 'revisions_requested']),
+                'riskFlags',
+                'transferDisbursements as transfer_count' => fn ($transferQuery) => $transferQuery->whereNotNull('think_tank_member_id'),
+                'transferDisbursements as confirmed_transfer_count' => fn ($transferQuery) => $transferQuery
+                    ->whereNotNull('think_tank_member_id')
+                    ->where('recipient_confirmation_status', 'confirmed'),
+            ])
+            ->withSum([
+                'transferDisbursements as transferred_amount' => fn ($transferQuery) => $transferQuery->whereNotNull('think_tank_member_id'),
+            ], 'amount')
+            ->withSum([
+                'transferDisbursements as receipted_amount' => fn ($transferQuery) => $transferQuery
+                    ->whereNotNull('think_tank_member_id')
+                    ->where('recipient_confirmation_status', 'confirmed'),
+            ], 'amount');
 
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
@@ -51,34 +69,13 @@ class ConsortiumOperationsController extends Controller
             });
         }
 
-        $consortia = $query->orderBy('name')->paginate(15)->withQueryString();
+        $analysisConsortia = (clone $query)->orderBy('name')->get();
+        $consortia = (clone $query)->orderBy('name')->paginate(12)->withQueryString();
         $summary = $this->summaryMetrics();
         $firstPortalMember = ConsortiumThinkTank::orderBy('name')->first();
+        $comparisonData = $this->comparisonData($analysisConsortia);
 
-        return view('consortium-operations.index', compact('consortia', 'summary', 'firstPortalMember'));
-    }
-
-    public function runtimeOverview(Request $request)
-    {
-        $funder = $request->user()?->funderPortal;
-        $summary = $this->summaryMetrics($funder);
-
-        $consortia = Consortium::with([
-            'funder',
-            'members',
-            'activityReports' => fn ($query) => $query->latest()->limit(5),
-            'riskFlags' => fn ($query) => $query->where('status', 'open')->latest()->limit(5),
-            'fundAllocations',
-            'researchOutputs',
-            'procurementPlans',
-            'procurements.submissions',
-            'procurements.awardedSubmission.submitter',
-        ])
-            ->when($funder, fn ($query) => $query->where('funder_id', $funder->id))
-            ->orderBy('name')
-            ->get();
-
-        return view('consortium-operations.runtime-overview', compact('consortia', 'summary', 'funder'));
+        return view('consortium-operations.index', compact('consortia', 'summary', 'firstPortalMember', 'comparisonData'));
     }
 
     public function show(Consortium $consortium)
@@ -445,6 +442,9 @@ class ConsortiumOperationsController extends Controller
     {
         $consortiumQuery = Consortium::query()->when($funder, fn ($query) => $query->where('funder_id', $funder->id));
         $consortiumIds = (clone $consortiumQuery)->pluck('id');
+        $transferQuery = ProcurementDisbursement::query()
+            ->whereIn('consortium_id', $consortiumIds)
+            ->whereNotNull('think_tank_member_id');
 
         return [
             'consortia' => (clone $consortiumQuery)->count(),
@@ -452,13 +452,95 @@ class ConsortiumOperationsController extends Controller
             'submitted_reports' => ConsortiumActivityReport::whereIn('consortium_id', $consortiumIds)->count(),
             'pending_reports' => ConsortiumActivityReport::whereIn('consortium_id', $consortiumIds)->where('status', 'submitted')->count(),
             'funds_allocated' => ConsortiumFundAllocation::whereIn('consortium_id', $consortiumIds)->sum('amount_allocated'),
-            'funds_disbursed' => ConsortiumFundAllocation::whereIn('consortium_id', $consortiumIds)->sum('amount_disbursed'),
+            'funds_disbursed' => (clone $transferQuery)->sum('amount'),
+            'funds_receipted' => (clone $transferQuery)->where('recipient_confirmation_status', 'confirmed')->sum('amount'),
+            'pending_receipts' => (clone $transferQuery)->where('recipient_confirmation_status', '!=', 'confirmed')->count(),
             'funds_spent' => ConsortiumFundAllocation::whereIn('consortium_id', $consortiumIds)->sum('amount_spent'),
             'open_risks' => ConsortiumRiskFlag::whereIn('consortium_id', $consortiumIds)->where('status', 'open')->count(),
             'research_outputs' => ThinkTankResearchOutput::whereIn('consortium_id', $consortiumIds)->count(),
             'procurement_plans' => ThinkTankProcurementPlan::whereIn('consortium_id', $consortiumIds)->count(),
             'procurement_opportunities' => Procurement::whereIn('consortium_id', $consortiumIds)->where('procurement_owner_type', 'think_tank')->count(),
             'procurement_applications' => \App\Models\FormSubmission::whereIn('procurement_id', Procurement::whereIn('consortium_id', $consortiumIds)->pluck('id'))->count(),
+        ];
+    }
+
+    private function comparisonData($consortia): array
+    {
+        $consortiumIds = $consortia->pluck('id');
+
+        $thinkTanks = ConsortiumThinkTank::query()
+            ->with('consortium:id,name,code')
+            ->whereIn('consortium_id', $consortiumIds)
+            ->withCount([
+                'reports as reports_total_count',
+                'reports as reports_approved_count' => fn ($query) => $query->where('status', 'approved'),
+                'reports as reports_rejected_count' => fn ($query) => $query->whereIn('status', ['rejected', 'revisions_requested']),
+                'transferDisbursements as transfer_count',
+                'transferDisbursements as confirmed_transfer_count' => fn ($query) => $query->where('recipient_confirmation_status', 'confirmed'),
+            ])
+            ->withSum('transferDisbursements as transferred_amount', 'amount')
+            ->withSum([
+                'transferDisbursements as receipted_amount' => fn ($query) => $query->where('recipient_confirmation_status', 'confirmed'),
+            ], 'amount')
+            ->orderBy('name')
+            ->get();
+
+        return [
+            'consortia' => $consortia->map(fn (Consortium $consortium) => $this->comparisonRow(
+                $consortium->id,
+                $consortium->name,
+                $consortium->code,
+                (float) ($consortium->transferred_amount ?? 0),
+                (float) ($consortium->receipted_amount ?? 0),
+                (int) ($consortium->reports_total_count ?? 0),
+                (int) ($consortium->reports_approved_count ?? 0),
+                (int) ($consortium->reports_rejected_count ?? 0),
+                (int) ($consortium->members_count ?? 0),
+                (int) ($consortium->transfer_count ?? 0),
+                (int) ($consortium->confirmed_transfer_count ?? 0),
+            ))->values()->all(),
+            'thinkTanks' => $thinkTanks->map(fn (ConsortiumThinkTank $thinkTank) => $this->comparisonRow(
+                $thinkTank->id,
+                $thinkTank->name,
+                $thinkTank->consortium?->code ?: $thinkTank->consortium?->name,
+                (float) ($thinkTank->transferred_amount ?? 0),
+                (float) ($thinkTank->receipted_amount ?? 0),
+                (int) ($thinkTank->reports_total_count ?? 0),
+                (int) ($thinkTank->reports_approved_count ?? 0),
+                (int) ($thinkTank->reports_rejected_count ?? 0),
+                1,
+                (int) ($thinkTank->transfer_count ?? 0),
+                (int) ($thinkTank->confirmed_transfer_count ?? 0),
+            ))->values()->all(),
+        ];
+    }
+
+    private function comparisonRow(
+        string $id,
+        string $label,
+        ?string $context,
+        float $transferred,
+        float $receipted,
+        int $submittedReports,
+        int $approvedReports,
+        int $rejectedReports,
+        int $thinkTanks,
+        int $transferCount,
+        int $confirmedTransferCount
+    ): array {
+        return [
+            'id' => $id,
+            'label' => $label,
+            'context' => $context,
+            'transferred' => round($transferred, 2),
+            'receipted' => round($receipted, 2),
+            'submittedReports' => $submittedReports,
+            'approvedReports' => $approvedReports,
+            'rejectedReports' => $rejectedReports,
+            'thinkTanks' => $thinkTanks,
+            'transferCount' => $transferCount,
+            'confirmedTransferCount' => $confirmedTransferCount,
+            'receiptRate' => $transferred > 0 ? round(($receipted / $transferred) * 100, 1) : 0,
         ];
     }
 

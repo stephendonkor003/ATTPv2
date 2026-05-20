@@ -140,7 +140,7 @@
                                     </div>
                                     <small class="text-muted">
                                         {{ $purchaseOrder->budgetCommitment?->commitment_year ?? 'N/A' }}
-                                        · {{ $purchaseOrder->budgetCommitment?->commitment_amount ? number_format($purchaseOrder->budgetCommitment->commitment_amount, 2) : 'N/A' }}
+                                        - {{ $purchaseOrder->budgetCommitment?->commitment_amount ? number_format($purchaseOrder->budgetCommitment->commitment_amount, 2) : 'N/A' }}
                                     </small>
                                 </td>
                                 <td>
@@ -152,7 +152,7 @@
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-secondary text-capitalize">
-                                        {{ $purchaseOrder->status ?? 'draft' }}
+                                        {{ str_replace('_', ' ', $purchaseOrder->status ?? 'draft') }}
                                     </span>
                                 </td>
                                 <td class="text-center">
@@ -176,3 +176,4 @@
         </div>
     </div>
 @endsection
+

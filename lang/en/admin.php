@@ -42,6 +42,7 @@ return [
     'budget_reports' => 'Budget Reports',
     'commitment_report' => 'Commitment Report',
     'ifr_report' => 'IFR Report',
+    'project_financial_position' => 'Project Financial Position',
     'execution_dashboard' => 'Execution Dashboard',
     'program_allocation' => 'Program Allocation',
     'allocations_reports' => 'Allocations Reports',

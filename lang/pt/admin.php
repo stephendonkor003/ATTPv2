@@ -42,6 +42,7 @@ return [
     'budget_reports' => 'Relatórios Orçamentários',
     'commitment_report' => 'Relatório de Compromissos',
     'ifr_report' => 'Relatório IFR',
+    'project_financial_position' => 'Posicao Financeira do Projeto',
     'execution_dashboard' => 'Painel de Execução',
     'program_allocation' => 'Alocação de Programa',
     'allocations_reports' => 'Relatórios de Alocações',

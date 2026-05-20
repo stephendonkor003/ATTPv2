@@ -192,21 +192,21 @@
                 @endcan
             </li>
             <li class="nav-item">
-                @can('think_tank.reports.submit')
+                @canany(['think_tank.reports.view', 'think_tank.reports.submit'])
                     <a class="nav-link {{ request()->routeIs('think-tank.reports*') ? 'active' : '' }}" @if(request()->routeIs('think-tank.reports*')) aria-current="page" @endif href="{{ route('think-tank.reports', $portalRouteParams) }}">Reports</a>
                 @else
                     <span class="nav-link disabled">Reports</span>
-                @endcan
+                @endcanany
             </li>
             <li class="nav-item">
-                @can('think_tank.research.submit')
+                @canany(['think_tank.research.view', 'think_tank.research.submit'])
                     <a class="nav-link {{ request()->routeIs('think-tank.research*') ? 'active' : '' }}" @if(request()->routeIs('think-tank.research*')) aria-current="page" @endif href="{{ route('think-tank.research', $portalRouteParams) }}">Research</a>
                 @else
                     <span class="nav-link disabled">Research</span>
-                @endcan
+                @endcanany
             </li>
             <li class="nav-item">
-                @canany(['think_tank.procurement.manage', 'think_tank.procurement.evaluate', 'think_tank.procurement.select'])
+                @canany(['think_tank.procurement.view', 'think_tank.procurement.manage', 'think_tank.procurement.evaluate', 'think_tank.procurement.select'])
                     <a class="nav-link {{ request()->routeIs('think-tank.procurement*') ? 'active' : '' }}" @if(request()->routeIs('think-tank.procurement*')) aria-current="page" @endif href="{{ route('think-tank.procurement', $portalRouteParams) }}">Procurement</a>
                 @else
                     <span class="nav-link disabled">Procurement</span>

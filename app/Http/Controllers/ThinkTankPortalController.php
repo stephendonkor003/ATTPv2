@@ -13,19 +13,38 @@ use App\Models\DynamicFormField;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\ProcurementDisbursement;
+use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
+use App\Models\SystemAuditLog;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankProcurementReview;
 use App\Models\ThinkTankResearchOutput;
+use App\Support\IpGeo;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Throwable;
 
 class ThinkTankPortalController extends Controller
 {
     public function dashboard(Request $request)
+    {
+        return view('think-tank.dashboard', $this->dashboardPayload($request));
+    }
+
+    public function downloadDashboardReport(Request $request)
+    {
+        $payload = $this->dashboardPayload($request);
+        $filename = 'think-tank-dashboard-' . Str::slug($payload['member']->name) . '-' . now()->format('Ymd-His') . '.pdf';
+
+        return Pdf::loadView('think-tank.dashboard-report-pdf', $payload)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    private function dashboardPayload(Request $request): array
     {
         $member = $this->member($request);
         $member->load(['consortium.funder', 'fundAllocations', 'disbursementRequests', 'reports', 'researchOutputs']);
@@ -104,6 +123,25 @@ class ThinkTankPortalController extends Controller
         $metrics['utilization'] = (float) $metrics['disbursed'] > 0
             ? round(((float) $metrics['spent'] / (float) $metrics['disbursed']) * 100, 1)
             : 0;
+
+        $transferSummaryQuery = $applyPeriod(ProcurementDisbursement::where('think_tank_member_id', $member->id), 'paid_at');
+        $receiptSent = (float) (clone $transferSummaryQuery)->sum('amount');
+        $receiptConfirmed = (float) (clone $transferSummaryQuery)
+            ->where('recipient_confirmation_status', 'confirmed')
+            ->sum('amount');
+        $receiptSummary = [
+            'sent' => $receiptSent,
+            'confirmed' => $receiptConfirmed,
+            'pending' => max(0, $receiptSent - $receiptConfirmed),
+            'transfer_count' => (clone $transferSummaryQuery)->count(),
+            'confirmed_count' => (clone $transferSummaryQuery)->where('recipient_confirmation_status', 'confirmed')->count(),
+            'rate' => $receiptSent > 0 ? round(($receiptConfirmed / $receiptSent) * 100, 1) : 0,
+        ];
+
+        $transferRecords = (clone $transferSummaryQuery)
+            ->latest('paid_at')
+            ->limit(8)
+            ->get();
 
         $recentProcurements = Procurement::withCount('submissions')
             ->where('think_tank_member_id', $member->id)
@@ -211,6 +249,9 @@ class ThinkTankPortalController extends Controller
         $allReports = (clone $reportQuery)->get();
         $allProcurements = (clone $filteredProcurementsBase)->get();
         $allResearch = (clone $researchQuery)->get();
+        $reportStatusCounts = $allReports->groupBy(fn ($report) => $report->status ?: 'submitted')->map->count();
+        $researchStatusCounts = $allResearch->groupBy(fn ($output) => $output->status ?: 'submitted')->map->count();
+        $procurementStatusCounts = $allProcurements->groupBy(fn ($procurement) => $procurement->status ?: 'draft')->map->count();
 
         $chartData = [
             'finance' => [
@@ -242,54 +283,216 @@ class ThinkTankPortalController extends Controller
                 'labels' => $allResearch->groupBy(fn ($output) => str_replace('_', ' ', ucfirst($output->output_type ?? 'Research')))->keys()->values(),
                 'values' => $allResearch->groupBy(fn ($output) => str_replace('_', ' ', ucfirst($output->output_type ?? 'Research')))->map->count()->values(),
             ],
+            'receipts' => [
+                'labels' => ['Confirmed', 'Awaiting receipt'],
+                'values' => [
+                    round($receiptSummary['confirmed'], 2),
+                    round($receiptSummary['pending'], 2),
+                ],
+            ],
         ];
 
-        return view('think-tank.dashboard', compact(
+        $membersForSearch = $request->user() && ($request->user()->isSuperAdmin() || $request->user()->isAdmin())
+            ? ConsortiumThinkTank::with('consortium:id,name')
+                ->orderBy('name')
+                ->get(['id', 'consortium_id', 'name', 'country', 'role', 'status'])
+            : collect([$member]);
+
+        $portalRouteParams = $this->portalRouteParams($request, $member);
+        $dashboardQueryParams = collect([
+            'think_tank_member_id' => $portalRouteParams['think_tank_member_id'] ?? null,
+            'filter_month' => $dashboardFilter['month'] ?? null,
+            'filter_year' => $dashboardFilter['year'] ?? null,
+            'date_from' => $dashboardFilter['date_from'] ?? null,
+            'date_to' => $dashboardFilter['date_to'] ?? null,
+        ])->filter(fn ($value) => filled($value))->all();
+
+        return compact(
             'member',
             'metrics',
             'recentProcurements',
             'recentReports',
             'recentResearch',
+            'transferRecords',
             'fundedActivities',
             'upcomingActivities',
             'monthlyReportDue',
             'monthlyReportDaysLeft',
             'reportSubmittedThisPeriod',
             'chartData',
-            'dashboardFilter'
-        ));
+            'dashboardFilter',
+            'receiptSummary',
+            'reportStatusCounts',
+            'researchStatusCounts',
+            'procurementStatusCounts',
+            'membersForSearch',
+            'portalRouteParams',
+            'dashboardQueryParams'
+        );
     }
 
     public function reports(Request $request)
+    {
+        return view('think-tank.reports', $this->reportsPayload($request));
+    }
+
+    public function downloadReports(Request $request)
+    {
+        $payload = $this->reportsPayload($request);
+        $filename = 'think-tank-reports-' . Str::slug($payload['member']->name) . '-' . now()->format('Ymd-His') . '.pdf';
+
+        $this->auditAction('think_tank.reports.downloaded', 'Think tank reports dashboard downloaded', [
+            'think_tank_member_id' => $payload['member']->id,
+            'think_tank' => $payload['member']->name,
+            'filters' => $payload['reportsQueryParams'],
+        ]);
+
+        return Pdf::loadView('think-tank.reports-report-pdf', $payload)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    private function reportsPayload(Request $request): array
     {
         $member = $this->member($request);
         $today = CarbonImmutable::now()->startOfDay();
         $monthlyReportDue = $today->endOfMonth()->addDays(7)->startOfDay();
         $monthlyReportDaysLeft = $today->diffInDays($monthlyReportDue, false);
+        $dashboardFilter = $this->dashboardFilter($request);
+        $periodStart = $dashboardFilter['start'];
+        $periodEnd = $dashboardFilter['end'];
+        $statusFilter = trim((string) $request->input('status', ''));
 
-        $reports = ConsortiumActivityReport::where('think_tank_member_id', $member->id)
+        $applyReportPeriod = function ($query) use ($periodStart, $periodEnd) {
+            if (! $periodStart && ! $periodEnd) {
+                return $query;
+            }
+
+            return $query->where(function ($periodQuery) use ($periodStart, $periodEnd) {
+                if ($periodStart && $periodEnd) {
+                    $periodQuery->whereBetween('reporting_period_start', [$periodStart, $periodEnd])
+                        ->orWhereBetween('reporting_period_end', [$periodStart, $periodEnd])
+                        ->orWhereBetween('submitted_at', [$periodStart, $periodEnd]);
+                } elseif ($periodStart) {
+                    $periodQuery->whereDate('reporting_period_start', '>=', $periodStart)
+                        ->orWhereDate('reporting_period_end', '>=', $periodStart)
+                        ->orWhereDate('submitted_at', '>=', $periodStart);
+                } elseif ($periodEnd) {
+                    $periodQuery->whereDate('reporting_period_start', '<=', $periodEnd)
+                        ->orWhereDate('reporting_period_end', '<=', $periodEnd)
+                        ->orWhereDate('submitted_at', '<=', $periodEnd);
+                }
+            });
+        };
+
+        $reportsBase = $applyReportPeriod(ConsortiumActivityReport::where('think_tank_member_id', $member->id))
             ->with(['workplan', 'evidence'])
-            ->latest()
-            ->paginate(15);
+            ->when($statusFilter !== '', fn ($query) => $query->where('status', $statusFilter));
+
+        $reportRecords = (clone $reportsBase)->latest()->get();
+        $reports = (clone $reportsBase)->latest()->paginate(15)->withQueryString();
 
         $workplans = $member->consortium->workplans()->orderBy('title')->get();
+        $statusCounts = $reportRecords->groupBy(fn ($report) => $report->status ?: 'submitted')->map->count();
+        $evidenceCount = $reportRecords->sum(fn ($report) => $report->evidence->count());
+
         $reportStats = [
-            'total' => ConsortiumActivityReport::where('think_tank_member_id', $member->id)->count(),
-            'submitted' => ConsortiumActivityReport::where('think_tank_member_id', $member->id)->where('status', 'submitted')->count(),
-            'approved' => ConsortiumActivityReport::where('think_tank_member_id', $member->id)->where('status', 'approved')->count(),
-            'revisions' => ConsortiumActivityReport::where('think_tank_member_id', $member->id)->where('status', 'revisions_requested')->count(),
-            'average_progress' => round((float) ConsortiumActivityReport::where('think_tank_member_id', $member->id)->avg('progress_percent'), 1),
-            'funds_spent' => ConsortiumActivityReport::where('think_tank_member_id', $member->id)->sum('funds_spent'),
+            'total' => $reportRecords->count(),
+            'submitted' => (int) ($statusCounts->get('submitted') ?? 0),
+            'approved' => (int) ($statusCounts->get('approved') ?? 0),
+            'revisions' => (int) ($statusCounts->get('revisions_requested') ?? 0),
+            'rejected' => (int) ($statusCounts->get('rejected') ?? 0),
+            'average_progress' => round((float) $reportRecords->avg('progress_percent'), 1),
+            'funds_spent' => (float) $reportRecords->sum('funds_spent'),
+            'evidence_count' => $evidenceCount,
+            'with_evidence' => $reportRecords->filter(fn ($report) => $report->evidence->isNotEmpty())->count(),
+            'without_evidence' => $reportRecords->filter(fn ($report) => $report->evidence->isEmpty())->count(),
         ];
 
-        return view('think-tank.reports', compact(
+        $lastSixMonths = collect(range(5, 0))->map(fn ($monthsAgo) => $today->subMonths($monthsAgo));
+        $monthlyCounts = $lastSixMonths->map(function ($date) use ($reportRecords) {
+            return $reportRecords->filter(function ($report) use ($date) {
+                $reportDate = $report->submitted_at ?? $report->created_at;
+
+                return $reportDate && $reportDate->format('Y-m') === $date->format('Y-m');
+            })->count();
+        })->values();
+
+        $monthlyFunds = $lastSixMonths->map(function ($date) use ($reportRecords) {
+            return round((float) $reportRecords->filter(function ($report) use ($date) {
+                $reportDate = $report->submitted_at ?? $report->created_at;
+
+                return $reportDate && $reportDate->format('Y-m') === $date->format('Y-m');
+            })->sum('funds_spent'), 2);
+        })->values();
+
+        $monthlyProgress = $lastSixMonths->map(function ($date) use ($reportRecords) {
+            $reportsInMonth = $reportRecords->filter(function ($report) use ($date) {
+                $reportDate = $report->submitted_at ?? $report->created_at;
+
+                return $reportDate && $reportDate->format('Y-m') === $date->format('Y-m');
+            });
+
+            return round((float) $reportsInMonth->avg('progress_percent'), 1);
+        })->values();
+
+        $chartData = [
+            'status' => [
+                'labels' => $statusCounts->keys()->map(fn ($status) => ucfirst(str_replace('_', ' ', $status)))->values(),
+                'values' => $statusCounts->values(),
+            ],
+            'timeline' => [
+                'labels' => $lastSixMonths->map(fn ($date) => $date->format('M'))->values(),
+                'counts' => $monthlyCounts,
+                'progress' => $monthlyProgress,
+            ],
+            'funds' => [
+                'labels' => $lastSixMonths->map(fn ($date) => $date->format('M'))->values(),
+                'values' => $monthlyFunds,
+            ],
+            'evidence' => [
+                'labels' => ['With evidence', 'Without evidence'],
+                'values' => [$reportStats['with_evidence'], $reportStats['without_evidence']],
+            ],
+        ];
+
+        if ($chartData['status']['labels']->isEmpty()) {
+            $chartData['status']['labels'] = collect(['No reports']);
+            $chartData['status']['values'] = collect([0]);
+        }
+
+        $membersForSearch = $request->user() && ($request->user()->isSuperAdmin() || $request->user()->isAdmin())
+            ? ConsortiumThinkTank::with('consortium:id,name')
+                ->orderBy('name')
+                ->get(['id', 'consortium_id', 'name', 'country', 'role', 'status'])
+            : collect([$member]);
+
+        $portalRouteParams = $this->portalRouteParams($request, $member);
+        $reportsQueryParams = collect([
+            'think_tank_member_id' => $portalRouteParams['think_tank_member_id'] ?? null,
+            'filter_month' => $dashboardFilter['month'] ?? null,
+            'filter_year' => $dashboardFilter['year'] ?? null,
+            'date_from' => $dashboardFilter['date_from'] ?? null,
+            'date_to' => $dashboardFilter['date_to'] ?? null,
+            'status' => $statusFilter ?: null,
+        ])->filter(fn ($value) => filled($value))->all();
+
+        return compact(
             'member',
             'reports',
+            'reportRecords',
             'workplans',
             'reportStats',
             'monthlyReportDue',
-            'monthlyReportDaysLeft'
-        ));
+            'monthlyReportDaysLeft',
+            'dashboardFilter',
+            'statusFilter',
+            'statusCounts',
+            'chartData',
+            'membersForSearch',
+            'portalRouteParams',
+            'reportsQueryParams'
+        );
     }
 
     public function storeReport(Request $request)
@@ -305,21 +508,170 @@ class ThinkTankPortalController extends Controller
 
     public function research(Request $request)
     {
-        $member = $this->member($request);
-        $outputs = ThinkTankResearchOutput::where('think_tank_member_id', $member->id)->latest()->paginate(15);
-        $researchStats = [
-            'total' => ThinkTankResearchOutput::where('think_tank_member_id', $member->id)->count(),
-            'submitted' => ThinkTankResearchOutput::where('think_tank_member_id', $member->id)->where('status', 'submitted')->count(),
-            'approved' => ThinkTankResearchOutput::where('think_tank_member_id', $member->id)->where('status', 'approved')->count(),
-            'with_files' => ThinkTankResearchOutput::where('think_tank_member_id', $member->id)->whereNotNull('file_path')->count(),
-        ];
-        $outputTypes = ThinkTankResearchOutput::where('think_tank_member_id', $member->id)
-            ->select('output_type', DB::raw('count(*) as total'))
-            ->groupBy('output_type')
-            ->orderByDesc('total')
-            ->get();
+        return view('think-tank.research', $this->researchPayload($request));
+    }
 
-        return view('think-tank.research', compact('member', 'outputs', 'researchStats', 'outputTypes'));
+    public function downloadResearch(Request $request)
+    {
+        $payload = $this->researchPayload($request);
+        $filename = 'think-tank-research-' . Str::slug($payload['member']->name) . '-' . now()->format('Ymd-His') . '.pdf';
+
+        $this->auditAction('think_tank.research.downloaded', 'Think tank research dashboard downloaded', [
+            'think_tank_member_id' => $payload['member']->id,
+            'think_tank' => $payload['member']->name,
+            'filters' => $payload['researchQueryParams'],
+        ]);
+
+        return Pdf::loadView('think-tank.research-report-pdf', $payload)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    private function researchPayload(Request $request): array
+    {
+        $member = $this->member($request);
+        $dashboardFilter = $this->dashboardFilter($request);
+        $periodStart = $dashboardFilter['start'];
+        $periodEnd = $dashboardFilter['end'];
+        $statusFilter = trim((string) $request->input('status', ''));
+        $typeFilter = trim((string) $request->input('output_type', ''));
+        $keyword = trim((string) $request->input('q', ''));
+
+        $applyPeriod = function ($query) use ($periodStart, $periodEnd) {
+            if (! $periodStart && ! $periodEnd) {
+                return $query;
+            }
+
+            return $query->where(function ($periodQuery) use ($periodStart, $periodEnd) {
+                if ($periodStart && $periodEnd) {
+                    $periodQuery->whereBetween('submitted_at', [$periodStart, $periodEnd])
+                        ->orWhereBetween('published_on', [$periodStart, $periodEnd])
+                        ->orWhereBetween('created_at', [$periodStart, $periodEnd]);
+                } elseif ($periodStart) {
+                    $periodQuery->whereDate('submitted_at', '>=', $periodStart)
+                        ->orWhereDate('published_on', '>=', $periodStart)
+                        ->orWhereDate('created_at', '>=', $periodStart);
+                } elseif ($periodEnd) {
+                    $periodQuery->whereDate('submitted_at', '<=', $periodEnd)
+                        ->orWhereDate('published_on', '<=', $periodEnd)
+                        ->orWhereDate('created_at', '<=', $periodEnd);
+                }
+            });
+        };
+
+        $outputsBase = $applyPeriod(ThinkTankResearchOutput::where('think_tank_member_id', $member->id))
+            ->when($statusFilter !== '', fn ($query) => $query->where('status', $statusFilter))
+            ->when($typeFilter !== '', fn ($query) => $query->where('output_type', $typeFilter))
+            ->when($keyword !== '', function ($query) use ($keyword) {
+                $search = '%' . $keyword . '%';
+
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('title', 'like', $search)
+                        ->orWhere('abstract', 'like', $search)
+                        ->orWhere('external_url', 'like', $search);
+                });
+            });
+
+        $outputRecords = (clone $outputsBase)->latest()->get();
+        $outputs = (clone $outputsBase)->latest()->paginate(15)->withQueryString();
+        $statusCounts = $outputRecords->groupBy(fn ($output) => $output->status ?: 'submitted')->map->count();
+        $typeCounts = $outputRecords->groupBy(fn ($output) => $output->output_type ?: 'research')->map->count();
+
+        $researchStats = [
+            'total' => $outputRecords->count(),
+            'submitted' => (int) ($statusCounts->get('submitted') ?? 0),
+            'approved' => (int) ($statusCounts->get('approved') ?? 0),
+            'rejected' => (int) ($statusCounts->get('rejected') ?? 0),
+            'revisions' => (int) ($statusCounts->get('revisions_requested') ?? 0),
+            'with_files' => $outputRecords->whereNotNull('file_path')->count(),
+            'with_links' => $outputRecords->whereNotNull('external_url')->count(),
+            'published' => $outputRecords->filter(fn ($output) => filled($output->published_on))->count(),
+            'draft_unpublished' => $outputRecords->filter(fn ($output) => blank($output->published_on))->count(),
+        ];
+
+        $outputTypes = $typeCounts
+            ->map(fn ($total, $type) => (object) ['output_type' => $type, 'total' => $total])
+            ->sortByDesc('total')
+            ->values();
+
+        $lastSixMonths = collect(range(5, 0))->map(fn ($monthsAgo) => CarbonImmutable::now()->startOfDay()->subMonths($monthsAgo));
+        $monthlyCounts = $lastSixMonths->map(function ($date) use ($outputRecords) {
+            return $outputRecords->filter(function ($output) use ($date) {
+                $outputDate = $output->submitted_at ?? $output->created_at;
+
+                return $outputDate && $outputDate->format('Y-m') === $date->format('Y-m');
+            })->count();
+        })->values();
+
+        $chartData = [
+            'types' => [
+                'labels' => $typeCounts->keys()->map(fn ($type) => ucfirst(str_replace('_', ' ', $type)))->values(),
+                'values' => $typeCounts->values(),
+            ],
+            'status' => [
+                'labels' => $statusCounts->keys()->map(fn ($status) => ucfirst(str_replace('_', ' ', $status)))->values(),
+                'values' => $statusCounts->values(),
+            ],
+            'timeline' => [
+                'labels' => $lastSixMonths->map(fn ($date) => $date->format('M'))->values(),
+                'values' => $monthlyCounts,
+            ],
+            'access' => [
+                'labels' => ['Attached file', 'External link', 'No file/link'],
+                'values' => [
+                    $researchStats['with_files'],
+                    $researchStats['with_links'],
+                    max(0, $researchStats['total'] - $researchStats['with_files'] - $researchStats['with_links']),
+                ],
+            ],
+            'publication' => [
+                'labels' => ['Publication date set', 'Publication date missing'],
+                'values' => [$researchStats['published'], $researchStats['draft_unpublished']],
+            ],
+        ];
+
+        foreach (['types', 'status'] as $chartKey) {
+            if ($chartData[$chartKey]['labels']->isEmpty()) {
+                $chartData[$chartKey]['labels'] = collect(['No research']);
+                $chartData[$chartKey]['values'] = collect([0]);
+            }
+        }
+
+        $membersForSearch = $request->user() && ($request->user()->isSuperAdmin() || $request->user()->isAdmin())
+            ? ConsortiumThinkTank::with('consortium:id,name')
+                ->orderBy('name')
+                ->get(['id', 'consortium_id', 'name', 'country', 'role', 'status'])
+            : collect([$member]);
+
+        $portalRouteParams = $this->portalRouteParams($request, $member);
+        $researchQueryParams = collect([
+            'think_tank_member_id' => $portalRouteParams['think_tank_member_id'] ?? null,
+            'filter_month' => $dashboardFilter['month'] ?? null,
+            'filter_year' => $dashboardFilter['year'] ?? null,
+            'date_from' => $dashboardFilter['date_from'] ?? null,
+            'date_to' => $dashboardFilter['date_to'] ?? null,
+            'status' => $statusFilter ?: null,
+            'output_type' => $typeFilter ?: null,
+            'q' => $keyword ?: null,
+        ])->filter(fn ($value) => filled($value))->all();
+
+        return compact(
+            'member',
+            'outputs',
+            'outputRecords',
+            'researchStats',
+            'outputTypes',
+            'statusCounts',
+            'typeCounts',
+            'dashboardFilter',
+            'statusFilter',
+            'typeFilter',
+            'keyword',
+            'chartData',
+            'membersForSearch',
+            'portalRouteParams',
+            'researchQueryParams'
+        );
     }
 
     public function purchaseOrders(Request $request)
@@ -418,9 +770,77 @@ class ThinkTankPortalController extends Controller
         $member = $this->member($request);
         $this->assertMemberPurchaseOrder($member, $purchaseOrder);
 
-        $purchaseOrder->load(['vendor', 'consortium', 'thinkTankMember', 'disbursements']);
+        $purchaseOrder->load(['vendor', 'consortium', 'thinkTankMember', 'disbursements.recipientConfirmer']);
 
         return view('think-tank.purchase-orders-show', compact('member', 'purchaseOrder'));
+    }
+
+    public function confirmDisbursementReceipt(Request $request, ProcurementPurchaseOrder $purchaseOrder, ProcurementDisbursement $disbursement)
+    {
+        $member = $this->member($request);
+        $this->assertMemberPurchaseOrder($member, $purchaseOrder);
+
+        abort_unless(
+            (string) $disbursement->purchase_order_id === (string) $purchaseOrder->id
+            && (string) $disbursement->think_tank_member_id === (string) $member->id,
+            403
+        );
+
+        $data = $request->validate([
+            'recipient_confirmation_notes' => 'nullable|string|max:2000',
+        ]);
+
+        $disbursement->update([
+            'recipient_confirmation_status' => 'confirmed',
+            'recipient_confirmed_by' => $request->user()?->id,
+            'recipient_confirmed_at' => now(),
+            'recipient_confirmation_notes' => $data['recipient_confirmation_notes'] ?? null,
+        ]);
+
+        $purchaseOrder->load(['disbursements', 'invoice']);
+        $hasPendingReceipt = $purchaseOrder->disbursements
+            ->contains(fn (ProcurementDisbursement $linkedDisbursement) => $linkedDisbursement->recipient_confirmation_status !== 'confirmed');
+
+        $purchaseOrder->update([
+            'status' => $hasPendingReceipt ? 'pending' : 'fully_paid',
+        ]);
+
+        if ($purchaseOrder->invoice) {
+            $purchaseOrder->invoice->update([
+                'status' => 'paid',
+                'approved_by' => $purchaseOrder->invoice->approved_by ?: $request->user()?->id,
+                'approved_at' => $purchaseOrder->invoice->approved_at ?: now(),
+            ]);
+        } else {
+            $invoice = ProcurementInvoice::create([
+                'procurement_id' => $purchaseOrder->procurement_id,
+                'vendor_id' => $purchaseOrder->vendor_id,
+                'sub_activity_id' => $purchaseOrder->sub_activity_id,
+                'governance_node_id' => $purchaseOrder->governance_node_id,
+                'invoice_month' => ($disbursement->paid_at ?: now())->copy()->startOfMonth()->toDateString(),
+                'reference_no' => ProcurementInvoice::generateReference(),
+                'amount' => $purchaseOrder->amount,
+                'currency' => $purchaseOrder->currency,
+                'status' => 'paid',
+                'created_by' => $purchaseOrder->created_by,
+                'approved_by' => $request->user()?->id,
+                'approved_at' => now(),
+                'notes' => 'Paid Funding to Think Tanks transfer for ' . $member->name,
+            ]);
+
+            $purchaseOrder->update(['invoice_id' => $invoice->id]);
+        }
+
+        $this->auditAction('think_tank.transfer.receipt_confirmed', 'Think tank funding transfer receipt confirmed', [
+            'think_tank_member_id' => $member->id,
+            'purchase_order_id' => $purchaseOrder->id,
+            'purchase_order_status' => $purchaseOrder->fresh()->status,
+            'disbursement_id' => $disbursement->id,
+            'amount' => (float) $disbursement->amount,
+            'currency' => $disbursement->currency,
+        ]);
+
+        return back()->with('success', 'Receipt of payment confirmed. ATTP Secretariat can now see this transfer as received.');
     }
 
     public function purchaseOrderPdf(Request $request, ProcurementPurchaseOrder $purchaseOrder)
@@ -478,31 +898,279 @@ class ThinkTankPortalController extends Controller
 
     public function procurement(Request $request)
     {
-        $member = $this->member($request);
+        return view('think-tank.procurement', $this->procurementPayload($request));
+    }
 
-        $plans = ThinkTankProcurementPlan::where('think_tank_member_id', $member->id)
+    public function downloadProcurement(Request $request)
+    {
+        $payload = $this->procurementPayload($request);
+        $filename = 'think-tank-procurement-' . Str::slug($payload['member']->name) . '-' . now()->format('Ymd-His') . '.pdf';
+
+        $this->auditAction('think_tank.procurement.downloaded', 'Think tank procurement dashboard downloaded', [
+            'think_tank_member_id' => $payload['member']->id,
+            'think_tank' => $payload['member']->name,
+            'filters' => $payload['procurementQueryParams'],
+        ]);
+
+        return Pdf::loadView('think-tank.procurement-report-pdf', $payload)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    private function procurementPayload(Request $request): array
+    {
+        $member = $this->member($request);
+        $dashboardFilter = $this->dashboardFilter($request);
+        $periodStart = $dashboardFilter['start'];
+        $periodEnd = $dashboardFilter['end'];
+        $statusFilter = trim((string) $request->input('status', ''));
+        $planStatusFilter = trim((string) $request->input('plan_status', ''));
+        $fiscalYearFilter = trim((string) $request->input('fiscal_year', ''));
+        $keyword = trim((string) $request->input('q', ''));
+
+        $applyPlanPeriod = function ($query) use ($periodStart, $periodEnd) {
+            if (! $periodStart && ! $periodEnd) {
+                return $query;
+            }
+
+            return $query->where(function ($periodQuery) use ($periodStart, $periodEnd) {
+                if ($periodStart && $periodEnd) {
+                    $periodQuery->whereBetween('planned_publish_date', [$periodStart, $periodEnd])
+                        ->orWhereBetween('created_at', [$periodStart, $periodEnd]);
+                } elseif ($periodStart) {
+                    $periodQuery->whereDate('planned_publish_date', '>=', $periodStart)
+                        ->orWhereDate('created_at', '>=', $periodStart);
+                } elseif ($periodEnd) {
+                    $periodQuery->whereDate('planned_publish_date', '<=', $periodEnd)
+                        ->orWhereDate('created_at', '<=', $periodEnd);
+                }
+            });
+        };
+
+        $applyOpportunityPeriod = function ($query) use ($periodStart, $periodEnd) {
+            if (! $periodStart && ! $periodEnd) {
+                return $query;
+            }
+
+            return $query->where(function ($periodQuery) use ($periodStart, $periodEnd) {
+                if ($periodStart && $periodEnd) {
+                    $periodQuery->whereBetween('application_start_date', [$periodStart, $periodEnd])
+                        ->orWhereBetween('application_end_date', [$periodStart, $periodEnd])
+                        ->orWhereBetween('created_at', [$periodStart, $periodEnd]);
+                } elseif ($periodStart) {
+                    $periodQuery->whereDate('application_start_date', '>=', $periodStart)
+                        ->orWhereDate('application_end_date', '>=', $periodStart)
+                        ->orWhereDate('created_at', '>=', $periodStart);
+                } elseif ($periodEnd) {
+                    $periodQuery->whereDate('application_start_date', '<=', $periodEnd)
+                        ->orWhereDate('application_end_date', '<=', $periodEnd)
+                        ->orWhereDate('created_at', '<=', $periodEnd);
+                }
+            });
+        };
+
+        $plansBase = $applyPlanPeriod(ThinkTankProcurementPlan::where('think_tank_member_id', $member->id))
+            ->when($planStatusFilter !== '', fn ($query) => $query->where('status', $planStatusFilter))
+            ->when($fiscalYearFilter !== '', fn ($query) => $query->where('fiscal_year', $fiscalYearFilter))
+            ->when($keyword !== '', function ($query) use ($keyword) {
+                $search = '%' . $keyword . '%';
+
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('title', 'like', $search)
+                        ->orWhere('plan_code', 'like', $search)
+                        ->orWhere('description', 'like', $search);
+                });
+            });
+
+        $opportunitiesBase = $applyOpportunityPeriod(Procurement::where('think_tank_member_id', $member->id))
+            ->when($statusFilter !== '', fn ($query) => $query->where('status', $statusFilter))
+            ->when($fiscalYearFilter !== '', fn ($query) => $query->where('fiscal_year', $fiscalYearFilter))
+            ->when($keyword !== '', function ($query) use ($keyword) {
+                $search = '%' . $keyword . '%';
+
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('title', 'like', $search)
+                        ->orWhere('reference_no', 'like', $search)
+                        ->orWhere('description', 'like', $search);
+                });
+            });
+
+        $plans = (clone $plansBase)
             ->withCount('procurements')
             ->latest()
             ->get();
 
-        $procurements = Procurement::withCount('submissions')
-            ->with('thinkTankProcurementPlan')
-            ->where('think_tank_member_id', $member->id)
+        $planOptions = ThinkTankProcurementPlan::where('think_tank_member_id', $member->id)
             ->latest()
-            ->paginate(15);
+            ->get();
 
-        $allProcurements = Procurement::where('think_tank_member_id', $member->id)->get();
+        $opportunityRecords = (clone $opportunitiesBase)
+            ->with(['thinkTankProcurementPlan', 'awardedSubmission'])
+            ->withCount('submissions')
+            ->latest()
+            ->get();
+
+        $procurements = (clone $opportunitiesBase)
+            ->with(['thinkTankProcurementPlan', 'awardedSubmission'])
+            ->withCount('submissions')
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+
+        $procurementIds = $opportunityRecords->pluck('id');
+        $submissionRecords = $procurementIds->isNotEmpty()
+            ? FormSubmission::with('thinkTankReview')
+                ->whereIn('procurement_id', $procurementIds)
+                ->get()
+            : collect();
+
+        $reviewRecords = $procurementIds->isNotEmpty()
+            ? ThinkTankProcurementReview::whereIn('procurement_id', $procurementIds)->get()
+            : collect();
+
+        $statusCounts = $opportunityRecords->groupBy(fn ($procurement) => $procurement->status ?: 'draft')->map->count();
+        $planStatusCounts = $plans->groupBy(fn ($plan) => $plan->status ?: 'submitted')->map->count();
+        $submissionStatusCounts = $submissionRecords->groupBy(fn ($submission) => $submission->status ?: 'submitted')->map->count();
+        $today = CarbonImmutable::now()->startOfDay();
+
         $procurementStats = [
             'plans' => $plans->count(),
-            'plan_budget' => $plans->sum(fn ($plan) => (float) $plan->estimated_budget),
-            'opportunities' => $allProcurements->count(),
-            'published' => $allProcurements->where('status', 'published')->count(),
-            'draft' => $allProcurements->where('status', 'draft')->count(),
-            'awarded' => $allProcurements->where('status', 'awarded')->count(),
-            'applications' => FormSubmission::whereIn('procurement_id', $allProcurements->pluck('id'))->count(),
+            'plan_budget' => (float) $plans->sum(fn ($plan) => (float) $plan->estimated_budget),
+            'opportunities' => $opportunityRecords->count(),
+            'opportunity_budget' => (float) $opportunityRecords->sum(fn ($procurement) => (float) $procurement->estimated_budget),
+            'published' => (int) ($statusCounts->get('published') ?? 0),
+            'draft' => (int) ($statusCounts->get('draft') ?? 0),
+            'closed' => (int) ($statusCounts->get('closed') ?? 0),
+            'awarded' => (int) ($statusCounts->get('awarded') ?? 0),
+            'applications' => $submissionRecords->count(),
+            'reviewed' => $reviewRecords->count(),
+            'selected' => $opportunityRecords->whereNotNull('awarded_submission_id')->count(),
+            'open' => $opportunityRecords->filter(function ($procurement) use ($today) {
+                if ($procurement->status !== 'published') {
+                    return false;
+                }
+
+                if ($procurement->application_start_date && $today->lt($procurement->application_start_date)) {
+                    return false;
+                }
+
+                return ! $procurement->application_end_date || $today->lte($procurement->application_end_date);
+            })->count(),
+            'closing_soon' => $opportunityRecords->filter(function ($procurement) use ($today) {
+                return $procurement->status === 'published'
+                    && $procurement->application_end_date
+                    && $today->lte($procurement->application_end_date)
+                    && $today->diffInDays($procurement->application_end_date, false) <= 14;
+            })->count(),
         ];
 
-        return view('think-tank.procurement', compact('member', 'plans', 'procurements', 'procurementStats'));
+        $procurementStats['average_applications'] = $procurementStats['opportunities'] > 0
+            ? round($procurementStats['applications'] / $procurementStats['opportunities'], 1)
+            : 0;
+
+        $fiscalYears = $plans->pluck('fiscal_year')
+            ->merge($opportunityRecords->pluck('fiscal_year'))
+            ->filter()
+            ->unique()
+            ->sortDesc()
+            ->values();
+
+        $lastSixMonths = collect(range(5, 0))->map(fn ($monthsAgo) => $today->subMonths($monthsAgo));
+        $monthlyPlans = $lastSixMonths->map(function ($date) use ($plans) {
+            return $plans->filter(fn ($plan) => $plan->created_at && $plan->created_at->format('Y-m') === $date->format('Y-m'))->count();
+        })->values();
+
+        $monthlyOpportunities = $lastSixMonths->map(function ($date) use ($opportunityRecords) {
+            return $opportunityRecords->filter(fn ($procurement) => $procurement->created_at && $procurement->created_at->format('Y-m') === $date->format('Y-m'))->count();
+        })->values();
+
+        $monthlyApplications = $lastSixMonths->map(function ($date) use ($submissionRecords) {
+            return $submissionRecords->filter(fn ($submission) => $submission->submitted_at && $submission->submitted_at->format('Y-m') === $date->format('Y-m'))->count();
+        })->values();
+
+        $monthlyBudget = $lastSixMonths->map(function ($date) use ($opportunityRecords) {
+            return round((float) $opportunityRecords->filter(fn ($procurement) => $procurement->created_at && $procurement->created_at->format('Y-m') === $date->format('Y-m'))
+                ->sum(fn ($procurement) => (float) $procurement->estimated_budget), 2);
+        })->values();
+
+        $chartData = [
+            'opportunityStatus' => [
+                'labels' => $statusCounts->keys()->map(fn ($status) => ucfirst(str_replace('_', ' ', $status)))->values(),
+                'values' => $statusCounts->values(),
+            ],
+            'planStatus' => [
+                'labels' => $planStatusCounts->keys()->map(fn ($status) => ucfirst(str_replace('_', ' ', $status)))->values(),
+                'values' => $planStatusCounts->values(),
+            ],
+            'pipeline' => [
+                'labels' => $lastSixMonths->map(fn ($date) => $date->format('M'))->values(),
+                'plans' => $monthlyPlans,
+                'opportunities' => $monthlyOpportunities,
+                'applications' => $monthlyApplications,
+            ],
+            'budget' => [
+                'labels' => $lastSixMonths->map(fn ($date) => $date->format('M'))->values(),
+                'values' => $monthlyBudget,
+            ],
+            'applications' => [
+                'labels' => $submissionStatusCounts->keys()->map(fn ($status) => ucfirst(str_replace('_', ' ', $status)))->values(),
+                'values' => $submissionStatusCounts->values(),
+            ],
+            'review' => [
+                'labels' => ['Applications received', 'Reviewed', 'Selected opportunities'],
+                'values' => [$procurementStats['applications'], $procurementStats['reviewed'], $procurementStats['selected']],
+            ],
+        ];
+
+        foreach (['opportunityStatus', 'planStatus', 'applications'] as $chartKey) {
+            if ($chartData[$chartKey]['labels']->isEmpty()) {
+                $chartData[$chartKey]['labels'] = collect(['No data']);
+                $chartData[$chartKey]['values'] = collect([0]);
+            }
+        }
+
+        $membersForSearch = $request->user() && ($request->user()->isSuperAdmin() || $request->user()->isAdmin())
+            ? ConsortiumThinkTank::with('consortium:id,name')
+                ->orderBy('name')
+                ->get(['id', 'consortium_id', 'name', 'country', 'role', 'status'])
+            : collect([$member]);
+
+        $portalRouteParams = $this->portalRouteParams($request, $member);
+        $procurementQueryParams = collect([
+            'think_tank_member_id' => $portalRouteParams['think_tank_member_id'] ?? null,
+            'filter_month' => $dashboardFilter['month'] ?? null,
+            'filter_year' => $dashboardFilter['year'] ?? null,
+            'date_from' => $dashboardFilter['date_from'] ?? null,
+            'date_to' => $dashboardFilter['date_to'] ?? null,
+            'status' => $statusFilter ?: null,
+            'plan_status' => $planStatusFilter ?: null,
+            'fiscal_year' => $fiscalYearFilter ?: null,
+            'q' => $keyword ?: null,
+        ])->filter(fn ($value) => filled($value))->all();
+
+        return compact(
+            'member',
+            'plans',
+            'planOptions',
+            'procurements',
+            'opportunityRecords',
+            'submissionRecords',
+            'reviewRecords',
+            'procurementStats',
+            'statusCounts',
+            'planStatusCounts',
+            'submissionStatusCounts',
+            'fiscalYears',
+            'dashboardFilter',
+            'statusFilter',
+            'planStatusFilter',
+            'fiscalYearFilter',
+            'keyword',
+            'chartData',
+            'membersForSearch',
+            'portalRouteParams',
+            'procurementQueryParams'
+        );
     }
 
     public function storeProcurementPlan(Request $request)
@@ -518,7 +1186,7 @@ class ThinkTankPortalController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        ThinkTankProcurementPlan::create([
+        $plan = ThinkTankProcurementPlan::create([
             ...$data,
             'consortium_id' => $member->consortium_id,
             'think_tank_member_id' => $member->id,
@@ -526,6 +1194,14 @@ class ThinkTankPortalController extends Controller
             'currency' => $data['currency'] ?? $member->consortium->currency,
             'status' => 'submitted',
             'created_by' => $request->user()?->id,
+        ]);
+
+        $this->auditAction('think_tank.procurement.plan_created', 'Think tank procurement plan created', [
+            'think_tank_member_id' => $member->id,
+            'plan_id' => $plan->id,
+            'plan_code' => $plan->plan_code,
+            'amount' => $plan->estimated_budget,
+            'currency' => $plan->currency,
         ]);
 
         return back()->with('success', 'Procurement plan submitted.');
@@ -547,7 +1223,7 @@ class ThinkTankPortalController extends Controller
             'status' => 'required|in:draft,published',
         ]);
 
-        DB::transaction(function () use ($data, $request, $member) {
+        $procurement = DB::transaction(function () use ($data, $request, $member) {
             $procurement = Procurement::create([
                 ...$data,
                 'consortium_id' => $member->consortium_id,
@@ -577,7 +1253,17 @@ class ThinkTankPortalController extends Controller
                     [...$field, 'created_by' => $request->user()?->id]
                 );
             }
+
+            return $procurement;
         });
+
+        $this->auditAction('think_tank.procurement.opportunity_created', 'Think tank procurement opportunity created', [
+            'think_tank_member_id' => $member->id,
+            'procurement_id' => $procurement->id,
+            'reference_no' => $procurement->reference_no,
+            'status' => $procurement->status,
+            'amount' => $procurement->estimated_budget,
+        ]);
 
         return back()->with('success', 'Procurement opportunity created. Published items appear on the public procurement page.');
     }
@@ -729,6 +1415,31 @@ class ThinkTankPortalController extends Controller
         return $user && ($user->isSuperAdmin() || $user->isAdmin())
             ? ['think_tank_member_id' => $member->id]
             : [];
+    }
+
+    private function auditAction(string $action, string $message, array $payload = []): void
+    {
+        try {
+            $request = request();
+
+            SystemAuditLog::create([
+                'user_id' => optional($request->user())->id,
+                'module' => 'think_tank_portal',
+                'action' => $action,
+                'action_message' => $message,
+                'description' => $message,
+                'method' => $request->method(),
+                'url' => $request->fullUrl(),
+                'route_name' => $request->route()?->getName(),
+                'ip_address' => $request->ip(),
+                'country' => IpGeo::countryForIp($request->ip()),
+                'user_agent' => $request->userAgent() ? substr((string) $request->userAgent(), 0, 1000) : null,
+                'status_code' => 200,
+                'payload' => $payload,
+            ]);
+        } catch (Throwable) {
+            // Audit logging should not block portal reporting workflows.
+        }
     }
 
     private function assertMemberPurchaseOrder(ConsortiumThinkTank $member, ProcurementPurchaseOrder $purchaseOrder): void

@@ -86,6 +86,11 @@ class Consortium extends BaseModel
         return $this->hasMany(ConsortiumDisbursementRequest::class, 'consortium_id');
     }
 
+    public function transferDisbursements(): HasMany
+    {
+        return $this->hasMany(ProcurementDisbursement::class, 'consortium_id');
+    }
+
     public function expenseReports(): HasMany
     {
         return $this->hasMany(ConsortiumExpenseReport::class, 'consortium_id');

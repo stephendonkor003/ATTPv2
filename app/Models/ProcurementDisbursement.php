@@ -18,11 +18,18 @@ class ProcurementDisbursement extends BaseModel
         'governance_node_id',
         'consortium_id',
         'think_tank_member_id',
+        'fund_allocation_id',
+        'consortium_disbursement_request_id',
         'reference_no',
         'amount',
         'currency',
         'payment_method',
+        'transfer_reference',
         'status',
+        'recipient_confirmation_status',
+        'recipient_confirmed_by',
+        'recipient_confirmed_at',
+        'recipient_confirmation_notes',
         'paid_at',
         'created_by',
         'notes',
@@ -31,6 +38,7 @@ class ProcurementDisbursement extends BaseModel
     protected $casts = [
         'amount' => 'decimal:2',
         'paid_at' => 'datetime',
+        'recipient_confirmed_at' => 'datetime',
     ];
 
     public function purchaseOrder(): BelongsTo
@@ -56,6 +64,21 @@ class ProcurementDisbursement extends BaseModel
     public function thinkTankMember(): BelongsTo
     {
         return $this->belongsTo(ConsortiumThinkTank::class, 'think_tank_member_id');
+    }
+
+    public function fundAllocation(): BelongsTo
+    {
+        return $this->belongsTo(ConsortiumFundAllocation::class, 'fund_allocation_id');
+    }
+
+    public function consortiumDisbursementRequest(): BelongsTo
+    {
+        return $this->belongsTo(ConsortiumDisbursementRequest::class, 'consortium_disbursement_request_id');
+    }
+
+    public function recipientConfirmer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'recipient_confirmed_by');
     }
 
     public function subActivity(): BelongsTo

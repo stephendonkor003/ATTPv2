@@ -65,17 +65,38 @@
                     </thead>
                     <tbody>
                         @foreach ($invoices as $invoice)
+                            @php
+                                $isThinkTankTransfer = $invoice->purchaseOrder?->po_type === 'think_tank_transfer';
+                                $procurementTitle = $isThinkTankTransfer
+                                    ? 'Funding to Think Tanks'
+                                    : ($invoice->procurement?->title ?? 'N/A');
+                                $procurementReference = $isThinkTankTransfer
+                                    ? ($invoice->purchaseOrder?->reference_no ?? 'Think tank transfer')
+                                    : ($invoice->procurement?->reference_no ?? 'N/A');
+                                $vendorName = $isThinkTankTransfer
+                                    ? ($invoice->purchaseOrder?->thinkTankMember?->name ?? $invoice->vendor?->name ?? 'Think Tank')
+                                    : ($invoice->vendor?->name ?? 'Vendor');
+                                $vendorEmail = $isThinkTankTransfer
+                                    ? ($invoice->purchaseOrder?->thinkTankMember?->email ?? $invoice->vendor?->email ?? 'N/A')
+                                    : ($invoice->vendor?->email ?? 'N/A');
+                                $badgeClass = match ($invoice->status) {
+                                    'paid' => 'bg-success',
+                                    'approved' => 'bg-primary',
+                                    'rejected' => 'bg-danger',
+                                    default => 'bg-secondary',
+                                };
+                            @endphp
                             <tr>
                                 <td class="ps-4 fw-semibold">
                                     {{ $invoice->reference_no ?? 'N/A' }}
                                 </td>
                                 <td>
-                                    <div class="fw-semibold">{{ $invoice->procurement?->title ?? 'N/A' }}</div>
-                                    <small class="text-muted">{{ $invoice->procurement?->reference_no ?? 'N/A' }}</small>
+                                    <div class="fw-semibold">{{ $procurementTitle }}</div>
+                                    <small class="text-muted">{{ $procurementReference }}</small>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold">{{ $invoice->vendor?->name ?? 'Vendor' }}</div>
-                                    <small class="text-muted">{{ $invoice->vendor?->email ?? 'N/A' }}</small>
+                                    <div class="fw-semibold">{{ $vendorName }}</div>
+                                    <small class="text-muted">{{ $vendorEmail }}</small>
                                 </td>
                                 <td class="text-center">
                                     {{ $invoice->invoice_month?->format('M Y') ?? 'N/A' }}
@@ -85,8 +106,8 @@
                                     {{ $invoice->currency ?? '' }}
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge bg-secondary text-capitalize">
-                                        {{ $invoice->status ?? 'submitted' }}
+                                    <span class="badge {{ $badgeClass }} text-capitalize">
+                                        {{ str_replace('_', ' ', $invoice->status ?? 'submitted') }}
                                     </span>
                                 </td>
                                 <td class="text-center">

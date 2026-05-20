@@ -12,52 +12,102 @@ use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
 use App\Models\Resource;
 use App\Models\ResourceCategory;
+use App\Models\SystemAuditLog;
 use App\Models\SubActivity;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class ApprovedWorkPlanController extends Controller
 {
     public function index(Request $request)
     {
         $programs = Program::orderBy('name')->get();
-        $program = null;
-        $funders = collect();
-        $report = null;
-        $summary = null;
-        $filters = $this->resolveFilters($request);
         $selectedProgramId = $request->input('program_id');
+        $selectedYear = $request->input('year');
 
-        if ($selectedProgramId) {
-            $program = Program::with([
-                'projects.activities.subActivities.allocations',
-                'approvedFundings.funder',
-                'fundings.funder',
-            ])->findOrFail($selectedProgramId);
+        $requests = PurchaseRequest::with([
+            'programFunding.program',
+            'items.resource',
+            'commitments.approvedWorkPlans',
+        ])
+            ->whereNotNull('work_plan_source')
+            ->when($selectedProgramId, function ($query) use ($selectedProgramId) {
+                $query->whereHas('programFunding', fn ($fundingQuery) => $fundingQuery->where('program_id', $selectedProgramId));
+            })
+            ->when($selectedYear, fn ($query) => $query->where('start_year', (int) $selectedYear))
+            ->orderByDesc('updated_at')
+            ->get();
 
-            $fundings = $program->approvedFundings->isNotEmpty()
-                ? $program->approvedFundings
-                : $program->fundings;
+        $folders = $requests
+            ->groupBy(function (PurchaseRequest $request) {
+                return implode('|', [
+                    $request->programFunding?->program_id ?: 'no-program',
+                    $request->start_year ?: 'no-year',
+                    $request->work_plan_source ?: 'Untitled Work Plan',
+                ]);
+            })
+            ->map(function ($folderRequests) {
+                $first = $folderRequests->first();
+                $program = $first->programFunding?->program;
+                $items = $folderRequests->flatMap(fn (PurchaseRequest $request) => $request->items);
+                $commitments = $folderRequests->flatMap(fn (PurchaseRequest $request) => $request->commitments);
+                $approvedPlans = $commitments->flatMap(fn (BudgetCommitment $commitment) => $commitment->approvedWorkPlans);
+                $statusCounts = $approvedPlans
+                    ->groupBy(fn (ApprovedWorkPlan $plan) => $plan->status ?: 'draft')
+                    ->map(fn ($rows) => $rows->count());
 
-            $funders = $fundings->pluck('funder')->filter()->unique('id')->values();
-            $report = $this->buildWorkPlanHierarchy($program, $fundings->pluck('id')->all(), $filters);
-            $summary = $this->summarizeWorkPlan($report);
-        }
+                return [
+                    'folder_name' => $first->work_plan_source ?: 'Untitled Work Plan',
+                    'program' => $program,
+                    'program_id' => $program?->id,
+                    'year' => (int) $first->start_year,
+                    'currency' => $first->currency ?: $program?->currency ?: 'USD',
+                    'items_count' => $items->count(),
+                    'planned_amount' => round((float) $folderRequests->sum('total_amount'), 2),
+                    'committed_amount' => round((float) $commitments->sum('commitment_amount'), 2),
+                    'approved_count' => (int) ($statusCounts['approved'] ?? 0),
+                    'submitted_count' => (int) ($statusCounts['submitted'] ?? 0),
+                    'draft_count' => (int) ($statusCounts['draft'] ?? 0),
+                    'closed_count' => (int) ($statusCounts['closed'] ?? 0),
+                    'latest_update' => $folderRequests->max('updated_at'),
+                    'items_preview' => $items
+                        ->take(5)
+                        ->map(fn (PurchaseRequestItem $item) => $item->resource?->name ?: $item->milestone ?: 'Work plan item')
+                        ->values(),
+                ];
+            })
+            ->sortByDesc('latest_update')
+            ->values();
 
-        return view('finance.awp.index', [
+        $years = $requests
+            ->pluck('start_year')
+            ->filter()
+            ->map(fn ($year) => (int) $year)
+            ->unique()
+            ->sortDesc()
+            ->values();
+
+        $summary = [
+            'folders' => $folders->count(),
+            'items' => $folders->sum('items_count'),
+            'amount' => $folders->sum('planned_amount'),
+            'programs' => $folders->pluck('program_id')->filter()->unique()->count(),
+        ];
+
+        return view('finance.awp.registry', [
             'programs' => $programs,
-            'program' => $program,
-            'funders' => $funders,
-            'report' => $report,
+            'folders' => $folders,
+            'years' => $years,
             'summary' => $summary,
-            'filters' => $filters,
-            'query' => $request->query(),
             'selectedProgramId' => $selectedProgramId,
+            'selectedYear' => $selectedYear,
         ]);
     }
 
@@ -122,6 +172,479 @@ class ApprovedWorkPlanController extends Controller
             'awpAllowDocumentUpload' => false,
             'awpReadOnly' => false,
         ]);
+    }
+
+    public function create(Request $request)
+    {
+        $programs = Program::orderBy('name')->get();
+        $selectedProgramId = $request->input('program_id') ?: $programs->first()?->id;
+        $program = null;
+        $funding = null;
+        $fundings = collect();
+        $years = collect();
+        $selectedYear = (int) $request->input('year', now()->year);
+        $folderName = trim((string) $request->input('folder_name'));
+        $folderOptions = collect();
+        $sheet = null;
+
+        if ($selectedProgramId) {
+            $program = Program::with([
+                'projects.allocations',
+                'projects.activities.allocations',
+                'projects.activities.subActivities.allocations',
+                'approvedFundings.funder',
+                'fundings.funder',
+            ])->findOrFail($selectedProgramId);
+
+            $fundings = $this->programWorkPlanFundings($program);
+            $funding = $fundings->first();
+            $years = $this->programWorkPlanYears($program);
+            $selectedYear = $years->contains($selectedYear) ? $selectedYear : (int) ($years->first() ?: now()->year);
+
+            $folderOptions = $this->folderOptionsForProgramYear($fundings->pluck('id')->all(), $selectedYear);
+            $folderName = $folderName
+                ?: ($folderOptions->first() ?: $this->defaultWorkPlanFolderName($program));
+
+            $sheet = $this->buildAllocationWorkPlanSheet($program, $fundings->pluck('id')->all(), $selectedYear);
+        }
+
+        return view('finance.awp.create', [
+            'programs' => $programs,
+            'program' => $program,
+            'funding' => $funding,
+            'fundings' => $fundings,
+            'years' => $years,
+            'selectedProgramId' => $selectedProgramId,
+            'selectedYear' => $selectedYear,
+            'folderName' => $folderName,
+            'folderOptions' => $folderOptions,
+            'sheet' => $sheet,
+            'currency' => $program?->currency ?? $funding?->currency ?? 'USD',
+        ]);
+    }
+
+    public function storeAllocationSheet(Request $request)
+    {
+        $data = $request->validate([
+            'program_id' => ['required', 'uuid', Rule::exists('myb_programs', 'id')],
+            'year' => 'required|integer|min:1900|max:2200',
+            'folder_name' => 'required|string|max:180',
+            'use_allocations' => 'accepted',
+            'include' => 'nullable|array',
+            'include.*' => 'nullable|boolean',
+            'amounts' => 'nullable|array',
+            'amounts.*' => 'nullable|numeric|min:0|max:999999999999.99',
+            'documents' => 'nullable|array',
+            'documents.*.tor_file' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx,jpg,jpeg,png|max:20480',
+            'documents.*.concept_note_file' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx,jpg,jpeg,png|max:20480',
+        ]);
+
+        $program = Program::with([
+            'projects.activities.subActivities.allocations',
+            'approvedFundings',
+            'fundings',
+        ])->findOrFail($data['program_id']);
+        $funding = $this->programWorkPlanFundings($program)->first();
+
+        if (! $funding) {
+            throw ValidationException::withMessages([
+                'program_id' => 'An approved program funding source is required before a work plan can be created.',
+            ]);
+        }
+
+        $subActivities = $program->projects
+            ->flatMap(fn ($project) => $project->activities)
+            ->flatMap(fn ($activity) => $activity->subActivities)
+            ->keyBy(fn ($subActivity) => (string) $subActivity->id);
+
+        $includedIds = collect($data['include'] ?? [])
+            ->filter(fn ($value) => (bool) $value)
+            ->keys()
+            ->filter(fn ($id) => $subActivities->has((string) $id))
+            ->values();
+
+        if ($includedIds->isEmpty()) {
+            throw ValidationException::withMessages([
+                'include' => 'Select at least one sub-activity line to create the work plan sheet.',
+            ]);
+        }
+
+        $folderName = trim($data['folder_name']);
+        $year = (int) $data['year'];
+        $currency = $program->currency ?: $funding->currency ?: 'USD';
+        $created = 0;
+        $createdAmount = 0.0;
+
+        DB::transaction(function () use (
+            $includedIds,
+            $subActivities,
+            $data,
+            $year,
+            $folderName,
+            $funding,
+            $program,
+            $currency,
+            &$created,
+            &$createdAmount
+        ) {
+            foreach ($includedIds as $subActivityId) {
+                $subActivity = $subActivities[(string) $subActivityId];
+                $amount = round((float) data_get($data, "amounts.{$subActivityId}", 0), 2);
+
+                if ($amount <= 0) {
+                    continue;
+                }
+
+                $this->assertWorkPlanAmountWithinBudget(
+                    $subActivity,
+                    $year,
+                    $amount
+                );
+
+                $activity = $subActivity->activity;
+                $project = $activity?->project;
+                $category = $this->resourceCategoryForObjectType('Work Plan Allocation', request()->user()?->id);
+                $resource = Resource::firstOrCreate(
+                    [
+                        'resource_category_id' => $category->id,
+                        'name' => $subActivity->name,
+                    ],
+                    [
+                        'governance_node_id' => $subActivity->governance_node_id ?: $funding->governance_node_id,
+                        'reference_code' => 'AWP-' . $year . '-' . Str::upper(Str::random(5)),
+                        'description' => $subActivity->description ?: $activity?->name,
+                        'status' => 'active',
+                        'is_human_resource' => false,
+                        'created_by' => request()->user()?->id,
+                    ]
+                );
+
+                $purchaseRequest = PurchaseRequest::create([
+                    'reference_no' => $this->nextPurchaseRequestReference('AWP'),
+                    'program_funding_id' => $funding->id,
+                    'governance_node_id' => $subActivity->governance_node_id ?: $funding->governance_node_id,
+                    'allocation_level' => 'sub_activity',
+                    'allocation_id' => $subActivity->id,
+                    'start_year' => $year,
+                    'commitment_date' => Carbon::create($year, 1, 1)->toDateString(),
+                    'delivery_date' => Carbon::create($year, 12, 31)->toDateString(),
+                    'currency' => $currency,
+                    'total_amount' => $amount,
+                    'description' => "FY{$year} {$folderName}: {$subActivity->name}",
+                    'status' => 'draft',
+                    'work_plan_source' => $folderName,
+                    'work_plan_component' => $project?->name,
+                    'work_plan_sub_component' => $activity?->name,
+                    'created_by' => request()->user()?->id,
+                ]);
+
+                $item = PurchaseRequestItem::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'resource_category_id' => $category->id,
+                    'resource_id' => $resource->id,
+                    'milestone' => $subActivity->name,
+                    'amount' => $amount,
+                    'work_plan_source' => $folderName,
+                    'work_plan_sort_order' => ($created + 1) * 10,
+                    'work_plan_serial' => (string) ($created + 1),
+                    'implemented_by' => 'ATTP Secretariat',
+                    'budget_code' => $this->workPlanBudgetCode($project, $activity, $subActivity, $year),
+                    'object_type' => 'Work Plan Allocation',
+                    'estimated_amount' => $amount,
+                    'work_plan_payment_basis' => 'scheduled',
+                    'intermediate_indicator' => $subActivity->name,
+                    'result_indicator' => $subActivity->expected_outcome_value ?: $activity?->expected_outcome_value,
+                    'observations' => 'Pulled from the approved allocation structure.',
+                ]);
+                $this->syncWorkPlanItemDocuments($item, $funding, request(), "documents.{$subActivityId}");
+
+                $commitment = BudgetCommitment::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'program_funding_id' => $funding->id,
+                    'governance_node_id' => $purchaseRequest->governance_node_id,
+                    'resource_category_id' => $category->id,
+                    'resource_id' => $resource->id,
+                    'allocation_level' => 'sub_activity',
+                    'allocation_id' => $subActivity->id,
+                    'commitment_amount' => $amount,
+                    'commitment_year' => $year,
+                    'status' => BudgetCommitment::STATUS_SUBMITTED,
+                    'description' => "FY{$year} {$folderName}: {$subActivity->name}",
+                    'created_by' => request()->user()?->id,
+                ]);
+
+                ApprovedWorkPlan::create([
+                    'awp_code' => $this->nextWorkPlanCode($year),
+                    'title' => $subActivity->name,
+                    'budget_commitment_id' => $commitment->id,
+                    'program_funding_id' => $funding->id,
+                    'governance_node_id' => $purchaseRequest->governance_node_id,
+                    'fiscal_year' => (string) $year,
+                    'planned_amount' => $amount,
+                    'currency' => $currency,
+                    'start_date' => Carbon::create($year, 1, 1)->toDateString(),
+                    'end_date' => Carbon::create($year, 12, 31)->toDateString(),
+                    'status' => 'submitted',
+                    'description' => $folderName,
+                    'expected_outputs' => $item->result_indicator ?: $subActivity->name,
+                    'implementation_notes' => "Created from allocation pull for {$program->name}.",
+                    'created_by' => request()->user()?->id,
+                ]);
+
+                $created++;
+                $createdAmount += $amount;
+            }
+        });
+
+        if ($created === 0) {
+            throw ValidationException::withMessages([
+                'amounts' => 'No work plan line was created because every selected amount was zero.',
+            ]);
+        }
+
+        $this->auditAction('work_plan.created_from_allocations', 'Work plan sheet created from allocations', [
+            'program_id' => $program->id,
+            'year' => $year,
+            'folder_name' => $folderName,
+            'items_created' => $created,
+            'amount' => $createdAmount,
+        ]);
+
+        return redirect()
+            ->route('finance.awp.index', [
+                'program_id' => $program->id,
+                'year' => $year,
+            ])
+            ->with('success', "{$created} work plan line(s) created for {$folderName}.");
+    }
+
+    public function storeManualSheet(Request $request)
+    {
+        $data = $request->validate([
+            'program_id' => ['required', 'uuid', Rule::exists('myb_programs', 'id')],
+            'year' => 'required|integer|min:1900|max:2200',
+            'folder_name' => 'required|string|max:180',
+            'items' => 'required|array|min:1',
+            'items.*.sub_activity_id' => ['required', 'uuid', Rule::exists('myb_sub_activities', 'id')],
+            'items.*.title' => 'required|string|max:255',
+            'items.*.actual_amount' => 'required|numeric|min:0.01|max:999999999999.99',
+            'items.*.implemented_by' => 'nullable|string|max:255',
+            'items.*.budget_code' => 'nullable|string|max:255',
+            'items.*.object_type' => 'nullable|string|max:255',
+            'items.*.result_indicator' => 'nullable|string|max:4000',
+            'items.*.notes' => 'nullable|string|max:4000',
+            'items.*.tor_file' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx,jpg,jpeg,png|max:20480',
+            'items.*.concept_note_file' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx,jpg,jpeg,png|max:20480',
+        ]);
+
+        $program = Program::with([
+            'projects.activities.subActivities.allocations',
+            'approvedFundings',
+            'fundings',
+        ])->findOrFail($data['program_id']);
+        $funding = $this->programWorkPlanFundings($program)->first();
+
+        if (! $funding) {
+            throw ValidationException::withMessages([
+                'program_id' => 'An approved program funding source is required before a manual work plan can be created.',
+            ]);
+        }
+
+        $subActivities = $program->projects
+            ->flatMap(fn ($project) => $project->activities)
+            ->flatMap(fn ($activity) => $activity->subActivities)
+            ->keyBy(fn ($subActivity) => (string) $subActivity->id);
+
+        $year = (int) $data['year'];
+        $folderName = trim($data['folder_name']);
+        $currency = $program->currency ?: $funding->currency ?: 'USD';
+        $created = 0;
+        $createdAmount = 0.0;
+
+        DB::transaction(function () use (
+            $data,
+            $subActivities,
+            $year,
+            $folderName,
+            $funding,
+            $program,
+            $currency,
+            &$created,
+            &$createdAmount
+        ) {
+            foreach ($data['items'] as $index => $row) {
+                $subActivity = $subActivities[(string) $row['sub_activity_id']] ?? null;
+                if (! $subActivity) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.sub_activity_id" => 'Select a sub-activity that belongs to the selected program.',
+                    ]);
+                }
+
+                $amount = round((float) $row['actual_amount'], 2);
+                $this->assertWorkPlanAmountWithinBudget($subActivity, $year, $amount);
+
+                $title = trim((string) $row['title']);
+                $activity = $subActivity->activity;
+                $project = $activity?->project;
+                $objectType = trim((string) ($row['object_type'] ?? '')) ?: 'Manual Work Plan';
+                $category = $this->resourceCategoryForObjectType($objectType, request()->user()?->id);
+                $resource = Resource::create([
+                    'resource_category_id' => $category->id,
+                    'governance_node_id' => $subActivity->governance_node_id ?: $funding->governance_node_id,
+                    'name' => $title,
+                    'reference_code' => ($row['budget_code'] ?? null) ?: 'AWP-' . $year . '-' . Str::upper(Str::random(5)),
+                    'description' => ($row['result_indicator'] ?? null) ?: $subActivity->name,
+                    'status' => 'active',
+                    'is_human_resource' => false,
+                    'created_by' => request()->user()?->id,
+                ]);
+
+                $purchaseRequest = PurchaseRequest::create([
+                    'reference_no' => $this->nextPurchaseRequestReference('AWP'),
+                    'program_funding_id' => $funding->id,
+                    'governance_node_id' => $subActivity->governance_node_id ?: $funding->governance_node_id,
+                    'allocation_level' => 'sub_activity',
+                    'allocation_id' => $subActivity->id,
+                    'start_year' => $year,
+                    'commitment_date' => Carbon::create($year, 1, 1)->toDateString(),
+                    'delivery_date' => Carbon::create($year, 12, 31)->toDateString(),
+                    'currency' => $currency,
+                    'total_amount' => $amount,
+                    'description' => "FY{$year} {$folderName}: {$title}",
+                    'status' => 'draft',
+                    'work_plan_source' => $folderName,
+                    'work_plan_component' => $project?->name,
+                    'work_plan_sub_component' => $activity?->name,
+                    'created_by' => request()->user()?->id,
+                ]);
+
+                $item = PurchaseRequestItem::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'resource_category_id' => $category->id,
+                    'resource_id' => $resource->id,
+                    'milestone' => $title,
+                    'amount' => $amount,
+                    'work_plan_source' => $folderName,
+                    'work_plan_sort_order' => ($created + 1) * 10,
+                    'work_plan_serial' => (string) ($created + 1),
+                    'implemented_by' => ($row['implemented_by'] ?? null) ?: 'ATTP Secretariat',
+                    'budget_code' => ($row['budget_code'] ?? null) ?: $this->workPlanBudgetCode($project, $activity, $subActivity, $year),
+                    'object_type' => $objectType,
+                    'estimated_amount' => $amount,
+                    'work_plan_payment_basis' => 'scheduled',
+                    'intermediate_indicator' => $title,
+                    'result_indicator' => ($row['result_indicator'] ?? null) ?: null,
+                    'observations' => ($row['notes'] ?? null) ?: 'Manually created work plan line.',
+                ]);
+                $this->syncWorkPlanItemDocuments($item, $funding, request(), "items.{$index}");
+
+                $commitment = BudgetCommitment::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'program_funding_id' => $funding->id,
+                    'governance_node_id' => $purchaseRequest->governance_node_id,
+                    'resource_category_id' => $category->id,
+                    'resource_id' => $resource->id,
+                    'allocation_level' => 'sub_activity',
+                    'allocation_id' => $subActivity->id,
+                    'commitment_amount' => $amount,
+                    'commitment_year' => $year,
+                    'status' => BudgetCommitment::STATUS_SUBMITTED,
+                    'description' => "FY{$year} {$folderName}: {$title}",
+                    'created_by' => request()->user()?->id,
+                ]);
+
+                ApprovedWorkPlan::create([
+                    'awp_code' => $this->nextWorkPlanCode($year),
+                    'title' => $title,
+                    'budget_commitment_id' => $commitment->id,
+                    'program_funding_id' => $funding->id,
+                    'governance_node_id' => $purchaseRequest->governance_node_id,
+                    'fiscal_year' => (string) $year,
+                    'planned_amount' => $amount,
+                    'currency' => $currency,
+                    'start_date' => Carbon::create($year, 1, 1)->toDateString(),
+                    'end_date' => Carbon::create($year, 12, 31)->toDateString(),
+                    'status' => 'submitted',
+                    'description' => $folderName,
+                    'expected_outputs' => $item->result_indicator ?: $title,
+                    'implementation_notes' => ($row['notes'] ?? null) ?: 'Manually created from the Work Plans Registry.',
+                    'created_by' => request()->user()?->id,
+                ]);
+
+                $created++;
+                $createdAmount += $amount;
+            }
+        });
+
+        $this->auditAction('work_plan.created_manually', 'Manual work plan sheet created', [
+            'program_id' => $program->id,
+            'year' => $year,
+            'folder_name' => $folderName,
+            'items_created' => $created,
+            'amount' => $createdAmount,
+        ]);
+
+        return redirect()
+            ->route('finance.awp.index', [
+                'program_id' => $program->id,
+                'year' => $year,
+            ])
+            ->with('success', "{$created} manual work plan line(s) saved for {$folderName}.");
+    }
+
+    public function renameFolder(Request $request)
+    {
+        $data = $request->validate([
+            'program_id' => ['required', 'uuid', Rule::exists('myb_programs', 'id')],
+            'year' => 'required|integer|min:1900|max:2200',
+            'old_folder_name' => 'required|string|max:180',
+            'folder_name' => 'required|string|max:180',
+        ]);
+
+        $program = Program::with(['approvedFundings', 'fundings'])->findOrFail($data['program_id']);
+        $fundingIds = $this->programWorkPlanFundings($program)->pluck('id')->all();
+
+        if (empty($fundingIds)) {
+            throw ValidationException::withMessages([
+                'program_id' => 'No funding source was found for this work plan folder.',
+            ]);
+        }
+
+        $oldName = trim($data['old_folder_name']);
+        $newName = trim($data['folder_name']);
+        $year = (int) $data['year'];
+
+        DB::transaction(function () use ($fundingIds, $oldName, $newName, $year) {
+            $requestIds = PurchaseRequest::query()
+                ->whereIn('program_funding_id', $fundingIds)
+                ->where('start_year', $year)
+                ->where('work_plan_source', $oldName)
+                ->pluck('id');
+
+            PurchaseRequest::whereIn('id', $requestIds)->update(['work_plan_source' => $newName]);
+            PurchaseRequestItem::whereIn('purchase_request_id', $requestIds)->update(['work_plan_source' => $newName]);
+
+            ApprovedWorkPlan::query()
+                ->whereIn('program_funding_id', $fundingIds)
+                ->where('fiscal_year', (string) $year)
+                ->where('description', $oldName)
+                ->update(['description' => $newName]);
+        });
+
+        $this->auditAction('work_plan.folder_renamed', 'Work plan folder renamed', [
+            'program_id' => $program->id,
+            'year' => $year,
+            'old_folder_name' => $oldName,
+            'folder_name' => $newName,
+        ]);
+
+        return redirect()
+            ->route('finance.awp.create', [
+                'program_id' => $program->id,
+                'year' => $year,
+                'folder_name' => $newName,
+            ])
+            ->with('success', 'Work plan folder renamed.');
     }
 
     public function reviewItem(Request $request, PurchaseRequestItem $item)
@@ -201,6 +724,7 @@ class ApprovedWorkPlanController extends Controller
                 ...$documentPayload,
             ]
         );
+        $this->syncApprovedWorkPlanStatusForItem($item, $data['status'], $data['review_notes'] ?? null);
 
         return back()->with('success', 'Work plan item review updated.');
     }
@@ -228,6 +752,7 @@ class ApprovedWorkPlanController extends Controller
                 'review_notes' => $data['review_notes'] ?? null,
             ]
         );
+        $this->syncApprovedWorkPlanStatusForItem($item, $data['status'], $data['review_notes'] ?? null);
 
         return back()->with('success', 'World Bank review updated.');
     }
@@ -305,6 +830,15 @@ class ApprovedWorkPlanController extends Controller
         $data['activity'] = trim((string) ($data['activity'] ?? '')) ?: $selectedSubActivity->name;
 
         $amount = round((float) $data['estimated_amount'], 2);
+        $year = (int) ($purchaseRequest?->start_year ?: $purchaseRequest?->commitments?->first()?->commitment_year ?: now()->year);
+        $this->assertWorkPlanAmountWithinBudget(
+            $selectedSubActivity,
+            $year,
+            $amount,
+            [],
+            $purchaseRequest?->commitments?->pluck('id')->all() ?? []
+        );
+
         $months = $this->normalizeWorkPlanMonths($data['work_plan_months'] ?? []);
         $paymentBasis = $this->normalizePaymentBasis(
             $data['work_plan_payment_basis'] ?? null,
@@ -372,6 +906,165 @@ class ApprovedWorkPlanController extends Controller
         return back()->with('success', 'Work plan item updated.');
     }
 
+    public function updateSheetItem(Request $request, PurchaseRequestItem $item)
+    {
+        abort_unless($request->user()?->hasPermission('finance.awp.edit'), 403);
+
+        $item->loadMissing([
+            'awpReview',
+            'purchaseRequest.commitments.approvedWorkPlans',
+            'purchaseRequest.programFunding',
+            'purchaseRequest.subActivity.activity.project',
+            'resourceCategory',
+            'resource',
+        ]);
+
+        abort_if(
+            $item->awpReview?->status === 'approved',
+            403,
+            'This work plan item is already approved by the World Bank and cannot be edited.'
+        );
+
+        $purchaseRequest = $item->purchaseRequest;
+        abort_unless($purchaseRequest?->subActivity, 404);
+
+        $data = $request->validate([
+            'activity' => 'required|string|max:255',
+            'estimated_amount' => 'required|numeric|min:0|max:999999999999.99',
+            'implemented_by' => 'nullable|string|max:255',
+            'budget_code' => 'nullable|string|max:255',
+            'object_type' => 'nullable|string|max:255',
+            'result_indicator' => 'nullable|string|max:4000',
+            'observations' => 'nullable|string|max:4000',
+            'tor_file' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx,jpg,jpeg,png|max:20480',
+            'concept_note_file' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx,jpg,jpeg,png|max:20480',
+        ]);
+
+        $amount = round((float) $data['estimated_amount'], 2);
+        $year = (int) ($purchaseRequest->start_year ?: now()->year);
+        $commitmentIds = $purchaseRequest->commitments->pluck('id')->all();
+
+        $this->assertWorkPlanAmountWithinBudget(
+            $purchaseRequest->subActivity,
+            $year,
+            $amount,
+            [],
+            $commitmentIds
+        );
+
+        $category = $item->resourceCategory
+            ?: $this->resourceCategoryForObjectType($data['object_type'] ?? null, $request->user()?->id);
+        $resource = $item->resource ?: new Resource();
+        $resource->fill([
+            'resource_category_id' => $category->id,
+            'governance_node_id' => $resource->governance_node_id ?: $purchaseRequest->governance_node_id,
+            'name' => $data['activity'],
+            'reference_code' => $resource->reference_code ?: $data['budget_code'] ?: 'AWP-' . $year . '-' . Str::upper(Str::random(5)),
+            'description' => $data['result_indicator'] ?: null,
+            'status' => 'active',
+            'is_human_resource' => false,
+            'created_by' => $resource->created_by ?: $request->user()?->id,
+        ]);
+        $resource->save();
+
+        DB::transaction(function () use ($item, $purchaseRequest, $category, $resource, $data, $amount, $year) {
+            $item->update([
+                'resource_category_id' => $category->id,
+                'resource_id' => $resource->id,
+                'milestone' => $data['activity'],
+                'amount' => $amount,
+                'estimated_amount' => $amount,
+                'implemented_by' => $data['implemented_by'] ?: null,
+                'budget_code' => $data['budget_code'] ?: null,
+                'object_type' => $data['object_type'] ?: $item->object_type,
+                'intermediate_indicator' => $data['activity'],
+                'result_indicator' => $data['result_indicator'] ?: null,
+                'observations' => $data['observations'] ?: null,
+            ]);
+
+            $purchaseRequest->update([
+                'total_amount' => $amount,
+                'description' => "FY{$year} {$purchaseRequest->work_plan_source}: {$data['activity']}",
+            ]);
+
+            foreach ($purchaseRequest->commitments as $commitment) {
+                $commitment->update([
+                    'resource_category_id' => $category->id,
+                    'resource_id' => $resource->id,
+                    'commitment_amount' => $amount,
+                    'description' => "FY{$year} {$purchaseRequest->work_plan_source}: {$data['activity']}",
+                ]);
+
+                $commitment->approvedWorkPlans()->update([
+                    'title' => $data['activity'],
+                    'planned_amount' => $amount,
+                    'expected_outputs' => $data['result_indicator'] ?: $data['activity'],
+                    'implementation_notes' => $data['observations'] ?: null,
+                ]);
+            }
+        });
+        $this->syncWorkPlanItemDocuments($item, $purchaseRequest->programFunding, $request);
+
+        $this->auditAction('work_plan.item_updated', 'Work plan sheet item updated', [
+            'item_id' => $item->id,
+            'purchase_request_id' => $purchaseRequest->id,
+            'amount' => $amount,
+        ]);
+
+        return back()->with('success', 'Work plan sheet item updated.');
+    }
+
+    public function destroyItem(Request $request, PurchaseRequestItem $item)
+    {
+        abort_unless($request->user()?->hasPermission('finance.awp.edit'), 403);
+
+        $item->loadMissing([
+            'awpReview',
+            'purchaseRequest.items',
+            'purchaseRequest.commitments.approvedWorkPlans',
+            'purchaseRequest.programFunding',
+        ]);
+
+        abort_if(
+            $item->awpReview?->status === 'approved',
+            403,
+            'This work plan item is already approved by the World Bank and cannot be removed.'
+        );
+
+        $purchaseRequest = $item->purchaseRequest;
+        abort_unless($purchaseRequest, 404);
+
+        $deletedPayload = [
+            'item_id' => $item->id,
+            'purchase_request_id' => $purchaseRequest->id,
+            'program_funding_id' => $purchaseRequest->program_funding_id,
+            'amount' => (float) $item->amount,
+        ];
+
+        DB::transaction(function () use ($item, $purchaseRequest) {
+            foreach ($purchaseRequest->commitments as $commitment) {
+                $commitment->approvedWorkPlans()->delete();
+                $commitment->delete();
+            }
+
+            if ($purchaseRequest->items->count() <= 1) {
+                $purchaseRequest->delete();
+                return;
+            }
+
+            $item->delete();
+            $purchaseRequest->update([
+                'total_amount' => $purchaseRequest->items()
+                    ->whereKeyNot($item->id)
+                    ->sum('amount'),
+            ]);
+        });
+
+        $this->auditAction('work_plan.item_removed', 'Work plan sheet item removed', $deletedPayload);
+
+        return back()->with('success', 'Work plan line removed.');
+    }
+
     public function downloadItemDocument(PurchaseRequestItem $item)
     {
         $review = $item->awpReview;
@@ -401,6 +1094,77 @@ class ApprovedWorkPlanController extends Controller
         $this->assertPartnerCanAccessItem($request, $item);
 
         return $this->downloadItemDocument($item);
+    }
+
+    private function syncWorkPlanItemDocuments(PurchaseRequestItem $item, ?ProgramFunding $funding, Request $request, ?string $baseKey = null): void
+    {
+        $item->loadMissing('awpReview');
+        $existingReview = $item->awpReview;
+        $torFile = $request->file($baseKey ? "{$baseKey}.tor_file" : 'tor_file');
+        $conceptNoteFile = $request->file($baseKey ? "{$baseKey}.concept_note_file" : 'concept_note_file');
+        $documentPayload = [
+            'program_funding_id' => $funding?->id,
+            'funder_id' => $funding?->funder_id,
+            'status' => $existingReview?->status ?: 'pending',
+        ];
+
+        if ($torFile) {
+            if ($existingReview?->tor_path) {
+                Storage::disk('local')->delete($existingReview->tor_path);
+            }
+
+            $documentPayload = [
+                ...$documentPayload,
+                'tor_path' => $torFile->store("approved-work-plan-items/{$item->id}/tor", 'local'),
+                'tor_name' => $torFile->getClientOriginalName(),
+                'tor_uploaded_at' => now(),
+                'document_uploaded_by' => $request->user()?->id,
+                'document_uploaded_at' => now(),
+            ];
+        }
+
+        if ($conceptNoteFile) {
+            if ($existingReview?->concept_note_path) {
+                Storage::disk('local')->delete($existingReview->concept_note_path);
+            }
+
+            $documentPayload = [
+                ...$documentPayload,
+                'concept_note_path' => $conceptNoteFile->store("approved-work-plan-items/{$item->id}/concept-note", 'local'),
+                'concept_note_name' => $conceptNoteFile->getClientOriginalName(),
+                'concept_note_uploaded_at' => now(),
+                'document_uploaded_by' => $request->user()?->id,
+                'document_uploaded_at' => now(),
+            ];
+        }
+
+        ApprovedWorkPlanItemReview::updateOrCreate(
+            ['purchase_request_item_id' => $item->id],
+            $documentPayload
+        );
+    }
+
+    private function syncApprovedWorkPlanStatusForItem(PurchaseRequestItem $item, string $reviewStatus, ?string $reviewNotes = null): void
+    {
+        $item->loadMissing('purchaseRequest.commitments.approvedWorkPlans');
+        $workPlanStatus = $reviewStatus === 'approved' ? 'approved' : 'submitted';
+
+        foreach ($item->purchaseRequest?->commitments ?? collect() as $commitment) {
+            $payload = [
+                'status' => $workPlanStatus,
+                'review_notes' => $reviewNotes,
+            ];
+
+            if ($reviewStatus === 'approved') {
+                $payload['approved_by'] = request()->user()?->id;
+                $payload['approved_at'] = now();
+            } else {
+                $payload['approved_by'] = null;
+                $payload['approved_at'] = null;
+            }
+
+            $commitment->approvedWorkPlans()->update($payload);
+        }
     }
 
     public function store(Request $request)
@@ -510,6 +1274,290 @@ class ApprovedWorkPlanController extends Controller
     private function nextCode(): string
     {
         return 'AWP-' . now()->format('Ymd') . '-' . Str::upper(Str::random(5));
+    }
+
+    private function nextWorkPlanCode(int $year): string
+    {
+        do {
+            $code = 'AWP-' . $year . '-' . Str::upper(Str::random(6));
+        } while (ApprovedWorkPlan::where('awp_code', $code)->exists());
+
+        return $code;
+    }
+
+    private function nextPurchaseRequestReference(string $prefix = 'PR'): string
+    {
+        do {
+            $reference = $prefix . '-' . now()->year . '-' . Str::upper(Str::random(5));
+        } while (PurchaseRequest::where('reference_no', $reference)->exists());
+
+        return $reference;
+    }
+
+    private function programWorkPlanFundings(Program $program)
+    {
+        $approved = $program->approvedFundings ?? collect();
+
+        return ($approved->isNotEmpty() ? $approved : ($program->fundings ?? collect()))
+            ->filter()
+            ->sortByDesc(fn ($funding) => $funding->status === 'approved')
+            ->values();
+    }
+
+    private function programWorkPlanYears(Program $program)
+    {
+        $years = collect();
+
+        if ($program->start_year && $program->end_year && (int) $program->end_year >= (int) $program->start_year) {
+            $years = $years->merge(range((int) $program->start_year, (int) $program->end_year));
+        }
+
+        foreach ($program->projects as $project) {
+            if ($project->start_year && $project->end_year && (int) $project->end_year >= (int) $project->start_year) {
+                $years = $years->merge(range((int) $project->start_year, (int) $project->end_year));
+            }
+
+            $years = $years->merge(($project->allocations ?? collect())->pluck('year'));
+            $years = $years->merge(($project->allocations ?? collect())->pluck('actual_year'));
+
+            foreach ($project->activities as $activity) {
+                $years = $years->merge(($activity->allocations ?? collect())->pluck('year'));
+
+                foreach ($activity->subActivities as $subActivity) {
+                    $years = $years->merge(($subActivity->allocations ?? collect())->pluck('year'));
+                }
+            }
+        }
+
+        return $years
+            ->filter(fn ($year) => (int) $year > 0)
+            ->map(fn ($year) => (int) $year)
+            ->unique()
+            ->sort()
+            ->values()
+            ->whenEmpty(fn ($collection) => $collection->push(now()->year));
+    }
+
+    private function defaultWorkPlanFolderName(Program $program): string
+    {
+        $name = trim((string) ($program->program_id ?: $program->name));
+
+        return 'Work Plan for ' . ($name ?: 'Program');
+    }
+
+    private function folderOptionsForProgramYear(array $fundingIds, int $year)
+    {
+        if (empty($fundingIds)) {
+            return collect();
+        }
+
+        return PurchaseRequest::query()
+            ->whereIn('program_funding_id', $fundingIds)
+            ->where('start_year', $year)
+            ->whereNotNull('work_plan_source')
+            ->distinct()
+            ->orderBy('work_plan_source')
+            ->pluck('work_plan_source')
+            ->filter()
+            ->values();
+    }
+
+    private function buildAllocationWorkPlanSheet(Program $program, array $fundingIds, int $year): array
+    {
+        $requests = empty($fundingIds)
+            ? collect()
+            : PurchaseRequest::with([
+                'items.resource',
+                'items.resourceCategory',
+                'items.awpReview',
+                'commitments.approvedWorkPlans',
+            ])
+                ->whereIn('program_funding_id', $fundingIds)
+                ->where('allocation_level', 'sub_activity')
+                ->where('start_year', $year)
+                ->get();
+
+        $requestsBySubActivity = $requests->groupBy('allocation_id');
+        $commitmentsBySubActivity = empty($fundingIds)
+            ? collect()
+            : BudgetCommitment::query()
+                ->where('allocation_level', 'sub_activity')
+                ->where('commitment_year', $year)
+                ->where('status', '!=', BudgetCommitment::STATUS_CANCELLED)
+                ->get()
+                ->groupBy('allocation_id');
+
+        $totals = [
+            'allocation' => 0.0,
+            'committed' => 0.0,
+            'planned' => 0.0,
+            'available' => 0.0,
+            'items' => 0,
+            'sub_activities' => 0,
+        ];
+
+        $projects = $program->projects
+            ->sortBy(fn ($project) => $this->sortKeyForProject($project))
+            ->map(function ($project) use ($year, $requestsBySubActivity, $commitmentsBySubActivity, &$totals) {
+                $projectTotals = [
+                    'allocation' => $this->allocationAmountForYear($project->allocations ?? collect(), $year),
+                    'committed' => 0.0,
+                    'planned' => 0.0,
+                    'available' => 0.0,
+                    'items' => 0,
+                ];
+
+                $activities = $project->activities
+                    ->sortBy(fn ($activity) => Str::lower((string) $activity->name))
+                    ->map(function ($activity) use ($year, $requestsBySubActivity, $commitmentsBySubActivity, &$projectTotals, &$totals) {
+                        $activityTotals = [
+                            'allocation' => $this->allocationAmountForYear($activity->allocations ?? collect(), $year),
+                            'committed' => 0.0,
+                            'planned' => 0.0,
+                            'available' => 0.0,
+                            'items' => 0,
+                        ];
+
+                        $subActivities = $activity->subActivities
+                            ->sortBy(fn ($subActivity) => Str::lower((string) $subActivity->name))
+                            ->map(function ($subActivity) use ($year, $requestsBySubActivity, $commitmentsBySubActivity, &$activityTotals, &$projectTotals, &$totals) {
+                                $allocation = $this->subActivityAllocationAmountForYear($subActivity, $year);
+                                $commitments = collect($commitmentsBySubActivity[(string) $subActivity->id] ?? []);
+                                $committed = round((float) $commitments->sum('commitment_amount'), 2);
+                                $requests = collect($requestsBySubActivity[(string) $subActivity->id] ?? []);
+                                $existingItems = $requests
+                                    ->flatMap(function (PurchaseRequest $request) {
+                                        return $request->items->map(function (PurchaseRequestItem $item) use ($request) {
+                                            $status = $item->awpReview?->status ?: 'pending';
+                                            $locked = $status === 'approved';
+
+                                            return [
+                                                'item' => $item,
+                                                'request' => $request,
+                                                'review' => $item->awpReview,
+                                                'label' => $item->resource?->name ?: $item->milestone ?: 'Work plan item',
+                                                'amount' => (float) ($item->estimated_amount ?: $item->amount),
+                                                'status' => $status,
+                                                'status_label' => $this->formatWorldBankStatus($status),
+                                                'locked' => $locked,
+                                            ];
+                                        });
+                                    })
+                                    ->values();
+                                $planned = round((float) $existingItems->sum('amount'), 2);
+                                $available = max(0, round($allocation - $committed, 2));
+
+                                foreach (['committed' => $committed, 'planned' => $planned, 'available' => $available] as $key => $value) {
+                                    $activityTotals[$key] += $value;
+                                    $projectTotals[$key] += $value;
+                                    $totals[$key] += $value;
+                                }
+
+                                $activityTotals['items'] += $existingItems->count();
+                                $projectTotals['items'] += $existingItems->count();
+                                $totals['items'] += $existingItems->count();
+                                $totals['sub_activities']++;
+                                $totals['allocation'] += $allocation;
+
+                                return [
+                                    'subActivity' => $subActivity,
+                                    'allocation' => $allocation,
+                                    'committed' => $committed,
+                                    'planned' => $planned,
+                                    'available' => $available,
+                                    'suggested' => $available,
+                                    'existing_items' => $existingItems,
+                                ];
+                            })
+                            ->values();
+
+                        $activityTotals['available'] = round($activityTotals['available'], 2);
+
+                        return [
+                            'activity' => $activity,
+                            'subActivities' => $subActivities,
+                            'totals' => $activityTotals,
+                        ];
+                    })
+                    ->values();
+
+                return [
+                    'project' => $project,
+                    'activities' => $activities,
+                    'totals' => $projectTotals,
+                ];
+            })
+            ->values();
+
+        foreach (['allocation', 'committed', 'planned', 'available'] as $key) {
+            $totals[$key] = round((float) $totals[$key], 2);
+        }
+
+        return [
+            'projects' => $projects,
+            'totals' => $totals,
+        ];
+    }
+
+    private function allocationAmountForYear($allocations, int $year): float
+    {
+        return round((float) collect($allocations)
+            ->filter(function ($allocation) use ($year) {
+                return (int) ($allocation->year ?? 0) === $year
+                    || (int) ($allocation->actual_year ?? 0) === $year;
+            })
+            ->sum('amount'), 2);
+    }
+
+    private function subActivityAllocationAmountForYear($subActivity, int $year): float
+    {
+        return $this->allocationAmountForYear($subActivity->allocations ?? collect(), $year);
+    }
+
+    private function committedAmountForSubActivityYear(string $subActivityId, int $year, array $fundingIds = [], array $excludeCommitmentIds = []): float
+    {
+        $fundingIds = array_values(array_filter($fundingIds));
+
+        return round((float) BudgetCommitment::query()
+            ->where('allocation_level', 'sub_activity')
+            ->where('allocation_id', $subActivityId)
+            ->where('commitment_year', $year)
+            ->where('status', '!=', BudgetCommitment::STATUS_CANCELLED)
+            ->when(! empty($fundingIds), fn ($query) => $query->whereIn('program_funding_id', $fundingIds))
+            ->when(! empty($excludeCommitmentIds), fn ($query) => $query->whereNotIn('id', $excludeCommitmentIds))
+            ->sum('commitment_amount'), 2);
+    }
+
+    private function assertWorkPlanAmountWithinBudget($subActivity, int $year, float $amount, array $fundingIds = [], array $excludeCommitmentIds = []): void
+    {
+        $allocation = $this->subActivityAllocationAmountForYear($subActivity, $year);
+        $committedElsewhere = $this->committedAmountForSubActivityYear(
+            (string) $subActivity->id,
+            $year,
+            $fundingIds,
+            $excludeCommitmentIds
+        );
+        $available = max(0, round($allocation - $committedElsewhere, 2));
+
+        if ($allocation <= 0) {
+            throw ValidationException::withMessages([
+                'estimated_amount' => "No allocation exists for {$subActivity->name} in {$year}.",
+            ]);
+        }
+
+        if ($amount > $available + 0.01) {
+            throw ValidationException::withMessages([
+                'estimated_amount' => "The work plan amount for {$subActivity->name} cannot exceed the available {$year} allocation of USD " . number_format($available, 2) . '.',
+            ]);
+        }
+    }
+
+    private function workPlanBudgetCode($project, $activity, $subActivity, int $year): string
+    {
+        $projectCode = $project?->project_id ?: 'PROJECT';
+        $subCode = Str::upper(Str::substr(str_replace('-', '', (string) $subActivity->id), 0, 6));
+
+        return Str::limit($projectCode . '-WP-' . $year . '-' . $subCode, 120, '');
     }
 
     private function resolveFilters(Request $request): array
@@ -1045,5 +2093,30 @@ class ApprovedWorkPlanController extends Controller
         $itemFunderId = $item->purchaseRequest?->programFunding?->funder_id;
 
         abort_unless((string) $itemFunderId === (string) $funder->id, 403, 'This work plan item is not funded by your partner account.');
+    }
+
+    private function auditAction(string $action, string $message, array $payload = []): void
+    {
+        try {
+            $request = request();
+
+            SystemAuditLog::create([
+                'user_id' => $request->user()?->id,
+                'module' => 'finance_work_plan_registry',
+                'action' => $action,
+                'action_message' => $message,
+                'description' => $message,
+                'method' => $request->method(),
+                'url' => $request->fullUrl(),
+                'route_name' => $request->route()?->getName(),
+                'ip_address' => $request->ip(),
+                'country' => null,
+                'user_agent' => $request->userAgent() ? substr((string) $request->userAgent(), 0, 1000) : null,
+                'status_code' => 200,
+                'payload' => $payload,
+            ]);
+        } catch (Throwable) {
+            // Audit logging must not block the work plan workflow.
+        }
     }
 }

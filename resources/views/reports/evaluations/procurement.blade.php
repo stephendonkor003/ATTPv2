@@ -46,6 +46,53 @@
         </div>
 
         <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">Applicant Ranking</span>
+                <span class="badge bg-warning text-dark">Average Panel Score</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-bordered table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="70" class="text-center">Rank</th>
+                            <th>Submission</th>
+                            <th>Applicant</th>
+                            <th class="text-center">Average</th>
+                            <th class="text-center">Highest</th>
+                            <th class="text-center">Lowest</th>
+                            <th class="text-center">Spread</th>
+                            <th class="text-center">Evaluators</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($rankings as $row)
+                            <tr>
+                                <td class="text-center">
+                                    <span class="badge {{ $row['rank'] === 1 ? 'bg-success' : 'bg-secondary' }}">
+                                        #{{ $row['rank'] }}
+                                    </span>
+                                </td>
+                                <td class="fw-semibold text-primary">
+                                    {{ $row['submission']?->procurement_submission_code ?? 'N/A' }}
+                                </td>
+                                <td>{{ $row['submission']?->submitter?->name ?? 'N/A' }}</td>
+                                <td class="text-center fw-bold">{{ number_format($row['average'], 2) }}</td>
+                                <td class="text-center text-success">{{ number_format($row['highest'], 2) }}</td>
+                                <td class="text-center text-danger">{{ number_format($row['lowest'], 2) }}</td>
+                                <td class="text-center">{{ number_format($row['spread'], 2) }}</td>
+                                <td class="text-center">{{ $row['evaluators'] }}</td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="8" class="text-center text-muted py-3">No ranked applicants yet.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
             <div class="card-header bg-light fw-semibold">Evaluator Breakdown</div>
             <div class="card-body">
                 <table class="table table-sm table-bordered">

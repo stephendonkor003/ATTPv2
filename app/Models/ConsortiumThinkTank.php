@@ -70,6 +70,11 @@ class ConsortiumThinkTank extends BaseModel
         return $this->hasMany(ConsortiumDisbursementRequest::class, 'think_tank_member_id');
     }
 
+    public function transferDisbursements(): HasMany
+    {
+        return $this->hasMany(ProcurementDisbursement::class, 'think_tank_member_id');
+    }
+
     public function procurementPlans(): HasMany
     {
         return $this->hasMany(ThinkTankProcurementPlan::class, 'think_tank_member_id');

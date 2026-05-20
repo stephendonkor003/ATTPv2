@@ -1,242 +1,216 @@
 @php
     $currency = 'USD';
-    $portalRouteParams = (auth()->user()?->isSuperAdmin() || auth()->user()?->isAdmin())
-        ? ['think_tank_member_id' => $member->id]
-        : [];
+    $isAdminView = auth()->user()?->isSuperAdmin() || auth()->user()?->isAdmin();
     $financePercent = min(100, max(0, (float) ($metrics['utilization'] ?? 0)));
+    $receiptRate = min(100, max(0, (float) ($receiptSummary['rate'] ?? 0)));
+    $resetParams = $isAdminView ? ['think_tank_member_id' => $member->id] : [];
 @endphp
 
 @push('styles')
     <style>
-        .tt-dashboard-hero {
-            display: grid;
-            grid-template-columns: minmax(0, 1.45fr) minmax(280px, .55fr);
-            gap: 18px;
-            margin-bottom: 18px;
+        .think-tank-workspace > .card.shadow-sm.border-0.overflow-hidden.mb-4 {
+            display: none;
         }
 
-        .tt-briefing,
-        .tt-deadline-card,
-        .tt-panel,
-        .tt-stat-card {
+        .tt-report-shell {
+            display: grid;
+            gap: 18px;
+        }
+
+        .tt-search-panel,
+        .tt-report-hero,
+        .tt-kpi-card,
+        .tt-report-panel,
+        .tt-chart-box {
             border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            background: #fff;
+            background: #ffffff;
+            border-radius: 12px;
             box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
         }
 
-        .tt-briefing {
-            position: relative;
-            overflow: hidden;
-            min-height: 245px;
-            background:
-                linear-gradient(120deg, rgba(15, 23, 42, .96), rgba(14, 116, 144, .88)),
-                url("{{ asset('admin/assets/images/gallery/1.png') }}");
-            background-size: cover;
-            background-position: center;
-            color: #fff;
-            padding: 26px;
+        .tt-search-panel {
+            padding: 16px;
         }
 
-        .tt-briefing h1 {
-            max-width: 760px;
-            font-size: 30px;
-            line-height: 1.15;
-            margin: 10px 0;
-            color: #fff;
-        }
-
-        .tt-briefing p {
-            max-width: 780px;
-            color: rgba(255, 255, 255, .86);
+        .tt-search-title {
+            font-size: 17px;
+            font-weight: 900;
+            color: #0f172a;
             margin: 0;
+        }
+
+        .tt-search-subtitle {
+            color: #64748b;
+            font-size: 13px;
+            margin: 4px 0 0;
+        }
+
+        .tt-search-grid {
+            display: grid;
+            grid-template-columns: minmax(260px, 1.4fr) minmax(150px, .7fr) minmax(150px, .7fr) minmax(145px, .7fr) minmax(145px, .7fr) auto;
+            gap: 12px;
+            align-items: end;
+            margin-top: 14px;
+        }
+
+        .tt-field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .tt-field label {
+            color: #334155;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .tt-field input,
+        .tt-field select {
+            min-height: 42px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            color: #0f172a;
+            background: #ffffff;
+            padding: 9px 10px;
+        }
+
+        .tt-search-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tt-report-hero {
+            overflow: hidden;
+            background:
+                linear-gradient(120deg, rgba(15, 23, 42, .96), rgba(15, 118, 110, .9)),
+                linear-gradient(45deg, rgba(245, 158, 11, .22), rgba(37, 99, 235, .14));
+            color: #f8fafc;
+            padding: 24px;
+        }
+
+        .tt-hero-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(280px, .7fr);
+            gap: 18px;
+            align-items: center;
         }
 
         .tt-kicker {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            border: 1px solid rgba(255, 255, 255, .28);
-            background: rgba(255, 255, 255, .13);
+            gap: 7px;
             border-radius: 999px;
-            padding: 7px 11px;
-            font-weight: 700;
-            font-size: 12px;
-            text-transform: uppercase;
-        }
-
-        .tt-hero-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 22px;
-        }
-
-        .tt-hero-actions .btn {
-            border-radius: 7px;
-            font-weight: 700;
-        }
-
-        .tt-deadline-card {
-            padding: 22px;
-            display: grid;
-            align-content: space-between;
-            gap: 16px;
-            background: linear-gradient(180deg, #f8fafc, #ffffff);
-        }
-
-        .tt-deadline-number {
-            font-size: 54px;
-            line-height: 1;
+            border: 1px solid rgba(248, 250, 252, .3);
+            color: #fde68a;
+            background: rgba(248, 250, 252, .12);
             font-weight: 900;
-            color: #0f172a;
-            letter-spacing: 0;
+            font-size: 12px;
+            padding: 7px 11px;
         }
 
-        .tt-deadline-label {
+        .tt-report-hero h1 {
+            color: #ffffff;
+            font-size: 30px;
+            font-weight: 900;
+            line-height: 1.14;
+            margin: 12px 0 8px;
+        }
+
+        .tt-report-hero p,
+        .tt-hero-meta {
+            color: rgba(248, 250, 252, .86);
+        }
+
+        .tt-hero-facts {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .tt-hero-fact {
+            border: 1px solid rgba(248, 250, 252, .26);
+            border-radius: 10px;
+            padding: 12px;
+            background: rgba(15, 23, 42, .2);
+        }
+
+        .tt-hero-fact span {
+            display: block;
+            color: rgba(248, 250, 252, .7);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .tt-hero-fact strong {
+            color: #ffffff;
+            font-size: 15px;
+        }
+
+        .tt-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .tt-kpi-card {
+            padding: 16px;
+            min-height: 132px;
+        }
+
+        .tt-kpi-icon {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            margin-bottom: 12px;
+        }
+
+        .tt-kpi-card.green .tt-kpi-icon { background: #dcfce7; color: #166534; }
+        .tt-kpi-card.amber .tt-kpi-icon { background: #fef3c7; color: #92400e; }
+        .tt-kpi-card.teal .tt-kpi-icon { background: #ccfbf1; color: #0f766e; }
+
+        .tt-kpi-value {
+            color: #0f172a;
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1.15;
+            overflow-wrap: anywhere;
+        }
+
+        .tt-kpi-label {
             color: #64748b;
-            font-weight: 700;
+            font-size: 13px;
+            font-weight: 750;
+            margin-top: 6px;
         }
 
         .tt-progress {
             height: 9px;
             border-radius: 999px;
-            background: #e2e8f0;
             overflow: hidden;
+            background: #e2e8f0;
         }
 
         .tt-progress > span {
             display: block;
             height: 100%;
             border-radius: inherit;
-            background: linear-gradient(90deg, #0891b2, #22c55e);
+            background: linear-gradient(90deg, #0ea5e9, #22c55e);
         }
 
-        .tt-stats-grid {
+        .tt-section-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 18px;
-        }
-
-        .tt-filter-card {
-            border: 1px solid #dbeafe;
-            border-radius: 10px;
-            background: #f8fbff;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
-            padding: 16px;
-            margin-bottom: 18px;
-        }
-
-        .tt-filter-head {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 14px;
-            margin-bottom: 14px;
-        }
-
-        .tt-filter-head h2 {
-            font-size: 16px;
-            font-weight: 900;
-            color: #0f172a;
-            margin: 0;
-        }
-
-        .tt-filter-head p {
-            color: #64748b;
-            font-size: 13px;
-            margin: 4px 0 0;
-        }
-
-        .tt-filter-active {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            border-radius: 999px;
-            background: #dbeafe;
-            color: #1e40af;
-            padding: 6px 10px;
-            font-size: 12px;
-            font-weight: 850;
-            white-space: nowrap;
-        }
-
-        .tt-filter-grid {
-            display: grid;
-            grid-template-columns: 1fr .85fr 1fr 1fr auto;
-            gap: 12px;
-            align-items: end;
-        }
-
-        .tt-filter-field {
-            display: grid;
-            gap: 6px;
-        }
-
-        .tt-filter-field label {
-            color: #334155;
-            font-size: 12px;
-            font-weight: 850;
-        }
-
-        .tt-filter-field input,
-        .tt-filter-field select {
-            width: 100%;
-            border: 1px solid #cbd5e1;
-            border-radius: 7px;
-            background: #fff;
-            color: #0f172a;
-            padding: 10px 11px;
-            min-height: 42px;
-        }
-
-        .tt-filter-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .tt-stat-card {
-            padding: 18px;
-            min-height: 120px;
-        }
-
-        .tt-stat-card .icon {
-            width: 38px;
-            height: 38px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            margin-bottom: 12px;
-            color: #0f172a;
-            background: #e0f2fe;
-        }
-
-        .tt-stat-card .value {
-            font-size: 23px;
-            font-weight: 900;
-            color: #0f172a;
-            line-height: 1.2;
-        }
-
-        .tt-stat-card .label {
-            color: #64748b;
-            font-size: 13px;
-            font-weight: 700;
-            margin-top: 5px;
-        }
-
-        .tt-layout-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
+            grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr);
             gap: 18px;
         }
 
-        .tt-panel {
-            padding: 20px;
-            margin-bottom: 18px;
+        .tt-report-panel {
+            padding: 18px;
         }
 
         .tt-panel-head {
@@ -244,466 +218,518 @@
             align-items: flex-start;
             justify-content: space-between;
             gap: 12px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
-        .tt-panel h2 {
+        .tt-panel-head h2 {
+            color: #0f172a;
             font-size: 18px;
             font-weight: 900;
             margin: 0;
-            color: #0f172a;
         }
 
-        .tt-panel .hint {
+        .tt-panel-head p {
             color: #64748b;
-            margin: 4px 0 0;
             font-size: 13px;
+            margin: 3px 0 0;
         }
 
         .tt-chart-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 16px;
+            gap: 14px;
         }
 
         .tt-chart-box {
-            min-height: 275px;
-            border: 1px solid #eef2f7;
-            border-radius: 8px;
             padding: 14px;
+            min-height: 305px;
+            box-shadow: none;
             background: #fbfdff;
         }
 
         .tt-chart-box h3 {
-            font-size: 14px;
-            font-weight: 800;
             color: #334155;
+            font-size: 14px;
+            font-weight: 900;
             margin: 0 0 10px;
-        }
-
-        .tt-notification-list,
-        .tt-funded-list {
-            display: grid;
-            gap: 12px;
-        }
-
-        .tt-note,
-        .tt-funded-row {
-            border: 1px solid #e2e8f0;
-            border-radius: 9px;
-            padding: 14px;
-            background: #fff;
-        }
-
-        .tt-note {
-            display: grid;
-            grid-template-columns: 38px minmax(0, 1fr);
-            gap: 12px;
-        }
-
-        .tt-note-icon {
-            width: 38px;
-            height: 38px;
-            border-radius: 9px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: #dbeafe;
-            color: #1d4ed8;
-        }
-
-        .tt-note.urgent .tt-note-icon { background: #fee2e2; color: #b91c1c; }
-        .tt-note.complete .tt-note-icon { background: #dcfce7; color: #15803d; }
-        .tt-note.review .tt-note-icon { background: #fef3c7; color: #b45309; }
-        .tt-note.procurement .tt-note-icon { background: #ccfbf1; color: #0f766e; }
-
-        .tt-note-title,
-        .tt-funded-title {
-            font-weight: 850;
-            color: #0f172a;
-            margin-bottom: 4px;
-        }
-
-        .tt-note-meta,
-        .tt-funded-meta {
-            color: #64748b;
-            font-size: 13px;
-            line-height: 1.45;
-        }
-
-        .tt-note-value {
-            display: inline-flex;
-            align-items: center;
-            margin-top: 9px;
-            padding: 4px 8px;
-            border-radius: 999px;
-            background: #f1f5f9;
-            color: #0f172a;
-            font-weight: 800;
-            font-size: 12px;
-        }
-
-        .tt-funded-row {
-            display: grid;
-            gap: 10px;
-        }
-
-        .tt-funded-money {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
-            font-size: 12px;
-            color: #64748b;
-        }
-
-        .tt-funded-money strong {
-            display: block;
-            color: #0f172a;
-            font-size: 13px;
-            margin-top: 2px;
         }
 
         .tt-table-wrap {
             overflow-x: auto;
         }
 
-        .tt-dashboard-table th {
-            background: #f8fafc;
+        .tt-report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .tt-report-table th {
+            background: #f1f5f9;
             color: #475569;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0;
+            padding: 10px;
+            border-bottom: 1px solid #cbd5e1;
+            white-space: nowrap;
+        }
+
+        .tt-report-table td {
+            padding: 11px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: top;
+        }
+
+        .tt-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 4px 8px;
+            background: #e0f2fe;
+            color: #075985;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .tt-badge.good { background: #dcfce7; color: #166534; }
+        .tt-badge.warn { background: #fef3c7; color: #92400e; }
+        .tt-badge.danger { background: #fee2e2; color: #991b1b; }
+
+        .tt-funded-list,
+        .tt-status-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .tt-funded-row,
+        .tt-status-row {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 12px;
+        }
+
+        .tt-funded-title {
+            color: #0f172a;
+            font-weight: 900;
+            margin-bottom: 5px;
+        }
+
+        .tt-funded-money {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            color: #64748b;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+
+        .tt-funded-money strong {
+            display: block;
+            color: #0f172a;
+            font-size: 13px;
+        }
+
+        .tt-status-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .tt-empty {
+            border: 1px dashed #cbd5e1;
+            border-radius: 10px;
+            padding: 18px;
+            color: #64748b;
+            background: #f8fafc;
+            text-align: center;
         }
 
         @media (max-width: 1200px) {
-            .tt-dashboard-hero,
-            .tt-layout-grid {
+            .tt-search-grid,
+            .tt-hero-grid,
+            .tt-section-grid {
                 grid-template-columns: 1fr;
             }
 
-            .tt-filter-grid {
+            .tt-kpi-grid,
+            .tt-chart-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .tt-filter-actions {
-                grid-column: 1 / -1;
             }
         }
 
-        @media (max-width: 900px) {
-            .tt-stats-grid,
+        @media (max-width: 767.98px) {
+            .tt-kpi-grid,
             .tt-chart-grid,
-            .tt-funded-money,
-            .tt-filter-grid {
+            .tt-hero-facts,
+            .tt-funded-money {
                 grid-template-columns: 1fr;
             }
 
-            .tt-briefing h1 {
+            .tt-report-hero h1 {
                 font-size: 24px;
             }
         }
     </style>
 @endpush
 
-<x-think-tank.partials.shell :member="$member" title="Dashboard">
-    <section class="tt-dashboard-hero">
-        <div class="tt-briefing">
-            <span class="tt-kicker"><i class="feather-activity"></i> Runtime Think Tank Dashboard</span>
-            <h1>{{ $member->name }} operational overview</h1>
-            <p>
-                Track the funds disbursed by the ATTP Secretariat, monthly reporting obligations,
-                procurement opportunities, research submissions, and activities visible to oversight teams.
-            </p>
-            <div class="tt-hero-actions">
-                <a class="btn btn-light" href="{{ route('think-tank.reports', $portalRouteParams) }}">
-                    <i class="feather-file-text me-1"></i> Submit Report
-                </a>
-                <a class="btn btn-outline-light" href="{{ route('think-tank.procurement', $portalRouteParams) }}">
-                    <i class="feather-briefcase me-1"></i> Manage Procurement
-                </a>
-                <a class="btn btn-outline-light" href="{{ route('think-tank.research', $portalRouteParams) }}">
-                    <i class="feather-book-open me-1"></i> Publish Research
+<x-think-tank.partials.shell :member="$member" title="Think Tank Dashboard">
+    <div class="tt-report-shell">
+        <section class="tt-search-panel">
+            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                <div>
+                    <h2 class="tt-search-title">Think Tank Report Search</h2>
+                    <p class="tt-search-subtitle">Select a think tank and run the search to generate the full operational report.</p>
+                </div>
+                <a class="btn btn-dark fw-bold" href="{{ route('think-tank.dashboard.download', $dashboardQueryParams) }}">
+                    <i class="feather-download me-1"></i> Download Report
                 </a>
             </div>
-        </div>
 
-        <aside class="tt-deadline-card">
+            <form method="GET" action="{{ route('think-tank.dashboard') }}">
+                <div class="tt-search-grid">
+                    <div class="tt-field">
+                        <label for="think_tank_member_id">Think tank</label>
+                        @if($isAdminView)
+                            <select id="think_tank_member_id" name="think_tank_member_id" required>
+                                @foreach($membersForSearch as $searchMember)
+                                    <option value="{{ $searchMember->id }}" @selected((string) $member->id === (string) $searchMember->id)>
+                                        {{ $searchMember->name }}{{ $searchMember->consortium ? ' - ' . $searchMember->consortium->name : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        @else
+                            <input value="{{ $member->name }}" readonly>
+                        @endif
+                    </div>
+
+                    <div class="tt-field">
+                        <label for="filter_month">Month</label>
+                        <input id="filter_month" type="month" name="filter_month" value="{{ $dashboardFilter['month'] }}">
+                    </div>
+                    <div class="tt-field">
+                        <label for="filter_year">Year</label>
+                        <select id="filter_year" name="filter_year">
+                            <option value="">All years</option>
+                            @foreach($dashboardFilter['year_options'] as $year)
+                                <option value="{{ $year }}" @selected((string) $dashboardFilter['year'] === (string) $year)>{{ $year }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="tt-field">
+                        <label for="date_from">From</label>
+                        <input id="date_from" type="date" name="date_from" value="{{ $dashboardFilter['date_from'] }}">
+                    </div>
+                    <div class="tt-field">
+                        <label for="date_to">To</label>
+                        <input id="date_to" type="date" name="date_to" value="{{ $dashboardFilter['date_to'] }}">
+                    </div>
+                    <div class="tt-search-actions">
+                        <button class="btn btn-primary fw-bold" type="submit">
+                            <i class="feather-search me-1"></i> Run Search
+                        </button>
+                        <a class="btn btn-light border fw-bold" href="{{ route('think-tank.dashboard', $resetParams) }}">Reset</a>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        <section class="tt-report-hero">
+            <div class="tt-hero-grid">
+                <div>
+                    <span class="tt-kicker"><i class="feather-activity"></i> {{ $dashboardFilter['label'] }} report</span>
+                    <h1>{{ $member->name }}</h1>
+                    <p class="mb-2">
+                        {{ $member->consortium?->name ?? 'Consortium not linked' }}
+                        {{ $member->country ? ' / ' . $member->country : '' }}
+                    </p>
+                    <div class="tt-hero-meta">
+                        Funding, receipt confirmation, reports, research, procurement, and activity utilisation are generated from live system records.
+                    </div>
+                </div>
+                <div class="tt-hero-facts">
+                    <div class="tt-hero-fact">
+                        <span>Consortium</span>
+                        <strong>{{ $member->consortium?->name ?? 'Not linked' }}</strong>
+                    </div>
+                    <div class="tt-hero-fact">
+                        <span>Status</span>
+                        <strong>{{ ucfirst($member->status ?? 'active') }}</strong>
+                    </div>
+                    <div class="tt-hero-fact">
+                        <span>Role</span>
+                        <strong>{{ ucfirst(str_replace('_', ' ', $member->role ?? 'member')) }}</strong>
+                    </div>
+                    <div class="tt-hero-fact">
+                        <span>Generated</span>
+                        <strong>{{ now()->format('M d, Y H:i') }}</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="tt-kpi-grid">
+            <article class="tt-kpi-card">
+                <span class="tt-kpi-icon"><i class="feather-credit-card"></i></span>
+                <div class="tt-kpi-value">{{ $currency }} {{ number_format($metrics['disbursed'], 2) }}</div>
+                <div class="tt-kpi-label">Funds disbursed by ATTP</div>
+            </article>
+            <article class="tt-kpi-card green">
+                <span class="tt-kpi-icon"><i class="feather-check-circle"></i></span>
+                <div class="tt-kpi-value">{{ $currency }} {{ number_format($receiptSummary['confirmed'], 2) }}</div>
+                <div class="tt-kpi-label">Payment receipt confirmed</div>
+            </article>
+            <article class="tt-kpi-card amber">
+                <span class="tt-kpi-icon"><i class="feather-trending-up"></i></span>
+                <div class="tt-kpi-value">{{ number_format($financePercent, 1) }}%</div>
+                <div class="tt-kpi-label">Utilisation of disbursed funds</div>
+            </article>
+            <article class="tt-kpi-card teal">
+                <span class="tt-kpi-icon"><i class="feather-file-text"></i></span>
+                <div class="tt-kpi-value">{{ number_format($metrics['reports']) }}</div>
+                <div class="tt-kpi-label">Activity reports submitted</div>
+            </article>
+        </section>
+
+        <section class="tt-section-grid">
             <div>
-                <div class="tt-deadline-label">Upcoming monthly report</div>
-                <div class="tt-deadline-number">
-                    @if($reportSubmittedThisPeriod)
-                        OK
-                    @elseif($monthlyReportDaysLeft >= 0)
-                        {{ $monthlyReportDaysLeft }}
-                    @else
-                        {{ abs($monthlyReportDaysLeft) }}
-                    @endif
-                </div>
-                <p class="text-muted mb-0">
-                    @if($reportSubmittedThisPeriod)
-                        Report received for {{ now()->format('F Y') }}.
-                    @elseif($monthlyReportDaysLeft >= 0)
-                        Days left to submit by {{ $monthlyReportDue->format('M d, Y') }}.
-                    @else
-                        Days overdue since {{ $monthlyReportDue->format('M d, Y') }}.
-                    @endif
-                </p>
-            </div>
-            <div>
-                <div class="d-flex justify-content-between small fw-bold mb-2">
-                    <span>Fund utilisation</span>
-                    <span>{{ number_format($financePercent, 1) }}%</span>
-                </div>
-                <div class="tt-progress"><span style="width: {{ $financePercent }}%"></span></div>
-            </div>
-        </aside>
-    </section>
-
-    <section class="tt-filter-card">
-        <div class="tt-filter-head">
-            <div>
-                <h2>Dashboard period filter</h2>
-                <p>Filter funds allocated, disbursed amounts, activities, reports, research, and procurement by month, year, or custom dates.</p>
-            </div>
-            <span class="tt-filter-active"><i class="feather-calendar"></i> {{ $dashboardFilter['label'] }}</span>
-        </div>
-        <form method="GET" action="{{ route('think-tank.dashboard', $portalRouteParams) }}">
-            @if(isset($portalRouteParams['think_tank_member_id']))
-                <input type="hidden" name="think_tank_member_id" value="{{ $portalRouteParams['think_tank_member_id'] }}">
-            @endif
-            <div class="tt-filter-grid">
-                <div class="tt-filter-field">
-                    <label for="filter_month">Month</label>
-                    <input id="filter_month" type="month" name="filter_month" value="{{ $dashboardFilter['month'] }}">
-                </div>
-                <div class="tt-filter-field">
-                    <label for="filter_year">Year</label>
-                    <select id="filter_year" name="filter_year">
-                        <option value="">All years</option>
-                        @foreach($dashboardFilter['year_options'] as $year)
-                            <option value="{{ $year }}" @selected((string) $dashboardFilter['year'] === (string) $year)>{{ $year }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="tt-filter-field">
-                    <label for="date_from">Custom from</label>
-                    <input id="date_from" type="date" name="date_from" value="{{ $dashboardFilter['date_from'] }}">
-                </div>
-                <div class="tt-filter-field">
-                    <label for="date_to">Custom to</label>
-                    <input id="date_to" type="date" name="date_to" value="{{ $dashboardFilter['date_to'] }}">
-                </div>
-                <div class="tt-filter-actions">
-                    <button class="btn btn-primary" type="submit"><i class="feather-filter me-1"></i> Apply</button>
-                    <a class="btn btn-light border" href="{{ route('think-tank.dashboard', $portalRouteParams) }}">Reset</a>
-                </div>
-            </div>
-        </form>
-    </section>
-
-    <section class="tt-stats-grid">
-        <div class="tt-stat-card">
-            <span class="icon"><i class="feather-credit-card"></i></span>
-            <div class="value">{{ $currency }} {{ number_format($metrics['disbursed'], 2) }}</div>
-            <div class="label">Amount disbursed by ATTP · {{ $dashboardFilter['label'] }}</div>
-        </div>
-        <div class="tt-stat-card">
-            <span class="icon" style="background:#dcfce7;"><i class="feather-trending-up"></i></span>
-            <div class="value">{{ $currency }} {{ number_format($metrics['spent'], 2) }}</div>
-            <div class="label">Reported activity spend · {{ $dashboardFilter['label'] }}</div>
-        </div>
-        <div class="tt-stat-card">
-            <span class="icon" style="background:#e0f2fe;"><i class="feather-archive"></i></span>
-            <div class="value">{{ $currency }} {{ number_format($metrics['balance'], 2) }}</div>
-            <div class="label">Funds in custody remaining to spend Â· {{ $dashboardFilter['label'] }}</div>
-        </div>
-        <div class="tt-stat-card">
-            <span class="icon" style="background:#fef3c7;"><i class="feather-file-text"></i></span>
-            <div class="value">{{ number_format($metrics['reports']) }}</div>
-            <div class="label">Reports to Secretariat</div>
-        </div>
-        <div class="tt-stat-card">
-            <span class="icon" style="background:#ccfbf1;"><i class="feather-book-open"></i></span>
-            <div class="value">{{ number_format($metrics['research']) }}</div>
-            <div class="label">Research outputs submitted</div>
-        </div>
-    </section>
-
-    <section class="tt-layout-grid">
-        <div>
-            <div class="tt-panel">
-                <div class="tt-panel-head">
-                    <div>
-                        <h2>Performance graphs</h2>
-                        <p class="hint">Finance, reporting, procurement, and research at a glance.</p>
-                    </div>
-                </div>
-                <div class="tt-chart-grid">
-                    <div class="tt-chart-box">
-                        <h3>Finance position</h3>
-                        <div id="ttFinanceChart"></div>
-                    </div>
-                    <div class="tt-chart-box">
-                        <h3>Reports submitted over 6 months</h3>
-                        <div id="ttReportsChart"></div>
-                    </div>
-                    <div class="tt-chart-box">
-                        <h3>Procurement pipeline</h3>
-                        <div id="ttProcurementChart"></div>
-                    </div>
-                    <div class="tt-chart-box">
-                        <h3>Research output mix</h3>
-                        <div id="ttResearchChart"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="tt-panel">
-                <div class="tt-panel-head">
-                    <div>
-                        <h2>Funded activities</h2>
-                        <p class="hint">Activities and budget lines funded through Secretariat disbursements.</p>
-                    </div>
-                    <a class="btn btn-sm btn-light border" href="{{ route('think-tank.reports', $portalRouteParams) }}">Update progress</a>
-                </div>
-                <div class="tt-funded-list">
-                    @forelse($fundedActivities as $activity)
-                        <article class="tt-funded-row">
-                            <div>
-                                <div class="tt-funded-title">{{ $activity['budget_line'] }}</div>
-                                <div class="tt-funded-meta">
-                                    Current status: <strong class="text-capitalize">{{ $activity['status'] }}</strong>.
-                                    {{ number_format($activity['utilization'], 1) }}% of disbursed funds reported as spent.
-                                </div>
-                            </div>
-                            <div class="tt-funded-money">
-                                <span>Allocated <strong>{{ $currency }} {{ number_format($activity['allocated'], 2) }}</strong></span>
-                                <span>Disbursed <strong>{{ $currency }} {{ number_format($activity['disbursed'], 2) }}</strong></span>
-                                <span>Spent <strong>{{ $currency }} {{ number_format($activity['spent'], 2) }}</strong></span>
-                            </div>
-                            <div class="tt-progress"><span style="width: {{ $activity['utilization'] }}%"></span></div>
-                        </article>
-                    @empty
-                        <div class="alert alert-light border mb-0">
-                            No fund allocation has been recorded for this think tank yet.
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Graphs and Analysis</h2>
+                            <p>Financial, receipt, reporting, procurement, and research patterns for the selected think tank.</p>
                         </div>
-                    @endforelse
-                </div>
-            </div>
-
-            <div class="tt-panel">
-                <div class="tt-panel-head">
-                    <div>
-                        <h2>Procurement opportunities</h2>
-                        <p class="hint">Open evaluations and selections managed by this think tank.</p>
                     </div>
-                    <a class="btn btn-sm btn-primary" href="{{ route('think-tank.procurement', $portalRouteParams) }}">Create opportunity</a>
+                    <div class="tt-chart-grid">
+                        <div class="tt-chart-box">
+                            <h3>Financial Position</h3>
+                            <div id="ttFinanceChart"></div>
+                        </div>
+                        <div class="tt-chart-box">
+                            <h3>Disbursement vs Receipt</h3>
+                            <div id="ttReceiptChart"></div>
+                        </div>
+                        <div class="tt-chart-box">
+                            <h3>Reports Submitted Over 6 Months</h3>
+                            <div id="ttReportsChart"></div>
+                        </div>
+                        <div class="tt-chart-box">
+                            <h3>Procurement Pipeline</h3>
+                            <div id="ttProcurementChart"></div>
+                        </div>
+                        <div class="tt-chart-box">
+                            <h3>Research Output Mix</h3>
+                            <div id="ttResearchChart"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="tt-table-wrap">
-                    <table class="tt-dashboard-table">
-                        <thead><tr><th>Title</th><th>Status</th><th>Applications</th><th>Closing</th><th></th></tr></thead>
-                        <tbody>
-                        @forelse($recentProcurements as $procurement)
+
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Transfer and Receipt Register</h2>
+                            <p>Funds sent by the Secretariat and confirmation status from the think tank portal.</p>
+                        </div>
+                    </div>
+                    <div class="tt-table-wrap">
+                        <table class="tt-report-table">
+                            <thead>
                             <tr>
-                                <td>{{ $procurement->title }}</td>
-                                <td><span class="badge">{{ ucfirst($procurement->status) }}</span></td>
-                                <td>{{ number_format($procurement->submissions_count) }}</td>
-                                <td>{{ $procurement->application_end_date?->format('M d, Y') ?? 'N/A' }}</td>
-                                <td>
-                                    <a class="btn btn-sm btn-light border" href="{{ route('think-tank.procurement.submissions', array_merge($portalRouteParams, ['procurement' => $procurement])) }}">
-                                        Evaluate
-                                    </a>
-                                </td>
+                                <th>Reference</th>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Method</th>
+                                <th>Receipt</th>
+                                <th>Notes</th>
                             </tr>
-                        @empty
-                            <tr><td colspan="5">No procurement opportunities yet.</td></tr>
-                        @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <aside>
-            <div class="tt-panel">
-                <div class="tt-panel-head">
-                    <div>
-                        <h2>Notifications</h2>
-                        <p class="hint">Tasks that need attention from the think tank team.</p>
+                            </thead>
+                            <tbody>
+                            @forelse($transferRecords as $transfer)
+                                @php
+                                    $receiptStatus = $transfer->recipient_confirmation_status ?: 'pending';
+                                @endphp
+                                <tr>
+                                    <td>{{ $transfer->transfer_reference ?: $transfer->reference_no }}</td>
+                                    <td>{{ $transfer->paid_at?->format('M d, Y') ?? $transfer->created_at?->format('M d, Y') }}</td>
+                                    <td>{{ $currency }} {{ number_format((float) $transfer->amount, 2) }}</td>
+                                    <td>{{ ucfirst(str_replace('_', ' ', $transfer->payment_method ?? 'transfer')) }}</td>
+                                    <td>
+                                        <span class="tt-badge {{ $receiptStatus === 'confirmed' ? 'good' : 'warn' }}">
+                                            {{ ucfirst(str_replace('_', ' ', $receiptStatus)) }}
+                                        </span>
+                                    </td>
+                                    <td>{{ \Illuminate\Support\Str::limit($transfer->notes ?: $transfer->recipient_confirmation_notes ?: 'No notes', 80) }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="6"><div class="tt-empty">No transfers found for this selected period.</div></td></tr>
+                            @endforelse
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                <div class="tt-notification-list">
-                    @foreach($upcomingActivities as $activity)
-                        <a class="tt-note {{ $activity['type'] }}" href="{{ $activity['route'] }}">
-                            <span class="tt-note-icon">
-                                @if($activity['type'] === 'urgent')
-                                    <i class="feather-alert-triangle"></i>
-                                @elseif($activity['type'] === 'complete')
-                                    <i class="feather-check-circle"></i>
-                                @elseif($activity['type'] === 'procurement')
-                                    <i class="feather-briefcase"></i>
-                                @else
-                                    <i class="feather-bell"></i>
-                                @endif
-                            </span>
-                            <span>
-                                <span class="tt-note-title d-block">{{ $activity['title'] }}</span>
-                                <span class="tt-note-meta d-block">{{ $activity['meta'] }}</span>
-                                <span class="tt-note-value">{{ $activity['value'] }}</span>
-                            </span>
-                        </a>
-                    @endforeach
+
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Recent Activity Reports</h2>
+                            <p>Latest report submissions and Secretariat review status.</p>
+                        </div>
+                        <a class="btn btn-sm btn-light border" href="{{ route('think-tank.reports', $portalRouteParams) }}">Open Reports</a>
+                    </div>
+                    <div class="tt-table-wrap">
+                        <table class="tt-report-table">
+                            <thead><tr><th>Report</th><th>Period</th><th>Progress</th><th>Status</th></tr></thead>
+                            <tbody>
+                            @forelse($recentReports as $report)
+                                <tr>
+                                    <td>{{ $report->title }}</td>
+                                    <td>{{ $report->reporting_period_start?->format('M d, Y') ?? '-' }} - {{ $report->reporting_period_end?->format('M d, Y') ?? '-' }}</td>
+                                    <td>{{ number_format((float) $report->progress_percent, 1) }}%</td>
+                                    <td><span class="tt-badge">{{ ucfirst(str_replace('_', ' ', $report->status)) }}</span></td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="4"><div class="tt-empty">No activity reports found for this selected period.</div></td></tr>
+                            @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Procurement Opportunities</h2>
+                            <p>Open and recent procurement records created by this think tank.</p>
+                        </div>
+                        <a class="btn btn-sm btn-primary" href="{{ route('think-tank.procurement', $portalRouteParams) }}">Open Procurement</a>
+                    </div>
+                    <div class="tt-table-wrap">
+                        <table class="tt-report-table">
+                            <thead><tr><th>Title</th><th>Status</th><th>Applications</th><th>Closing</th><th></th></tr></thead>
+                            <tbody>
+                            @forelse($recentProcurements as $procurement)
+                                <tr>
+                                    <td>{{ $procurement->title }}</td>
+                                    <td><span class="tt-badge">{{ ucfirst($procurement->status) }}</span></td>
+                                    <td>{{ number_format($procurement->submissions_count) }}</td>
+                                    <td>{{ $procurement->application_end_date?->format('M d, Y') ?? 'N/A' }}</td>
+                                    <td>
+                                        <a class="btn btn-sm btn-light border" href="{{ route('think-tank.procurement.submissions', array_merge($portalRouteParams, ['procurement' => $procurement])) }}">
+                                            Evaluate
+                                        </a>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="5"><div class="tt-empty">No procurement opportunities found for this selected period.</div></td></tr>
+                            @endforelse
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
-            <div class="tt-panel">
-                <div class="tt-panel-head">
-                    <div>
-                        <h2>Recent research</h2>
-                        <p class="hint">Submissions visible to Secretariat oversight.</p>
+            <aside>
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Receipt Confirmation</h2>
+                            <p>Comparison of Secretariat transfers and bank receipt confirmations.</p>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between small fw-bold mb-2">
+                        <span>Confirmed receipts</span>
+                        <span>{{ number_format($receiptRate, 1) }}%</span>
+                    </div>
+                    <div class="tt-progress mb-3"><span style="width: {{ $receiptRate }}%"></span></div>
+                    <div class="tt-status-list">
+                        <div class="tt-status-row">
+                            <span>Total sent</span>
+                            <strong>{{ $currency }} {{ number_format($receiptSummary['sent'], 2) }}</strong>
+                        </div>
+                        <div class="tt-status-row">
+                            <span>Confirmed in bank</span>
+                            <strong>{{ $currency }} {{ number_format($receiptSummary['confirmed'], 2) }}</strong>
+                        </div>
+                        <div class="tt-status-row">
+                            <span>Awaiting confirmation</span>
+                            <strong>{{ $currency }} {{ number_format($receiptSummary['pending'], 2) }}</strong>
+                        </div>
                     </div>
                 </div>
-                <div class="tt-table-wrap">
-                    <table class="tt-dashboard-table">
-                        <thead><tr><th>Title</th><th>Type</th><th>Status</th></tr></thead>
-                        <tbody>
-                        @forelse($recentResearch as $output)
-                            <tr>
-                                <td>{{ $output->title }}</td>
-                                <td>{{ str_replace('_', ' ', ucfirst($output->output_type)) }}</td>
-                                <td><span class="badge">{{ ucfirst($output->status) }}</span></td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="3">No research submitted yet.</td></tr>
-                        @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
 
-            <div class="tt-panel">
-                <div class="tt-panel-head">
-                    <div>
-                        <h2>Recent reports</h2>
-                        <p class="hint">Latest Secretariat-facing activity updates.</p>
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Funded Activities</h2>
+                            <p>Budget lines funded through Secretariat disbursements.</p>
+                        </div>
+                    </div>
+                    <div class="tt-funded-list">
+                        @forelse($fundedActivities as $activity)
+                            <article class="tt-funded-row">
+                                <div class="tt-funded-title">{{ $activity['budget_line'] }}</div>
+                                <div class="text-muted small">{{ number_format($activity['utilization'], 1) }}% of disbursed funds reported as spent.</div>
+                                <div class="tt-funded-money">
+                                    <span>Allocated <strong>{{ $currency }} {{ number_format($activity['allocated'], 2) }}</strong></span>
+                                    <span>Disbursed <strong>{{ $currency }} {{ number_format($activity['disbursed'], 2) }}</strong></span>
+                                    <span>Spent <strong>{{ $currency }} {{ number_format($activity['spent'], 2) }}</strong></span>
+                                </div>
+                                <div class="tt-progress"><span style="width: {{ $activity['utilization'] }}%"></span></div>
+                            </article>
+                        @empty
+                            <div class="tt-empty">No funded activities found for this selected period.</div>
+                        @endforelse
                     </div>
                 </div>
-                <div class="tt-table-wrap">
-                    <table class="tt-dashboard-table">
-                        <thead><tr><th>Report</th><th>Progress</th><th>Status</th></tr></thead>
-                        <tbody>
-                        @forelse($recentReports as $report)
-                            <tr>
-                                <td>{{ $report->title }}</td>
-                                <td>{{ number_format((float) $report->progress_percent, 1) }}%</td>
-                                <td><span class="badge">{{ ucfirst($report->status) }}</span></td>
-                            </tr>
+
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Report Status</h2>
+                            <p>Review state of submitted reports.</p>
+                        </div>
+                    </div>
+                    <div class="tt-status-list">
+                        @forelse($reportStatusCounts as $status => $count)
+                            <div class="tt-status-row">
+                                <span>{{ ucfirst(str_replace('_', ' ', $status)) }}</span>
+                                <strong>{{ number_format($count) }}</strong>
+                            </div>
                         @empty
-                            <tr><td colspan="3">No reports submitted yet.</td></tr>
+                            <div class="tt-empty">No report status data yet.</div>
                         @endforelse
-                        </tbody>
-                    </table>
+                    </div>
                 </div>
-            </div>
-        </aside>
-    </section>
+
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
+                            <h2>Recent Research</h2>
+                            <p>Latest research outputs submitted to the Secretariat.</p>
+                        </div>
+                    </div>
+                    <div class="tt-table-wrap">
+                        <table class="tt-report-table">
+                            <thead><tr><th>Title</th><th>Type</th><th>Status</th></tr></thead>
+                            <tbody>
+                            @forelse($recentResearch as $output)
+                                <tr>
+                                    <td>{{ $output->title }}</td>
+                                    <td>{{ str_replace('_', ' ', ucfirst($output->output_type)) }}</td>
+                                    <td><span class="tt-badge">{{ ucfirst($output->status) }}</span></td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="3"><div class="tt-empty">No research outputs found for this selected period.</div></td></tr>
+                            @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </aside>
+        </section>
+    </div>
 </x-think-tank.partials.shell>
 
 @push('scripts')
@@ -714,26 +740,40 @@
             }
 
             const chartData = @json($chartData);
+            const money = (value) => 'USD ' + Number(value || 0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
             const baseOptions = {
                 chart: { toolbar: { show: false }, fontFamily: 'Inter, Arial, sans-serif' },
                 dataLabels: { enabled: false },
-                colors: ['#0ea5e9', '#22c55e', '#f59e0b', '#6366f1'],
+                colors: ['#2563eb', '#16a34a', '#f59e0b', '#0f766e'],
                 grid: { borderColor: '#e2e8f0' },
                 legend: { position: 'bottom' }
             };
 
             new ApexCharts(document.querySelector('#ttFinanceChart'), {
                 ...baseOptions,
-                chart: { ...baseOptions.chart, type: 'bar', height: 230 },
+                chart: { ...baseOptions.chart, type: 'bar', height: 250 },
                 series: [{ name: 'Amount', data: chartData.finance.values }],
                 xaxis: { categories: chartData.finance.labels },
                 yaxis: { labels: { formatter: (value) => Number(value).toLocaleString() } },
+                tooltip: { y: { formatter: money } },
                 plotOptions: { bar: { borderRadius: 5, columnWidth: '48%' } }
+            }).render();
+
+            new ApexCharts(document.querySelector('#ttReceiptChart'), {
+                ...baseOptions,
+                chart: { ...baseOptions.chart, type: 'donut', height: 250 },
+                colors: ['#22c55e', '#f59e0b'],
+                series: chartData.receipts.values,
+                labels: chartData.receipts.labels,
+                tooltip: { y: { formatter: money } }
             }).render();
 
             new ApexCharts(document.querySelector('#ttReportsChart'), {
                 ...baseOptions,
-                chart: { ...baseOptions.chart, type: 'area', height: 230 },
+                chart: { ...baseOptions.chart, type: 'area', height: 250 },
                 stroke: { curve: 'smooth', width: 3 },
                 fill: { opacity: .18 },
                 series: [{ name: 'Reports', data: chartData.reports.values }],
@@ -742,14 +782,15 @@
 
             new ApexCharts(document.querySelector('#ttProcurementChart'), {
                 ...baseOptions,
-                chart: { ...baseOptions.chart, type: 'donut', height: 230 },
-                series: chartData.procurements.values,
-                labels: chartData.procurements.labels
+                chart: { ...baseOptions.chart, type: 'bar', height: 250 },
+                series: [{ name: 'Procurement', data: chartData.procurements.values }],
+                xaxis: { categories: chartData.procurements.labels },
+                plotOptions: { bar: { horizontal: true, borderRadius: 5 } }
             }).render();
 
             new ApexCharts(document.querySelector('#ttResearchChart'), {
                 ...baseOptions,
-                chart: { ...baseOptions.chart, type: 'bar', height: 230 },
+                chart: { ...baseOptions.chart, type: 'bar', height: 250 },
                 series: [{ name: 'Outputs', data: chartData.research.values.length ? chartData.research.values : [0] }],
                 xaxis: { categories: chartData.research.labels.length ? chartData.research.labels : ['No output yet'] },
                 plotOptions: { bar: { horizontal: true, borderRadius: 5 } }

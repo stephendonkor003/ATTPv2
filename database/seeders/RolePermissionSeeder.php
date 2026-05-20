@@ -46,6 +46,7 @@ class RolePermissionSeeder extends Seeder
             'budget.activities.manage',
             'budget.allocations.manage',
             'budget.reports.view',
+            'budget.project_financial_position.view',
         ]);
 
         // Auditor
@@ -54,6 +55,7 @@ class RolePermissionSeeder extends Seeder
             'finance.executions.view',
             'budget.access',
             'budget.reports.view',
+            'budget.project_financial_position.view',
             'budget.summary.view',
             'hr.analytics.view',
             'national_data.review',

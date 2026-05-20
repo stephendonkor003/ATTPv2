@@ -28,7 +28,7 @@ class ProcurementInvoiceController extends Controller
             abort(403, 'You do not have access to invoices.');
         }
 
-        $invoices = ProcurementInvoice::with(['procurement', 'vendor', 'subActivity', 'purchaseOrder'])
+        $invoices = ProcurementInvoice::with(['procurement', 'vendor', 'subActivity', 'purchaseOrder.thinkTankMember'])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
@@ -43,17 +43,22 @@ class ProcurementInvoiceController extends Controller
     {
         $this->assertInvoiceInScope($invoice);
 
-        $invoice->load(['procurement', 'vendor', 'subActivity', 'purchaseOrder', 'deliverables']);
+        $invoice->load(['procurement', 'vendor', 'subActivity', 'purchaseOrder.thinkTankMember', 'purchaseOrder.budgetCommitment', 'purchaseOrder.disbursements', 'deliverables']);
 
         $budget = null;
         $currency = null;
         if ($invoice->procurement) {
             [$budget, $currency] = $this->resolveBudget($invoice->procurement);
+        } elseif ($invoice->purchaseOrder) {
+            $budget = (float) ($invoice->purchaseOrder->budgetCommitment?->commitment_amount ?? $invoice->purchaseOrder->amount ?? $invoice->amount);
+            $currency = $invoice->purchaseOrder->currency ?? $invoice->currency;
         }
 
-        $totalInvoiced = ProcurementInvoice::where('procurement_id', $invoice->procurement_id)
-            ->where('status', '!=', 'rejected')
-            ->sum('amount');
+        $totalInvoiced = $invoice->procurement_id
+            ? ProcurementInvoice::where('procurement_id', $invoice->procurement_id)
+                ->where('status', '!=', 'rejected')
+                ->sum('amount')
+            : ($invoice->purchaseOrder?->paidAmount() ?? (float) $invoice->amount);
 
         $remaining = $budget !== null ? max($budget - $totalInvoiced, 0) : null;
 

@@ -42,6 +42,21 @@
 @endpush
 
 @section('content')
+    @php
+        $isThinkTankTransfer = $invoice->purchaseOrder?->po_type === 'think_tank_transfer';
+        $procurementTitle = $isThinkTankTransfer
+            ? 'Funding to Think Tanks'
+            : ($invoice->procurement?->title ?? 'N/A');
+        $procurementReference = $isThinkTankTransfer
+            ? ($invoice->purchaseOrder?->reference_no ?? 'Think tank transfer')
+            : ($invoice->procurement?->reference_no ?? 'N/A');
+        $vendorName = $isThinkTankTransfer
+            ? ($invoice->purchaseOrder?->thinkTankMember?->name ?? $invoice->vendor?->name ?? 'Think Tank')
+            : ($invoice->vendor?->name ?? 'Vendor');
+        $vendorEmail = $isThinkTankTransfer
+            ? ($invoice->purchaseOrder?->thinkTankMember?->email ?? $invoice->vendor?->email ?? 'N/A')
+            : ($invoice->vendor?->email ?? 'N/A');
+    @endphp
     <div class="nxl-container invoice-show">
         <div class="card hero-card mb-4">
             <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-start">
@@ -70,7 +85,7 @@
                     <div class="col-md-4">
                         <div class="stat-tile">
                             <div class="stat-label">Status</div>
-                            <div class="stat-value text-capitalize">{{ $invoice->status ?? 'submitted' }}</div>
+                            <div class="stat-value text-capitalize">{{ str_replace('_', ' ', $invoice->status ?? 'submitted') }}</div>
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -93,13 +108,13 @@
                 <div class="row g-4 mt-1">
                     <div class="col-md-6">
                         <div class="text-muted small">Procurement</div>
-                        <div class="fw-semibold">{{ $invoice->procurement?->title ?? 'N/A' }}</div>
-                        <div class="small text-muted">{{ $invoice->procurement?->reference_no ?? 'N/A' }}</div>
+                        <div class="fw-semibold">{{ $procurementTitle }}</div>
+                        <div class="small text-muted">{{ $procurementReference }}</div>
                     </div>
                     <div class="col-md-6">
                         <div class="text-muted small">Vendor</div>
-                        <div class="fw-semibold">{{ $invoice->vendor?->name ?? 'Vendor' }}</div>
-                        <div class="small text-muted">{{ $invoice->vendor?->email ?? 'N/A' }}</div>
+                        <div class="fw-semibold">{{ $vendorName }}</div>
+                        <div class="small text-muted">{{ $vendorEmail }}</div>
                     </div>
                     <div class="col-md-4">
                         <div class="text-muted small">Budget</div>
@@ -119,6 +134,14 @@
                         <div class="text-muted small">Sub-Activity</div>
                         <div class="fw-semibold">{{ $invoice->subActivity?->name ?? 'N/A' }}</div>
                     </div>
+                    @if ($isThinkTankTransfer)
+                        <div class="col-md-4">
+                            <div class="text-muted small">Think Tank Receipt</div>
+                            <div class="fw-semibold text-capitalize">
+                                {{ str_replace('_', ' ', $invoice->purchaseOrder?->status ?? 'pending') }}
+                            </div>
+                        </div>
+                    @endif
                 </div>
 
                 @if ($invoice->notes)
