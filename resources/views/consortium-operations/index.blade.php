@@ -265,6 +265,118 @@
             padding: 0.45rem 0.55rem;
         }
 
+        .analysis-field .select2-container {
+            width: 100% !important;
+        }
+
+        .analysis-field .select2-container--default .select2-selection--multiple,
+        .analysis-field .select2-container--default .select2-selection--single {
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+            min-height: 46px;
+            padding: 0.28rem 0.45rem;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+        }
+
+        .analysis-field .select2-container--default.select2-container--focus .select2-selection--multiple,
+        .analysis-field .select2-container--default.select2-container--focus .select2-selection--single,
+        .analysis-field .select2-container--default.select2-container--open .select2-selection--multiple,
+        .analysis-field .select2-container--default.select2-container--open .select2-selection--single {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 0.18rem rgba(37, 99, 235, 0.16);
+        }
+
+        .analysis-field .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.36rem;
+            padding: 0;
+        }
+
+        .analysis-field .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border: 1px solid #93c5fd;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1e3a8a;
+            font-size: 0.76rem;
+            font-weight: 800;
+            padding: 0.28rem 0.6rem 0.28rem 1.6rem;
+            margin: 0;
+        }
+
+        .analysis-field .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            border-right: 1px solid rgba(30, 64, 175, 0.24);
+            color: #1d4ed8;
+            font-weight: 900;
+            left: 0.42rem;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .analysis-field .select2-container--default .select2-search--inline .select2-search__field {
+            color: #0f172a;
+            font-weight: 700;
+            height: 30px;
+            margin: 0;
+        }
+
+        .analysis-field .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #0f172a;
+            font-weight: 800;
+            line-height: 34px;
+            padding-left: 0.2rem;
+        }
+
+        .analysis-field .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 44px;
+            right: 0.55rem;
+        }
+
+        .analysis-control-panel .select2-dropdown,
+        .analysis-select2-dropdown {
+            border: 1px solid #bfdbfe;
+            border-radius: 12px;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.16);
+            overflow: hidden;
+            z-index: 2050;
+        }
+
+        .analysis-control-panel .select2-results__option,
+        .analysis-select2-dropdown .select2-results__option {
+            color: #0f172a;
+            font-weight: 700;
+            padding: 0.62rem 0.75rem;
+        }
+
+        .analysis-control-panel .select2-results__option--highlighted[aria-selected],
+        .analysis-select2-dropdown .select2-results__option--highlighted[aria-selected] {
+            background: #0f172a;
+            color: #ffffff;
+        }
+
+        .analysis-control-panel .select2-results__option[aria-selected=true],
+        .analysis-select2-dropdown .select2-results__option[aria-selected=true] {
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+
+        .analysis-control-panel .select2-search--dropdown {
+            padding: 0.65rem;
+            background: #f8fafc;
+        }
+
+        .analysis-control-panel .select2-search--dropdown .select2-search__field {
+            border: 1px solid #bfdbfe;
+            border-radius: 10px;
+            color: #0f172a;
+            font-weight: 700;
+            min-height: 38px;
+        }
+
         .analysis-chip-row {
             display: flex;
             flex-wrap: wrap;
@@ -662,7 +774,7 @@
                                 </div>
                                 <div class="analysis-field">
                                     <label for="analysisEntitySelect">Records to compare</label>
-                                    <select class="form-select analysis-select" id="analysisEntitySelect" multiple></select>
+                                    <select class="form-select analysis-select" id="analysisEntitySelect" multiple data-placeholder="Search and select records"></select>
                                 </div>
                                 <div class="analysis-field">
                                     <label for="analysisSortSelect">Sort by</label>
@@ -818,6 +930,7 @@
 
 @can('consortiums.analysis.view')
     @push('scripts')
+        <script src="{{ asset('admin/assets/vendors/js/select2.min.js') }}"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 const comparisonData = @json($comparisonData);
@@ -871,9 +984,61 @@
                     });
                 }
 
+                function hasSelect2() {
+                    return !!(window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.select2 === 'function');
+                }
+
+                function destroyEntitySelectPlugin() {
+                    if (!entitySelect || !hasSelect2()) {
+                        return;
+                    }
+
+                    const select = window.jQuery(entitySelect);
+                    if (select.hasClass('select2-hidden-accessible')) {
+                        select.select2('destroy');
+                    }
+                }
+
+                function refreshEntitySelectPlugin() {
+                    if (!entitySelect || !hasSelect2()) {
+                        return;
+                    }
+
+                    const select = window.jQuery(entitySelect);
+                    const singleMode = selectionModeSelect?.value === 'single';
+
+                    if (select.hasClass('select2-hidden-accessible')) {
+                        select.select2('destroy');
+                    }
+
+                    select.select2({
+                        width: '100%',
+                        placeholder: entitySelect.dataset.placeholder || 'Search and select records',
+                        allowClear: true,
+                        closeOnSelect: singleMode,
+                        maximumSelectionLength: singleMode ? 1 : 0,
+                        dropdownParent: window.jQuery('.analysis-control-panel'),
+                        dropdownCssClass: 'analysis-select2-dropdown'
+                    });
+                }
+
+                function notifyEntitySelectChanged() {
+                    if (!entitySelect || !hasSelect2()) {
+                        return;
+                    }
+
+                    window.jQuery(entitySelect).trigger('change.select2');
+                }
+
                 function selectedIds() {
                     if (!entitySelect) {
                         return [];
+                    }
+
+                    if (hasSelect2() && window.jQuery(entitySelect).hasClass('select2-hidden-accessible')) {
+                        const value = window.jQuery(entitySelect).val();
+
+                        return Array.isArray(value) ? value.map(String) : (value ? [String(value)] : []);
                     }
 
                     return Array.from(entitySelect.selectedOptions).map((option) => option.value);
@@ -901,17 +1066,20 @@
                     }
 
                     const multi = selectionModeSelect.value !== 'single';
+                    destroyEntitySelectPlugin();
+
                     if (multi) {
                         entitySelect.setAttribute('multiple', 'multiple');
-                        entitySelect.size = Math.min(9, Math.max(5, entitySelect.options.length || 5));
+                        entitySelect.removeAttribute('size');
                     } else {
                         entitySelect.removeAttribute('multiple');
-                        entitySelect.size = 1;
                         const selected = selectedIds();
                         Array.from(entitySelect.options).forEach((option, index) => {
                             option.selected = selected.length ? option.value === selected[0] : index === 0;
                         });
                     }
+
+                    refreshEntitySelectPlugin();
                 }
 
                 function populateEntitySelect(mode, preferredIds = null) {
@@ -929,6 +1097,7 @@
                         idsToSelect = rows.slice(0, defaultCount).map((row) => String(row.id));
                     }
 
+                    destroyEntitySelectPlugin();
                     entitySelect.innerHTML = '';
                     rows.forEach((row) => {
                         const option = document.createElement('option');
@@ -1160,6 +1329,7 @@
                     Array.from(entitySelect.options).forEach((option) => {
                         option.selected = ids.includes(option.value);
                     });
+                    notifyEntitySelectChanged();
                     renderCharts(currentMode);
                 }
 
@@ -1171,6 +1341,7 @@
                     Array.from(entitySelect.options).forEach((option) => {
                         option.selected = false;
                     });
+                    notifyEntitySelectChanged();
                     renderCharts(currentMode);
                 }
 
@@ -1191,6 +1362,7 @@
                         Array.from(entitySelect.options).forEach((option, index) => {
                             option.selected = option.value === currentSelection[0] || (!currentSelection[0] && index === 0);
                         });
+                        notifyEntitySelectChanged();
                     }
                     renderCharts(currentMode);
                 });
