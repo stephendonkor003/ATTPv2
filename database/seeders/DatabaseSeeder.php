@@ -39,6 +39,7 @@ class DatabaseSeeder extends Seeder
             AssignPartnerPermissionsSeeder::class,
             ProcurementPermissionsSeeder::class,
             AttpAiGuideSettingSeeder::class,
+            AttpBudgetStructureSeeder::class,
             ApprovedWorkPlanSeeder::class,
             AttpWorkPlan2025Seeder::class,
             ConsortiumThinkTankMembershipSeeder::class,

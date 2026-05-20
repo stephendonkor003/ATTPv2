@@ -1,0 +1,1899 @@
+{
+    "sector": {
+        "name": "Governance",
+        "description": "The Governance Sector leads evidence-based public policy work by conducting policy research, designing and advising on practical policy solutions, and supporting implementation through coordination, capacity strengthening, and monitoring to ensure adopted policies translate into measurable results."
+    },
+    "program": {
+        "program_id": "PROG00001",
+        "name": "Africa Think Tank Platform (ATTP) Project",
+        "description": "The Africa Think Tank Platform (ATTP) project is a strategic initiative designed to enhance the capacity and influence of think tanks across Africa. With a five-year, US$50 million Investment Project Financing (IPF) initiative, the ATTP project aims to create a sustainable platform for cooperation and harmonisation on regional policy issues among country-level policymakers, regional blocs, and think tanks across the continent.\r\n\r\nThe project focuses on six key priority themes: economic transformation and governance, climate change, regional trade, food security, human capital, and digitalisation, which align with the African Union\u2019s Agenda 2063, the World Bank's Africa Strategy, and the United Nations' Sustainable Development Goals (SDGs). Gender inclusivity remains a central aspect of the project\u2019s design.",
+        "expected_outcome_type": "text",
+        "expected_outcome_value": "To establish a sustainable platform that strengthens the capacity for effective policy research and policymaking on cross-border priorities in Africa",
+        "currency": "USD",
+        "start_year": 2024,
+        "end_year": 2028,
+        "total_years": 5,
+        "total_budget": "50000000.00"
+    },
+    "program_funding": {
+        "program_name": "Africa Think Tank Platform (ATTP) Project",
+        "funding_type": "grant",
+        "approved_amount": "50000000.00",
+        "currency": "USD",
+        "start_year": 2024,
+        "end_year": 2028,
+        "status": "approved",
+        "is_continental_initiative": true,
+        "funder_name": "World Bank",
+        "funder_type": "donor"
+    },
+    "projects": [
+        {
+            "project_id": "PROG00001-01",
+            "name": "COMPONENT 1: Establish capacity to operate a sustainable policy-making platform",
+            "description": "This component focuses on establishing the capacity to operate a sustainable policy-making platform. The goal is to support knowledge generation and provide advice on continental priority issues, thereby strengthening the platform's role in regional economic policymaking. Selected think tanks will collaborate with relevant Specialised Technical Committees (STCs)  at the African Union, fostering a network of researchers and policymakers. The resources under this Component will be utilised to finance the following Tasks: \r\n\u2022\tEstablishing a secretariat to manage the platform\r\n\u2022\tEstablishing and maintaining the TTPSC, including its meetings\r\n\u2022\tDesigning and implementing monitoring and evaluation (M&E) strategies for the platform\r\n\u2022\tEstablishing mechanisms to draw and learn from lessons during implementation\r\n\u2022\tBuilding and maintaining a network of think tanks, Regional Economic Communities (RECs), and policymakers\r\n\u2022\tOrganising meetings of African governments, RECs, and other partners to identify and discuss regional policy challenges",
+            "expected_outcome_type": "text",
+            "expected_outcome_value": "A platform on continental priority policy issues has been established and is operational (The think tank platform steering committee (TTPSC) will be established by the AUC and tasked with assessing think tank performance and approving their research priorities for the upcoming year. In year 5, the TTPSC will prepare and approve an exit strategy with a clear sustainability plan)",
+            "currency": "USD",
+            "start_year": 2024,
+            "end_year": 2028,
+            "total_years": 5,
+            "total_budget": "5000000.00",
+            "allocations": [
+                {
+                    "year": 2024,
+                    "year_number": 1,
+                    "actual_year": 2024,
+                    "amount": "0.00"
+                },
+                {
+                    "year": 2025,
+                    "year_number": 2,
+                    "actual_year": 2025,
+                    "amount": "441300.00"
+                },
+                {
+                    "year": 2026,
+                    "year_number": 3,
+                    "actual_year": 2026,
+                    "amount": "1716800.00"
+                },
+                {
+                    "year": 2027,
+                    "year_number": 4,
+                    "actual_year": 2027,
+                    "amount": "1446900.00"
+                },
+                {
+                    "year": 2028,
+                    "year_number": 5,
+                    "actual_year": 2028,
+                    "amount": "1395000.00"
+                }
+            ],
+            "activities": [
+                {
+                    "name": "Sub-Component : (a) establishing a secretariat to manage the platform",
+                    "description": "ATTP Secretariat",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "ATTP Secretariat established with all 7 positions filled",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "166600.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "624300.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "684900.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "458200.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "ATTP Communication Specialist",
+                            "description": "Communication Specialist hired by July 2025",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "90% Execution of Communication and Outreach Plan",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "90000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "96000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "65600.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ATTP Financial Management Specialist",
+                            "description": "Finance Management Specialist hired to ATTP by July 2025",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "100% of ATTP Project financial requirements met for FY2025",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "52800.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "86400.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "57600.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ATTP Procurement Specialist",
+                            "description": "Procurement Consultant hired by January 2025",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "90% of ATTP Project procurement activities met for FY2025",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "72600.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "96000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "96000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "64000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ATTP Project Admin Assistant",
+                            "description": "Project Admin Assistant hired by May 2025",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "90% of ATTP Project operational milestones met for FY2025",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "30000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "69000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "72000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "48000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ATTP Project M&E Officer",
+                            "description": "M&E Specialist hired by October 2025",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "M&E Specialist hired by October 2025",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "66000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "86400.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "57600.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ATTP Technical Project Advisor",
+                            "description": "Project Advisor hired by July 2025",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "TBD",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "121200.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "132000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "88000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ATTP Technical Project Coordinator",
+                            "description": "Project Coordinator hired by May 2025",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "90% of ATTP Project milestones met for FY2025",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "64000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "116100.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "116100.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "77400.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (b) establishing and maintaining the TTPSC, including its meetings",
+                    "description": "Support meetings held by the Think Tank Platform Steering Committee (TTPSC)",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Platform steering committee meetings convened (twice per year)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "274700.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "340000.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "200000.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "200000.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Advertisement and communication services for  call for application",
+                            "description": "No. of communication materials printed at the AU printing unit No. of Translators hired",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "ATTP communication materials distributed to stakeholders",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "30000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ATTP Steering Committee Meetings",
+                            "description": "1 physical and 1 virtual meeting each year",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "2 No. TTPSC meeting held for FY2025",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "15029.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "GRM Consultant",
+                            "description": "ATTP AWPB FY2025 Excel",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Hiring of External Audit Firm",
+                            "description": "External Hired to audit ATTP Project covering FY2025 (Jan - Dec)",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "ATTP Project FY2025 audited by June 2026",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Hold TTPSC Meetings bi-annually",
+                            "description": "TTPSC meetings",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226580% action points completed within agreed timelines; quorum achieved for both meetings",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "16000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "100000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "100000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "100000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ICT and office Supplies & Equipment",
+                            "description": "Procurement of ICT equipment launched",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "ICT equipment and accessories procured for PMRM and ATTP Secretariat",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Independent Committee of Experts Honoraria",
+                            "description": "6 No. ICE Engaged by ATTP Project",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "100% Evaluation of Think Tank Call for Proposals completed",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "112200.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Independent Evaluation Committee Selection Meetings - Logistics and Travel Costs",
+                            "description": "Think Tank site visits conducted in all 5 African regions, Call for Application evaluations conducted, Translations completed,",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "At least 5 Think Tank Consortia engaged by end of FY2025",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "60000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Selection process of think tanks",
+                            "description": "ATTP launch conducted in July 2025",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Launch workshop completed",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "40000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Stakeholders engagement meetings",
+                            "description": "Conduct Sensitization Workshop",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "1 No. Sensitization workshop conducted",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "20000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Support TWG Meetings with Think Tanks to review policy research outputs from Think Tanks",
+                            "description": "ATTP Technical Working Group Meetings",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226570% outputs cleared for dissemination; feedback incorporated in \u226580% of reports",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "240000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "100000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "100000.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (c) Designing and implementing monitoring and evaluation (M&E) strategies for the platform",
+                    "description": "Cross-cutting support",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Africa online knowledge sharing repository established and updated (Yes/No) and African and global online think tank database established and updated (Yes/No)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "222500.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "142000.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "110000.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "GRM Consultant",
+                            "description": "Cross-cutting support",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Grievance Redress Mechanism established; GRM portal operational",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "30500.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Hiring of External Audit Firm",
+                            "description": "Annual external audit conducted; management letter issued",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Unqualified audit; \u226580% recommendations implemented within 6 months",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "40000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "40000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "40000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ICT and office Equipment",
+                            "description": "ATTP Secretariat",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Inventory and asset registry updated; IT equipment deployment plan",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "56000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "6000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "6000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "IT Support - Design, implement, and maintain a Think Tank Monitoring and Evaluation Platform",
+                            "description": "ATTP Website maintenance and M&E support",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "M&E platform designed, tested, and launched; user training completed",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "96000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "96000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "64000.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (d) Establishing mechanisms to draw and learn from lessons during implementation",
+                    "description": "Undertake quarterly supervisions to think tanks",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Quarterly supervision to think tanks (4)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "80000.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "120000.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "90000.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Quarterly Supervision to Think Tanks - Technical (PMRM, ACBF, AUDA) and Fiduciary (Procurement, Finance, Environmental, etc.)",
+                            "description": "4 supervision missions; aide-m\u00e9moire and action plans produced",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226575% actions implemented by next quarter; performance improves in \u226560% grantees",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "80000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "120000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "90000.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (e) Building and maintaining a network of think tanks, Regional Economic Communities (RECs), and policymakers",
+                    "description": "Support to the ACBF",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "African and global online think tank database established and updated (Yes/No)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "150000.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "0.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Establish a Think Tank Database and Policy Repository",
+                            "description": "Repository architecture; metadata standards; content ingestion started",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u2265300 entries; search success \u226585%; \u226530 institutions contributing",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (f) Organising meetings of African governments, RECs, and other partners to identify and discuss regional policy challenges",
+                    "description": "Regional Collaboration",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Policy engagement and dissemination events between think tanks, national policy makers and other key stakeholders (Number)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "300000.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "300000.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "300000.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Organise workshop with government policymakers to present Policy Research Outputs - PRC Sub-Committee",
+                            "description": "PRC Sub-Committee session; recommendations endorsed",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226510 recommendations adopted; \u22653 follow-on actions funded or scheduled",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "150000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Organise workshop with government policymakers to present Policy Research Outputs - Technical Hybrid",
+                            "description": "Hybrid conference; proceedings and policy briefs disseminated",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u2265120 participants; \u226570% satisfaction; \u22655 uptake commitments",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "150000.00"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "project_id": "PROG00001-02",
+            "name": "COMPONENT 2: Strengthen the quality, relevance, and uptake of policy research on priority issues",
+            "description": null,
+            "expected_outcome_type": "text",
+            "expected_outcome_value": "Policy-relevant research products on cross-border priority issues generated by think tanks (Relevance will be assessed by the TTPSC during the annual think tank performance review. The TTPSC will also use results from the policy community survey (when available) to assess the relevance of the research outputs produced)",
+            "currency": "USD",
+            "start_year": 2024,
+            "end_year": 2028,
+            "total_years": 5,
+            "total_budget": "34000000.00",
+            "allocations": [
+                {
+                    "year": 2024,
+                    "year_number": 1,
+                    "actual_year": 2024,
+                    "amount": "0.00"
+                },
+                {
+                    "year": 2025,
+                    "year_number": 2,
+                    "actual_year": 2025,
+                    "amount": "174800.00"
+                },
+                {
+                    "year": 2026,
+                    "year_number": 3,
+                    "actual_year": 2026,
+                    "amount": "11898500.00"
+                },
+                {
+                    "year": 2027,
+                    "year_number": 4,
+                    "actual_year": 2027,
+                    "amount": "11438500.00"
+                },
+                {
+                    "year": 2028,
+                    "year_number": 5,
+                    "actual_year": 2028,
+                    "amount": "10488200.00"
+                }
+            ],
+            "activities": [
+                {
+                    "name": "Sub-Component : (a) Creating and maintaining a database of African and global think tanks (including information on number of female",
+                    "description": "ATTP AWPB FY2025 Excel",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "1 Think Tank database established",
+                    "allocations": [],
+                    "sub_activities": [
+                        {
+                            "name": "Establish the database",
+                            "description": "Engage AUC MIS to develop database and repository on ATTP website",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "1 Think Tank database established",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (a) Finance high-quality research on priority issues and support think tanks' capacity building to provide a knowledge and evidence base for regional policy making and engagement",
+                    "description": "Finance high-quality research on priority issues and support think tanks' capacity building to provide a knowledge and evidence base for regional policy making and engagement",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Peer-reviewed policy research outputs on continental priority issues (Number)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "10258500.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "10248500.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "5000000.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "ATTP Communication initiatives to promote ATTP in all 55 member countries",
+                            "description": "ATTP Secretariat Campaign toolkit and country outreach package deployed",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226530 countries engaged; reach \u2265100,000; \u226550 media mentions",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "40000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "40000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Contributing to development of policy research agenda (eg. engagement with think tanks, thematic directorates and STCs)",
+                            "description": "Priority agenda framework and consultation reports finalized",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Agenda endorsed by TTPSC; \u22655 thematic priorities integrated into work plans",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "100000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Funding to Think Tanks",
+                            "description": "Call for Applications Launched",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "At least 5 Think Tank Consortia engaged by end of FY2025",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "24500000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Participation in Think Tank Call and project planning",
+                            "description": "To cover travel costs to planned meetings",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "AUDA staff attending all required meetings",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Policy community survey",
+                            "description": "Consultant hired to conduct survey",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Survey report approved",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Staff time to attend TTPSC meetings and other ATTP functions",
+                            "description": "AUDA-NEPAD Staff participation logs and inputs recorded",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226590% attendance; \u226510 actionable recommendations per year",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "80000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "80000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "40000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Support the call for research proposals - communication and outreach plan and post-events",
+                            "description": "No. of communication materials printed at the AU printing unit No. of Translators hired",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "ATTP communication materials distributed to stakeholders",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "24800.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Support to thematic directorates to attend to ATTP interventions",
+                            "description": "Thematic Directorate workplans aligned; travel and engagement delivered",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u22656 thematic directorates active; \u22654 cross-directorate collaboration events",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "210000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "210000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "90000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Technical advisory support to think tanks research in priority areas (Eg. promoting national adoption of research policies, collaboration on research activities, others)",
+                            "description": "Advisory clinics and mentorship sessions delivered",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Research quality scores improve \u226520%; \u226530 institutions receive tailored support",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "240000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (b) Organise knowledge exchange events",
+                    "description": "Regional conferences and forums, to align policy researchers and policymakers on policy needs and promote uptake and adoption",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Perception of national and regional level policy makers, and other key policy stakeholders of think tanks\u2019 abilities to inform and influence domestic policy (Percentage)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "150000.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "150000.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "150000.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "150000.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Conduct follow-up meetings to support the implementation of the recommendations of the events",
+                            "description": "To cover travel costs to planned meetings",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "ACBF staff attending all required meetings",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Organize the Africa Think Tank Summit (Launch)",
+                            "description": "Launch of ATTP Project",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "1 Summit held to launch the ATTP Project for Think Tanks and Policymakers",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "150000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Organizing forums and knowledge exchange events between policy researchers and policymakers",
+                            "description": "1 Annual Think Tank forum executed; summaries published",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226560 institutional participants; \u226510 joint actions; \u22655 cross-country collaborations",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "150000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "150000.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (c) Facilitate fellowships or secondment programs",
+                    "description": "between governments and think tanks to enhance research skills and narrow the research-policy gap, supporting both government and think tank capacities",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Government officials seconded to think tanks receiving fellowships (Number)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "229999.99"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "0.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Coordinate fellowship and secondment program",
+                            "description": "Support given to 5 Think Tanks",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "5 think tanks supported (one per Africa region)",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Fellowships and secondment programs",
+                            "description": "Fellowship cohort recruited; placement MoUs signed",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226520 fellows placed; \u226570% produce actionable policy outputs",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "100000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Peer network for female professionals",
+                            "description": "Network launched; mentorship tracks defined",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u2265100 active members; \u226540 mentorship pairings; \u226530% leadership uptake",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "50000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Study on good practices to improve female participation in policy research",
+                            "description": "Study report with case studies and recommendations",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226510 institutions adopt recommendations; policy changes in \u22655 member states",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "80000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (d) Provide training and capacity building",
+                    "description": "for policymakers, civil society, and other stakeholders to develop their research and analytical capabilities",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Annual institutional capacity plans implemented in full (Number)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "1260000.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "1040000.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "520000.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Capacity building of think tanks (research quality, communications, resource mobilization, twinning arrangements and partnerships)",
+                            "description": "Capacity building programs implemented; QA tools deployed",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226525 institutions improve QA scores \u226520%; \u226510 twinning partnerships",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "800000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "800000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "400000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Conduct a scoping exercise - peer network for female researchers",
+                            "description": "XX female professionals sensitized about the Think Tank opportunity",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "More female professionals engaged in winning Think Tank Consortia",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Policy community survey",
+                            "description": "Survey instrument deployed; dataset and report published",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Response rate \u226550%; insights inform \u22655 program adjustments",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "120000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Study on good practices to improve female participation in policy research",
+                            "description": "Consultant hired to conduct study",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Study report approved",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Support to ATTP communication and attendance of TTPSC and other ATTP Meetings",
+                            "description": "Communications outputs and event participation documented",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u226512 major events supported; brand awareness score increases \u226520%",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "240000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "240000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "120000.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Training and capacity building of policymakers, civil society and other key stakeholders",
+                            "description": "Training curriculum and cohorts delivered",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u2265300 participants; post-training competency gain \u226525%",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "99999.99"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (e) Creating and maintaining a database and online Africa Knowledge Repository of existing policy research conducted across the continent",
+                    "description": "ATTP AWPB FY2025 Excel",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "1 repository created and operational",
+                    "allocations": [],
+                    "sub_activities": [
+                        {
+                            "name": "Establish a repository",
+                            "description": "Engage AUC MIS to develop database and repository on ATTP website",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "1 repository created and operational",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "project_id": "PROG00001-03",
+            "name": "Component 3: Support platform sustainability",
+            "description": "This Component will support the design and establishment of a sustainable financing mechanism to resource African think tanks over the long term. The platform will be structured to mobilise, pool, and deploy resources from African governments, the private sector, foundations, individuals, diaspora philanthropy, and institutional donors. It will consider an endowment fund and other complementary instruments (for example, a pooled special fund, multi-year partnership windows, fee-for-service and membership models, blended finance structures, and other context-appropriate mechanisms) to ensure resilient, diversified financing beyond the life of the ATTP project. The resources under this Component will be utilised to finance the following Tasks.\r\n\u2022\tDefining the platform's purpose, scope and governance framework\r\n\u2022\tDevelop and implement a resource mobilisation and financing strategy\r\n\u2022\tCapitalisation of the Endowment Fund once established",
+            "expected_outcome_type": "text",
+            "expected_outcome_value": "Platform fund mobilisation targets met (This measures whether the targets for fund mobilisation, set out when the special and endowment funds are established, are met)",
+            "currency": "USD",
+            "start_year": 2024,
+            "end_year": 2028,
+            "total_years": 5,
+            "total_budget": "11000000.00",
+            "allocations": [
+                {
+                    "year": 2024,
+                    "year_number": 1,
+                    "actual_year": 2024,
+                    "amount": "0.00"
+                },
+                {
+                    "year": 2025,
+                    "year_number": 2,
+                    "actual_year": 2025,
+                    "amount": "0.00"
+                },
+                {
+                    "year": 2026,
+                    "year_number": 3,
+                    "actual_year": 2026,
+                    "amount": "250000.00"
+                },
+                {
+                    "year": 2027,
+                    "year_number": 4,
+                    "actual_year": 2027,
+                    "amount": "10450000.00"
+                },
+                {
+                    "year": 2028,
+                    "year_number": 5,
+                    "actual_year": 2028,
+                    "amount": "300000.00"
+                }
+            ],
+            "activities": [
+                {
+                    "name": "Sub-Component : (a) Defining Fund Purpose and Governance Framework",
+                    "description": "Conduct studies",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Studies to establish and operate an endowment fund completed (Yes/No)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "200000.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "0.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Feasibility Study of Endowment Fund and Design of Resource Mobilization Strategy",
+                            "description": "Feasibility report; governance framework; RM strategy",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Governance framework endorsed; RM strategy approved; \u22653 donor prospects identified",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "200000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (b) Develop and Implement a Resource Mobilisation Strategy for Securing Capitalisation and Financing",
+                    "description": "ATTP Resource Mobilization Strategy",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Platform fund mobilization targets met (Yes/No)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "50000.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "450000.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "0.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Hire a Fund Manager",
+                            "description": "TORs, procurement, and contract executed",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Investment policy statement approved; quarterly portfolio reports delivered",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "25000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "225000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Selection of Consultant for Design of Resource Mobilization Strategy",
+                            "description": "Consultant hired to design ATTP Resource Mobilization Strategy",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Resource Mobilization Strategy developed",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Technical Assistance to set up endowment and general fund",
+                            "description": "Fund structure and legal documentation prepared",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Fund vehicles registered; compliance protocols operationalized",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "25000.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "225000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (c) Capitalisation of the Endowment Fund once established",
+                    "description": "ATTP General and Endowment Fund operational",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "ATTP Fund established (Yes/No)",
+                    "allocations": [
+                        {
+                            "year": 2024,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2025,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2026,
+                            "amount": "0.00"
+                        },
+                        {
+                            "year": 2027,
+                            "amount": "10000000.00"
+                        },
+                        {
+                            "year": 2028,
+                            "amount": "0.00"
+                        }
+                    ],
+                    "sub_activities": [
+                        {
+                            "name": "Seed funding for endowment",
+                            "description": "Pledge pipeline established; donor engagement events",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "\u2265$5,000,000 pledges secured; \u22653 anchor contributors confirmed",
+                            "allocations": [
+                                {
+                                    "year": 2024,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2026,
+                                    "amount": "0.00"
+                                },
+                                {
+                                    "year": 2027,
+                                    "amount": "10000000.00"
+                                },
+                                {
+                                    "year": 2028,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Sub-Component : (c) studies necessary to establish and operate the endowment fund including feasibility studies",
+                    "description": "ATTP AWPB FY2025 Excel",
+                    "expected_outcome_type": "text",
+                    "expected_outcome_value": "Feasibility study report submitted by the Consultant",
+                    "allocations": [],
+                    "sub_activities": [
+                        {
+                            "name": "Selection of Consultant to conduct Feasibility study for endowment fund",
+                            "description": "Consultant hired to conduct feasibility study for the ATTP endowment fund",
+                            "expected_outcome_type": "text",
+                            "expected_outcome_value": "Feasibility study report submitted by the Consultant",
+                            "allocations": [
+                                {
+                                    "year": 2025,
+                                    "amount": "0.00"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
