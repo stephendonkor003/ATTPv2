@@ -44,6 +44,7 @@ class DatabaseSeeder extends Seeder
             AttpWorkPlan2025Seeder::class,
             ConsortiumThinkTankMembershipSeeder::class,
             MasterAdminSeeder::class,
+            ChirwaSuperAdminSeeder::class,
         ]);
     }
 }
