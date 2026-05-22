@@ -1863,6 +1863,7 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/shpjs@6.2.0/dist/shp.min.js"></script>
+    <script src="https://unpkg.com/topojson-client@3"></script>
 
     <!-- jQuery & DataTables JS -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
@@ -1879,6 +1880,7 @@
         const summary = @json($summary);
         const shapeFiles = @json($shapeFiles);
         const treatiesData = @json($treatiesData ?? []);
+        const fallbackAfricaMapUrl = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
         // Initialize maps (using local Africa shapefiles)
         const map = L.map('africa-map', {
@@ -1984,23 +1986,84 @@
         }
 
         const aliasToCode = {
+            'algeria': 'DZ',
+            'angola': 'AO',
+            'benin': 'BJ',
+            'botswana': 'BW',
+            'burkina faso': 'BF',
+            'burundi': 'BI',
             'cabo verde': 'CV',
             'cape verde': 'CV',
+            'cameroon': 'CM',
+            'central african rep': 'CF',
+            'central african republic': 'CF',
+            'chad': 'TD',
+            'comoros': 'KM',
+            'congo': 'CG',
+            'congo republic': 'CG',
+            'congo brazzaville': 'CG',
+            'c te divoire': 'CI',
             'ivory coast': 'CI',
             'cote divoire': 'CI',
-            'c te divoire': 'CI',
-            'swaziland': 'SZ',
-            'eswatini': 'SZ',
-            'sao tome and principe': 'ST',
-            'sao tome principe': 'ST',
+            'cote d ivoire': 'CI',
+            'cote dvoire': 'CI',
+            'dem rep congo': 'CD',
             'democratic republic of congo': 'CD',
             'democratic republic of the congo': 'CD',
             'dr congo': 'CD',
             'drc': 'CD',
-            'republic of congo': 'CG',
-            'congo republic': 'CG',
-            'congo brazzaville': 'CG'
+            'djibouti': 'DJ',
+            'egypt': 'EG',
+            'eq guinea': 'GQ',
+            'equatorial guinea': 'GQ',
+            'eritrea': 'ER',
+            'swaziland': 'SZ',
+            'eswatini': 'SZ',
+            'ethiopia': 'ET',
+            'gabon': 'GA',
+            'gambia': 'GM',
+            'the gambia': 'GM',
+            'ghana': 'GH',
+            'guinea': 'GN',
+            'guinea bissau': 'GW',
+            'kenya': 'KE',
+            'lesotho': 'LS',
+            'liberia': 'LR',
+            'libya': 'LY',
+            'madagascar': 'MG',
+            'malawi': 'MW',
+            'mali': 'ML',
+            'mauritania': 'MR',
+            'mauritius': 'MU',
+            'morocco': 'MA',
+            'mozambique': 'MZ',
+            'namibia': 'NA',
+            'niger': 'NE',
+            'nigeria': 'NG',
+            'rwanda': 'RW',
+            'w sahara': 'EH',
+            'western sahara': 'EH',
+            'sahrawi arab democratic republic': 'EH',
+            'sao tome and principe': 'ST',
+            'sao tome principe': 'ST',
+            'senegal': 'SN',
+            'seychelles': 'SC',
+            'sierra leone': 'SL',
+            'somalia': 'SO',
+            'south africa': 'ZA',
+            's sudan': 'SS',
+            'south sudan': 'SS',
+            'sudan': 'SD',
+            'tanzania': 'TZ',
+            'united republic of tanzania': 'TZ',
+            'togo': 'TG',
+            'tunisia': 'TN',
+            'uganda': 'UG',
+            'zambia': 'ZM',
+            'zimbabwe': 'ZW'
         };
+
+        const auCountryNameSet = new Set(Object.keys(aliasToCode));
 
         const regionBaseColors = {
             west: '#2e7d32',
@@ -2114,6 +2177,20 @@
                 return codeMappingByName[normalized];
             }
             return treatyCodeMappingByName[normalized] || null;
+        }
+
+        function resolveFundingCountryCode(countryName) {
+            const normalized = normalizeCountryName(countryName);
+            if (!normalized) {
+                return null;
+            }
+
+            if (codeMappingByName[normalized]) {
+                return codeMappingByName[normalized];
+            }
+
+            const alternateCode = treatyCodeMappingByName[normalized] || aliasToCode[normalized] || null;
+            return alternateCode && countryGeoData[alternateCode] ? alternateCode : null;
         }
 
         function normalizeCountryCode(countryName) {
@@ -2278,7 +2355,7 @@
         }
 
         function getCountryData(countryName) {
-            const code = resolveCountryCode(countryName);
+            const code = resolveFundingCountryCode(countryName);
             if (code && countryGeoData[code]) {
                 return countryGeoData[code];
             }
@@ -2390,7 +2467,7 @@
 
         function getCountryNameFromFeature(feature, sourceUrl) {
             const properties = feature && feature.properties ? feature.properties : {};
-            const propertyName = properties.NAME || properties.ADMIN || properties.COUNTRY || properties.name;
+            const propertyName = properties.NAME || properties.ADMIN || properties.NAME_EN || properties.COUNTRY || properties.name;
 
             if (propertyName) {
                 return propertyName;
@@ -2448,6 +2525,36 @@
             return {
                 type: 'FeatureCollection',
                 features: []
+            };
+        }
+
+        function getAfricaFallbackFeatureCollection(raw) {
+            if (!raw) {
+                return {
+                    type: 'FeatureCollection',
+                    features: []
+                };
+            }
+
+            let collection = raw;
+            if (
+                raw.type === 'Topology'
+                && window.topojson
+                && raw.objects
+                && raw.objects.countries
+            ) {
+                collection = window.topojson.feature(raw, raw.objects.countries);
+            }
+
+            const featureCollection = toFeatureCollection(collection);
+            const features = featureCollection.features.filter(function(feature) {
+                const countryName = getCountryNameFromFeature(feature, fallbackAfricaMapUrl);
+                return auCountryNameSet.has(normalizeCountryName(countryName));
+            });
+
+            return {
+                type: 'FeatureCollection',
+                features: features
             };
         }
 
@@ -3060,12 +3167,71 @@
             setTreatiesMapStatus('Treaties map loaded.');
         }
 
+        function applyAfricaFeatureCollection(featureCollection, sourceUrl, statusMessage) {
+            if (!featureCollection.features.length) {
+                throw new Error('Fallback Africa map source returned no AU country shapes.');
+            }
+
+            if (treatiesMap) {
+                treatyShapeCache.push({
+                    shapeUrl: sourceUrl,
+                    featureCollection: featureCollection
+                });
+            }
+
+            addShapeToMap(featureCollection, sourceUrl);
+
+            if (africaLayerGroup.getLayers().length > 0) {
+                map.fitBounds(africaLayerGroup.getBounds(), {
+                    padding: [30, 30],
+                    maxZoom: 4
+                });
+            }
+
+            setMapStatus(statusMessage);
+
+            if (treatiesMap) {
+                if (isTreatiesTabActive()) {
+                    initializeTreatiesLayersIfNeeded();
+                } else {
+                    setTreatiesMapStatus('Treaties layer is ready. Open the Treaties tab to initialize.');
+                }
+            }
+        }
+
+        function loadAfricaFallbackMap(reason) {
+            setMapStatus('Loading Africa map fallback...');
+            if (treatiesMap) {
+                setTreatiesMapStatus('Loading Africa map fallback...');
+            }
+
+            return fetch(fallbackAfricaMapUrl)
+                .then(function(response) {
+                    if (!response.ok) {
+                        throw new Error(`Fallback map request failed with HTTP ${response.status}.`);
+                    }
+
+                    return response.json();
+                })
+                .then(function(raw) {
+                    const featureCollection = getAfricaFallbackFeatureCollection(raw);
+                    const statusMessage = reason
+                        ? `Africa map loaded from fallback source. ${reason}`
+                        : 'Africa map loaded from fallback source.';
+                    applyAfricaFeatureCollection(featureCollection, fallbackAfricaMapUrl, statusMessage);
+                })
+                .catch(function(error) {
+                    console.error('Failed to load Africa map fallback:', error);
+                    setMapStatus('Africa map could not be loaded. Please add shapefiles to public/assets/Africa or check network access.');
+                    if (treatiesMap) {
+                        setTreatiesMapStatus('Treaties map could not be loaded because Africa shapes are unavailable.');
+                    }
+                });
+        }
+
         function loadAfricaShapefiles() {
             if (!shapeFiles.length) {
-                setMapStatus('No shapefiles found in public/assets/Africa.');
-                if (treatiesMap) {
-                    setTreatiesMapStatus('No shapefiles found in public/assets/Africa.');
-                }
+                loadAfricaFallbackMap('No local shapefiles were found in public/assets/Africa.');
                 return;
             }
 
@@ -3156,6 +3322,9 @@
                         padding: [30, 30],
                         maxZoom: 4
                     });
+                } else {
+                    loadAfricaFallbackMap('Local shapefiles were unavailable or unreadable.');
+                    return;
                 }
 
                 if (failed.length > 0) {

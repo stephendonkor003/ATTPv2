@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\File;
 class WorldShapeService
 {
     private const BASE_ASSET_DIRECTORY = 'assets/Worldshapes';
+    private const LEGACY_AFRICA_ASSET_DIRECTORY = 'assets/Africa';
 
     private const REGION_ORDER = [
         'Africa',
@@ -27,16 +28,19 @@ class WorldShapeService
     public function getAvailableRegions(): array
     {
         $directory = public_path(self::BASE_ASSET_DIRECTORY);
+        $legacyAfricaDirectory = public_path(self::LEGACY_AFRICA_ASSET_DIRECTORY);
 
-        if (!File::exists($directory)) {
-            return [];
+        $detectedRegions = File::exists($directory)
+            ? collect(File::directories($directory))
+                ->map(function (string $path): string {
+                    return basename($path);
+                })
+                ->values()
+            : collect();
+
+        if (!$detectedRegions->contains('Africa') && File::exists($legacyAfricaDirectory)) {
+            $detectedRegions->push('Africa');
         }
-
-        $detectedRegions = collect(File::directories($directory))
-            ->map(function (string $path): string {
-                return basename($path);
-            })
-            ->values();
 
         $orderedRegions = collect(self::REGION_ORDER)
             ->filter(function (string $region) use ($detectedRegions): bool {
@@ -79,18 +83,21 @@ class WorldShapeService
     public function getShapeFilesForRegion(string $region): array
     {
         $regionPath = public_path(self::BASE_ASSET_DIRECTORY . DIRECTORY_SEPARATOR . $region);
+        $assetDirectory = self::BASE_ASSET_DIRECTORY . '/' . rawurlencode($region);
+
+        if (!File::exists($regionPath) && $region === 'Africa') {
+            $regionPath = public_path(self::LEGACY_AFRICA_ASSET_DIRECTORY);
+            $assetDirectory = self::LEGACY_AFRICA_ASSET_DIRECTORY;
+        }
 
         if (!File::exists($regionPath)) {
             return [];
         }
 
-        $regionSegment = rawurlencode($region);
         $baseUrl = app()->bound('request') ? rtrim(request()->getBaseUrl(), '/') : '';
         $assetPathPrefix = ($baseUrl !== '' ? $baseUrl : '')
             . '/'
-            . self::BASE_ASSET_DIRECTORY
-            . '/'
-            . $regionSegment
+            . $assetDirectory
             . '/';
 
         return collect(File::files($regionPath))

@@ -111,7 +111,7 @@ class WorldBankCatalogSyncService
                 continue;
             }
 
-            $rows[] = [
+            $rows[$wbTopicId] = [
                 'id' => (string) Str::uuid(),
                 'wb_topic_id' => $wbTopicId,
                 'name' => $name,
@@ -124,7 +124,7 @@ class WorldBankCatalogSyncService
             ];
         }
 
-        return $rows;
+        return array_values($rows);
     }
 
     /**
@@ -143,7 +143,7 @@ class WorldBankCatalogSyncService
                 continue;
             }
 
-            $rows[] = [
+            $rows[$wbIndicatorId] = [
                 'id' => (string) Str::uuid(),
                 'wb_indicator_id' => $wbIndicatorId,
                 'name' => $name,
@@ -160,7 +160,7 @@ class WorldBankCatalogSyncService
             ];
         }
 
-        return $rows;
+        return array_values($rows);
     }
 
     /**
@@ -216,7 +216,7 @@ class WorldBankCatalogSyncService
             $region = $this->nullableString(data_get($country, 'region.value'));
             $isAggregate = strtolower((string) data_get($country, 'region.id')) === 'agg' || $region === 'Aggregates';
 
-            $rows[] = [
+            $rows[$wbCountryId] = [
                 'id' => (string) Str::uuid(),
                 'wb_country_id' => $wbCountryId,
                 'iso2_code' => $this->normalizeIso2(data_get($country, 'iso2Code')),
@@ -235,7 +235,7 @@ class WorldBankCatalogSyncService
             ];
         }
 
-        return $rows;
+        return array_values($rows);
     }
 
     /**
@@ -283,7 +283,7 @@ class WorldBankCatalogSyncService
             return;
         }
 
-        foreach (array_chunk($rows, 500) as $chunk) {
+        foreach (array_chunk($rows, 50) as $chunk) {
             DB::table($table)->upsert($chunk, $uniqueBy, $updateColumns);
         }
     }
@@ -348,4 +348,3 @@ class WorldBankCatalogSyncService
         };
     }
 }
-
