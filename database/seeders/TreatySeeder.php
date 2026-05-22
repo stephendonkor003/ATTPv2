@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -21,6 +22,8 @@ class TreatySeeder extends Seeder
      */
     private const SOURCE_FILE = 'treaty files/AU_Treaties_List_Alphabetical.xlsx';
     private const SUPPORTING_DOCUMENTS_DIR = 'treaty files/Treaties Contd';
+    private const AU_TREATIES_INDEX_URL = 'https://au.int/en/treaties/';
+    private const AU_BASE_URL = 'https://au.int';
     private const FOLDER_TITLE_ALIASES = [
         'additional protocol to the oau general convention on privileges and immunitie'
             => 'Additional Protocol to the OAU General Convention on the Privileges and Immunities of the OAU',
@@ -52,14 +55,31 @@ class TreatySeeder extends Seeder
             ->where('user_type', 'admin')
             ->value('id') ?? User::query()->oldest()->value('id');
 
+        $officialTreatyIndex = $this->loadOfficialAuTreatyIndex();
+        if (!empty($officialTreatyIndex)) {
+            $this->command?->info('Loaded ' . count($officialTreatyIndex) . ' official AU treaty metadata rows from au.int.');
+        }
+
         $synced = 0;
         foreach ($titles as $index => $title) {
             $treaty = Treaty::query()->firstOrNew(['title' => $title]);
             $isNew = !$treaty->exists;
+            $officialMetadata = $this->findOfficialTreatyMetadata($title, $officialTreatyIndex);
 
             $treaty->short_title = Str::limit($title, 120, '');
-            if (empty($treaty->description)) {
-                $treaty->description = $this->buildDescription();
+            if ($this->shouldReplaceSeededDescription((string) $treaty->description)) {
+                $treaty->description = $this->buildDescription($title, $officialMetadata);
+            }
+            if ($officialMetadata) {
+                if (empty($treaty->adoption_date) && !empty($officialMetadata['adoption_date'])) {
+                    $treaty->adoption_date = $officialMetadata['adoption_date'];
+                }
+                if (empty($treaty->entry_into_force_date) && !empty($officialMetadata['entry_into_force_date'])) {
+                    $treaty->entry_into_force_date = $officialMetadata['entry_into_force_date'];
+                }
+                if (empty($treaty->read_more_url) && !empty($officialMetadata['url'])) {
+                    $treaty->read_more_url = $officialMetadata['url'];
+                }
             }
             if ($isNew && empty($treaty->status)) {
                 $treaty->status = 'active';
@@ -81,8 +101,12 @@ class TreatySeeder extends Seeder
         }
 
         $documentStats = $this->syncSupportingDocumentsFromFolders($seedUserId);
+        $descriptionBackfills = $this->backfillSeededDescriptions($officialTreatyIndex, $seedUserId);
 
         $this->command?->info("TreatySeeder synced {$synced} treaties from workbook " . self::SOURCE_FILE . '.');
+        if ($descriptionBackfills > 0) {
+            $this->command?->info("TreatySeeder replaced {$descriptionBackfills} seeded placeholder treaty descriptions.");
+        }
         $this->command?->info(
             'TreatySeeder synced '
             . $documentStats['documents_created']
@@ -102,6 +126,50 @@ class TreatySeeder extends Seeder
                 . ' extra treaty records from document folders that were not present in the workbook.'
             );
         }
+    }
+
+    /**
+     * @param array<string, array<string, ?string>> $officialTreatyIndex
+     */
+    private function backfillSeededDescriptions(array $officialTreatyIndex, ?string $seedUserId): int
+    {
+        $updated = 0;
+
+        Treaty::query()
+            ->where(function ($query) {
+                $query->whereNull('description')
+                    ->orWhere('description', '')
+                    ->orWhere('description', 'like', 'Seed source:%');
+            })
+            ->orderBy('title')
+            ->get()
+            ->each(function (Treaty $treaty) use ($officialTreatyIndex, $seedUserId, &$updated): void {
+                $title = (string) $treaty->title;
+                $officialMetadata = $this->findOfficialTreatyMetadata($title, $officialTreatyIndex);
+
+                $treaty->description = $this->buildDescription($title, $officialMetadata);
+
+                if ($officialMetadata) {
+                    if (empty($treaty->adoption_date) && !empty($officialMetadata['adoption_date'])) {
+                        $treaty->adoption_date = $officialMetadata['adoption_date'];
+                    }
+                    if (empty($treaty->entry_into_force_date) && !empty($officialMetadata['entry_into_force_date'])) {
+                        $treaty->entry_into_force_date = $officialMetadata['entry_into_force_date'];
+                    }
+                    if (empty($treaty->read_more_url) && !empty($officialMetadata['url'])) {
+                        $treaty->read_more_url = $officialMetadata['url'];
+                    }
+                }
+
+                if ($seedUserId) {
+                    $treaty->updated_by = $seedUserId;
+                }
+
+                $treaty->save();
+                $updated++;
+            });
+
+        return $updated;
     }
 
     /**
@@ -152,6 +220,169 @@ class TreatySeeder extends Seeder
         }
 
         return array_values($titlesByKey);
+    }
+
+    /**
+     * @return array<string, array<string, ?string>>
+     */
+    private function loadOfficialAuTreatyIndex(): array
+    {
+        try {
+            $response = Http::timeout(45)
+                ->retry(2, 750)
+                ->accept('text/html')
+                ->get(self::AU_TREATIES_INDEX_URL);
+
+            if (!$response->successful()) {
+                $this->command?->warn('TreatySeeder: AU treaty metadata request failed with HTTP ' . $response->status() . '.');
+                return [];
+            }
+        } catch (\Throwable $exception) {
+            $this->command?->warn('TreatySeeder: AU treaty metadata request skipped: ' . $exception->getMessage());
+            return [];
+        }
+
+        return $this->parseOfficialAuTreatyRows($response->body());
+    }
+
+    /**
+     * @return array<string, array<string, ?string>>
+     */
+    private function parseOfficialAuTreatyRows(string $html): array
+    {
+        if (trim($html) === '' || !class_exists(\DOMDocument::class)) {
+            return [];
+        }
+
+        $previousUseInternalErrors = libxml_use_internal_errors(true);
+        $document = new \DOMDocument();
+        $loaded = $document->loadHTML('<?xml encoding="UTF-8">' . $html);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousUseInternalErrors);
+
+        if (!$loaded) {
+            return [];
+        }
+
+        $xpath = new \DOMXPath($document);
+        $rows = [];
+
+        foreach ($xpath->query('//tr') as $row) {
+            $titleLink = $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), " views-field-title ")]//a', $row)->item(0);
+            if (!$titleLink instanceof \DOMElement) {
+                continue;
+            }
+
+            $title = trim(html_entity_decode($titleLink->textContent, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            if ($title === '') {
+                continue;
+            }
+
+            $url = $this->absoluteAuUrl((string) $titleLink->getAttribute('href'));
+            $metadata = [
+                'title' => $title,
+                'url' => $url,
+                'adoption_date' => $this->extractDateFromRow($xpath, $row, 'views-field-field-date-adoption'),
+                'entry_into_force_date' => $this->extractDateFromRow($xpath, $row, 'views-field-field-date-intoforce'),
+                'signature_date' => $this->extractDateFromRow($xpath, $row, 'views-field-field-date-signature'),
+                'category' => $this->extractTextFromRow($xpath, $row, 'views-field-nothing'),
+            ];
+
+            foreach ($this->buildMatchKeys($title) as $key) {
+                $rows[$key] = $metadata;
+            }
+        }
+
+        return $rows;
+    }
+
+    private function extractDateFromRow(\DOMXPath $xpath, \DOMNode $row, string $className): ?string
+    {
+        $cell = $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), " ' . $className . ' ")]', $row)->item(0);
+        if (!$cell instanceof \DOMElement) {
+            return null;
+        }
+
+        $dateSpan = $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), " date-display-single ")]', $cell)->item(0);
+        if ($dateSpan instanceof \DOMElement) {
+            $contentDate = trim((string) $dateSpan->getAttribute('content'));
+            if (preg_match('/^\d{4}-\d{2}-\d{2}/', $contentDate, $matches)) {
+                return $matches[0];
+            }
+        }
+
+        $dateText = trim(preg_replace('/\s+/', ' ', $cell->textContent) ?? '');
+        if ($dateText === '') {
+            return null;
+        }
+
+        try {
+            return (new \DateTimeImmutable($dateText))->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function extractTextFromRow(\DOMXPath $xpath, \DOMNode $row, string $className): ?string
+    {
+        $cell = $xpath->query('.//*[contains(concat(" ", normalize-space(@class), " "), " ' . $className . ' ")]', $row)->item(0);
+        if (!$cell instanceof \DOMElement) {
+            return null;
+        }
+
+        $text = trim(preg_replace('/\s+/', ' ', html_entity_decode($cell->textContent, ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? '');
+
+        return $text === '' ? null : $text;
+    }
+
+    private function absoluteAuUrl(?string $path): ?string
+    {
+        $path = trim((string) $path);
+        if ($path === '') {
+            return null;
+        }
+
+        if (Str::startsWith($path, ['http://', 'https://'])) {
+            return $path;
+        }
+
+        return self::AU_BASE_URL . '/' . ltrim($path, '/');
+    }
+
+    /**
+     * @param array<string, array<string, ?string>> $officialTreatyIndex
+     * @return array<string, ?string>|null
+     */
+    private function findOfficialTreatyMetadata(string $title, array $officialTreatyIndex): ?array
+    {
+        foreach ($this->buildMatchKeys($title) as $key) {
+            if (isset($officialTreatyIndex[$key])) {
+                return $officialTreatyIndex[$key];
+            }
+        }
+
+        $titleTokens = $this->extractMatchTokens($title);
+        if (count($titleTokens) < 4) {
+            return null;
+        }
+
+        $best = null;
+        $bestScore = 0.0;
+        foreach ($officialTreatyIndex as $metadata) {
+            $candidateTokens = $this->extractMatchTokens((string) ($metadata['title'] ?? ''));
+            if (count($candidateTokens) < 4) {
+                continue;
+            }
+
+            $intersection = count(array_intersect($titleTokens, $candidateTokens));
+            $score = $intersection / max(count($titleTokens), count($candidateTokens));
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $best = $metadata;
+            }
+        }
+
+        return $bestScore >= 0.82 ? $best : null;
     }
 
     /**
@@ -588,8 +819,56 @@ class TreatySeeder extends Seeder
         return 'AU-TRT-' . strtoupper(substr(sha1($title . '|' . $index), 0, 14));
     }
 
-    private function buildDescription(): string
+    /**
+     * @param array<string, ?string>|null $officialMetadata
+     */
+    private function buildDescription(string $title, ?array $officialMetadata = null): string
     {
-        return 'Seed source: database/' . self::SOURCE_FILE . '.';
+        if ($officialMetadata) {
+            $parts = [
+                'Official African Union treaty record for "' . $title . '".',
+            ];
+
+            if (!empty($officialMetadata['category'])) {
+                $parts[] = 'It is listed by the African Union under ' . $officialMetadata['category'] . '.';
+            }
+            if (!empty($officialMetadata['adoption_date'])) {
+                $parts[] = 'Adopted on ' . $this->formatOfficialDate($officialMetadata['adoption_date']) . '.';
+            }
+            if (!empty($officialMetadata['entry_into_force_date'])) {
+                $parts[] = 'Entered into force on ' . $this->formatOfficialDate($officialMetadata['entry_into_force_date']) . '.';
+            }
+            if (!empty($officialMetadata['signature_date'])) {
+                $parts[] = 'Opened for signature on ' . $this->formatOfficialDate($officialMetadata['signature_date']) . '.';
+            }
+            if (!empty($officialMetadata['url'])) {
+                $parts[] = 'The official AU treaty page provides the treaty text and status-list references.';
+            }
+
+            return implode(' ', $parts);
+        }
+
+        return 'African Union treaty instrument titled "' . $title . '", tracked by ATTP for member-state signature, ratification, and instrument-submission status.';
+    }
+
+    private function shouldReplaceSeededDescription(string $description): bool
+    {
+        $description = trim($description);
+
+        return $description === ''
+            || Str::startsWith($description, 'Seed source:');
+    }
+
+    private function formatOfficialDate(?string $date): string
+    {
+        if (!$date) {
+            return '';
+        }
+
+        try {
+            return (new \DateTimeImmutable($date))->format('F j, Y');
+        } catch (\Throwable) {
+            return $date;
+        }
     }
 }
