@@ -481,11 +481,9 @@
 		                const startYear = Number(yearSelect.value);
 		                const amount = Number(commitmentAmountInput.value);
 
-		                if (!breakdown.length || !Number.isFinite(startYear) || !Number.isFinite(amount) || amount <= 0) {
+		                if (!breakdown.length || !Number.isFinite(startYear)) {
 		                    return;
 		                }
-	
-		                saveBtn.disabled = false;
 
 	                const rows = breakdown
 	                    .filter(r => Number(r.year) >= startYear)
@@ -503,6 +501,12 @@
                 document.getElementById('allocatedAmount').innerText = formatNumber(totalAllocated);
                 document.getElementById('remainingAmount').innerText = formatNumber(totalRemaining);
                 document.getElementById('confirmText').innerText = `Sub-Activity – Start year ${startYear}`;
+
+		                if (!Number.isFinite(amount) || amount <= 0) {
+		                    return;
+		                }
+
+		                saveBtn.disabled = false;
 
 	                if (amount > totalRemaining) {
 	                    show('distributionWrap');
