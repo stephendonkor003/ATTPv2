@@ -169,7 +169,6 @@
                                                 action="{{ route('procurement.purchase-orders.destroy', $purchaseOrder) }}"
                                                 onsubmit="return confirm('Delete this purchase order? Payment records will be kept but detached from this order.');">
                                                 @csrf
-                                                @method('DELETE')
                                                 <button type="submit" class="btn btn-sm btn-outline-danger">
                                                     Delete
                                                 </button>
