@@ -462,7 +462,7 @@
 
 	                        show('allocationPreview');
 	                        show('resourceSection');
-	                        updateDistribution();
+	                        setTotalFromItems();
 	                    })
 	                    .catch(() => {
 	                        breakdown = [];
@@ -603,7 +603,7 @@
 		                    });
 		            }
 	
-		            function setTotalFromItems() {
+		            function setTotalFromItems({ update = true } = {}) {
 		                const total = roundMoney(
 		                    Array.from(itemsBody.querySelectorAll('.item-amount')).reduce((sum, input) => {
 		                        const value = Number(input.value);
@@ -612,7 +612,9 @@
 		                );
 	
 		                commitmentAmountInput.value = (total > 0 ? total : 0).toFixed(2);
-		                updateDistribution();
+		                if (update) {
+		                    updateDistribution();
+		                }
 		            }
 	
                         function addItemRow(item = null) {
@@ -739,7 +741,7 @@
 		            }
 	
 		            initItemRows();
-		            setTotalFromItems();
+		            setTotalFromItems({ update: false });
 
 		            loadProjects();
 	        });
