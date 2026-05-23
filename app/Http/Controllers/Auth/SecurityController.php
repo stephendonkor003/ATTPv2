@@ -81,11 +81,11 @@ class SecurityController extends Controller
         // Mark as changed
         $user->markPasswordAsChanged();
 
-        // Send confirmation email (queued for scalability)
+        // Send confirmation email immediately so users receive security notices without a queue worker.
         try {
-            Mail::to($user->email)->queue(new PasswordChangedMail($user));
+            Mail::to($user->email)->send(new PasswordChangedMail($user));
         } catch (Throwable $exception) {
-            Log::warning('Password changed email could not be queued.', [
+            Log::warning('Password changed email could not be sent.', [
                 'user_id' => $user->id,
                 'email' => $user->email,
                 'mailer' => config('mail.default'),

@@ -70,7 +70,7 @@ class VendorImport implements ToCollection, WithHeadingRow, WithValidation, Skip
             ]);
 
             try {
-                Mail::to($vendor->email)->queue(new VendorAccountCreated($vendor, $password));
+                Mail::to($vendor->email)->send(new VendorAccountCreated($vendor, $password));
             } catch (\Throwable $exception) {
                 $this->mailFailures[] = [
                     'email' => $vendor->email,

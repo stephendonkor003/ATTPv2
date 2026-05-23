@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Notifications\QueuedResetPasswordNotification;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -230,7 +230,7 @@ class User extends Authenticatable
 
     public function sendPasswordResetNotification($token): void
     {
-        $this->notify(new QueuedResetPasswordNotification($token));
+        $this->notify(new ResetPassword($token));
     }
 
     /**

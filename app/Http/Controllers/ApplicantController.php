@@ -251,8 +251,8 @@ class ApplicantController extends Controller
                 return redirect()->back()->withErrors(['error' => 'An unexpected database error occurred.']);
             }
 
-            // Send confirmation email
-            Mail::to($applicant->email)->queue(new ApplicantSubmissionReceived($applicant, $uniqueCode, $defaultPassword));
+            // Send confirmation email immediately because it contains the applicant login credentials.
+            Mail::to($applicant->email)->send(new ApplicantSubmissionReceived($applicant, $uniqueCode, $defaultPassword));
 
             return redirect()->back()->with('success', 'Application submitted successfully. Login credentials have been sent to your email.');
         } catch (\Exception $e) {
