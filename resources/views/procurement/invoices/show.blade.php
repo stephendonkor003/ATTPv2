@@ -9,6 +9,10 @@
             border-radius: 16px;
         }
 
+        .invoice-show .hero-card h4 {
+            color: #fff;
+        }
+
         .invoice-show .hero-card p {
             color: rgba(255, 255, 255, 0.78);
         }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use App\Mail\VendorDisbursementReceipt;
 use App\Models\ProcurementAuditLog;
 use App\Models\ProcurementDisbursement;
+use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -192,6 +193,49 @@ class ProcurementDisbursementController extends Controller
         $purchaseOrder->update([
             'status' => $status,
         ]);
+
+        if ($remaining <= 0 && $totalPaid > 0) {
+            $this->ensureInvoiceForPaidPurchaseOrder($purchaseOrder);
+        }
+    }
+
+    private function ensureInvoiceForPaidPurchaseOrder(ProcurementPurchaseOrder $purchaseOrder): void
+    {
+        $purchaseOrder->loadMissing(['invoice', 'disbursements']);
+
+        $latestDisbursement = $purchaseOrder->disbursements
+            ->sortByDesc(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at?->timestamp ?? 0)
+            ->first();
+
+        $paidAt = $latestDisbursement?->paid_at ?: now();
+
+        if ($purchaseOrder->invoice) {
+            $purchaseOrder->invoice->update([
+                'status' => 'paid',
+                'approved_by' => $purchaseOrder->invoice->approved_by ?: auth()->id(),
+                'approved_at' => $purchaseOrder->invoice->approved_at ?: now(),
+            ]);
+
+            return;
+        }
+
+        $invoice = ProcurementInvoice::create([
+            'procurement_id' => $purchaseOrder->procurement_id,
+            'vendor_id' => $purchaseOrder->vendor_id,
+            'sub_activity_id' => $purchaseOrder->sub_activity_id,
+            'governance_node_id' => $purchaseOrder->governance_node_id,
+            'invoice_month' => $paidAt->copy()->startOfMonth()->toDateString(),
+            'reference_no' => ProcurementInvoice::generateReference(),
+            'amount' => $purchaseOrder->amount,
+            'currency' => $purchaseOrder->currency,
+            'status' => 'paid',
+            'created_by' => $purchaseOrder->created_by ?: auth()->id(),
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+            'notes' => 'Auto-generated from fully paid purchase order ' . ($purchaseOrder->reference_no ?? $purchaseOrder->id),
+        ]);
+
+        $purchaseOrder->update(['invoice_id' => $invoice->id]);
     }
 
     private function sendReceipt(ProcurementDisbursement $disbursement): void

@@ -10,6 +10,10 @@
             overflow: hidden;
         }
 
+        .invoice-page .hero-card h4 {
+            color: #fff;
+        }
+
         .invoice-page .hero-card p {
             color: rgba(255, 255, 255, 0.75);
         }
