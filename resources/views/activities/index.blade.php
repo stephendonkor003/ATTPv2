@@ -62,32 +62,41 @@
             <div class="accordion" id="programAccordion">
 
                 @forelse ($programs as $prIndex => $program)
+                    @php
+                        $programHeadingId = 'headingProgram' . $program->id;
+                        $programCollapseId = 'collapseProgram' . $program->id;
+                    @endphp
                     <div class="accordion-item mb-3 border-0 tree-level-1 rounded shadow-sm">
 
                         <!-- PROGRAM -->
-                        <h2 class="accordion-header" id="headingProgram{{ $prIndex }}">
+                        <h2 class="accordion-header" id="{{ $programHeadingId }}">
                             <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#collapseProgram{{ $prIndex }}">
+                                data-bs-target="#{{ $programCollapseId }}" aria-expanded="false"
+                                aria-controls="{{ $programCollapseId }}">
                                 📘 PROGRAM: {{ $program->name }}
                             </button>
                         </h2>
 
                         <!-- PROGRAM BODY -->
-                        <div id="collapseProgram{{ $prIndex }}" class="accordion-collapse collapse"
-                            data-bs-parent="#programAccordion">
+                        <div id="{{ $programCollapseId }}" class="accordion-collapse collapse"
+                            aria-labelledby="{{ $programHeadingId }}" data-bs-parent="#programAccordion">
 
                             <div class="accordion-body">
 
                                 @forelse ($program->projects as $pjIndex => $project)
-                                    <div class="accordion mb-2" id="projectAccordion{{ $prIndex }}">
+                                    @php
+                                        $projectHeadingId = 'headingProject' . $project->id;
+                                        $projectCollapseId = 'collapseProject' . $project->id;
+                                    @endphp
+                                    <div class="accordion mb-2" id="projectAccordion{{ $project->id }}">
 
                                         <!-- PROJECT -->
                                         <div class="accordion-item tree-level-2 rounded">
-                                            <h2 class="accordion-header"
-                                                id="headingProject{{ $prIndex }}{{ $pjIndex }}">
+                                            <h2 class="accordion-header" id="{{ $projectHeadingId }}">
                                                 <button class="accordion-button collapsed" type="button"
                                                     data-bs-toggle="collapse"
-                                                    data-bs-target="#collapseProject{{ $prIndex }}{{ $pjIndex }}">
+                                                    data-bs-target="#{{ $projectCollapseId }}" aria-expanded="false"
+                                                    aria-controls="{{ $projectCollapseId }}">
                                                     📌 {{ $project->project_id }} — {{ $project->name }}
                                                     &nbsp;&nbsp;
                                                     <small class="text-muted">
@@ -97,22 +106,28 @@
                                             </h2>
 
                                             <!-- PROJECT BODY -->
-                                            <div id="collapseProject{{ $prIndex }}{{ $pjIndex }}"
-                                                class="accordion-collapse collapse">
+                                            <div id="{{ $projectCollapseId }}" class="accordion-collapse collapse"
+                                                aria-labelledby="{{ $projectHeadingId }}">
 
                                                 <div class="accordion-body">
 
                                                     @forelse ($project->activities as $acIndex => $activity)
+                                                        @php
+                                                            $activityHeadingId = 'headingActivity' . $activity->id;
+                                                            $activityCollapseId = 'collapseActivity' . $activity->id;
+                                                        @endphp
                                                         <div class="accordion tree-level-3 mb-2"
-                                                            id="activityAccordion{{ $acIndex }}">
+                                                            id="activityAccordion{{ $activity->id }}">
 
                                                             <!-- ACTIVITY -->
                                                             <div class="accordion-item">
                                                                 <h2 class="accordion-header"
-                                                                    id="headingActivity{{ $acIndex }}">
+                                                                    id="{{ $activityHeadingId }}">
                                                                     <button class="accordion-button collapsed"
                                                                         type="button" data-bs-toggle="collapse"
-                                                                        data-bs-target="#collapseActivity{{ $acIndex }}">
+                                                                        data-bs-target="#{{ $activityCollapseId }}"
+                                                                        aria-expanded="false"
+                                                                        aria-controls="{{ $activityCollapseId }}">
                                                                         🎯 {{ $activity->name }}
                                                                         &nbsp;—&nbsp;
                                                                         <small class="text-muted">
@@ -124,8 +139,9 @@
                                                                 </h2>
 
                                                                 <!-- ACTIVITY BODY -->
-                                                                <div id="collapseActivity{{ $acIndex }}"
-                                                                    class="accordion-collapse collapse">
+                                                                <div id="{{ $activityCollapseId }}"
+                                                                    class="accordion-collapse collapse"
+                                                                    aria-labelledby="{{ $activityHeadingId }}">
                                                                     <div class="accordion-body">
 
                                                                         {{-- ALLOCATION TABLE --}}
@@ -199,5 +215,28 @@
 
         </div>
     </main>
+
+    @push('scripts')
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                document.querySelectorAll('#programAccordion .accordion-collapse').forEach((collapse) => {
+                    collapse.addEventListener('hidden.bs.collapse', (event) => {
+                        if (event.target !== collapse) {
+                            return;
+                        }
+
+                        collapse.querySelectorAll('.accordion-collapse.show').forEach((child) => {
+                            bootstrap.Collapse.getOrCreateInstance(child, { toggle: false }).hide();
+                        });
+
+                        collapse.querySelectorAll('.accordion-button:not(.collapsed)').forEach((button) => {
+                            button.classList.add('collapsed');
+                            button.setAttribute('aria-expanded', 'false');
+                        });
+                    });
+                });
+            });
+        </script>
+    @endpush
 
 @endsection
