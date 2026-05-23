@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\ApprovedWorkPlanRegistryExport;
 use App\Models\ApprovedWorkPlan;
 use App\Models\ApprovedWorkPlanItemReview;
 use App\Models\BudgetCommitment;
@@ -14,6 +15,7 @@ use App\Models\Resource;
 use App\Models\ResourceCategory;
 use App\Models\SystemAuditLog;
 use App\Models\SubActivity;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,11 +24,40 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Maatwebsite\Excel\Facades\Excel;
 use Throwable;
 
 class ApprovedWorkPlanController extends Controller
 {
     public function index(Request $request)
+    {
+        return view('finance.awp.registry', $this->workPlanRegistryData($request));
+    }
+
+    public function exportRegistryPdf(Request $request)
+    {
+        $data = $this->workPlanRegistryData($request);
+        $filename = 'work-plans-registry-' . now()->format('Ymd-His') . '.pdf';
+
+        return Pdf::loadView('finance.awp.registry-pdf', $data)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    public function exportRegistryExcel(Request $request)
+    {
+        $data = $this->workPlanRegistryData($request);
+        $filename = 'work-plans-registry-' . now()->format('Ymd-His') . '.xlsx';
+
+        return Excel::download(new ApprovedWorkPlanRegistryExport(
+            $data['folders'],
+            $data['summary'],
+            $data['selectedProgramId'],
+            $data['selectedYear']
+        ), $filename);
+    }
+
+    private function workPlanRegistryData(Request $request): array
     {
         $programs = Program::orderBy('name')->get();
         $selectedProgramId = $request->input('program_id');
@@ -101,14 +132,14 @@ class ApprovedWorkPlanController extends Controller
             'programs' => $folders->pluck('program_id')->filter()->unique()->count(),
         ];
 
-        return view('finance.awp.registry', [
+        return [
             'programs' => $programs,
             'folders' => $folders,
             'years' => $years,
             'summary' => $summary,
             'selectedProgramId' => $selectedProgramId,
             'selectedYear' => $selectedYear,
-        ]);
+        ];
     }
 
     public function partnerIndex(Request $request)

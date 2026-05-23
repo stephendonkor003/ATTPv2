@@ -858,6 +858,14 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.awp.create')
             ->name('awp.create');
 
+        Route::get('awp/export/pdf', [ApprovedWorkPlanController::class, 'exportRegistryPdf'])
+            ->middleware('permission:finance.awp.view')
+            ->name('awp.export.pdf');
+
+        Route::get('awp/export/excel', [ApprovedWorkPlanController::class, 'exportRegistryExcel'])
+            ->middleware('permission:finance.awp.view')
+            ->name('awp.export.excel');
+
         Route::post('awp/create/from-allocations', [ApprovedWorkPlanController::class, 'storeAllocationSheet'])
             ->middleware('permission:finance.awp.create')
             ->name('awp.store-from-allocations');

@@ -415,9 +415,15 @@
             const filterMode = document.getElementById('filter_mode');
             const allFields = document.querySelectorAll('.filter-field');
             const updateFilterFields = () => {
-                allFields.forEach(el => el.classList.add('d-none'));
+                allFields.forEach(el => {
+                    el.classList.add('d-none');
+                    el.querySelectorAll('input, select, textarea').forEach(input => input.disabled = true);
+                });
                 const mode = filterMode.value;
-                document.querySelectorAll(`.filter-${mode}`).forEach(el => el.classList.remove('d-none'));
+                document.querySelectorAll(`.filter-${mode}`).forEach(el => {
+                    el.classList.remove('d-none');
+                    el.querySelectorAll('input, select, textarea').forEach(input => input.disabled = false);
+                });
             };
             filterMode.addEventListener('change', updateFilterFields);
             updateFilterFields();
@@ -445,9 +451,15 @@
             const filterMode = document.getElementById('filter_mode');
             const allFields = document.querySelectorAll('.filter-field');
             const updateFilterFields = () => {
-                allFields.forEach(el => el.classList.add('d-none'));
+                allFields.forEach(el => {
+                    el.classList.add('d-none');
+                    el.querySelectorAll('input, select, textarea').forEach(input => input.disabled = true);
+                });
                 const mode = filterMode.value;
-                document.querySelectorAll(`.filter-${mode}`).forEach(el => el.classList.remove('d-none'));
+                document.querySelectorAll(`.filter-${mode}`).forEach(el => {
+                    el.classList.remove('d-none');
+                    el.querySelectorAll('input, select, textarea').forEach(input => input.disabled = false);
+                });
             };
             filterMode.addEventListener('change', updateFilterFields);
             updateFilterFields();

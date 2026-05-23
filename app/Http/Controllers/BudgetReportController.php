@@ -822,14 +822,8 @@ class BudgetReportController extends Controller
             $endDate = $startDate->copy()->addMonths(6)->subDay();
             $label = ($half === 2 ? 'H2 ' : 'H1 ') . $year;
         } else {
-            // Multi-year: always show the full program span when available
-            if ($program && $program->start_year && $program->end_year) {
-                $startYear = (int) $program->start_year;
-                $endYear = (int) $program->end_year;
-            } else {
-                $startYear = (int) $request->input('start_year', $defaultStartYear);
-                $endYear = (int) $request->input('end_year', $defaultEndYear);
-            }
+            $startYear = (int) $request->input('start_year', $defaultStartYear);
+            $endYear = (int) $request->input('end_year', $defaultEndYear);
 
             if ($endYear < $startYear) {
                 [$startYear, $endYear] = [$endYear, $startYear];

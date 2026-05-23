@@ -127,9 +127,17 @@
                         <h3 class="fw-bold text-white mb-2">Saved Work Plans</h3>
                         <div class="fs-6 text-white-50">Each folder contains the yearly sheet and all work-plan items saved under it.</div>
                     </div>
-                    <a href="{{ route('finance.awp.create') }}" class="btn btn-warning fw-bold">
-                        <i class="feather-folder-plus me-1"></i> Create New Work Plan
-                    </a>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{{ route('finance.awp.export.pdf', request()->query()) }}" class="btn btn-light fw-bold">
+                            <i class="feather-file-text me-1"></i> PDF
+                        </a>
+                        <a href="{{ route('finance.awp.export.excel', request()->query()) }}" class="btn btn-light fw-bold">
+                            <i class="feather-download me-1"></i> Excel
+                        </a>
+                        <a href="{{ route('finance.awp.create') }}" class="btn btn-warning fw-bold">
+                            <i class="feather-folder-plus me-1"></i> Create New Work Plan
+                        </a>
+                    </div>
                 </div>
             </div>
 
