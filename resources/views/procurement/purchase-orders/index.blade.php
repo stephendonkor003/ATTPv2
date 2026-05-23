@@ -160,7 +160,7 @@
                                 </td>
                                 <td class="text-center">
                                     <div class="d-inline-flex gap-1">
-                                        <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}"
+                                        <a href="{{ url('procurement/purchase-orders/' . $purchaseOrder->getKey()) }}"
                                             class="btn btn-sm btn-outline-primary">
                                             View
                                         </a>
