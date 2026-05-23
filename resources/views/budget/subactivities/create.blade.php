@@ -32,7 +32,7 @@
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Total Budget (GHS) <span
+                                <label class="form-label fw-semibold">Total Budget (USD) <span
                                         class="text-danger">*</span></label>
                                 <input type="number" step="0.01" name="total_budget" class="form-control" required>
                                 @error('total_budget')

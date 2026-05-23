@@ -25,7 +25,7 @@
                             <p>{{ $subActivity->sub_activity_id }}</p>
                         </div>
                         <div class="col-md-4">
-                            <p class="fw-semibold text-muted mb-1">Total Budget (GHS)</p>
+                            <p class="fw-semibold text-muted mb-1">Total Budget (USD)</p>
                             <p>{{ number_format($subActivity->total_budget, 2) }}</p>
                         </div>
                         <div class="col-md-4">

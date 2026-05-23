@@ -32,7 +32,7 @@
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Default Currency *</label>
                         <input name="currency" class="form-control" value="{{ old('currency', $partner?->currency) }}"
-                            placeholder="USD, GHS, EUR" required>
+                            placeholder="USD, EUR" required>
                     </div>
 
                     <div class="col-md-8">

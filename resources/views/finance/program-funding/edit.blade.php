@@ -81,7 +81,7 @@
                                 placeholder="Search currency">
                             <select name="currency" class="form-select currency-select" required>
                                 @php
-                                    $currencyOptions = ['USD','EUR','GBP','GHS','KES','NGN','ZAR','UGX','TZS','RWF','XOF','XAF','EGP','MAD'];
+                                    $currencyOptions = ['USD'];
                                 @endphp
                                 <option value="">-- Select Currency --</option>
                                 @foreach ($currencyOptions as $currency)

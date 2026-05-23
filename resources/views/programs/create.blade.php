@@ -36,8 +36,6 @@
                         <label class="form-label">Currency</label>
                         <select name="currency" class="form-select" required>
                             <option value="USD">USD</option>
-                            <option value="GHS">GHS</option>
-                            <option value="EUR">EUR</option>
                         </select>
                     </div>
 

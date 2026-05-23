@@ -70,7 +70,7 @@
                             </div>
 
                             <div class="col-md-3">
-                                <label class="form-label fw-semibold">Total Budget (GHS)</label>
+                                <label class="form-label fw-semibold">Total Budget (USD)</label>
                                 <input type="number" step="0.01" name="total_budget" class="form-control"
                                     value="{{ old('total_budget', $project->total_budget) }}" required>
                             </div>

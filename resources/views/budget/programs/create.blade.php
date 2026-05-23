@@ -117,10 +117,6 @@
                                         <select id="currencySelect" class="form-select" required disabled>
                                             <option value="">-- Select --</option>
                                             <option value="USD">USD</option>
-                                            <option value="EUR">EUR</option>
-                                            <option value="GHS">GHS</option>
-                                            <option value="NGN">NGN</option>
-                                            <option value="ZAR">ZAR</option>
                                         </select>
                                         <input type="hidden" name="currency" id="currencyHidden" value="{{ old('currency') }}">
                                     </div>

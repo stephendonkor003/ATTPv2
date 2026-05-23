@@ -25,7 +25,7 @@
                             <p>{{ $project->project_id }}</p>
                         </div>
                         <div class="col-md-4">
-                            <p class="fw-semibold text-muted mb-1">Total Budget (GHS)</p>
+                            <p class="fw-semibold text-muted mb-1">Total Budget (USD)</p>
                             <p>{{ number_format($project->total_budget, 2) }}</p>
                         </div>
                         <div class="col-md-4">

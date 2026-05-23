@@ -21,7 +21,7 @@
                             <th>#</th>
                             <th>Project ID</th>
                             <th>Project Name</th>
-                            <th>Total Budget (GHS)</th>
+                            <th>Total Budget (USD)</th>
                             <th>Duration</th>
                             <th>Status</th>
                             <th>Actions</th>

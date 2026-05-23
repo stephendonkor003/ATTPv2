@@ -136,16 +136,16 @@
                     <div class="row g-4">
                         <div class="col-md-4 border-end">
                             <h6 class="text-muted">Total Approved Budget</h6>
-                            <h4 class="fw-bold text-primary">GHS {{ number_format($summary['total_budget'] ?? 0, 2) }}</h4>
+                            <h4 class="fw-bold text-primary">USD {{ number_format($summary['total_budget'] ?? 0, 2) }}</h4>
                         </div>
                         <div class="col-md-4 border-end">
                             <h6 class="text-muted">Total Allocated</h6>
-                            <h4 class="fw-bold text-success">GHS {{ number_format($summary['total_allocated'] ?? 0, 2) }}
+                            <h4 class="fw-bold text-success">USD {{ number_format($summary['total_allocated'] ?? 0, 2) }}
                             </h4>
                         </div>
                         <div class="col-md-4">
                             <h6 class="text-muted">Unallocated Balance</h6>
-                            <h4 class="fw-bold text-danger">GHS
+                            <h4 class="fw-bold text-danger">USD
                                 {{ number_format(($summary['total_budget'] ?? 0) - ($summary['total_allocated'] ?? 0), 2) }}
                             </h4>
                         </div>
@@ -167,7 +167,7 @@
                                     <canvas id="chart{{ $sector->id }}"></canvas>
                                 </div>
                                 <small class="text-muted">
-                                    GHS {{ number_format($sector->total_budget, 2) }} <br>
+                                    USD {{ number_format($sector->total_budget, 2) }} <br>
                                     {{ $sector->share_percent }}% of total
                                 </small>
                             </div>
@@ -207,7 +207,7 @@
                                                 data-bs-target="#proj{{ $project->id }}">
                                                 <i class="bi bi-chevron-right expand-icon me-1"></i>
                                                 <i class="bi bi-diagram-2 text-success me-1"></i> {{ $project->name }}
-                                                <span class="text-muted small">(GHS
+                                                <span class="text-muted small">(USD
                                                     {{ number_format($project->total_budget, 2) }})</span>
                                             </div>
                                             <div class="collapse tree-branch" id="proj{{ $project->id }}">
@@ -224,7 +224,7 @@
                                                                 data-bs-target="#subModal{{ $sub->id }}">
                                                                 <i class="bi bi-dot text-secondary me-1"></i>
                                                                 {{ $sub->name }}
-                                                                <small>(GHS
+                                                                <small>(USD
                                                                     {{ number_format($sub->total_budget, 2) }})</small>
                                                             </div>
                                                             <!-- SubActivity Modal -->
@@ -247,7 +247,7 @@
                                                                                 <div class="col-md-4"><strong>ID:</strong>
                                                                                     {{ $sub->sub_activity_id }}</div>
                                                                                 <div class="col-md-4">
-                                                                                    <strong>Budget:</strong> GHS
+                                                                                    <strong>Budget:</strong> USD
                                                                                     {{ number_format($sub->total_budget, 2) }}
                                                                                 </div>
                                                                                 <div class="col-md-4">
@@ -261,7 +261,7 @@
                                                                                 <thead class="table-light">
                                                                                     <tr>
                                                                                         <th>Year</th>
-                                                                                        <th>Amount (GHS)</th>
+                                                                                        <th>Amount (USD)</th>
                                                                                     </tr>
                                                                                 </thead>
                                                                                 <tbody>
@@ -465,7 +465,7 @@
                                 stacked: true,
                                 title: {
                                     display: true,
-                                    text: 'Allocated Budget (GHS)'
+                                    text: 'Allocated Budget (USD)'
                                 }
                             }
                         }

@@ -23,7 +23,7 @@
                         </div>
 
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">Total Budget (GHS)</label>
+                            <label class="form-label fw-semibold">Total Budget (USD)</label>
                             <input type="number" name="total_budget" class="form-control" step="0.01" required>
                         </div>
                     </div>

@@ -97,7 +97,7 @@
                                 </div>
 
                                 <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Total Budget (GHS) <span class="text-danger">*</span></label>
+                                    <label class="form-label fw-semibold">Total Budget (USD) <span class="text-danger">*</span></label>
                                     <input type="number" name="total_budget" id="totalBudget" class="form-control" step="0.01" min="0"
                                         value="{{ old('total_budget') }}" required placeholder="0.00">
                                     @error('total_budget')
@@ -170,7 +170,7 @@
                                         <thead class="table-light">
                                             <tr>
                                                 <th style="width:120px;">Year</th>
-                                                <th style="width:180px;">Amount (GHS)</th>
+                                                <th style="width:180px;">Amount (USD)</th>
                                                 <th style="width:120px;">Percent</th>
                                             </tr>
                                         </thead>

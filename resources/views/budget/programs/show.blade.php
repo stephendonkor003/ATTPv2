@@ -141,7 +141,7 @@
                                     <th>#</th>
                                     <th>Project ID</th>
                                     <th>Project Name</th>
-                                    <th>Budget (GHS)</th>
+                                    <th>Budget (USD)</th>
                                     <th>Duration (Years)</th>
                                     <th>Created At</th>
                                     <th class="text-center">Actions</th>

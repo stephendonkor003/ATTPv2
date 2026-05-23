@@ -25,7 +25,7 @@
                                 <th>#</th>
                                 <th>Sub-Activity ID</th>
                                 <th>Name</th>
-                                <th>Total Budget (GHS)</th>
+                                <th>Total Budget (USD)</th>
                                 <th>Created</th>
                                 <th class="text-center">Actions</th>
                             </tr>

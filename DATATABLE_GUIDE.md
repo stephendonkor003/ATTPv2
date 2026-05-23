@@ -442,7 +442,7 @@ public function index(Request $request)
                 <td><code>{{ $transaction->transaction_id }}</code></td>
                 <td>{{ $transaction->description }}</td>
                 <td class="text-end">
-                    <strong>GH₵ {{ number_format($transaction->amount, 2) }}</strong>
+                    <strong>USD {{ number_format($transaction->amount, 2) }}</strong>
                 </td>
                 <td>
                     <span class="badge bg-{{ $transaction->status === 'completed' ? 'success' : 'warning' }}">

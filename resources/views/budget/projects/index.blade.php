@@ -111,7 +111,7 @@
                                 <th>Project ID</th>
                                 <th>Project Name</th>
                                 <th>Program</th>
-                                <th>Total Budget (GHS)</th>
+                                <th>Total Budget (USD)</th>
                                 <th>Duration (Yrs)</th>
                                 <th>Created On</th>
                                 <th class="text-center">Actions</th>
