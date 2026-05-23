@@ -166,7 +166,7 @@
                                         </a>
                                         @can('finance.purchase_orders.delete')
                                             <form method="POST"
-                                                action="{{ route('procurement.purchase-orders.destroy', $purchaseOrder) }}"
+                                                action="{{ url('procurement/purchase-orders/' . $purchaseOrder->getKey()) }}"
                                                 onsubmit="return confirm('Delete this purchase order? Payment records will be kept but detached from this order.');">
                                                 @csrf
                                                 @method('DELETE')
