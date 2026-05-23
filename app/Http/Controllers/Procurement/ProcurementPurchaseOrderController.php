@@ -15,6 +15,7 @@ use App\Models\SubActivity;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ProcurementPurchaseOrderController extends Controller
@@ -182,6 +183,20 @@ class ProcurementPurchaseOrderController extends Controller
         ]);
 
         return $pdf->download('purchase-order-' . ($purchaseOrder->reference_no ?? 'draft') . '.pdf');
+    }
+
+    public function destroy(ProcurementPurchaseOrder $purchaseOrder)
+    {
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        DB::transaction(function () use ($purchaseOrder) {
+            $purchaseOrder->disbursements()->update(['purchase_order_id' => null]);
+            $purchaseOrder->delete();
+        });
+
+        return redirect()
+            ->route('procurement.purchase-orders.index')
+            ->with('success', 'Purchase order deleted successfully.');
     }
 
     private function assertPurchaseOrderInScope(ProcurementPurchaseOrder $purchaseOrder): void

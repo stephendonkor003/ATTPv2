@@ -56,6 +56,16 @@
                     <a href="{{ route('procurement.purchase-orders.download', $purchaseOrder) }}" class="btn btn-primary">
                         <i class="feather-download me-1"></i> Download PDF
                     </a>
+                    @can('finance.purchase_orders.delete')
+                        <form method="POST" action="{{ route('procurement.purchase-orders.destroy', $purchaseOrder) }}"
+                            onsubmit="return confirm('Delete this purchase order? Payment records will be kept but detached from this order.');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-danger">
+                                <i class="feather-trash-2 me-1"></i> Delete
+                            </button>
+                        </form>
+                    @endcan
                     <a href="{{ route('procurement.purchase-orders.index') }}" class="btn btn-outline-light">
                         <i class="feather-arrow-left me-1"></i> Back
                     </a>

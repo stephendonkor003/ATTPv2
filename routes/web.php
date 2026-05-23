@@ -1630,6 +1630,9 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
             ->name('pdf');
         Route::get('{purchaseOrder}/download', [ProcurementPurchaseOrderController::class, 'download'])
             ->name('download');
+        Route::delete('{purchaseOrder}', [ProcurementPurchaseOrderController::class, 'destroy'])
+            ->middleware('permission:finance.purchase_orders.delete')
+            ->name('destroy');
     });
 
 Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_requests.view'])

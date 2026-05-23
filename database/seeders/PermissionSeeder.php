@@ -91,6 +91,7 @@ class PermissionSeeder extends Seeder
 		            ['name' => 'finance.purchase_requests.view_all', 'module' => 'Finance', 'description' => 'View all purchase requests across governance nodes'],
 		            ['name' => 'finance.purchase_requests.send', 'module' => 'Finance', 'description' => 'Send purchase requests via email'],
 		            ['name' => 'finance.purchase_orders.create', 'module' => 'Finance', 'description' => 'Create purchase orders from approved commitments'],
+		            ['name' => 'finance.purchase_orders.delete', 'module' => 'Finance', 'description' => 'Delete procurement purchase orders'],
 		            ['name' => 'finance.executions.view', 'module' => 'Finance', 'description' => 'View finance execution dashboard'],
 
             // Budget

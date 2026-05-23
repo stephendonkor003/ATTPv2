@@ -121,7 +121,7 @@
                             <th class="text-center">Amount</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">Issued</th>
-                            <th class="text-center" width="120">Action</th>
+                            <th class="text-center" width="170">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -159,10 +159,23 @@
                                     {{ $purchaseOrder->issued_at?->format('d M Y') ?? 'N/A' }}
                                 </td>
                                 <td class="text-center">
-                                    <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}"
-                                        class="btn btn-sm btn-outline-primary">
-                                        View
-                                    </a>
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}"
+                                            class="btn btn-sm btn-outline-primary">
+                                            View
+                                        </a>
+                                        @can('finance.purchase_orders.delete')
+                                            <form method="POST"
+                                                action="{{ route('procurement.purchase-orders.destroy', $purchaseOrder) }}"
+                                                onsubmit="return confirm('Delete this purchase order? Payment records will be kept but detached from this order.');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        @endcan
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach
