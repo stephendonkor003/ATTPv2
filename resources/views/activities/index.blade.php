@@ -70,8 +70,8 @@
 
                         <!-- PROGRAM -->
                         <h2 class="accordion-header" id="{{ $programHeadingId }}">
-                            <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse"
-                                data-bs-target="#{{ $programCollapseId }}" aria-expanded="false"
+                            <button class="accordion-button collapsed fw-bold" type="button"
+                                data-tree-target="{{ $programCollapseId }}" aria-expanded="false"
                                 aria-controls="{{ $programCollapseId }}">
                                 📘 PROGRAM: {{ $program->name }}
                             </button>
@@ -79,7 +79,7 @@
 
                         <!-- PROGRAM BODY -->
                         <div id="{{ $programCollapseId }}" class="accordion-collapse collapse"
-                            aria-labelledby="{{ $programHeadingId }}" data-bs-parent="#programAccordion">
+                            aria-labelledby="{{ $programHeadingId }}">
 
                             <div class="accordion-body">
 
@@ -94,8 +94,7 @@
                                         <div class="accordion-item tree-level-2 rounded">
                                             <h2 class="accordion-header" id="{{ $projectHeadingId }}">
                                                 <button class="accordion-button collapsed" type="button"
-                                                    data-bs-toggle="collapse"
-                                                    data-bs-target="#{{ $projectCollapseId }}" aria-expanded="false"
+                                                    data-tree-target="{{ $projectCollapseId }}" aria-expanded="false"
                                                     aria-controls="{{ $projectCollapseId }}">
                                                     📌 {{ $project->project_id }} — {{ $project->name }}
                                                     &nbsp;&nbsp;
@@ -124,8 +123,8 @@
                                                                 <h2 class="accordion-header"
                                                                     id="{{ $activityHeadingId }}">
                                                                     <button class="accordion-button collapsed"
-                                                                        type="button" data-bs-toggle="collapse"
-                                                                        data-bs-target="#{{ $activityCollapseId }}"
+                                                                        type="button"
+                                                                        data-tree-target="{{ $activityCollapseId }}"
                                                                         aria-expanded="false"
                                                                         aria-controls="{{ $activityCollapseId }}">
                                                                         🎯 {{ $activity->name }}
@@ -219,20 +218,69 @@
     @push('scripts')
         <script>
             document.addEventListener('DOMContentLoaded', () => {
-                document.querySelectorAll('#programAccordion .accordion-collapse').forEach((collapse) => {
-                    collapse.addEventListener('hidden.bs.collapse', (event) => {
-                        if (event.target !== collapse) {
+                const root = document.getElementById('programAccordion');
+                if (!root) {
+                    return;
+                }
+
+                const buttons = Array.from(root.querySelectorAll('[data-tree-target]'));
+
+                function getCollapse(button) {
+                    return document.getElementById(button.dataset.treeTarget);
+                }
+
+                function getButton(collapse) {
+                    return buttons.find(button => button.dataset.treeTarget === collapse.id);
+                }
+
+                function setButtonState(collapse, expanded) {
+                    const button = getButton(collapse);
+                    if (!button) {
+                        return;
+                    }
+
+                    button.classList.toggle('collapsed', !expanded);
+                    button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                }
+
+                function setCollapseState(collapse, expanded) {
+                    if (window.bootstrap?.Collapse) {
+                        const instance = bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false });
+                        expanded ? instance.show() : instance.hide();
+                    } else {
+                        collapse.classList.toggle('show', expanded);
+                    }
+
+                    setButtonState(collapse, expanded);
+                }
+
+                function closeBranch(collapse) {
+                    Array.from(collapse.querySelectorAll('.accordion-collapse.show'))
+                        .reverse()
+                        .forEach(child => setCollapseState(child, false));
+
+                    setCollapseState(collapse, false);
+                }
+
+                buttons.forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const collapse = getCollapse(button);
+                        if (!collapse) {
                             return;
                         }
 
-                        collapse.querySelectorAll('.accordion-collapse.show').forEach((child) => {
-                            bootstrap.Collapse.getOrCreateInstance(child, { toggle: false }).hide();
-                        });
+                        const isOpen = collapse.classList.contains('show');
+                        if (isOpen) {
+                            closeBranch(collapse);
+                            return;
+                        }
 
-                        collapse.querySelectorAll('.accordion-button:not(.collapsed)').forEach((button) => {
-                            button.classList.add('collapsed');
-                            button.setAttribute('aria-expanded', 'false');
-                        });
+                        if (collapse.parentElement?.parentElement?.id === 'programAccordion') {
+                            root.querySelectorAll(':scope > .accordion-item > .accordion-collapse.show')
+                                .forEach(openProgram => closeBranch(openProgram));
+                        }
+
+                        setCollapseState(collapse, true);
                     });
                 });
             });
