@@ -47,7 +47,7 @@ class ProgramFundingController extends Controller
         'user_id' => Auth::id(),
         'user_name' => Auth::user()?->name,
         'user_node_id' => Auth::user()?->governance_node_id,
-        'is_admin' => Auth::user()?->isAdmin() ?? false,
+        'is_admin' => $this->hasGlobalGovernanceScope(),
         'visible_node_ids' => $scopedNodeIds,
     ];
 
@@ -448,7 +448,7 @@ public function edit(ProgramFunding $programFunding)
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin()) {
+        if (!$currentUser || $this->hasGlobalGovernanceScope()) {
             return null;
         }
 
@@ -463,11 +463,19 @@ public function edit(ProgramFunding $programFunding)
     {
         $scopedNodeIds = $this->scopedNodeIds();
 
-        return GovernanceNode::orderBy('name')
+        return GovernanceNode::with('level')
+            ->orderBy('name')
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('id', $scopedNodeIds);
             })
             ->get();
+    }
+
+    private function hasGlobalGovernanceScope(): bool
+    {
+        $currentUser = Auth::user();
+
+        return (bool) ($currentUser && ($currentUser->isAdmin() || $currentUser->isSuperAdmin()));
     }
 
     private function assertFundingInScope(ProgramFunding $funding): void

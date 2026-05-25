@@ -1,0 +1,133 @@
+SUDO COMMANDS TO CLEAR BUDGET STRUCTURE, RESOURCE PLANNING, AND WORK PLAN DATA
+=============================================================================
+
+Database:
+attpuat
+
+PostgreSQL user:
+myuser
+
+Run these commands from your SSH terminal on the PostgreSQL server.
+
+IMPORTANT:
+- These commands permanently delete data.
+- Run the backup command first.
+- The clear command uses TRUNCATE ... RESTART IDENTITY CASCADE.
+
+
+1. BACKUP FIRST
+---------------
+
+sudo env PGPASSWORD='MyUserPass123' pg_dump -h 127.0.0.1 -p 5432 -U myuser -d attpuat -Fc -f /tmp/attpuat_before_budget_resource_workplan_clear.backup
+
+
+2. CHECK COUNTS BEFORE CLEARING
+-------------------------------
+
+sudo env PGPASSWORD='MyUserPass123' psql -h 127.0.0.1 -p 5432 -U myuser -d attpuat -c "
+SELECT 'approved_work_plan_item_reviews' AS table_name, count(*) FROM approved_work_plan_item_reviews
+UNION ALL SELECT 'approved_work_plans', count(*) FROM approved_work_plans
+UNION ALL SELECT 'attp_workplans', count(*) FROM attp_workplans
+UNION ALL SELECT 'procurement_disbursements', count(*) FROM procurement_disbursements
+UNION ALL SELECT 'procurement_purchase_orders', count(*) FROM procurement_purchase_orders
+UNION ALL SELECT 'procurement_invoices', count(*) FROM procurement_invoices
+UNION ALL SELECT 'myb_purchase_request_items', count(*) FROM myb_purchase_request_items
+UNION ALL SELECT 'myb_purchase_requests', count(*) FROM myb_purchase_requests
+UNION ALL SELECT 'myb_budget_commitments', count(*) FROM myb_budget_commitments
+UNION ALL SELECT 'myb_sub_activity_allocations', count(*) FROM myb_sub_activity_allocations
+UNION ALL SELECT 'myb_sub_activities', count(*) FROM myb_sub_activities
+UNION ALL SELECT 'myb_activity_allocations', count(*) FROM myb_activity_allocations
+UNION ALL SELECT 'myb_activities', count(*) FROM myb_activities
+UNION ALL SELECT 'myb_project_allocations', count(*) FROM myb_project_allocations
+UNION ALL SELECT 'myb_projects', count(*) FROM myb_projects
+UNION ALL SELECT 'myb_program_funding_documents', count(*) FROM myb_program_funding_documents
+UNION ALL SELECT 'myb_program_fundings', count(*) FROM myb_program_fundings
+UNION ALL SELECT 'myb_programs', count(*) FROM myb_programs
+UNION ALL SELECT 'myb_resources', count(*) FROM myb_resources
+UNION ALL SELECT 'myb_resource_categories', count(*) FROM myb_resource_categories
+UNION ALL SELECT 'myb_sectors', count(*) FROM myb_sectors
+ORDER BY table_name;
+"
+
+
+3. CLEAR BUDGET STRUCTURE, RESOURCE PLANNING, AND WORK PLAN DATA
+----------------------------------------------------------------
+
+sudo env PGPASSWORD='MyUserPass123' psql -h 127.0.0.1 -p 5432 -U myuser -d attpuat -v ON_ERROR_STOP=1 -c "
+TRUNCATE TABLE
+    approved_work_plan_item_reviews,
+    approved_work_plans,
+    attp_workplans,
+    procurement_invoice_deliverables,
+    procurement_disbursements,
+    procurement_purchase_orders,
+    procurement_invoices,
+    procurement_deliverables,
+    procurement_contract_documents,
+    procurement_contract_negotiations,
+    myb_purchase_request_items,
+    myb_purchase_requests,
+    myb_budget_commitments,
+    myb_sub_activity_allocations,
+    myb_sub_activities,
+    myb_activity_allocations,
+    myb_activities,
+    myb_project_allocations,
+    program_budget_allocations,
+    myb_projects,
+    myb_program_funding_documents,
+    myb_program_funding_member_states,
+    myb_program_funding_regional_blocks,
+    myb_program_funding_aspirations,
+    myb_program_funding_goals,
+    myb_program_funding_flagship_projects,
+    myb_program_fundings,
+    myb_programs,
+    myb_resources,
+    myb_resource_categories,
+    myb_sectors
+RESTART IDENTITY CASCADE;
+"
+
+
+4. OPTIONAL: ALSO CLEAR PROCUREMENT PLANS AND PROCUREMENT RECORDS
+-----------------------------------------------------------------
+Run this only if you also want to delete procurement records and procurement plans.
+
+sudo env PGPASSWORD='MyUserPass123' psql -h 127.0.0.1 -p 5432 -U myuser -d attpuat -v ON_ERROR_STOP=1 -c "
+TRUNCATE TABLE
+    attp_think_tank_procurement_reviews,
+    attp_think_tank_procurement_plans,
+    procurement_submission_screenings,
+    procurement_audit_logs,
+    procurement_form_assignments,
+    procurement_form_maps,
+    procurement_user_permissions,
+    procurements,
+    myb_procurement_plans
+RESTART IDENTITY CASCADE;
+"
+
+
+5. OPTIONAL: ALSO CLEAR PROCUREMENT SETTINGS / MASTER DATA
+---------------------------------------------------------
+Run this only if you also want to delete setup lists like methods, stages, statuses, geographics, and approvals.
+
+sudo env PGPASSWORD='MyUserPass123' psql -h 127.0.0.1 -p 5432 -U myuser -d attpuat -v ON_ERROR_STOP=1 -c "
+TRUNCATE TABLE
+    myb_procurement_method_planned_milestones,
+    myb_procurement_step_approvals,
+    myb_procurement_step_stages,
+    myb_procurement_statuses,
+    myb_procurement_stages,
+    myb_procurement_method_planned,
+    myb_procurement_geographics,
+    myb_procurement_program_plans
+RESTART IDENTITY CASCADE;
+"
+
+
+6. VERIFY AFTER CLEARING
+------------------------
+
+Run command 2 again. The cleared tables should show 0.

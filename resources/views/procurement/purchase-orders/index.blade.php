@@ -10,6 +10,11 @@
             overflow: hidden;
         }
 
+        .po-page .hero-card h4 {
+            color: #fff;
+            font-weight: 700;
+        }
+
         .po-page .hero-card p {
             color: rgba(255, 255, 255, 0.75);
         }

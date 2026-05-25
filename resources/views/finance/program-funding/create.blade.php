@@ -47,21 +47,25 @@
 
                     <div class="row mb-4">
                         @php
+                            $currentUser = auth()->user();
                             $currentNodeId = optional(auth()->user())->governance_node_id;
+                            $canChooseGovernanceNode = (bool) ($currentUser?->isAdmin() || $currentUser?->isSuperAdmin());
+                            $selectedGovernanceNodeId = old('governance_node_id', $canChooseGovernanceNode ? null : $currentNodeId);
                         @endphp
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Governance Node *</label>
-                            <select name="governance_node_id" class="form-select" required disabled>
+                            <select name="governance_node_id" class="form-select" required @disabled(! $canChooseGovernanceNode)>
                                 <option value="">-- Select Node --</option>
                                 @foreach ($nodes as $node)
                                     <option value="{{ $node->id }}"
-                                        @selected(old('governance_node_id', $currentNodeId) == $node->id)>
+                                        @selected($selectedGovernanceNodeId == $node->id)>
                                         {{ $node->name }} ({{ $node->level->name ?? 'Level' }})
                                     </option>
                                 @endforeach
                             </select>
-                            <input type="hidden" name="governance_node_id"
-                                value="{{ old('governance_node_id', $currentNodeId) }}">
+                            @unless($canChooseGovernanceNode)
+                                <input type="hidden" name="governance_node_id" value="{{ $selectedGovernanceNodeId }}">
+                            @endunless
                         </div>
 
                         <div class="col-md-4">
