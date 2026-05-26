@@ -434,7 +434,21 @@ public function edit(ProgramFunding $programFunding)
     public function destroy(ProgramFunding $programFunding)
     {
         $this->assertFundingInScope($programFunding);
-        $programFunding->delete();
+
+        DB::transaction(function () use ($programFunding) {
+            $programFunding->memberStates()->detach();
+            $programFunding->regionalBlocks()->detach();
+            $programFunding->aspirations()->detach();
+            $programFunding->goals()->detach();
+            $programFunding->flagshipProjects()->detach();
+
+            $programFunding->documents()->get()->each(function (ProgramFundingDocument $document) {
+                $this->deleteDocumentFile($document->file_path);
+                $document->delete();
+            });
+
+            $programFunding->delete();
+        });
 
         return redirect()
             ->route('finance.program-funding.index')

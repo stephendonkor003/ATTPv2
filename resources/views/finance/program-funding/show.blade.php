@@ -19,6 +19,17 @@
                     </a>
                 @endcan
 
+                @can('finance.program_funding.delete')
+                    <form method="POST" action="{{ route('finance.program-funding.destroy', $programFunding) }}"
+                        onsubmit="return confirm('Delete this program funding record? This cannot be undone.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-danger">
+                            <i class="feather-trash-2 me-1"></i> Delete
+                        </button>
+                    </form>
+                @endcan
+
                 <a href="{{ route('finance.program-funding.index') }}" class="btn btn-light">
                     <i class="feather-arrow-left me-1"></i> Back
                 </a>

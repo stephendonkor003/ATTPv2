@@ -57,7 +57,7 @@
                             <th style="width: 150px;" class="text-end">Amount</th>
                             <th style="width: 100px;" class="text-center">Status</th>
                             <th style="width: 120px;">Created On</th>
-                            <th style="width: 100px;" class="text-center no-sort no-export">Action</th>
+                            <th style="width: 140px;" class="text-center no-sort no-export">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -83,6 +83,17 @@
                                     <a href="{{ route('finance.program-funding.show', $f->id) }}" class="btn btn-sm btn-outline-primary">
                                         <i class="feather-eye"></i>
                                     </a>
+                                    @can('finance.program_funding.delete')
+                                        <form method="POST" action="{{ route('finance.program-funding.destroy', $f) }}"
+                                            class="d-inline"
+                                            onsubmit="return confirm('Delete this program funding record? This cannot be undone.');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="feather-trash-2"></i>
+                                            </button>
+                                        </form>
+                                    @endcan
                                 </td>
                             </tr>
                         @empty
