@@ -19,6 +19,13 @@
             color: #f8fafc;
         }
         .section-card { border: 1px solid #e5e7eb; border-radius: 14px; box-shadow: 0 8px 24px rgba(15,23,42,0.04); }
+        .project-edit-tabs .nav-link {
+            font-weight: 600;
+            color: #475569;
+        }
+        .project-edit-tabs .nav-link.active {
+            color: #2563eb;
+        }
     </style>
 
     <main class="nxl-container">
@@ -62,33 +69,61 @@
                                 value="{{ old('allocations.' . $allocation->year, $allocation->amount) }}">
                         @endforeach
 
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">Project Name</label>
-                                <input type="text" name="name" class="form-control"
-                                    value="{{ old('name', $project->name) }}" required>
+                        <ul class="nav nav-tabs project-edit-tabs mb-4" id="projectEditTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="project-info-tab" data-bs-toggle="tab"
+                                    data-bs-target="#project-info-pane" type="button" role="tab"
+                                    aria-controls="project-info-pane" aria-selected="true">
+                                    Project Info
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="project-description-tab" data-bs-toggle="tab"
+                                    data-bs-target="#project-description-pane" type="button" role="tab"
+                                    aria-controls="project-description-pane" aria-selected="false">
+                                    Description
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="projectEditTabsContent">
+                            <div class="tab-pane fade show active" id="project-info-pane" role="tabpanel"
+                                aria-labelledby="project-info-tab" tabindex="0">
+                                <div class="row g-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Project Name</label>
+                                        <input type="text" name="name" class="form-control"
+                                            value="{{ old('name', $project->name) }}" required>
+                                    </div>
+
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold">Total Budget (USD)</label>
+                                        <input type="number" step="0.01" name="total_budget" class="form-control"
+                                            value="{{ old('total_budget', $project->total_budget) }}" required>
+                                    </div>
+
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-semibold">Duration (Years)</label>
+                                        <input type="number" name="duration_years" class="form-control" min="1"
+                                            max="10" value="{{ old('duration_years', $project->total_years) }}" required>
+                                    </div>
+
+                                    <div class="col-12 mt-4">
+                                        <div class="alert alert-info mb-0">
+                                            Indicators are managed from <strong>M&amp;E &rarr; Indicators</strong>.
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div class="col-md-3">
-                                <label class="form-label fw-semibold">Total Budget (USD)</label>
-                                <input type="number" step="0.01" name="total_budget" class="form-control"
-                                    value="{{ old('total_budget', $project->total_budget) }}" required>
-                            </div>
-
-                            <div class="col-md-3">
-                                <label class="form-label fw-semibold">Duration (Years)</label>
-                                <input type="number" name="duration_years" class="form-control" min="1"
-                                    max="10" value="{{ old('duration_years', $project->total_years) }}" required>
-                            </div>
-
-                            <div class="col-md-12">
-                                <label class="form-label fw-semibold">Description</label>
-                                <textarea name="description" class="form-control" rows="3">{{ old('description', $project->description) }}</textarea>
-                            </div>
-
-                            <div class="col-12 mt-4">
-                                <div class="alert alert-info mb-0">
-                                    Indicators are managed from <strong>M&amp;E &rarr; Indicators</strong>.
+                            <div class="tab-pane fade" id="project-description-pane" role="tabpanel"
+                                aria-labelledby="project-description-tab" tabindex="0">
+                                <div class="row g-4">
+                                    <div class="col-12">
+                                        <label class="form-label fw-semibold">Description</label>
+                                        <textarea name="description" class="form-control" rows="8"
+                                            placeholder="Optional project description">{{ old('description', $project->description) }}</textarea>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -108,4 +143,3 @@
     </main>
 
 @endsection
-
