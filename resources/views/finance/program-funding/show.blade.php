@@ -100,15 +100,6 @@
 
         </div>
 
-        @if ($programFunding->description)
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-body">
-                    <h6 class="fw-bold mb-2">Description</h6>
-                    <p class="mb-0">{{ $programFunding->description }}</p>
-                </div>
-            </div>
-        @endif
-
         {{-- ================= FUNDING INFORMATION ================= --}}
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-body">
@@ -142,6 +133,15 @@
                         <div class="fw-semibold">
                             {{ optional($programFunding->creator)->name ?? 'System' }}
                         </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <small class="text-muted">Description</small>
+                    <div class="fw-semibold mt-1">
+                        {!! $programFunding->description
+                            ? nl2br(e($programFunding->description))
+                            : '<span class="text-muted fw-normal">No description provided.</span>' !!}
                     </div>
                 </div>
             </div>
