@@ -180,10 +180,7 @@ class ProgramFundingController extends Controller
                 $fileName = $names[$index]
                     ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
 
-                $storedPath = $file->store(
-                    'program-funding-documents',
-                    'public'
-                );
+                $storedPath = $file->store('program-funding-documents');
 
                 ProgramFundingDocument::create([
                     'program_funding_id' => $funding->id,
@@ -558,7 +555,7 @@ public function edit(ProgramFunding $programFunding)
             if ($request->hasFile("existing_documents.$docId.file")) {
                 $file = $request->file("existing_documents.$docId.file");
                 $this->deleteDocumentFile($document->file_path);
-                $updatePayload['file_path'] = $file->store('program-funding-documents', 'public');
+                $updatePayload['file_path'] = $file->store('program-funding-documents');
             }
 
             $document->update($updatePayload);
@@ -579,7 +576,7 @@ public function edit(ProgramFunding $programFunding)
                 'document_type'      => $types[$index] ?? 'Supporting Document',
                 'description'        => $descriptions[$index] ?? null,
                 'file_name'          => $names[$index] ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
-                'file_path'          => $file->store('program-funding-documents', 'public'),
+                'file_path'          => $file->store('program-funding-documents'),
                 'uploaded_by'        => Auth::id(),
             ]);
         }
