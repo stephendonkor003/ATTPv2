@@ -108,6 +108,12 @@
                                 </option>
                             </select>
                         </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-control" rows="4"
+                                placeholder="Describe the purpose, scope, or conditions of this funding">{{ old('description', $programFunding->description) }}</textarea>
+                        </div>
                     </div>
 
                     <div class="row mb-4">

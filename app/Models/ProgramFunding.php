@@ -15,6 +15,7 @@ class ProgramFunding extends BaseModel
         'department_id',
         'program_id',
         'program_name',
+        'description',
         'funder_id',
         'governance_node_id',
         'funding_type',

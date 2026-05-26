@@ -84,6 +84,7 @@ class ProgramFundingController extends Controller
         /* ================= VALIDATION ================= */
         $validated = $request->validate([
             'program_name'    => 'required|string|max:255',
+            'description'     => 'nullable|string',
             'funder_id'       => 'required|exists:myb_funders,id',
             'governance_node_id' => 'required|exists:myb_governance_nodes,id',
             'funding_type'    => 'required|in:grant,allocation,capital',
@@ -124,6 +125,7 @@ class ProgramFundingController extends Controller
         /* ================= CREATE FUNDING ================= */
         $funding = ProgramFunding::create([
             'program_name'              => $validated['program_name'],
+            'description'               => $validated['description'] ?? null,
             'funder_id'                 => $validated['funder_id'],
             'governance_node_id'        => $validated['governance_node_id'],
             'funding_type'              => $validated['funding_type'],
@@ -358,6 +360,7 @@ public function edit(ProgramFunding $programFunding)
 
         $validated = $request->validate([
             'program_name' => 'required|string|max:255',
+            'description' => 'nullable|string',
             'funder_id' => 'required|exists:myb_funders,id',
             'governance_node_id' => 'required|exists:myb_governance_nodes,id',
             'funding_type' => 'required|in:grant,allocation,capital',
@@ -401,6 +404,7 @@ public function edit(ProgramFunding $programFunding)
         // Update basic fields
         $programFunding->update([
             'program_name'              => $validated['program_name'],
+            'description'               => $validated['description'] ?? null,
             'funder_id'                 => $validated['funder_id'],
             'governance_node_id'        => $validated['governance_node_id'],
             'funding_type'              => $validated['funding_type'],

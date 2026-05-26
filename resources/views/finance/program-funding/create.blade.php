@@ -85,6 +85,12 @@
                                 @endforeach
                             </select>
                         </div>
+
+                        <div class="col-md-12 mt-3">
+                            <label class="form-label fw-semibold">Description</label>
+                            <textarea name="description" class="form-control" rows="4"
+                                placeholder="Describe the purpose, scope, or conditions of this funding">{{ old('description') }}</textarea>
+                        </div>
                     </div>
 
                     {{-- ================= SECTION 2 ================= --}}
