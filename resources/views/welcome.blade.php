@@ -164,6 +164,11 @@
         <div class="slider">
             {{-- Video slide — dominant, plays first --}}
             <div class="slide active" style="background-image: url('{{ asset('assets/images/au3.jpg') }}');"></div>
+            <div class="slide video-slide">
+                <video id="heroSlideVideo" muted playsinline preload="none" loop poster="{{ asset('assets/images/au3.jpg') }}">
+                    <source src="{{ asset('gallary/video.mp4') }}" type="video/mp4">
+                </video>
+            </div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au1.jpg') }}');"></div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au2.webp') }}');"></div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au3.jpg') }}');"></div>
