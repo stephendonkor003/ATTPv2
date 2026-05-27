@@ -1,15 +1,59 @@
-// Background slider (only runs when .slide elements exist)
+// Background slider — video-aware
 (function () {
     var slides = document.querySelectorAll('.slide');
     if (!slides.length) return;
+
     var index = 0;
-    function showNextSlide() {
-        slides[index].classList.remove('active');
-        index = (index + 1) % slides.length;
-        slides[index].classList.add('active');
+    var timer;
+
+    function getVideo(slide) {
+        return slide.querySelector('video');
     }
-    setInterval(showNextSlide, 6000);
+
+    function delay(slide) {
+        var v = getVideo(slide);
+        if (v) {
+            var d = v.duration;
+            if (d && isFinite(d)) return Math.min(Math.max(d * 1000, 8000), 28000);
+            return 16000;
+        }
+        return 6000;
+    }
+
+    function activate(i) {
+        var hero = document.querySelector('.hero');
+        slides.forEach(function (s, si) {
+            var wasActive = s.classList.contains('active');
+            s.classList.toggle('active', si === i);
+            var v = getVideo(s);
+            if (v) {
+                if (si === i) {
+                    v.currentTime = 0;
+                    v.muted = true;
+                    v.play().catch(function () {});
+                    if (hero) hero.classList.add('video-active');
+                } else {
+                    v.pause();
+                }
+            } else if (si === i && hero) {
+                hero.classList.remove('video-active');
+            }
+        });
+    }
+
+    function schedule() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+            index = (index + 1) % slides.length;
+            activate(index);
+            schedule();
+        }, delay(slides[index]));
+    }
+
+    activate(0);
+    schedule();
 })();
+
 
 // Hero rotating headline + subtitle
 const heroSlides = [
@@ -51,12 +95,10 @@ function runTypewriter() {
     const raw     = current.title;
 
     if (!isDeleting) {
-        // Type next character (treat \n as <br>)
         charIndex++;
         typeEl.innerHTML = raw.substring(0, charIndex).replace(/\n/g, "<br>");
 
         if (charIndex === raw.length) {
-            // Finished typing — show subtitle, hold, then delete
             if (subtitleEl) {
                 subtitleEl.textContent = current.subtitle;
                 subtitleEl.classList.add("sub-visible");
@@ -69,7 +111,6 @@ function runTypewriter() {
             return;
         }
     } else {
-        // Erase one character at a time from the raw string (not from innerHTML)
         charIndex--;
         typeEl.innerHTML = raw.substring(0, charIndex).replace(/\n/g, "<br>");
 
@@ -87,10 +128,5 @@ function runTypewriter() {
 }
 
 window.addEventListener("load", function () {
-    if (typeEl) {
-        setTimeout(runTypewriter, 400);
-    }
+    if (typeEl) setTimeout(runTypewriter, 400);
 });
-
-
-

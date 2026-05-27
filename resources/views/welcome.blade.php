@@ -104,6 +104,7 @@
         </div>
 
         <a href="{{ route('news.index') }}" onclick="closeMobileNav()">News &amp; Updates</a>
+        <a href="{{ route('gallery') }}" onclick="closeMobileNav()">Gallery</a>
         <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
         <div class="mobile-nav-actions">
             <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
@@ -137,6 +138,7 @@
             </div>
 
             <a href="{{ route('news.index') }}">News &amp; Updates</a>
+            <a href="{{ route('gallery') }}">Gallery</a>
             <a href="#contact">{{ __('navigation.contact') }}</a>
         </nav>
 
@@ -160,9 +162,20 @@
         <div class="overlay"></div>
 
         <div class="slider">
-            <div class="slide active" style="background-image: url('{{ asset('assets/images/au1.jpg') }}');"></div>
+            {{-- Video slide — dominant, plays first --}}
+            <div class="slide video-slide active">
+                <video id="heroSlideVideo" muted playsinline preload="metadata" loop>
+                    <source src="{{ asset('gallary/video.mp4') }}" type="video/mp4">
+                </video>
+            </div>
+            <div class="slide" style="background-image: url('{{ asset('assets/images/au1.jpg') }}');"></div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au2.webp') }}');"></div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au3.jpg') }}');"></div>
+        </div>
+
+        {{-- Live-video badge shown only when video slide is active --}}
+        <div class="hero-video-badge">
+            <span></span> LIVE FOOTAGE
         </div>
 
         <div class="hero-content">
@@ -361,6 +374,64 @@
 
 
 
+    <!-- ====== GALLERY SECTION ====== -->
+    @if(!empty($galleryImages))
+    <section id="gallery" class="gallery-section">
+        <div class="gallery-section-header">
+            <h2>Our Gallery</h2>
+            <p>Moments from our events, webinars, and activities across Africa</p>
+            <a href="{{ route('gallery') }}" class="btn-gallery-all">View All Photos</a>
+        </div>
+        <div class="gallery-scroller-wrapper">
+            <div class="gallery-scroller">
+                @foreach($galleryImages as $i => $img)
+                <div class="gallery-scroller-item" onclick="openMainLightbox({{ $i }})">
+                    <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" loading="lazy">
+                </div>
+                @endforeach
+                @foreach($galleryImages as $i => $img)
+                <div class="gallery-scroller-item" onclick="openMainLightbox({{ $i }})">
+                    <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" loading="lazy">
+                </div>
+                @endforeach
+            </div>
+        </div>
+    </section>
+
+    <div class="gallery-lightbox" id="mainGalleryLightbox">
+        <div class="gallery-lightbox-overlay" onclick="closeMainLightbox()"></div>
+        <div class="gallery-lightbox-inner">
+            <button class="gallery-lightbox-btn" onclick="prevMainImage()">&#8249;</button>
+            <div class="gallery-lightbox-img-wrap">
+                <button class="gallery-lightbox-close" onclick="closeMainLightbox()">&times;</button>
+                <img id="mainLightboxImg" src="" alt="Gallery Image">
+                <div class="gallery-lightbox-counter" id="mainLightboxCounter"></div>
+            </div>
+            <button class="gallery-lightbox-btn" onclick="nextMainImage()">&#8250;</button>
+        </div>
+    </div>
+    @endif
+
+    <!-- ====== VIDEO FEATURE SECTION ====== -->
+    <section class="video-feature-section">
+        <div class="video-feature-inner">
+            <div class="video-feature-header">
+                <h2>Watch Our Story</h2>
+                <p>See ATTP's impact and activities across Africa in action</p>
+            </div>
+            <div class="video-feature-player" id="vfPlayer">
+                <video id="vfVideo" preload="none" controls poster="{{ asset('assets/images/au3.jpg') }}">
+                    <source src="{{ asset('gallary/video.mp4') }}" type="video/mp4">
+                </video>
+                <div class="vf-overlay-btn" id="vfOverlay" onclick="startVfVideo()">
+                    <div class="vf-play-icon">
+                        <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- ====== FOOTER ====== -->
     <footer id="contact" class="footer" role="contentinfo">
         <div class="footer-content">
@@ -374,6 +445,7 @@
                 <h4>{{ __('landing.footer_links_title') }}</h4>
                 <a href="{{ route('landing.index') }}">{{ __('landing.footer_link_home') }}</a>
                 <a href="#process">{{ __('landing.footer_link_process') }}</a>
+                <a href="#gallery">Gallery</a>
                 <a href="#customization">{{ __('landing.footer_link_oversight') }}</a>
                 <a href="#contact">{{ __('navigation.contact') }}</a>
                 <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
@@ -395,6 +467,58 @@
 
 
     <script src="{{ asset('assets/script.js') }}"></script>
+
+    <script>
+    function startVfVideo() {
+        var vid = document.getElementById('vfVideo');
+        var overlay = document.getElementById('vfOverlay');
+        if (!vid) return;
+        overlay.style.display = 'none';
+        vid.load();
+        vid.play().catch(function () { overlay.style.display = 'flex'; });
+        vid.addEventListener('ended', function () { overlay.style.display = 'flex'; });
+    }
+    </script>
+
+    @if(!empty($galleryImages))
+    <script>
+    (function () {
+        var mainImgs = @json($galleryImages);
+        var mainIdx = 0;
+
+        window.openMainLightbox = function (i) {
+            mainIdx = i;
+            updateMain();
+            document.getElementById('mainGalleryLightbox').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        };
+        window.closeMainLightbox = function () {
+            document.getElementById('mainGalleryLightbox').classList.remove('active');
+            document.body.style.overflow = '';
+        };
+        window.prevMainImage = function () {
+            mainIdx = (mainIdx - 1 + mainImgs.length) % mainImgs.length;
+            updateMain();
+        };
+        window.nextMainImage = function () {
+            mainIdx = (mainIdx + 1) % mainImgs.length;
+            updateMain();
+        };
+        function updateMain() {
+            document.getElementById('mainLightboxImg').src =
+                '{{ rtrim(asset("gallary"), "/") }}/' + encodeURIComponent(mainImgs[mainIdx]);
+            document.getElementById('mainLightboxCounter').textContent =
+                (mainIdx + 1) + ' / ' + mainImgs.length;
+        }
+        document.addEventListener('keydown', function (e) {
+            if (!document.getElementById('mainGalleryLightbox').classList.contains('active')) return;
+            if (e.key === 'ArrowRight') window.nextMainImage();
+            else if (e.key === 'ArrowLeft') window.prevMainImage();
+            else if (e.key === 'Escape') window.closeMainLightbox();
+        });
+    }());
+    </script>
+    @endif
 
     <script>
         function openMobileNav() {

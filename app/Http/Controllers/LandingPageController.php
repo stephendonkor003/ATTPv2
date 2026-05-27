@@ -12,15 +12,27 @@ class LandingPageController extends Controller
 
     public function index()
     {
-        // Fetch all categories and their related open projects
-        // $categories = Category::with(['projects' => function ($query) {
-        //     $query->where('status', 'open');
-        // }])->get();
+        $galleryImages = $this->loadGalleryImages();
+        return view('welcome', compact('galleryImages'));
+    }
 
-        // Or: Fetch all open projects without category grouping
-        // $projects = Project::where('status', 'open')->with('category')->latest()->get();
+    public function gallery()
+    {
+        $galleryImages = $this->loadGalleryImages();
+        return view('gallery', compact('galleryImages'));
+    }
 
-        return view('welcome');
+    private function loadGalleryImages(): array
+    {
+        $gallaryPath = public_path('gallary');
+        if (!File::isDirectory($gallaryPath)) {
+            return [];
+        }
+        return collect(File::files($gallaryPath))
+            ->filter(fn($f) => in_array(strtolower($f->getExtension()), ['jpg', 'jpeg', 'png', 'webp']))
+            ->map(fn($f) => $f->getFilename())
+            ->values()
+            ->all();
     }
 
     public function showBid(Project $project)

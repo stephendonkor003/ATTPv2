@@ -327,6 +327,9 @@
         </article>
     </section>
 
+    <!-- ====== GALLERY STRIP ====== -->
+    @include('partials.gallery-strip')
+
     <footer id="contact" class="footer" role="contentinfo">
         <div class="footer-content">
             <div class="footer-logo">

@@ -474,6 +474,8 @@
         </div>
 
     </div>
+    @include('partials.gallery-strip')
+
     <footer id="contact" class="footer">
         <div class="footer-content">
 

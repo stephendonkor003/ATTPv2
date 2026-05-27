@@ -306,6 +306,7 @@
         </div>
 
         <a href="{{ route('news.index') }}" onclick="closeMobileNav()">News &amp; Updates</a>
+        <a href="{{ route('gallery') }}" onclick="closeMobileNav()">Gallery</a>
         <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
         <div class="mobile-nav-actions">
             <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
@@ -340,6 +341,7 @@
             </div>
 
             <a href="{{ route('news.index') }}">News &amp; Updates</a>
+            <a href="{{ route('gallery') }}">Gallery</a>
             <a href="#contact">{{ __('navigation.contact') }}</a>
         </nav>
 
@@ -491,6 +493,9 @@
         </div>
 
     </section>
+
+    <!-- ====== GALLERY STRIP ====== -->
+    @include('partials.gallery-strip')
 
     <!-- ====== FOOTER ====== -->
     <footer id="contact" class="footer" role="contentinfo">

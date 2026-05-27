@@ -1832,6 +1832,9 @@
         </div>
     </div>
 
+    <!-- Gallery Strip -->
+    @include('partials.gallery-strip')
+
     <!-- Footer -->
     <footer id="contact" class="footer" role="contentinfo">
         <div class="footer-content">

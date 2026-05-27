@@ -577,6 +577,9 @@
     @endif {{-- end treatiesData not empty --}}
 </div>
 
+<!-- ── GALLERY STRIP ── -->
+@include('partials.gallery-strip')
+
 <!-- ── FOOTER ── -->
 <footer id="contact" class="footer">
     <div class="footer-content">

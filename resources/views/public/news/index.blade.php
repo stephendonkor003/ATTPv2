@@ -311,6 +311,8 @@
     </div>
 </main>
 
+@include('partials.gallery-strip')
+
 <!-- ── FOOTER ── -->
 <footer id="contact" class="footer">
     <div class="footer-content">

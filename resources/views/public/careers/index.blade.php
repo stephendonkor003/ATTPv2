@@ -472,6 +472,9 @@
 
 
 
+    <!-- ====== GALLERY STRIP ====== -->
+    @include('partials.gallery-strip')
+
     <!-- ====== FOOTER ====== -->
     <footer id="contact" class="footer" role="contentinfo">
         <div class="footer-content">
