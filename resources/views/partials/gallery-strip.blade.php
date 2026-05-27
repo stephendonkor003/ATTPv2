@@ -1,12 +1,19 @@
 @php
-    $gallaryDir = public_path('gallary');
-    $allGallaryFiles = collect(\Illuminate\Support\Facades\File::files($gallaryDir))
-        ->filter(fn($f) => in_array(strtolower($f->getExtension()), ['jpg', 'jpeg', 'png', 'webp']))
-        ->map(fn($f) => $f->getFilename())
-        ->values()
-        ->all();
-    shuffle($allGallaryFiles);
-    $stripImages = array_slice($allGallaryFiles, 0, 12);
+    $stripImages = [];
+    try {
+        $gallaryDir = public_path('gallary');
+        if (\Illuminate\Support\Facades\File::isDirectory($gallaryDir)) {
+            $all = collect(\Illuminate\Support\Facades\File::files($gallaryDir))
+                ->filter(fn($f) => in_array(strtolower($f->getExtension()), ['jpg', 'jpeg', 'png', 'webp']))
+                ->map(fn($f) => $f->getFilename())
+                ->values()
+                ->all();
+            shuffle($all);
+            $stripImages = array_slice($all, 0, 12);
+        }
+    } catch (\Throwable $e) {
+        $stripImages = [];
+    }
 @endphp
 
 @if(count($stripImages) > 0)
@@ -20,7 +27,9 @@
     <div class="gallery-strip-grid">
         @foreach($stripImages as $i => $img)
         <div class="gallery-strip-item" onclick="openStripLightbox({{ $i }})">
-            <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" loading="lazy">
+            <img src="{{ asset('gallary/' . rawurlencode($img)) }}"
+                 alt="ATTP Gallery"
+                 onerror="this.parentElement.style.display='none'">
         </div>
         @endforeach
     </div>
@@ -43,6 +52,7 @@
 (function () {
     var stripImgs = @json($stripImages);
     var stripIdx = 0;
+    var base = @json(rtrim(asset('gallary'), '/') . '/');
 
     window.openStripLightbox = function (i) {
         stripIdx = i;
@@ -64,7 +74,7 @@
     };
     function updateStrip() {
         document.getElementById('stripLightboxImg').src =
-            '{{ rtrim(asset("gallary"), "/") }}/' + encodeURIComponent(stripImgs[stripIdx]);
+            base + encodeURIComponent(stripImgs[stripIdx]);
         document.getElementById('stripLightboxCounter').textContent =
             (stripIdx + 1) + ' / ' + stripImgs.length;
     }

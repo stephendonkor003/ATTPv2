@@ -96,10 +96,8 @@
             height: 100%;
             object-fit: cover;
             display: block;
-            transition: transform 0.4s ease, opacity 0.3s;
-            opacity: 0;
+            transition: transform 0.4s ease;
         }
-        .gp-item img.loaded { opacity: 1; }
         .gp-item:hover img { transform: scale(1.07); }
 
         .gp-item-overlay {
@@ -497,7 +495,7 @@
     'use strict';
 
     var IMAGES = @json($galleryImages);
-    var BASE   = '{{ rtrim(asset("gallary"), "/") }}/';
+    var BASE   = @json(rtrim(asset('gallary'), '/') . '/');
     var BATCH  = 24;
     var loaded = 0;
     var lbIdx  = 0;
@@ -523,7 +521,6 @@
                 img.alt = 'ATTP Gallery';
                 img.loading = 'lazy';
                 img.decoding = 'async';
-                img.onload = function () { this.classList.add('loaded'); };
                 img.onerror = function () { this.parentElement.style.display = 'none'; };
                 img.src = BASE + encodeURIComponent(IMAGES[idx]);
 

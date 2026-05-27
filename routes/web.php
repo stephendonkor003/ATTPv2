@@ -7,6 +7,7 @@
 | CORE / AUTH / GENERAL CONTROLLERS
 |--------------------------------------------------------------------------
 */
+use App\Http\Controllers\VideoStreamController;
 use App\Http\Controllers\{
     DashboardController,
     LandingPageController,
@@ -2415,8 +2416,8 @@ Route::middleware(['auth', 'not.funding.partner'])
 
 Route::get('/', [LandingPageController::class, 'index'])->name('landing.index');
 Route::get('/gallery', [LandingPageController::class, 'gallery'])->name('gallery');
-Route::get('/stream/{filename}', [App\Http\Controllers\VideoStreamController::class, 'stream'])
-    ->where('filename', '[A-Za-z0-9._\-]+')
+Route::get('/stream/{filename}', [VideoStreamController::class, 'stream'])
+    ->where('filename', '[A-Za-z0-9_.+-]+')
     ->name('video.stream');
 Route::get('/contact', [LandingPageController::class, 'contact'])->name('landing.contact');
 Route::get('/african-map', [LandingPageController::class, 'africanMap'])->name('landing.african_map');

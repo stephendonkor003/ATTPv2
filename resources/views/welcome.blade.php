@@ -386,12 +386,12 @@
             <div class="gallery-scroller">
                 @foreach($galleryImages as $i => $img)
                 <div class="gallery-scroller-item" onclick="openMainLightbox({{ $i }})">
-                    <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" loading="lazy">
+                    <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" onerror="this.parentElement.style.display='none'">
                 </div>
                 @endforeach
                 @foreach($galleryImages as $i => $img)
                 <div class="gallery-scroller-item" onclick="openMainLightbox({{ $i }})">
-                    <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" loading="lazy">
+                    <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" onerror="this.parentElement.style.display='none'">
                 </div>
                 @endforeach
             </div>
@@ -506,7 +506,7 @@
         };
         function updateMain() {
             document.getElementById('mainLightboxImg').src =
-                '{{ rtrim(asset("gallary"), "/") }}/' + encodeURIComponent(mainImgs[mainIdx]);
+                @json(rtrim(asset('gallary'), '/')) + '/' + encodeURIComponent(mainImgs[mainIdx]);
             document.getElementById('mainLightboxCounter').textContent =
                 (mainIdx + 1) + ' / ' + mainImgs.length;
         }
