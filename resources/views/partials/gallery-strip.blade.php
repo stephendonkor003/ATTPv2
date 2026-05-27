@@ -1,16 +1,9 @@
 @php
     $stripImages = [];
     try {
-        $gallaryDir = public_path('gallary');
-        if (\Illuminate\Support\Facades\File::isDirectory($gallaryDir)) {
-            $all = collect(\Illuminate\Support\Facades\File::files($gallaryDir))
-                ->filter(fn($f) => in_array(strtolower($f->getExtension()), ['jpg', 'jpeg', 'png', 'webp']))
-                ->map(fn($f) => $f->getFilename())
-                ->values()
-                ->all();
-            shuffle($all);
-            $stripImages = array_slice($all, 0, 12);
-        }
+        $all = app(\App\Services\GalleryImageService::class)->items();
+        shuffle($all);
+        $stripImages = array_slice($all, 0, 12);
     } catch (\Throwable $e) {
         $stripImages = [];
     }
@@ -27,8 +20,10 @@
     <div class="gallery-strip-grid">
         @foreach($stripImages as $i => $img)
         <div class="gallery-strip-item" onclick="openStripLightbox({{ $i }})">
-            <img src="{{ asset('gallary/' . rawurlencode($img)) }}"
+            <img src="{{ $img['thumb'] }}"
                  alt="ATTP Gallery"
+                 loading="lazy"
+                 decoding="async"
                  onerror="this.parentElement.style.display='none'">
         </div>
         @endforeach
@@ -52,7 +47,6 @@
 (function () {
     var stripImgs = @json($stripImages);
     var stripIdx = 0;
-    var base = @json(rtrim(asset('gallary'), '/') . '/');
 
     window.openStripLightbox = function (i) {
         stripIdx = i;
@@ -73,8 +67,7 @@
         updateStrip();
     };
     function updateStrip() {
-        document.getElementById('stripLightboxImg').src =
-            base + encodeURIComponent(stripImgs[stripIdx]);
+        document.getElementById('stripLightboxImg').src = stripImgs[stripIdx].large;
         document.getElementById('stripLightboxCounter').textContent =
             (stripIdx + 1) + ' / ' + stripImgs.length;
     }

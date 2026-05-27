@@ -408,13 +408,13 @@
     <div style="max-width:960px; margin:0 auto;">
         <p style="color:#fbbc05; font-size:0.78rem; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-bottom:0.6rem;">&#9654; Featured Video</p>
         <div style="position:relative; border-radius:10px; overflow:hidden; aspect-ratio:16/9; background:#000; box-shadow:0 20px 60px rgba(0,0,0,0.7);">
-            <video id="gpFeaturedVideo" muted autoplay loop playsinline preload="metadata"
+            <video id="gpFeaturedVideo" controls playsinline preload="none" poster="{{ asset('assets/images/au3.jpg') }}"
                    style="width:100%;height:100%;object-fit:cover;display:block;">
                 <source src="{{ asset('gallary/video.mp4') }}" type="video/mp4">
             </video>
             <!-- unmute toggle -->
             <button id="gpMuteBtn" onclick="toggleGpMute()"
-                style="position:absolute;bottom:1rem;right:1rem;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:0.4rem 0.9rem;border-radius:20px;font-size:0.78rem;font-weight:600;cursor:pointer;backdrop-filter:blur(4px);transition:background 0.2s;">
+                style="display:none;position:absolute;bottom:1rem;right:1rem;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:0.4rem 0.9rem;border-radius:20px;font-size:0.78rem;font-weight:600;cursor:pointer;backdrop-filter:blur(4px);transition:background 0.2s;">
                 🔇 Unmute
             </button>
         </div>
@@ -495,7 +495,6 @@
     'use strict';
 
     var IMAGES = @json($galleryImages);
-    var BASE   = @json(rtrim(asset('gallary'), '/') . '/');
     var BATCH  = 24;
     var loaded = 0;
     var lbIdx  = 0;
@@ -522,7 +521,7 @@
                 img.loading = 'lazy';
                 img.decoding = 'async';
                 img.onerror = function () { this.parentElement.style.display = 'none'; };
-                img.src = BASE + encodeURIComponent(IMAGES[idx]);
+                img.src = IMAGES[idx].thumb;
 
                 var overlay = document.createElement('div');
                 overlay.className = 'gp-item-overlay';
@@ -581,7 +580,7 @@
                 t.className = 'gp-lb-thumb';
                 t.dataset.idx = i;
                 var ti = document.createElement('img');
-                ti.src = BASE + encodeURIComponent(IMAGES[i]);
+                ti.src = IMAGES[i].thumb;
                 ti.alt = '';
                 ti.loading = 'lazy';
                 t.appendChild(ti);
@@ -602,7 +601,7 @@
         lbIdx = idx;
         lbImg.classList.add('fading');
         lbLoad.style.display = 'flex';
-        var src = BASE + encodeURIComponent(IMAGES[lbIdx]);
+        var src = IMAGES[lbIdx].large;
         lbCtr.textContent = (lbIdx + 1) + ' / ' + IMAGES.length;
         var tmp = new Image();
         tmp.onload = function () {
@@ -690,7 +689,7 @@
     window.toggleGpMute = function () {
         var v = document.getElementById('gpFeaturedVideo');
         var btn = document.getElementById('gpMuteBtn');
-        if (!v) return;
+        if (!v || !btn) return;
         v.muted = !v.muted;
         btn.textContent = v.muted ? '🔇 Unmute' : '🔊 Mute';
     };

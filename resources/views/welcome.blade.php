@@ -163,11 +163,7 @@
 
         <div class="slider">
             {{-- Video slide — dominant, plays first --}}
-            <div class="slide video-slide active">
-                <video id="heroSlideVideo" muted playsinline preload="metadata" loop>
-                    <source src="{{ asset('gallary/video.mp4') }}" type="video/mp4">
-                </video>
-            </div>
+            <div class="slide active" style="background-image: url('{{ asset('assets/images/au3.jpg') }}');"></div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au1.jpg') }}');"></div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au2.webp') }}');"></div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au3.jpg') }}');"></div>
@@ -386,12 +382,12 @@
             <div class="gallery-scroller">
                 @foreach($galleryImages as $i => $img)
                 <div class="gallery-scroller-item" onclick="openMainLightbox({{ $i }})">
-                    <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" onerror="this.parentElement.style.display='none'">
+                    <img src="{{ $img['thumb'] }}" alt="ATTP Gallery" loading="lazy" decoding="async" onerror="this.parentElement.style.display='none'">
                 </div>
                 @endforeach
                 @foreach($galleryImages as $i => $img)
                 <div class="gallery-scroller-item" onclick="openMainLightbox({{ $i }})">
-                    <img src="{{ asset('gallary/' . rawurlencode($img)) }}" alt="ATTP Gallery" onerror="this.parentElement.style.display='none'">
+                    <img src="{{ $img['thumb'] }}" alt="ATTP Gallery" loading="lazy" decoding="async" onerror="this.parentElement.style.display='none'">
                 </div>
                 @endforeach
             </div>
@@ -505,8 +501,7 @@
             updateMain();
         };
         function updateMain() {
-            document.getElementById('mainLightboxImg').src =
-                @json(rtrim(asset('gallary'), '/')) + '/' + encodeURIComponent(mainImgs[mainIdx]);
+        document.getElementById('mainLightboxImg').src = mainImgs[mainIdx].large;
             document.getElementById('mainLightboxCounter').textContent =
                 (mainIdx + 1) + ' / ' + mainImgs.length;
         }

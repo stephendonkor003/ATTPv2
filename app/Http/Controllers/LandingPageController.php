@@ -4,35 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\Project;
 use App\Models\Category;
+use App\Services\GalleryImageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 
 class LandingPageController extends Controller
 {
 
-    public function index()
+    public function index(GalleryImageService $gallery)
     {
-        $galleryImages = $this->loadGalleryImages();
+        $galleryImages = $gallery->items();
         return view('welcome', compact('galleryImages'));
     }
 
-    public function gallery()
+    public function gallery(GalleryImageService $gallery)
     {
-        $galleryImages = $this->loadGalleryImages();
+        $galleryImages = $gallery->items();
         return view('gallery', compact('galleryImages'));
-    }
-
-    private function loadGalleryImages(): array
-    {
-        $gallaryPath = public_path('gallary');
-        if (!File::isDirectory($gallaryPath)) {
-            return [];
-        }
-        return collect(File::files($gallaryPath))
-            ->filter(fn($f) => in_array(strtolower($f->getExtension()), ['jpg', 'jpeg', 'png', 'webp']))
-            ->map(fn($f) => $f->getFilename())
-            ->values()
-            ->all();
     }
 
     public function showBid(Project $project)
