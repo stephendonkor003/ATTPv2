@@ -392,6 +392,16 @@
                                 @endif
                             @endcanany
 
+                            @can('think_tank.reports.submit')
+                                @if (Route::has('think-tank.upload-report-finding'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tank.upload-report-finding') }}" class="nxl-link">
+                                            <i class="feather-upload-cloud me-2"></i> Upload Report and Finding
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
                             @canany(['think_tank.research.view', 'think_tank.research.submit'])
                                 @if (Route::has('think-tank.research'))
                                     <li class="nxl-item">

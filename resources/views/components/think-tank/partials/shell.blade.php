@@ -199,6 +199,13 @@
                 @endcanany
             </li>
             <li class="nav-item">
+                @can('think_tank.reports.submit')
+                    <a class="nav-link {{ request()->routeIs('think-tank.upload-report-finding') ? 'active' : '' }}" @if(request()->routeIs('think-tank.upload-report-finding')) aria-current="page" @endif href="{{ route('think-tank.upload-report-finding', $portalRouteParams) }}">Upload Report and Finding</a>
+                @else
+                    <span class="nav-link disabled">Upload Report and Finding</span>
+                @endcan
+            </li>
+            <li class="nav-item">
                 @canany(['think_tank.research.view', 'think_tank.research.submit'])
                     <a class="nav-link {{ request()->routeIs('think-tank.research*') ? 'active' : '' }}" @if(request()->routeIs('think-tank.research*')) aria-current="page" @endif href="{{ route('think-tank.research', $portalRouteParams) }}">Research</a>
                 @else

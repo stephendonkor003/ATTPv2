@@ -340,6 +340,11 @@ class ThinkTankPortalController extends Controller
         return view('think-tank.reports', $this->reportsPayload($request));
     }
 
+    public function uploadReportFinding(Request $request)
+    {
+        return view('think-tank.upload-report-finding', $this->reportsPayload($request));
+    }
+
     public function downloadReports(Request $request)
     {
         $payload = $this->reportsPayload($request);

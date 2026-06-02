@@ -3112,6 +3112,7 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
     ->group(function () {
         Route::get('/dashboard', 'dashboard')->name('dashboard');
         Route::get('/dashboard/download', 'downloadDashboardReport')->middleware('permission:think_tank.dashboard.download')->name('dashboard.download');
+        Route::get('/upload-report-finding', 'uploadReportFinding')->middleware('permission:think_tank.reports.submit')->name('upload-report-finding');
         Route::get('/reports', 'reports')->middleware('permission:think_tank.reports.view|think_tank.reports.submit')->name('reports');
         Route::get('/reports/download', 'downloadReports')->middleware('permission:think_tank.reports.download')->name('reports.download');
         Route::post('/reports', 'storeReport')->middleware('permission:think_tank.reports.submit')->name('reports.store');

@@ -76,13 +76,36 @@ class ThinkTankPortalSmoke
                 ->assertSee('Run Search')
                 ->assertSee('Download Report');
 
+            $qascDate = now()->toDateString();
+
             $this->asThinkTank($data['thinkTankUser'])
                 ->postWithCsrf('/think-tank/research', [
                     'title' => 'E2E Agricultural Policy Research ' . Str::random(5),
                     'output_type' => 'research',
-                    'published_on' => now()->toDateString(),
+                    'published_on' => $qascDate,
                     'abstract' => 'End to end research output submitted by the think tank.',
                     'file' => UploadedFile::fake()->create('research.pdf', 120, 'application/pdf'),
+                    'qasc' => [
+                        'lead_authors' => 'E2E Lead Author',
+                        'lead_think_tank' => $data['member']->name,
+                        'consortium' => 'BRIDGE',
+                        'track_classification' => 'Track 1',
+                        'original_language' => 'English',
+                        'intended_publication_date' => $qascDate,
+                        'lead_author_name' => 'E2E Lead Author',
+                        'lead_author_date' => $qascDate,
+                        'lead_think_tank_representative_name' => 'E2E Think Tank Representative',
+                        'lead_think_tank_date' => $qascDate,
+                        'checklist' => [
+                            'internal_review' => ['status' => 'confirmed', 'signed_by' => 'E2E Reviewer', 'signed_date' => $qascDate],
+                            'data_confidentiality' => ['status' => 'confirmed', 'signed_by' => 'E2E Reviewer', 'signed_date' => $qascDate],
+                            'publication_integrity' => ['status' => 'confirmed', 'signed_by' => 'E2E Reviewer', 'signed_date' => $qascDate],
+                            'au_partner_sensitivity' => ['status' => 'confirmed', 'signed_by' => 'E2E Reviewer', 'signed_date' => $qascDate],
+                            'ai_usage' => ['status' => 'confirmed', 'signed_by' => 'E2E Reviewer', 'signed_date' => $qascDate],
+                        ],
+                    ],
+                    'qasc_author_signature' => UploadedFile::fake()->image('author-signature.png', 160, 60),
+                    'qasc_think_tank_signature' => UploadedFile::fake()->image('think-tank-signature.png', 160, 60),
                 ])
                 ->assertRedirect();
 
@@ -199,6 +222,12 @@ class ThinkTankPortalSmoke
                 ->assertSee('Run Search')
                 ->assertSee('Download Report');
 
+            $this->asThinkTank($data['thinkTankUser'])
+                ->get('/think-tank/upload-report-finding')
+                ->assertOk()
+                ->assertSee('Upload Report and Finding')
+                ->assertSee('Submit Upload');
+
             $this->asAdmin($data['adminUser'])
                 ->get(route('consortium-operations.show', $data['consortium']))
                 ->assertOk()
@@ -293,6 +322,12 @@ class ThinkTankPortalSmoke
                 ->assertSee('Activity Report Search')
                 ->assertSee('Graphs and Report Analysis')
                 ->assertSee('E2E Monthly Activity Report');
+
+            $this->asAdmin($data['adminUser'])
+                ->get(route('think-tank.upload-report-finding', ['think_tank_member_id' => $data['member']->id]))
+                ->assertOk()
+                ->assertSee('Upload Report and Finding')
+                ->assertSee('Submit Upload');
 
             $this->asAdmin($data['adminUser'])
                 ->get(route('think-tank.reports.download', ['think_tank_member_id' => $data['member']->id]))
