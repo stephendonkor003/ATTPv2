@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\SurveyQuestionResponsesExport;
 use App\Models\Indicator;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorSurveyLink;
@@ -16,6 +17,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
 use PDF;
 
 class MeSurveyController extends Controller
@@ -26,6 +28,9 @@ class MeSurveyController extends Controller
         $this->middleware('permission:me.configuration.view|me.configuration.manage')->only([
             'index',
             'responses',
+            'responseDetails',
+            'exportResponseDetailsPdf',
+            'exportResponseDetailsExcel',
             'questionnaires',
             'qrCodes',
             'reports',
@@ -102,6 +107,177 @@ class MeSurveyController extends Controller
             ],
             'surveyLinks' => $surveyLinks,
         ]);
+    }
+
+    public function responseDetails(Request $request, IndicatorSurveyLink $surveyLink)
+    {
+        return view('me.survey-hub.response-details', $this->responseDetailsPayload($request, $surveyLink));
+    }
+
+    public function exportResponseDetailsPdf(Request $request, IndicatorSurveyLink $surveyLink)
+    {
+        $payload = $this->responseDetailsPayload($request, $surveyLink);
+        $filename = $this->responseDetailsFilename($payload, 'pdf');
+
+        ini_set('memory_limit', '512M');
+
+        return PDF::loadView('me.survey-hub.response-details-pdf', $payload)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    public function exportResponseDetailsExcel(Request $request, IndicatorSurveyLink $surveyLink)
+    {
+        $payload = $this->responseDetailsPayload($request, $surveyLink);
+        $filename = $this->responseDetailsFilename($payload, 'xlsx');
+
+        return Excel::download(new SurveyQuestionResponsesExport($payload), $filename);
+    }
+
+    protected function responseDetailsPayload(Request $request, IndicatorSurveyLink $surveyLink): array
+    {
+        $surveyLink->loadMissing([
+            'indicator:id,name',
+            'methodology:id,name,description,metadata',
+        ]);
+
+        $responses = IndicatorSurveyResponse::query()
+            ->with([
+                'indicator:id,name',
+                'methodology:id,name',
+                'surveyLink:id,public_token',
+            ])
+            ->where('survey_link_id', $surveyLink->id)
+            ->orderByDesc('submitted_at')
+            ->get();
+
+        $methodology = $surveyLink->methodology;
+        if (!$methodology) {
+            $methodologyId = $responses->pluck('methodology_id')->filter()->unique()->first();
+            $methodology = $methodologyId ? IndicatorMethodology::query()->find($methodologyId) : null;
+        }
+
+        $questionCatalog = $this->buildQuestionCatalog($methodology, $responses);
+        $questionStats = collect($this->buildQuestionStats($responses, $questionCatalog))
+            ->keyBy('key');
+
+        $selectedQuestionKey = trim((string) $request->query('question_key', 'all'));
+        if ($selectedQuestionKey === '') {
+            $selectedQuestionKey = 'all';
+        }
+        if ($selectedQuestionKey !== 'all' && !array_key_exists($selectedQuestionKey, $questionCatalog)) {
+            $selectedQuestionKey = 'all';
+        }
+
+        $isAllQuestions = $selectedQuestionKey === 'all';
+        $questionCount = count($questionCatalog);
+
+        if ($isAllQuestions) {
+            $selectedQuestion = [
+                'key' => 'all',
+                'label' => 'All questionnaire questions',
+                'type' => 'all',
+                'section_title' => 'Full questionnaire',
+            ];
+            $answerRows = $this->buildAllQuestionResponseRows($responses, $questionCatalog);
+            $answeredFieldCount = $answerRows->sum(fn (array $row) => (int) ($row['answers_count'] ?? 0));
+            $totalFieldCount = $responses->count() * $questionCount;
+            $selectedQuestionStats = [
+                'key' => 'all',
+                'label' => 'All questionnaire questions',
+                'section_title' => 'Full questionnaire',
+                'type' => 'all',
+                'answered_count' => $answeredFieldCount,
+                'completion_rate' => $totalFieldCount > 0
+                    ? round(($answeredFieldCount / $totalFieldCount) * 100, 1)
+                    : 0.0,
+                'headline' => $answeredFieldCount . ' answered field(s) captured across '
+                    . $questionCount . ' question(s) and ' . $responses->count() . ' submission(s).',
+            ];
+            $answerBreakdown = $this->buildAllQuestionsAnswerBreakdown($questionStats);
+            $answeredRows = $answerRows->filter(fn (array $row) => (int) ($row['answers_count'] ?? 0) > 0);
+        } else {
+            $selectedQuestion = $questionCatalog[$selectedQuestionKey] ?? null;
+            $answerRows = $selectedQuestion
+                ? $this->buildQuestionResponseRows($responses, $selectedQuestion)
+                : collect();
+            $answeredRows = $answerRows->filter(fn (array $row) => (bool) ($row['has_answer'] ?? false));
+            $selectedQuestionStats = $selectedQuestion
+                ? ($questionStats->get((string) ($selectedQuestion['key'] ?? '')) ?? [])
+                : [];
+            $answerBreakdown = $selectedQuestion
+                ? $this->buildQuestionAnswerBreakdown($responses, $selectedQuestion)
+                : [
+                    'mode' => 'empty',
+                    'title' => 'No question selected',
+                    'subtitle' => 'Choose a questionnaire question to inspect response patterns.',
+                    'rows' => [],
+                    'stats' => [],
+                ];
+        }
+
+        $latestResponseAt = $responses->pluck('submitted_at')->filter()->first();
+        $allAnsweredFieldCount = $questionStats->sum(fn (array $stat) => (int) ($stat['answered_count'] ?? 0));
+        $surveyLink->responses_count = $responses->count();
+        $surveyLink->responses_max_submitted_at = $latestResponseAt
+            ? Carbon::parse($latestResponseAt)->toDateTimeString()
+            : null;
+        $surveyLink = $this->decorateSurveyLink($surveyLink);
+
+        return [
+            'surveyLink' => $surveyLink,
+            'methodology' => $methodology,
+            'questionOptions' => collect([[
+                    'key' => 'all',
+                    'label' => 'All questions',
+                    'type' => 'all',
+                    'answered_count' => $allAnsweredFieldCount,
+                ]])
+                ->concat(collect($questionCatalog)->map(function (array $question) use ($questionStats) {
+                    $key = (string) ($question['key'] ?? '');
+                    $stat = $questionStats->get($key, []);
+                    $sectionTitle = trim((string) ($question['section_title'] ?? ''));
+
+                    return [
+                        'key' => $key,
+                        'label' => trim($sectionTitle . ($sectionTitle !== '' ? ' - ' : '') . (string) ($question['label'] ?? 'Question')),
+                        'type' => strtolower((string) ($question['type'] ?? 'text')),
+                        'answered_count' => (int) ($stat['answered_count'] ?? 0),
+                    ];
+                }))
+                ->filter(fn (array $option) => $option['key'] !== '')
+                ->values(),
+            'selectedQuestionKey' => $selectedQuestionKey,
+            'isAllQuestions' => $isAllQuestions,
+            'selectedQuestion' => $selectedQuestion,
+            'selectedQuestionStats' => $selectedQuestionStats,
+            'answerBreakdown' => $answerBreakdown,
+            'answerRows' => $answerRows,
+            'answeredRows' => $answeredRows,
+            'generatedAt' => now(),
+            'stats' => [
+                'responses' => $responses->count(),
+                'answered' => $isAllQuestions
+                    ? (int) ($selectedQuestionStats['answered_count'] ?? 0)
+                    : $answeredRows->count(),
+                'missing' => $isAllQuestions
+                    ? max(($responses->count() * $questionCount) - (int) ($selectedQuestionStats['answered_count'] ?? 0), 0)
+                    : max($responses->count() - $answeredRows->count(), 0),
+                'last_response' => optional($responses->first())->submitted_at,
+            ],
+        ];
+    }
+
+    protected function responseDetailsFilename(array $payload, string $extension): string
+    {
+        $indicatorName = (string) data_get($payload, 'surveyLink.indicator.name', 'survey');
+        $questionLabel = !empty($payload['isAllQuestions'])
+            ? 'all-questions'
+            : (string) data_get($payload, 'selectedQuestion.label', 'question');
+
+        return Str::slug($indicatorName . '-' . Str::limit($questionLabel, 40, '') . '-responses')
+            . '-' . now()->format('Ymd_His')
+            . '.' . $extension;
     }
 
     public function questionnaires(Request $request)
@@ -1074,6 +1250,277 @@ class MeSurveyController extends Controller
                 ];
             })
             ->all();
+    }
+
+    protected function buildQuestionAnswerBreakdown(Collection $responses, array $selectedQuestion): array
+    {
+        $questionKey = (string) ($selectedQuestion['key'] ?? '');
+        $type = strtolower((string) ($selectedQuestion['type'] ?? 'text'));
+        $answers = $responses
+            ->map(fn (IndicatorSurveyResponse $response) => $questionKey !== ''
+                ? $this->findAnswerItem($response, $questionKey)
+                : null)
+            ->filter(fn ($answerItem) => is_array($answerItem) && $this->hasUsableAnswer($answerItem['answer'] ?? null))
+            ->values();
+
+        $totalResponses = $responses->count();
+        $answeredCount = $answers->count();
+        $completionRate = $totalResponses > 0
+            ? round(($answeredCount / $totalResponses) * 100, 1)
+            : 0.0;
+
+        $baseStats = [
+            'answered' => $answeredCount,
+            'total' => $totalResponses,
+            'completion_rate' => $completionRate,
+        ];
+
+        if ($answeredCount === 0) {
+            return [
+                'mode' => 'empty',
+                'title' => 'No answers captured yet',
+                'subtitle' => 'This field has no usable answers in the selected survey link.',
+                'rows' => [],
+                'stats' => $baseStats,
+            ];
+        }
+
+        if (in_array($type, ['select', 'radio', 'checkbox', 'multiselect'], true)) {
+            $counts = $this->categoricalDistribution($answers->pluck('answer'), (array) ($selectedQuestion['options'] ?? []));
+            $rows = collect($counts)
+                ->sortDesc()
+                ->map(function (int $count, string $label) use ($answeredCount) {
+                    return [
+                        'label' => $label,
+                        'count' => $count,
+                        'percent' => $answeredCount > 0 ? round(($count / $answeredCount) * 100, 1) : 0.0,
+                    ];
+                })
+                ->values()
+                ->all();
+
+            return [
+                'mode' => 'distribution',
+                'title' => 'Answer Distribution',
+                'subtitle' => 'Most common choices for this question.',
+                'rows' => $rows,
+                'stats' => $baseStats,
+            ];
+        }
+
+        if (in_array($type, ['scale', 'slider', 'number'], true)) {
+            $numbers = $answers
+                ->pluck('answer')
+                ->flatten()
+                ->filter(fn ($value) => is_numeric($value))
+                ->map(fn ($value) => (float) $value)
+                ->values();
+
+            $counts = $this->numericDistribution($answers->pluck('answer'));
+            $rows = collect($counts)
+                ->map(function (int $count, string $label) use ($answeredCount) {
+                    return [
+                        'label' => $label,
+                        'count' => $count,
+                        'percent' => $answeredCount > 0 ? round(($count / $answeredCount) * 100, 1) : 0.0,
+                    ];
+                })
+                ->values()
+                ->all();
+
+            return [
+                'mode' => 'numeric',
+                'title' => 'Numeric Pattern',
+                'subtitle' => $numbers->isNotEmpty()
+                    ? 'Average ' . number_format($numbers->avg(), 1) . ', from ' . number_format($numbers->min(), 1) . ' to ' . number_format($numbers->max(), 1) . '.'
+                    : 'Numeric answers were captured but could not be summarized.',
+                'rows' => $rows,
+                'stats' => array_merge($baseStats, [
+                    'average' => $numbers->isNotEmpty() ? round($numbers->avg(), 2) : null,
+                    'minimum' => $numbers->isNotEmpty() ? $numbers->min() : null,
+                    'maximum' => $numbers->isNotEmpty() ? $numbers->max() : null,
+                ]),
+            ];
+        }
+
+        if ($type === 'matrix') {
+            $heatmap = $this->buildMatrixHeatmap($answers->pluck('answer'), $selectedQuestion);
+            $rows = [];
+            foreach ((array) ($heatmap['rows'] ?? []) as $rowIndex => $rowLabel) {
+                foreach ((array) ($heatmap['columns'] ?? []) as $columnIndex => $columnLabel) {
+                    $count = (int) data_get($heatmap, "values.{$rowIndex}.{$columnIndex}", 0);
+                    if ($count <= 0) {
+                        continue;
+                    }
+
+                    $rows[] = [
+                        'label' => $rowLabel . ' -> ' . $columnLabel,
+                        'count' => $count,
+                        'percent' => $answeredCount > 0 ? round(($count / $answeredCount) * 100, 1) : 0.0,
+                    ];
+                }
+            }
+
+            usort($rows, fn (array $left, array $right) => ($right['count'] <=> $left['count']));
+
+            return [
+                'mode' => 'matrix',
+                'title' => 'Matrix Patterns',
+                'subtitle' => 'Most frequent row and column combinations.',
+                'rows' => array_slice($rows, 0, 8),
+                'stats' => $baseStats,
+            ];
+        }
+
+        $uniqueAnswers = $answers
+            ->map(fn (array $answerItem) => $this->formatReportAnswerValue($answerItem))
+            ->filter(fn (string $value) => $value !== '')
+            ->countBy()
+            ->sortDesc();
+
+        return [
+            'mode' => 'text',
+            'title' => 'Narrative Responses',
+            'subtitle' => $uniqueAnswers->count() . ' distinct answer' . ($uniqueAnswers->count() === 1 ? '' : 's') . ' captured for this field.',
+            'rows' => $uniqueAnswers
+                ->take(5)
+                ->map(function (int $count, string $label) use ($answeredCount) {
+                    return [
+                        'label' => $label,
+                        'count' => $count,
+                        'percent' => $answeredCount > 0 ? round(($count / $answeredCount) * 100, 1) : 0.0,
+                    ];
+                })
+                ->values()
+                ->all(),
+            'stats' => $baseStats,
+        ];
+    }
+
+    protected function buildAllQuestionsAnswerBreakdown(Collection $questionStats): array
+    {
+        return [
+            'mode' => 'all',
+            'title' => 'Question Coverage',
+            'subtitle' => 'Answered fields by questionnaire question across all submissions.',
+            'rows' => $questionStats
+                ->values()
+                ->map(function (array $stat) {
+                    $sectionTitle = trim((string) ($stat['section_title'] ?? ''));
+
+                    return [
+                        'label' => trim($sectionTitle . ($sectionTitle !== '' ? ' - ' : '') . (string) ($stat['label'] ?? 'Question')),
+                        'count' => (int) ($stat['answered_count'] ?? 0),
+                        'percent' => (float) ($stat['completion_rate'] ?? 0),
+                    ];
+                })
+                ->values()
+                ->all(),
+            'stats' => [],
+        ];
+    }
+
+    protected function buildAllQuestionResponseRows(Collection $responses, array $questionCatalog): Collection
+    {
+        return $responses
+            ->sortByDesc(fn (IndicatorSurveyResponse $response) => optional($response->submitted_at)->timestamp ?? 0)
+            ->values()
+            ->map(function (IndicatorSurveyResponse $response, int $index) use ($questionCatalog) {
+                $name = trim((string) ($response->respondent_name ?? '')) ?: 'Anonymous respondent';
+                $initials = collect(preg_split('/\s+/', $name, -1, PREG_SPLIT_NO_EMPTY))
+                    ->take(2)
+                    ->map(fn (string $part) => Str::upper(Str::substr($part, 0, 1)))
+                    ->implode('');
+
+                $answersByKey = collect((array) ($response->answers ?? []))
+                    ->filter(fn ($answerItem) => is_array($answerItem))
+                    ->keyBy(fn (array $answerItem) => $this->reportQuestionKey($answerItem));
+
+                $answers = collect($questionCatalog)
+                    ->map(function (array $question, string $questionKey) use ($answersByKey) {
+                        $answerItem = $answersByKey->get($questionKey);
+                        $answer = is_array($answerItem) ? ($answerItem['answer'] ?? null) : null;
+                        $hasAnswer = $this->hasUsableAnswer($answer);
+                        $value = is_array($answerItem)
+                            ? $this->formatReportAnswerValue($answerItem)
+                            : '';
+
+                        return [
+                            'question_key' => $questionKey,
+                            'section_title' => trim((string) ($question['section_title'] ?? '')) ?: 'General section',
+                            'question' => trim((string) ($question['label'] ?? 'Question')),
+                            'type' => Str::headline(strtolower((string) ($question['type'] ?? 'text'))),
+                            'answer_value' => $value !== '' ? $value : 'No answer captured.',
+                            'has_answer' => $hasAnswer,
+                        ];
+                    })
+                    ->values();
+
+                $answersCount = $answers
+                    ->filter(fn (array $answerRow) => (bool) ($answerRow['has_answer'] ?? false))
+                    ->count();
+
+                return [
+                    'response_number' => $index + 1,
+                    'response_id' => $response->id,
+                    'submitted_at' => optional($response->submitted_at)->format('d M Y H:i') ?: 'Unknown submission time',
+                    'respondent_initials' => $initials !== '' ? $initials : 'AR',
+                    'respondent_name' => $name,
+                    'respondent_email' => trim((string) ($response->respondent_email ?? '')),
+                    'respondent_phone' => trim((string) ($response->respondent_phone ?? '')),
+                    'respondent_organization' => trim((string) ($response->respondent_organization ?? '')),
+                    'indicator_name' => (string) ($response->indicator->name ?? 'Unassigned indicator'),
+                    'methodology_name' => (string) ($response->methodology->name ?? 'Questionnaire'),
+                    'survey_token' => (string) ($response->surveyLink->public_token ?? ''),
+                    'answer_value' => $answers->isNotEmpty()
+                        ? $answersCount . ' answered question(s)'
+                        : 'No answer details captured.',
+                    'has_answer' => $answersCount > 0,
+                    'answers_count' => $answersCount,
+                    'question_count' => $answers->count(),
+                    'answers' => $answers->all(),
+                ];
+            });
+    }
+
+    protected function buildQuestionResponseRows(Collection $responses, array $selectedQuestion): Collection
+    {
+        $questionKey = (string) ($selectedQuestion['key'] ?? '');
+
+        return $responses
+            ->sortByDesc(fn (IndicatorSurveyResponse $response) => optional($response->submitted_at)->timestamp ?? 0)
+            ->values()
+            ->map(function (IndicatorSurveyResponse $response, int $index) use ($questionKey) {
+                $answerItem = $questionKey !== ''
+                    ? $this->findAnswerItem($response, $questionKey)
+                    : null;
+                $answer = is_array($answerItem) ? ($answerItem['answer'] ?? null) : null;
+                $hasAnswer = $this->hasUsableAnswer($answer);
+                $displayValue = is_array($answerItem)
+                    ? $this->formatReportAnswerValue($answerItem)
+                    : '';
+                $name = trim((string) ($response->respondent_name ?? '')) ?: 'Anonymous respondent';
+                $initials = collect(preg_split('/\s+/', $name, -1, PREG_SPLIT_NO_EMPTY))
+                    ->take(2)
+                    ->map(fn (string $part) => Str::upper(Str::substr($part, 0, 1)))
+                    ->implode('');
+
+                return [
+                    'response_number' => $index + 1,
+                    'response_id' => $response->id,
+                    'submitted_at' => optional($response->submitted_at)->format('d M Y H:i') ?: 'Unknown submission time',
+                    'respondent_initials' => $initials !== '' ? $initials : 'AR',
+                    'respondent_name' => $name,
+                    'respondent_email' => trim((string) ($response->respondent_email ?? '')),
+                    'respondent_phone' => trim((string) ($response->respondent_phone ?? '')),
+                    'respondent_organization' => trim((string) ($response->respondent_organization ?? '')),
+                    'indicator_name' => (string) ($response->indicator->name ?? 'Unassigned indicator'),
+                    'methodology_name' => (string) ($response->methodology->name ?? 'Questionnaire'),
+                    'survey_token' => (string) ($response->surveyLink->public_token ?? ''),
+                    'answer_value' => $displayValue !== '' ? $displayValue : 'No answer captured.',
+                    'has_answer' => $hasAnswer,
+                ];
+            });
     }
 
     protected function categoricalDistribution(Collection $values, array $preferredOrder = []): array

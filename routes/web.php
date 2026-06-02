@@ -1110,6 +1110,12 @@ Route::middleware(['auth', 'not.funding.partner'])
                 ->name('reports.export.pdf');
             Route::get('/responses', [MeSurveyController::class, 'responses'])
                 ->name('responses');
+            Route::get('/responses/{surveyLink}/explore', [MeSurveyController::class, 'responseDetails'])
+                ->name('responses.explore');
+            Route::get('/responses/{surveyLink}/explore/export/pdf', [MeSurveyController::class, 'exportResponseDetailsPdf'])
+                ->name('responses.explore.export.pdf');
+            Route::get('/responses/{surveyLink}/explore/export/excel', [MeSurveyController::class, 'exportResponseDetailsExcel'])
+                ->name('responses.explore.export.excel');
             Route::delete('/responses/{response}', [MeSurveyController::class, 'destroyResponse'])
                 ->name('responses.destroy');
             Route::delete('/links/{surveyLink}', [MeSurveyController::class, 'destroySurvey'])

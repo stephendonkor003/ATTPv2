@@ -126,6 +126,9 @@
                                         <a href="{{ route('budget.me.data-sources.surveys.show', $surveyLink) }}" class="btn btn-outline-primary btn-sm">
                                             <i class="feather-eye me-1"></i> Responses
                                         </a>
+                                        <a href="{{ route('budget.me.surveys.responses.explore', $surveyLink) }}" class="btn btn-primary btn-sm">
+                                            <i class="feather-search me-1"></i> Explore Details
+                                        </a>
                                         <a href="{{ $surveyLink->public_url }}" target="_blank" class="btn btn-outline-secondary btn-sm">
                                             <i class="feather-external-link"></i>
                                         </a>
