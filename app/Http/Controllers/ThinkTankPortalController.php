@@ -342,7 +342,16 @@ class ThinkTankPortalController extends Controller
 
     public function uploadReportFinding(Request $request)
     {
-        return view('think-tank.upload-report-finding', $this->reportsPayload($request));
+        $payload = $this->reportsPayload($request);
+        $researchPayload = $this->researchPayload($request);
+
+        return view('think-tank.upload-report-finding', array_merge($payload, [
+            'researchRecords' => $researchPayload['outputRecords'],
+            'qascChecklist' => $researchPayload['qascChecklist'],
+            'qascConsortiumOptions' => $researchPayload['qascConsortiumOptions'],
+            'qascTrackOptions' => $researchPayload['qascTrackOptions'],
+            'qascLanguageOptions' => $researchPayload['qascLanguageOptions'],
+        ]));
     }
 
     public function downloadReports(Request $request)

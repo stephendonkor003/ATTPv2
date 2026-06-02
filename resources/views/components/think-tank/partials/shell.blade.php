@@ -1,4 +1,4 @@
-@props(['member', 'title' => 'Think Tank Portal'])
+@props(['member', 'title' => 'Think Tank Portal', 'showPortalTabs' => true])
 
 @extends('layouts.app')
 
@@ -183,6 +183,7 @@
             </a>
         </div>
 
+        @if($showPortalTabs)
         <ul class="nav nav-tabs attp-management-tabs mb-4">
             <li class="nav-item">
                 @can('think_tank.portal.access')
@@ -227,6 +228,7 @@
                 @endcan
             </li>
         </ul>
+        @endif
 
         <div class="card shadow-sm border-0 overflow-hidden mb-4">
             <div class="card-body p-4">

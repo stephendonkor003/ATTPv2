@@ -226,6 +226,9 @@ class ThinkTankPortalSmoke
                 ->get('/think-tank/upload-report-finding')
                 ->assertOk()
                 ->assertSee('Upload Report and Finding')
+                ->assertSee('Upload Reports')
+                ->assertSee('Upload Research Finding')
+                ->assertSee('Annex B: ATTP Quality Assurance Self-Certification')
                 ->assertSee('Submit Upload');
 
             $this->asAdmin($data['adminUser'])
@@ -327,6 +330,9 @@ class ThinkTankPortalSmoke
                 ->get(route('think-tank.upload-report-finding', ['think_tank_member_id' => $data['member']->id]))
                 ->assertOk()
                 ->assertSee('Upload Report and Finding')
+                ->assertSee('Upload Reports')
+                ->assertSee('Upload Research Finding')
+                ->assertSee('Annex B: ATTP Quality Assurance Self-Certification')
                 ->assertSee('Submit Upload');
 
             $this->asAdmin($data['adminUser'])
