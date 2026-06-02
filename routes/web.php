@@ -3117,6 +3117,7 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
         Route::post('/reports', 'storeReport')->middleware('permission:think_tank.reports.submit')->name('reports.store');
         Route::get('/research', 'research')->middleware('permission:think_tank.research.view|think_tank.research.submit')->name('research');
         Route::get('/research/download', 'downloadResearch')->middleware('permission:think_tank.research.download')->name('research.download');
+        Route::get('/research/{output}/qasc-preview', 'previewResearchQasc')->middleware('permission:think_tank.research.view|think_tank.research.submit')->name('research.qasc.preview');
         Route::post('/research', 'storeResearch')->middleware('permission:think_tank.research.submit')->name('research.store');
         Route::get('/purchase-orders', 'purchaseOrders')->name('purchase-orders');
         Route::post('/purchase-orders', 'storePurchaseOrder')->middleware('permission:think_tank.procurement.manage')->name('purchase-orders.store');

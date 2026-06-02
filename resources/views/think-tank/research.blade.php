@@ -372,6 +372,17 @@
             color: #134e4a;
         }
 
+        .tt-qasc-banner {
+            border: 1px solid #bfdbfe;
+            border-radius: 10px;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-size: 13px;
+            font-weight: 750;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
         .tt-check-list,
         .tt-status-list {
             display: grid;
@@ -618,6 +629,7 @@
                                         <th>File or link</th>
                                         <th>Status</th>
                                         <th>Published</th>
+                                        <th>Annex B QASC</th>
                                         <th>Submitted</th>
                                     </tr>
                                     </thead>
@@ -640,10 +652,22 @@
                                             </td>
                                             <td><span class="tt-status {{ $output->status }}">{{ str_replace('_', ' ', $output->status) }}</span></td>
                                             <td>{{ $output->published_on?->format('d M Y') ?? 'N/A' }}</td>
+                                            <td>
+                                                @if($output->qasc_pdf_path || $output->qasc_data)
+                                                    <a class="btn btn-sm btn-light border fw-bold" target="_blank" href="{{ route('think-tank.research.qasc.preview', array_merge($portalRouteParams, ['output' => $output])) }}">
+                                                        <i class="feather-eye me-1"></i> Preview
+                                                    </a>
+                                                    @if($output->qasc_email_sent_at)
+                                                        <div class="text-muted small mt-1">Emailed {{ $output->qasc_email_sent_at->format('d M Y') }}</div>
+                                                    @endif
+                                                @else
+                                                    <span class="text-muted">Not captured</span>
+                                                @endif
+                                            </td>
                                             <td>{{ $output->submitted_at?->format('d M Y') ?? $output->created_at?->format('d M Y') }}</td>
                                         </tr>
                                     @empty
-                                        <tr><td colspan="6"><div class="tt-empty">No research outputs match the selected search.</div></td></tr>
+                                        <tr><td colspan="7"><div class="tt-empty">No research outputs match the selected search.</div></td></tr>
                                     @endforelse
                                     </tbody>
                                 </table>
@@ -695,6 +719,118 @@
                                                     <div class="tt-field full">
                                                         <label for="abstract">Abstract</label>
                                                         <textarea id="abstract" name="abstract" placeholder="Summarize the research question, method, key findings, and policy relevance.">{{ old('abstract') }}</textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="tt-form-card">
+                                                <h3>Annex B: Quality Assurance Self-Certification</h3>
+                                                <p>Complete the publication-readiness certification required for ATTP-supported research outputs.</p>
+                                                <div class="tt-qasc-banner">
+                                                    The generated Annex B PDF will open after submission and will be emailed to the think tank with the uploaded electronic signatures.
+                                                </div>
+                                                <div class="tt-field-grid">
+                                                    <div class="tt-field full">
+                                                        <label for="qasc_lead_authors">Lead author(s)</label>
+                                                        <input id="qasc_lead_authors" name="qasc[lead_authors]" value="{{ old('qasc.lead_authors') }}" placeholder="Full name(s) of lead author(s)" required>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="qasc_lead_think_tank">Lead think tank</label>
+                                                        <input id="qasc_lead_think_tank" name="qasc[lead_think_tank]" value="{{ old('qasc.lead_think_tank', $member->name) }}" required>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="qasc_consortium">Consortium</label>
+                                                        <select id="qasc_consortium" name="qasc[consortium]" required>
+                                                            <option value="">Select consortium</option>
+                                                            @foreach($qascConsortiumOptions as $option)
+                                                                <option value="{{ $option }}" @selected(old('qasc.consortium') === $option)>{{ $option }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="qasc_track_classification">Track classification</label>
+                                                        <select id="qasc_track_classification" name="qasc[track_classification]" required>
+                                                            <option value="">Select track</option>
+                                                            @foreach($qascTrackOptions as $option)
+                                                                <option value="{{ $option }}" @selected(old('qasc.track_classification') === $option)>{{ $option }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="qasc_original_language">Original language</label>
+                                                        <select id="qasc_original_language" name="qasc[original_language]" required>
+                                                            <option value="">Select language</option>
+                                                            @foreach($qascLanguageOptions as $option)
+                                                                <option value="{{ $option }}" @selected(old('qasc.original_language', 'English') === $option)>{{ $option }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="qasc_intended_publication_date">Intended publication date</label>
+                                                        <input id="qasc_intended_publication_date" type="date" name="qasc[intended_publication_date]" value="{{ old('qasc.intended_publication_date', old('published_on')) }}" required>
+                                                    </div>
+                                                </div>
+
+                                                <div class="tt-table-wrap mt-3">
+                                                    <table class="tt-table">
+                                                        <thead>
+                                                        <tr>
+                                                            <th>Checklist item</th>
+                                                            <th>Confirmed / N/A</th>
+                                                            <th>Signatory name</th>
+                                                            <th>Date</th>
+                                                        </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                        @foreach($qascChecklist as $key => $item)
+                                                            <tr>
+                                                                <td>
+                                                                    <strong>{{ $item['number'] }}. {{ $item['title'] }}</strong>
+                                                                    <div class="text-muted small">{{ $item['description'] }}</div>
+                                                                    <div class="text-muted small">{{ $item['applies_to'] }}</div>
+                                                                </td>
+                                                                <td>
+                                                                    <select name="qasc[checklist][{{ $key }}][status]" required>
+                                                                        <option value="confirmed" @selected(old("qasc.checklist.$key.status", 'confirmed') === 'confirmed')>Confirmed</option>
+                                                                        <option value="not_applicable" @selected(old("qasc.checklist.$key.status") === 'not_applicable')>N/A</option>
+                                                                    </select>
+                                                                </td>
+                                                                <td>
+                                                                    <input name="qasc[checklist][{{ $key }}][signed_by]" value="{{ old("qasc.checklist.$key.signed_by") }}" placeholder="Name" required>
+                                                                </td>
+                                                                <td>
+                                                                    <input type="date" name="qasc[checklist][{{ $key }}][signed_date]" value="{{ old("qasc.checklist.$key.signed_date", now()->toDateString()) }}" required>
+                                                                </td>
+                                                            </tr>
+                                                        @endforeach
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <div class="tt-field-grid mt-3">
+                                                    <div class="tt-field">
+                                                        <label for="qasc_lead_author_name">Lead author name</label>
+                                                        <input id="qasc_lead_author_name" name="qasc[lead_author_name]" value="{{ old('qasc.lead_author_name') }}" required>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="qasc_lead_author_date">Lead author signature date</label>
+                                                        <input id="qasc_lead_author_date" type="date" name="qasc[lead_author_date]" value="{{ old('qasc.lead_author_date', now()->toDateString()) }}" required>
+                                                    </div>
+                                                    <div class="tt-field full">
+                                                        <label for="qasc_author_signature">Lead author electronic signature</label>
+                                                        <input id="qasc_author_signature" type="file" name="qasc_author_signature" accept="image/png,image/jpeg,image/webp" required>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="qasc_lead_think_tank_representative_name">Lead think tank representative name</label>
+                                                        <input id="qasc_lead_think_tank_representative_name" name="qasc[lead_think_tank_representative_name]" value="{{ old('qasc.lead_think_tank_representative_name') }}" required>
+                                                    </div>
+                                                    <div class="tt-field">
+                                                        <label for="qasc_lead_think_tank_date">Lead think tank signature date</label>
+                                                        <input id="qasc_lead_think_tank_date" type="date" name="qasc[lead_think_tank_date]" value="{{ old('qasc.lead_think_tank_date', now()->toDateString()) }}" required>
+                                                    </div>
+                                                    <div class="tt-field full">
+                                                        <label for="qasc_think_tank_signature">Lead think tank electronic signature</label>
+                                                        <input id="qasc_think_tank_signature" type="file" name="qasc_think_tank_signature" accept="image/png,image/jpeg,image/webp" required>
                                                     </div>
                                                 </div>
                                             </div>

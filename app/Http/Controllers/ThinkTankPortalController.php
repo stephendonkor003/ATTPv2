@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\ThinkTankResearchQascSubmitted;
 use App\Models\ConsortiumActivityReport;
 use App\Models\ConsortiumDisbursementRequest;
 use App\Models\ConsortiumExpenseReport;
@@ -24,7 +25,10 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class ThinkTankPortalController extends Controller
@@ -644,6 +648,10 @@ class ThinkTankPortalController extends Controller
             : collect([$member]);
 
         $portalRouteParams = $this->portalRouteParams($request, $member);
+        $qascChecklist = $this->qascChecklistDefinitions();
+        $qascConsortiumOptions = $this->qascConsortiumOptions();
+        $qascTrackOptions = $this->qascTrackOptions();
+        $qascLanguageOptions = $this->qascLanguageOptions();
         $researchQueryParams = collect([
             'think_tank_member_id' => $portalRouteParams['think_tank_member_id'] ?? null,
             'filter_month' => $dashboardFilter['month'] ?? null,
@@ -670,7 +678,11 @@ class ThinkTankPortalController extends Controller
             'chartData',
             'membersForSearch',
             'portalRouteParams',
-            'researchQueryParams'
+            'researchQueryParams',
+            'qascChecklist',
+            'qascConsortiumOptions',
+            'qascTrackOptions',
+            'qascLanguageOptions'
         );
     }
 
@@ -868,24 +880,56 @@ class ThinkTankPortalController extends Controller
     public function storeResearch(Request $request)
     {
         $member = $this->member($request);
+        $checklistRules = [];
 
-        $data = $request->validate([
+        foreach (array_keys($this->qascChecklistDefinitions()) as $key) {
+            $checklistRules["qasc.checklist.{$key}.status"] = ['required', Rule::in(['confirmed', 'not_applicable'])];
+            $checklistRules["qasc.checklist.{$key}.signed_by"] = 'required|string|max:255';
+            $checklistRules["qasc.checklist.{$key}.signed_date"] = 'required|date';
+        }
+
+        $data = $request->validate(array_merge([
             'title' => 'required|string|max:255',
             'output_type' => 'required|in:research,policy_brief,report,working_paper,dataset,publication',
             'published_on' => 'nullable|date',
             'abstract' => 'nullable|string',
             'external_url' => 'nullable|url|max:2000',
             'file' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip|max:20480',
-        ]);
+            'qasc.lead_authors' => 'required|string|max:1000',
+            'qasc.lead_think_tank' => 'required|string|max:255',
+            'qasc.consortium' => ['required', Rule::in($this->qascConsortiumOptions())],
+            'qasc.track_classification' => ['required', Rule::in($this->qascTrackOptions())],
+            'qasc.original_language' => ['required', Rule::in($this->qascLanguageOptions())],
+            'qasc.intended_publication_date' => 'required|date',
+            'qasc.lead_author_name' => 'required|string|max:255',
+            'qasc.lead_author_date' => 'required|date',
+            'qasc.lead_think_tank_representative_name' => 'required|string|max:255',
+            'qasc.lead_think_tank_date' => 'required|date',
+            'qasc_author_signature' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'qasc_think_tank_signature' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+        ], $checklistRules));
 
         if ($request->hasFile('file')) {
             $data['file_path'] = $request->file('file')->store("think-tank-research/{$member->id}");
         }
 
-        unset($data['file']);
+        $authorSignaturePath = $request->file('qasc_author_signature')
+            ->store("think-tank-research/{$member->id}/qasc-signatures");
+        $thinkTankSignaturePath = $request->file('qasc_think_tank_signature')
+            ->store("think-tank-research/{$member->id}/qasc-signatures");
 
-        ThinkTankResearchOutput::create([
-            ...$data,
+        $qascData = $this->buildQascData($data, $member);
+
+        $output = ThinkTankResearchOutput::create([
+            'title' => $data['title'],
+            'output_type' => $data['output_type'],
+            'published_on' => $data['published_on'] ?? null,
+            'abstract' => $data['abstract'] ?? null,
+            'external_url' => $data['external_url'] ?? null,
+            'file_path' => $data['file_path'] ?? null,
+            'qasc_data' => $qascData,
+            'qasc_author_signature_path' => $authorSignaturePath,
+            'qasc_think_tank_signature_path' => $thinkTankSignaturePath,
             'consortium_id' => $member->consortium_id,
             'think_tank_member_id' => $member->id,
             'status' => 'submitted',
@@ -893,7 +937,48 @@ class ThinkTankPortalController extends Controller
             'submitted_at' => now(),
         ]);
 
-        return back()->with('success', 'Research output submitted to the Secretariat.');
+        $output->loadMissing(['member.consortium', 'consortium']);
+        $pdfContent = $this->researchQascPdfContent($output);
+        $pdfPath = "think-tank-research/{$member->id}/qasc-pdfs/qasc-{$output->id}.pdf";
+        Storage::put($pdfPath, $pdfContent);
+        $output->forceFill(['qasc_pdf_path' => $pdfPath])->save();
+
+        $emailSent = $this->sendResearchQascEmail($output, $member, $pdfContent, $request);
+        if ($emailSent) {
+            $output->forceFill(['qasc_email_sent_at' => now()])->save();
+        }
+
+        $this->auditAction('think_tank.research.qasc_submitted', 'Think tank research output and QASC submitted', [
+            'think_tank_member_id' => $member->id,
+            'think_tank' => $member->name,
+            'research_output_id' => $output->id,
+            'email_sent' => $emailSent,
+        ]);
+
+        return redirect()
+            ->route('think-tank.research.qasc.preview', array_merge(
+                $this->portalRouteParams($request, $member),
+                ['output' => $output]
+            ))
+            ->with('success', $emailSent
+                ? 'Research output submitted. Annex B QASC PDF was emailed to the think tank.'
+                : 'Research output submitted. Annex B QASC PDF is ready, but no think tank email recipient was available.');
+    }
+
+    public function previewResearchQasc(Request $request, ThinkTankResearchOutput $output)
+    {
+        $member = $this->member($request);
+        $this->assertMemberResearchOutput($member, $output);
+
+        $output->loadMissing(['member.consortium', 'consortium']);
+        $pdfContent = $output->qasc_pdf_path && Storage::exists($output->qasc_pdf_path)
+            ? Storage::get($output->qasc_pdf_path)
+            : $this->researchQascPdfContent($output);
+
+        return response($pdfContent, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $this->researchQascFilename($output) . '"',
+        ]);
     }
 
     public function procurement(Request $request)
@@ -1417,6 +1502,170 @@ class ThinkTankPortalController extends Controller
             : [];
     }
 
+    private function qascConsortiumOptions(): array
+    {
+        return ['BRIDGE', 'CACEPS', 'RAISED'];
+    }
+
+    private function qascTrackOptions(): array
+    {
+        return ['Track 1', 'Track 2', 'Track 3', 'Track 4'];
+    }
+
+    private function qascLanguageOptions(): array
+    {
+        return ['English', 'French', 'Arabic', 'Portuguese', 'Spanish', 'Kiswahili'];
+    }
+
+    private function qascChecklistDefinitions(): array
+    {
+        return [
+            'internal_review' => [
+                'number' => 1,
+                'title' => 'Internal institutional review completed',
+                'description' => "Author confirms that the authoring institution's own internal review and approval procedures, including applicable internal peer review, editorial, ethics, factual accuracy and integrity checks, have been completed before this QASC is signed.",
+                'applies_to' => 'Applies to all tracks',
+            ],
+            'data_confidentiality' => [
+                'number' => 2,
+                'title' => 'Data and confidentiality',
+                'description' => 'Data verified against original sources; statistical claims fact-checked.',
+                'applies_to' => 'Applies to all tracks',
+            ],
+            'publication_integrity' => [
+                'number' => 3,
+                'title' => 'Publication Integrity',
+                'description' => 'Output is original; no fabrication, falsification, or plagiarism; prior work cited proportionately.',
+                'applies_to' => 'Applies to all tracks',
+            ],
+            'au_partner_sensitivity' => [
+                'number' => 4,
+                'title' => 'AU and partner sensitivity',
+                'description' => 'References to AU organs, RECs, Member States, and named institutions are factually correct and respectful; right of reply offered where required; no partisan endorsement; political and diplomatic risk assessed and elevated risks notified to the Secretariat.',
+                'applies_to' => 'Applies to all tracks',
+            ],
+            'ai_usage' => [
+                'number' => 5,
+                'title' => 'AI usage',
+                'description' => 'Generative AI used only for permitted support tasks per PREP Section 4.6, and not for content generation.',
+                'applies_to' => 'Applies to all tracks',
+            ],
+        ];
+    }
+
+    private function buildQascData(array $data, ConsortiumThinkTank $member): array
+    {
+        $qasc = (array) ($data['qasc'] ?? []);
+        $checklistInput = (array) ($qasc['checklist'] ?? []);
+        $checklist = [];
+
+        foreach ($this->qascChecklistDefinitions() as $key => $definition) {
+            $entry = (array) ($checklistInput[$key] ?? []);
+
+            $checklist[$key] = array_merge($definition, [
+                'status' => (string) ($entry['status'] ?? 'confirmed'),
+                'signed_by' => (string) ($entry['signed_by'] ?? ''),
+                'signed_date' => (string) ($entry['signed_date'] ?? ''),
+            ]);
+        }
+
+        return [
+            'output_title' => (string) ($data['title'] ?? ''),
+            'lead_authors' => (string) ($qasc['lead_authors'] ?? ''),
+            'lead_think_tank' => (string) ($qasc['lead_think_tank'] ?? $member->name),
+            'consortium' => (string) ($qasc['consortium'] ?? ''),
+            'track_classification' => (string) ($qasc['track_classification'] ?? ''),
+            'original_language' => (string) ($qasc['original_language'] ?? ''),
+            'intended_publication_date' => (string) ($qasc['intended_publication_date'] ?? ''),
+            'checklist' => $checklist,
+            'lead_author' => [
+                'name' => (string) ($qasc['lead_author_name'] ?? ''),
+                'date' => (string) ($qasc['lead_author_date'] ?? ''),
+            ],
+            'lead_think_tank_representative' => [
+                'name' => (string) ($qasc['lead_think_tank_representative_name'] ?? ''),
+                'date' => (string) ($qasc['lead_think_tank_date'] ?? ''),
+            ],
+            'certified_at' => now()->toDateTimeString(),
+        ];
+    }
+
+    private function researchQascPdfContent(ThinkTankResearchOutput $output): string
+    {
+        ini_set('memory_limit', '512M');
+
+        $output->loadMissing(['member.consortium', 'consortium']);
+
+        return Pdf::loadView('think-tank.research-qasc-pdf', [
+            'output' => $output,
+            'member' => $output->member,
+            'qasc' => (array) ($output->qasc_data ?? []),
+            'checklist' => (array) data_get($output->qasc_data, 'checklist', []),
+            'authorSignatureDataUri' => $this->storedImageDataUri($output->qasc_author_signature_path),
+            'thinkTankSignatureDataUri' => $this->storedImageDataUri($output->qasc_think_tank_signature_path),
+        ])->setPaper('a4')->output();
+    }
+
+    private function researchQascFilename(ThinkTankResearchOutput $output): string
+    {
+        return 'annex-b-qasc-' . Str::slug($output->title ?: 'research-output') . '.pdf';
+    }
+
+    private function storedImageDataUri(?string $path): ?string
+    {
+        if (! $path || ! Storage::exists($path)) {
+            return null;
+        }
+
+        $mime = Storage::mimeType($path) ?: 'image/png';
+
+        return 'data:' . $mime . ';base64,' . base64_encode(Storage::get($path));
+    }
+
+    private function sendResearchQascEmail(
+        ThinkTankResearchOutput $output,
+        ConsortiumThinkTank $member,
+        string $pdfContent,
+        Request $request
+    ): bool {
+        $member->loadMissing(['portalUser', 'vendorUser', 'consortium']);
+        $recipients = collect([
+            $member->email,
+            $member->portalUser?->email,
+            $member->vendorUser?->email,
+        ])
+            ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+            ->unique()
+            ->values();
+
+        if ($recipients->isEmpty()) {
+            return false;
+        }
+
+        try {
+            Mail::to($recipients->all())->send(new ThinkTankResearchQascSubmitted(
+                $output,
+                $member,
+                $pdfContent,
+                route('think-tank.research.qasc.preview', array_merge(
+                    $this->portalRouteParams($request, $member),
+                    ['output' => $output]
+                )),
+                $this->researchQascFilename($output)
+            ));
+
+            return true;
+        } catch (Throwable $exception) {
+            logger()->warning('Unable to email think tank QASC PDF.', [
+                'research_output_id' => $output->id,
+                'think_tank_member_id' => $member->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
     private function auditAction(string $action, string $message, array $payload = []): void
     {
         try {
@@ -1449,5 +1698,10 @@ class ThinkTankPortalController extends Controller
             && (string) $purchaseOrder->think_tank_member_id === (string) $member->id,
             403
         );
+    }
+
+    private function assertMemberResearchOutput(ConsortiumThinkTank $member, ThinkTankResearchOutput $output): void
+    {
+        abort_unless((string) $output->think_tank_member_id === (string) $member->id, 403);
     }
 }

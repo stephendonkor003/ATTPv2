@@ -101,6 +101,7 @@
             <th>Type</th>
             <th>Access</th>
             <th>Status</th>
+            <th>Annex B QASC</th>
             <th>Published</th>
             <th>Submitted</th>
         </tr>
@@ -120,11 +121,21 @@
                     @endif
                 </td>
                 <td><span class="pill">{{ ucfirst(str_replace('_', ' ', $output->status)) }}</span></td>
+                <td>
+                    @if($output->qasc_data)
+                        Captured
+                        @if($output->qasc_email_sent_at)
+                            <br><span class="muted">Emailed {{ $output->qasc_email_sent_at->format('d M Y') }}</span>
+                        @endif
+                    @else
+                        Not captured
+                    @endif
+                </td>
                 <td>{{ $output->published_on?->format('d M Y') ?? 'N/A' }}</td>
                 <td>{{ $output->submitted_at?->format('d M Y') ?? $output->created_at?->format('d M Y') }}</td>
             </tr>
         @empty
-            <tr><td colspan="6" class="muted">No research outputs match the selected search.</td></tr>
+            <tr><td colspan="7" class="muted">No research outputs match the selected search.</td></tr>
         @endforelse
         </tbody>
     </table>

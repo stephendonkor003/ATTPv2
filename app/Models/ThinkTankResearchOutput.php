@@ -18,6 +18,11 @@ class ThinkTankResearchOutput extends BaseModel
         'abstract',
         'file_path',
         'external_url',
+        'qasc_data',
+        'qasc_author_signature_path',
+        'qasc_think_tank_signature_path',
+        'qasc_pdf_path',
+        'qasc_email_sent_at',
         'submitted_by',
         'submitted_at',
         'reviewed_by',
@@ -27,6 +32,8 @@ class ThinkTankResearchOutput extends BaseModel
 
     protected $casts = [
         'published_on' => 'date',
+        'qasc_data' => 'array',
+        'qasc_email_sent_at' => 'datetime',
         'submitted_at' => 'datetime',
         'reviewed_at' => 'datetime',
     ];
