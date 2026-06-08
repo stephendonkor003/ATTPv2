@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -32,6 +31,7 @@ class DatabaseSeeder extends Seeder
             LegacyThinkTankProcurementLifecycleSeeder::class,
             LegacySiteVisitSeeder::class,
             PermissionSeeder::class,
+            RoleSeeder::class,
             GeoRegionSeeder::class,
             AuMasterDataPermissionsSeeder::class,
             AuAgenda2063Seeder::class,
@@ -52,8 +52,10 @@ class DatabaseSeeder extends Seeder
             ApprovedWorkPlanSeeder::class,
             AttpWorkPlan2025Seeder::class,
             ConsortiumThinkTankMembershipSeeder::class,
+            RolePermissionSeeder::class,
             MasterAdminSeeder::class,
             ChirwaSuperAdminSeeder::class,
+            SystemAdminAccessSeeder::class,
         ]);
     }
 }

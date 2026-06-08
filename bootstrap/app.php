@@ -25,6 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Send indicator reminder emails every 4 hours via queued job.
         $schedule->job(new IndicatorReminderJob())->everyFourHours();
 
+        // Clear Laravel cache buildup 6 times per day.
+        $schedule->command('optimize:clear')->everyFourHours()->withoutOverlapping();
+
         // Refresh World Bank catalog + recent values for used indicators each day.
         $schedule->command('worldbank:sync --catalog --used')->dailyAt('02:15')->withoutOverlapping();
     })

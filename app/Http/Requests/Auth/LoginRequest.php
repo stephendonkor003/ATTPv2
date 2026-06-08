@@ -5,9 +5,11 @@ namespace App\Http\Requests\Auth;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class LoginRequest extends FormRequest
 {
@@ -41,7 +43,22 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        try {
+            $authenticated = Auth::attempt($this->only('email', 'password'), $this->boolean('remember'));
+        } catch (RuntimeException $exception) {
+            if (! str_contains($exception->getMessage(), 'does not use the Bcrypt algorithm')) {
+                throw $exception;
+            }
+
+            Log::warning('Login rejected because the stored password hash is incompatible with bcrypt.', [
+                'email' => $this->string('email')->toString(),
+                'ip' => $this->ip(),
+            ]);
+
+            $authenticated = false;
+        }
+
+        if (! $authenticated) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
