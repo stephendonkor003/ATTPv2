@@ -29,12 +29,34 @@
             <div class="alert alert-danger">{{ session('error') }}</div>
         @endif
 
+        <form method="POST" action="{{ route('system.users.bulk-login-access') }}" id="bulkLoginAccessForm" class="d-none">
+            @csrf
+            <input type="hidden" name="action" id="bulkLoginAction">
+            <div id="bulkLoginUserIds"></div>
+        </form>
+
         <div class="card shadow-sm border-0">
             <div class="card-body">
-                <x-data-table id="usersTable">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <span class="small text-muted" id="selectedUsersCount">0 selected</span>
+
+                    <div class="d-inline-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-dark" id="bulkDisableLoginBtn" disabled>
+                            <i class="feather-slash me-1"></i> Disable Login
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success" id="bulkEnableLoginBtn" disabled>
+                            <i class="feather-unlock me-1"></i> Enable Login
+                        </button>
+                    </div>
+                </div>
+
+                <x-data-table id="usersTable" :config="['columnDefs' => [['targets' => [0, 8], 'orderable' => false, 'searchable' => false]], 'order' => [[7, 'desc']]]">
                     <thead class="table-light">
                         <tr>
-                            <th class="ps-4">User</th>
+                            <th class="text-center ps-4" width="44">
+                                <input type="checkbox" class="form-check-input" id="selectAllUsers" title="Select all users">
+                            </th>
+                            <th>User</th>
                             <th>Email</th>
                             <th>Governance</th>
                             <th>Role</th>
@@ -47,8 +69,19 @@
 
                     <tbody>
                         @foreach($users as $user)
+                            @php
+                                $canBulkManageLogin = !($user->id === auth()->id() || $user->isAdmin() || $user->isSuperAdmin());
+                            @endphp
                             <tr>
-                                <td class="ps-4">
+                                <td class="text-center ps-4">
+                                    <input type="checkbox"
+                                        class="form-check-input user-row-checkbox"
+                                        value="{{ $user->id }}"
+                                        title="{{ $canBulkManageLogin ? 'Select user' : 'Protected account' }}"
+                                        {{ $canBulkManageLogin ? '' : 'disabled' }}>
+                                </td>
+
+                                <td>
                                     <div class="fw-semibold">{{ $user->name }}</div>
                                     <small class="text-muted">{{ ucfirst(str_replace('_', ' ', (string) $user->user_type)) }}</small>
                                     @if ($user->memberState)
@@ -271,6 +304,14 @@
             const temporaryDurationGroup = document.getElementById('temporary-duration-group');
             const durationValueInput = document.getElementById('duration_value');
             const durationUnitSelect = document.getElementById('duration_unit');
+            const bulkLoginAccessForm = document.getElementById('bulkLoginAccessForm');
+            const bulkLoginAction = document.getElementById('bulkLoginAction');
+            const bulkLoginUserIds = document.getElementById('bulkLoginUserIds');
+            const bulkDisableLoginBtn = document.getElementById('bulkDisableLoginBtn');
+            const bulkEnableLoginBtn = document.getElementById('bulkEnableLoginBtn');
+            const selectedUsersCount = document.getElementById('selectedUsersCount');
+            const selectAllUsers = document.getElementById('selectAllUsers');
+            const selectedUserIds = new Set();
 
             function toggleTemporaryDuration() {
                 const isTemporary = blockTypeSelect.value === 'temporary';
@@ -296,6 +337,114 @@
 
             blockTypeSelect.addEventListener('change', toggleTemporaryDuration);
             toggleTemporaryDuration();
+
+            function getDataTable() {
+                if (window.$ && $.fn.DataTable && $.fn.DataTable.isDataTable('#usersTable')) {
+                    return $('#usersTable').DataTable();
+                }
+
+                return null;
+            }
+
+            function getManagedCheckboxes() {
+                const dataTable = getDataTable();
+
+                if (dataTable) {
+                    return dataTable
+                        .rows({ search: 'applied' })
+                        .nodes()
+                        .toArray()
+                        .flatMap(function(row) {
+                            return Array.from(row.querySelectorAll('.user-row-checkbox:not(:disabled)'));
+                        });
+                }
+
+                return Array.from(document.querySelectorAll('.user-row-checkbox:not(:disabled)'));
+            }
+
+            function syncBulkControls() {
+                document.querySelectorAll('.user-row-checkbox').forEach(function(checkbox) {
+                    checkbox.checked = selectedUserIds.has(checkbox.value);
+                });
+
+                const selectedCount = selectedUserIds.size;
+                const managedCheckboxes = getManagedCheckboxes();
+                const selectedManagedCount = managedCheckboxes.filter(function(checkbox) {
+                    return selectedUserIds.has(checkbox.value);
+                }).length;
+
+                selectedUsersCount.textContent = `${selectedCount} selected`;
+                bulkDisableLoginBtn.disabled = selectedCount === 0;
+                bulkEnableLoginBtn.disabled = selectedCount === 0;
+
+                selectAllUsers.checked = managedCheckboxes.length > 0 && selectedManagedCount === managedCheckboxes.length;
+                selectAllUsers.indeterminate = selectedManagedCount > 0 && selectedManagedCount < managedCheckboxes.length;
+            }
+
+            selectAllUsers.addEventListener('change', function() {
+                getManagedCheckboxes().forEach(function(checkbox) {
+                    if (selectAllUsers.checked) {
+                        selectedUserIds.add(checkbox.value);
+                    } else {
+                        selectedUserIds.delete(checkbox.value);
+                    }
+                });
+
+                syncBulkControls();
+            });
+
+            document.addEventListener('change', function(event) {
+                if (!event.target.classList.contains('user-row-checkbox')) {
+                    return;
+                }
+
+                if (event.target.checked) {
+                    selectedUserIds.add(event.target.value);
+                } else {
+                    selectedUserIds.delete(event.target.value);
+                }
+
+                syncBulkControls();
+            });
+
+            function submitBulkLoginAccess(action) {
+                const selectedCount = selectedUserIds.size;
+                if (selectedCount === 0) {
+                    return;
+                }
+
+                const actionLabel = action === 'disable' ? 'disable login for' : 'enable login for';
+                if (!confirm(`Are you sure you want to ${actionLabel} ${selectedCount} selected user(s)?`)) {
+                    return;
+                }
+
+                bulkLoginAction.value = action;
+                bulkLoginUserIds.innerHTML = '';
+
+                selectedUserIds.forEach(function(userId) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'user_ids[]';
+                    input.value = userId;
+                    bulkLoginUserIds.appendChild(input);
+                });
+
+                bulkLoginAccessForm.submit();
+            }
+
+            bulkDisableLoginBtn.addEventListener('click', function() {
+                submitBulkLoginAccess('disable');
+            });
+
+            bulkEnableLoginBtn.addEventListener('click', function() {
+                submitBulkLoginAccess('enable');
+            });
+
+            if (window.$) {
+                $('#usersTable').on('draw.dt', syncBulkControls);
+            }
+
+            syncBulkControls();
         });
     </script>
 @endsection

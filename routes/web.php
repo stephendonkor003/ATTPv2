@@ -276,6 +276,9 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
             Route::post('/', [UserAccessController::class, 'store'])
                 ->name('store');
 
+            Route::post('/bulk-login-access', [UserAccessController::class, 'bulkLoginAccess'])
+                ->name('bulk-login-access');
+
             Route::get('/{user}/edit', [UserAccessController::class, 'edit'])
                 ->name('edit');
 

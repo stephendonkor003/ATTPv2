@@ -262,6 +262,61 @@ class UserAccessController extends Controller
         return back()->with('success', 'User login unblocked successfully.');
     }
 
+    public function bulkLoginAccess(Request $request)
+    {
+        $validated = $request->validate([
+            'action' => 'required|in:disable,enable',
+            'user_ids' => 'required|array|min:1',
+            'user_ids.*' => 'required|exists:users,id',
+        ]);
+
+        $userIds = array_values(array_unique($validated['user_ids']));
+        $users = User::whereIn('id', $userIds)->get();
+        $updated = 0;
+        $skipped = 0;
+
+        foreach ($users as $user) {
+            $this->assertUserInScope($user);
+
+            if ($user->id === auth()->id() || $user->isAdmin() || $user->isSuperAdmin()) {
+                $skipped++;
+                continue;
+            }
+
+            if ($validated['action'] === 'disable') {
+                $user->update([
+                    'is_disabled' => true,
+                    'disabled_at' => now(),
+                    'disabled_until' => null,
+                    'disabled_reason' => 'Login disabled by bulk user management.',
+                ]);
+            } else {
+                $user->update([
+                    'is_disabled' => false,
+                    'disabled_at' => null,
+                    'disabled_until' => null,
+                    'disabled_reason' => null,
+                ]);
+            }
+
+            $updated++;
+        }
+
+        if ($updated === 0) {
+            return back()->with('error', 'No selected users could be updated.');
+        }
+
+        $message = $validated['action'] === 'disable'
+            ? "{$updated} user login(s) disabled successfully."
+            : "{$updated} user login(s) enabled successfully.";
+
+        if ($skipped > 0) {
+            $message .= " {$skipped} protected account(s) skipped.";
+        }
+
+        return back()->with('success', $message);
+    }
+
     /* ======================================================
      | INLINE ROLE UPDATE (USED IN INDEX)
      ====================================================== */
