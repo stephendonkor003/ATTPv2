@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Str;
 
 class EvaluationReportController extends Controller
 {
@@ -15,6 +16,7 @@ class EvaluationReportController extends Controller
         $submissions = EvaluationSubmission::with([
                 'procurement',
                 'applicant.submitter',
+                'applicant.values',
                 'evaluation',
                 'evaluator',
             ])
@@ -30,6 +32,7 @@ class EvaluationReportController extends Controller
         $submission->load([
             'procurement',
             'applicant.submitter',
+            'applicant.values',
             'evaluation.sections.criteria',
             'criteriaScores.criteria',
             'sectionScores.section',
@@ -43,9 +46,20 @@ class EvaluationReportController extends Controller
 
     public function submissionPdf(EvaluationSubmission $submission)
     {
+        return $this->downloadSubmissionReport($submission);
+    }
+
+    public function submissionAnonymisedPdf(EvaluationSubmission $submission)
+    {
+        return $this->downloadSubmissionReport($submission, true);
+    }
+
+    private function downloadSubmissionReport(EvaluationSubmission $submission, bool $anonymised = false)
+    {
         $submission->load([
             'procurement',
             'applicant.submitter',
+            'applicant.values',
             'evaluation.sections.criteria',
             'criteriaScores.criteria',
             'sectionScores.section',
@@ -54,9 +68,31 @@ class EvaluationReportController extends Controller
 
         $overallMax = $this->overallMax($submission);
 
-        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', compact('submission', 'overallMax'));
+        $name = Str::slug($submission->applicant?->display_name ?: 'submission');
+        $code = Str::slug($submission->applicant?->procurement_submission_code ?: $submission->id);
+        $prefix = $anonymised ? 'evaluation-submission-anonymised-' : 'evaluation-submission-';
 
-        return $pdf->download('evaluation-submission-' . $submission->id . '.pdf');
+        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', [
+            'submission' => $submission,
+            'overallMax' => $overallMax,
+            'anonymised' => $anonymised,
+            'platformName' => 'Africa Think Tank Platform',
+            'platformUrl' => rtrim(config('app.url') ?: url('/'), '/'),
+            'logoDataUri' => $this->logoDataUri(),
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download($prefix . trim($name . '-' . $code, '-') . '.pdf');
+    }
+
+    private function logoDataUri(): ?string
+    {
+        $path = public_path('admin/assets/images/logo-full.png');
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        return 'data:image/png;base64,' . base64_encode(file_get_contents($path));
     }
 
     public function procurement(Procurement $procurement)
@@ -177,9 +213,7 @@ class EvaluationReportController extends Controller
             return null;
         }
 
-        return $submission->evaluation->sections
-            ->flatMap(fn ($section) => $section->criteria)
-            ->sum('max_score');
+        return 100;
     }
 
     private function buildSummary($submissions): array

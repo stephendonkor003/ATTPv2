@@ -92,6 +92,30 @@ public function siteVisits()
     return $this->hasMany(SiteVisit::class, 'form_submission_id');
 }
 
+public function getDisplayNameAttribute(): string
+{
+    $preferredFields = ['official_name', 'consortium_name', 'think_tank_name'];
+    $values = $this->relationLoaded('values')
+        ? $this->values
+        : $this->values()->whereIn('field_key', $preferredFields)->get(['field_key', 'value']);
+
+    foreach ($preferredFields as $field) {
+        $value = trim((string) ($values->firstWhere('field_key', $field)?->value ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    if ($this->relationLoaded('submitter')) {
+        $name = trim((string) ($this->submitter?->name ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+    }
+
+    return $this->procurement_submission_code ?: 'Submission';
+}
+
 // FormSubmission.php
 public function assignedPrescreener()
 {

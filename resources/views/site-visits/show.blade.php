@@ -10,8 +10,8 @@
                 <div class="page-header-left">
                     <h5 class="m-b-10">Site Visit Details</h5>
                     <p class="text-muted mb-0">
-                        Submission:
-                        <strong>{{ $siteVisit->submission->procurement_submission_code }}</strong>
+                        Applicant:
+                        <strong>{{ $siteVisit->submission?->display_name ?? '-' }}</strong>
                     </p>
                 </div>
 

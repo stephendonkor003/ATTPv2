@@ -7,10 +7,12 @@ use App\Models\PrescreeningEvaluation;
 use App\Models\PrescreeningResult;
 use App\Models\User;
 use App\Mail\PrescreeningCompleted;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 
 class PrescreeningEvaluationController extends Controller
@@ -46,7 +48,12 @@ class PrescreeningEvaluationController extends Controller
             'submitter',
             'prescreeningResult.evaluator',
             'values' => function ($query) {
-                $query->whereIn('field_key', ['official_name', 'official_email']);
+                $query->whereIn('field_key', [
+                    'official_name',
+                    'consortium_name',
+                    'think_tank_name',
+                    'official_email',
+                ]);
             },
         ]);
 
@@ -103,7 +110,7 @@ class PrescreeningEvaluationController extends Controller
 
         $template = $submission->procurement
             ->prescreeningTemplate
-            ?->load('sections.criteria');
+            ?->load('sections.criteria', 'criteria');
 
         abort_if(!$template, 404);
 
@@ -130,6 +137,94 @@ class PrescreeningEvaluationController extends Controller
         );
     }
 
+    public function downloadPdf(FormSubmission $submission)
+    {
+        return $this->downloadReport($submission);
+    }
+
+    public function downloadAnonymisedPdf(FormSubmission $submission)
+    {
+        return $this->downloadReport($submission, true);
+    }
+
+    private function downloadReport(FormSubmission $submission, bool $anonymised = false)
+    {
+        $this->assertSubmissionInScope($submission);
+
+        if (!$this->canAccessSubmission($submission)) {
+            abort(403);
+        }
+
+        $submission->loadMissing([
+            'procurement',
+            'submitter',
+            'values',
+            'prescreeningResult.evaluator',
+        ]);
+
+        $template = $this->resolveTemplate($submission);
+        $sections = $template ? $template->sections : collect();
+        $criteria = $this->criteriaForTemplate($template);
+        $evaluations = PrescreeningEvaluation::with('criterion')
+            ->where('submission_id', $submission->id)
+            ->get()
+            ->keyBy('criterion_id');
+
+        $name = Str::slug($submission->display_name ?: 'submission');
+        $code = Str::slug($submission->procurement_submission_code ?: $submission->id);
+        $prefix = $anonymised ? 'prescreening-submission-anonymised-' : 'prescreening-submission-';
+
+        $pdf = Pdf::loadView('reports.prescreening.pdf.submission', [
+            'submission' => $submission,
+            'template' => $template,
+            'sections' => $sections,
+            'criteria' => $criteria,
+            'evaluations' => $evaluations,
+            'anonymised' => $anonymised,
+            'platformName' => 'Africa Think Tank Platform',
+            'platformUrl' => rtrim(config('app.url') ?: url('/'), '/'),
+            'logoDataUri' => $this->logoDataUri(),
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download($prefix . trim($name . '-' . $code, '-') . '.pdf');
+    }
+
+    private function resolveTemplate(FormSubmission $submission)
+    {
+        if ($submission->prescreeningResult?->prescreening_template_id) {
+            return \App\Models\PrescreeningTemplate::with(['sections.criteria', 'criteria'])
+                ->find($submission->prescreeningResult->prescreening_template_id);
+        }
+
+        return $submission->procurement?->prescreeningTemplate?->load('sections.criteria', 'criteria');
+    }
+
+    private function criteriaForTemplate($template)
+    {
+        if (!$template) {
+            return collect();
+        }
+
+        $sectionCriteria = $template->sections
+            ->flatMap(fn ($section) => $section->criteria)
+            ->values();
+
+        return $sectionCriteria->isNotEmpty()
+            ? $sectionCriteria
+            : $template->criteria->values();
+    }
+
+    private function logoDataUri(): ?string
+    {
+        $path = public_path('admin/assets/images/logo-full.png');
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        return 'data:image/png;base64,' . base64_encode(file_get_contents($path));
+    }
+
     /**
      * ===============================
      * STORE / UPDATE PRESCREENING
@@ -145,7 +240,7 @@ class PrescreeningEvaluationController extends Controller
         $template = $submission->procurement->prescreeningTemplate;
         abort_if(!$template, 404);
 
-        $template->load('sections.criteria');
+        $template->load('sections.criteria', 'criteria');
 
         $result = $submission->prescreeningResult;
 
@@ -155,9 +250,7 @@ class PrescreeningEvaluationController extends Controller
         }
 
         DB::transaction(function () use ($request, $submission, $template) {
-            $criteria = $template->sections
-                ->flatMap(fn ($section) => $section->criteria)
-                ->values();
+            $criteria = $this->criteriaForTemplate($template);
 
             $rules = [];
             foreach ($criteria as $criterion) {

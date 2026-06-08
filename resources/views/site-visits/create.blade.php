@@ -45,12 +45,12 @@
                                 </div>
 
                                 <div class="col-md-6 mb-3">
-                                    <label class="form-label">Submission Code</label>
+                                    <label class="form-label">Applicant</label>
                                     <select name="form_submission_id" class="form-control" required>
                                         @foreach ($submissions as $submission)
                                             <option value="{{ $submission->id }}"
                                                 {{ old('form_submission_id') == $submission->id ? 'selected' : '' }}>
-                                                {{ $submission->procurement_submission_code }}
+                                                {{ $submission->display_name }}
                                             </option>
                                         @endforeach
                                     </select>

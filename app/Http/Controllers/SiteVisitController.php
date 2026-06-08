@@ -25,7 +25,7 @@ class SiteVisitController extends Controller
 
     $query = SiteVisit::with([
         'procurement',
-        'submission',
+        'submission.values',
         'group.leader',
         'assignment.user'
     ]);
@@ -60,7 +60,7 @@ class SiteVisitController extends Controller
     public function create()
     {
         $procurements = Procurement::orderBy('title')->get();
-        $submissions  = FormSubmission::orderByDesc('submitted_at')->get();
+        $submissions  = FormSubmission::with('values')->orderByDesc('submitted_at')->get();
         $users        = User::orderBy('name')->get();
 
         return view('site-visits.create', compact(
@@ -158,6 +158,15 @@ class SiteVisitController extends Controller
      public function show(SiteVisit $siteVisit)
 {
     $user = auth()->user();
+    $siteVisit->loadMissing([
+        'procurement',
+        'submission.values',
+        'assignment.user',
+        'group.leader',
+        'group.members.user',
+        'observations.media',
+        'approvals.reviewer',
+    ]);
 
     if (
         $user->can('site_visits.approve') ||

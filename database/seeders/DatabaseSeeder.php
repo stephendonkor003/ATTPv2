@@ -30,6 +30,7 @@ class DatabaseSeeder extends Seeder
             LegacySqlDumpSeeder::class,
             OldDataSqlImportSeeder::class,
             LegacyThinkTankProcurementLifecycleSeeder::class,
+            LegacySiteVisitSeeder::class,
             PermissionSeeder::class,
             GeoRegionSeeder::class,
             AuMasterDataPermissionsSeeder::class,

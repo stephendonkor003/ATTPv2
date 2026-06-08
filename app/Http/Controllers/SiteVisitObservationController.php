@@ -35,6 +35,8 @@ class SiteVisitObservationController extends Controller
                 ]);
         }
 
+        $siteVisit->loadMissing(['submission.values', 'assignment', 'group.members']);
+
         /* =========================
          | ASSIGNMENT CHECK
          ========================= */

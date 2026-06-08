@@ -6,6 +6,8 @@ use App\Models\BaseModel;
 
 class SiteVisitMedia extends BaseModel
 {
+    protected $table = 'site_visit_medias';
+
     public $timestamps = false;
 
     protected $fillable = [

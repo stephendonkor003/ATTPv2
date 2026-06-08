@@ -48,6 +48,7 @@ class PrescreeningReportController extends Controller
 
         $template = $this->resolveTemplate($submission);
         $sections = $template ? $template->sections : collect();
+        $criteria = $this->criteriaForTemplate($template);
 
         $evaluations = PrescreeningEvaluation::with('criterion')
             ->where('submission_id', $submission->id)
@@ -58,6 +59,7 @@ class PrescreeningReportController extends Controller
             'submission',
             'template',
             'sections',
+            'criteria',
             'evaluations'
         ));
     }
@@ -69,6 +71,7 @@ class PrescreeningReportController extends Controller
 
         $template = $this->resolveTemplate($submission);
         $sections = $template ? $template->sections : collect();
+        $criteria = $this->criteriaForTemplate($template);
         $evaluations = PrescreeningEvaluation::with('criterion')
             ->where('submission_id', $submission->id)
             ->get()
@@ -78,6 +81,7 @@ class PrescreeningReportController extends Controller
             'submission',
             'template',
             'sections',
+            'criteria',
             'evaluations'
         ));
 
@@ -209,11 +213,26 @@ class PrescreeningReportController extends Controller
     private function resolveTemplate(FormSubmission $submission): ?PrescreeningTemplate
     {
         if ($submission->prescreeningResult?->prescreening_template_id) {
-            return PrescreeningTemplate::with('sections.criteria')
+            return PrescreeningTemplate::with(['sections.criteria', 'criteria'])
                 ->find($submission->prescreeningResult->prescreening_template_id);
         }
 
-        return $submission->procurement?->prescreeningTemplate?->load('sections.criteria');
+        return $submission->procurement?->prescreeningTemplate?->load('sections.criteria', 'criteria');
+    }
+
+    private function criteriaForTemplate(?PrescreeningTemplate $template)
+    {
+        if (!$template) {
+            return collect();
+        }
+
+        $sectionCriteria = $template->sections
+            ->flatMap(fn ($section) => $section->criteria)
+            ->values();
+
+        return $sectionCriteria->isNotEmpty()
+            ? $sectionCriteria
+            : $template->criteria->values();
     }
 
     private function buildSummary($submissions): array

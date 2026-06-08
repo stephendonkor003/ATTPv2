@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\{
     Procurement,
     SiteVisit
 };
+use Illuminate\Support\Str;
 
 class ProcurementSiteVisitReportController extends Controller
 {
@@ -17,7 +19,7 @@ class ProcurementSiteVisitReportController extends Controller
         }
 
         $siteVisits = SiteVisit::with([
-            'submission',
+            'submission.values',
             'assignment.user',
             'group.leader',
             'group.members.user',
@@ -31,6 +33,61 @@ class ProcurementSiteVisitReportController extends Controller
             'site-visits.reports.comprehensive', // ✅ UPDATED PATH
             compact('procurement', 'siteVisits')
         );
+    }
+
+    public function downloadVisit(Procurement $procurement, SiteVisit $siteVisit)
+    {
+        return $this->downloadVisitReport($procurement, $siteVisit);
+    }
+
+    public function downloadAnonymisedVisit(Procurement $procurement, SiteVisit $siteVisit)
+    {
+        return $this->downloadVisitReport($procurement, $siteVisit, true);
+    }
+
+    private function downloadVisitReport(Procurement $procurement, SiteVisit $siteVisit, bool $anonymised = false)
+    {
+        if (!auth()->user()->can('site_visits.approve')) {
+            abort(403, 'Unauthorized');
+        }
+
+        abort_unless($siteVisit->procurement_id === $procurement->id, 404);
+
+        $siteVisit->load([
+            'procurement',
+            'submission.values',
+            'assignment.user',
+            'group.leader',
+            'group.members.user',
+            'observations.media',
+            'approvals.reviewer',
+        ]);
+
+        $name = Str::slug($siteVisit->submission?->display_name ?: 'site-visit-report');
+        $prefix = $anonymised ? 'site-visit-anonymised-' : 'site-visit-';
+        $filename = $prefix . ($name ?: $siteVisit->id) . '.pdf';
+
+        return Pdf::loadView('site-visits.reports.pdf-single', [
+            'procurement' => $procurement,
+            'siteVisit' => $siteVisit,
+            'anonymised' => $anonymised,
+            'platformName' => 'Africa Think Tank Platform',
+            'platformUrl' => rtrim(config('app.url') ?: url('/'), '/'),
+            'logoDataUri' => $this->logoDataUri(),
+        ])
+            ->setPaper('a4', 'portrait')
+            ->download($filename);
+    }
+
+    private function logoDataUri(): ?string
+    {
+        $path = public_path('admin/assets/images/logo-full.png');
+
+        if (!is_file($path)) {
+            return null;
+        }
+
+        return 'data:image/png;base64,' . base64_encode(file_get_contents($path));
     }
 
 

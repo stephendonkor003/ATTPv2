@@ -77,6 +77,8 @@ class OldDataSqlImportSeeder extends Seeder
                 $this->command?->warn("Skipped {$count} row(s) from {$table}: {$sample}");
             }
         }
+
+        $this->reportApplicantImportHealth();
     }
 
     private function loadSchemaMetadata(): void
@@ -333,7 +335,71 @@ class OldDataSqlImportSeeder extends Seeder
             $row['evaluation_type'] ??= 'legacy_application_prescreening';
         }
 
+        $row = $this->attachLegacyMetadata($legacyTable, $targetTable, $legacyRow, $row, $targetColumns);
+
         return array_intersect_key($row, $targetColumns);
+    }
+
+    private function attachLegacyMetadata(
+        string $legacyTable,
+        string $targetTable,
+        array $legacyRow,
+        array $row,
+        array $targetColumns
+    ): array {
+        if ($targetTable !== 'applicants') {
+            return $row;
+        }
+
+        if (isset($targetColumns['legacy_source_table'])) {
+            $row['legacy_source_table'] = $legacyTable;
+        }
+
+        if (isset($targetColumns['legacy_source_id'])) {
+            $row['legacy_source_id'] = isset($legacyRow['id']) ? (string) $legacyRow['id'] : null;
+        }
+
+        if (isset($targetColumns['legacy_payload'])) {
+            $row['legacy_payload'] = json_encode($legacyRow, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        return $row;
+    }
+
+    private function reportApplicantImportHealth(): void
+    {
+        if (! Schema::hasTable('applicants')) {
+            return;
+        }
+
+        $query = DB::table('applicants');
+
+        if (Schema::hasColumn('applicants', 'legacy_source_table')) {
+            $query->where('legacy_source_table', 'applicants');
+        } else {
+            $query->where('code', 'like', 'AUC-TK-2-%');
+        }
+
+        $total = (clone $query)->count();
+        if ($total === 0) {
+            return;
+        }
+
+        $missingNames = (clone $query)
+            ->where(fn ($builder) => $builder
+                ->whereNull('think_tank_name')
+                ->orWhere('think_tank_name', '')
+            )
+            ->count();
+
+        $missingEmails = (clone $query)
+            ->where(fn ($builder) => $builder
+                ->whereNull('email')
+                ->orWhere('email', '')
+            )
+            ->count();
+
+        $this->command?->line("Applicant legacy detail check: {$total} applicant(s), {$missingNames} missing name(s), {$missingEmails} missing email(s).");
     }
 
     private function mapLegacyReference(string $legacyTable, string $column, mixed $value): mixed

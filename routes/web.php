@@ -1937,6 +1937,18 @@ Route::middleware(['auth', 'not.funding.partner'])
         )->middleware('permission:prescreening.evaluate')
          ->name('prescreening.submissions.show');
 
+        Route::get(
+            'submissions/{submission}/pdf',
+            [PrescreeningEvaluationController::class, 'downloadPdf']
+        )->middleware('permission:prescreening.evaluate')
+         ->name('prescreening.submissions.pdf');
+
+        Route::get(
+            'submissions/{submission}/anonymised-pdf',
+            [PrescreeningEvaluationController::class, 'downloadAnonymisedPdf']
+        )->middleware('permission:prescreening.evaluate')
+         ->name('prescreening.submissions.anonymised-pdf');
+
         Route::post(
             'submissions/{submission}',
             [PrescreeningEvaluationController::class, 'store']
@@ -2396,6 +2408,20 @@ Route::middleware(['auth', 'not.funding.partner'])
         ->middleware('permission:site_visits.approve')
         ->name('procurements.site-visit-report');
 
+    Route::get(
+    '/procurements/{procurement}/site-visit-report/{siteVisit}/pdf',
+    [ProcurementSiteVisitReportController::class, 'downloadVisit']
+    )
+        ->middleware('permission:site_visits.approve')
+        ->name('procurements.site-visit-report.pdf');
+
+    Route::get(
+    '/procurements/{procurement}/site-visit-report/{siteVisit}/anonymised-pdf',
+    [ProcurementSiteVisitReportController::class, 'downloadAnonymisedVisit']
+    )
+        ->middleware('permission:site_visits.approve')
+        ->name('procurements.site-visit-report.anonymised-pdf');
+
 
     Route::get(
     '/reports/site-visits',
@@ -2514,6 +2540,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
         Route::get('/', [EvaluationReportController::class, 'index'])->name('index');
         Route::get('/submission/{submission}', [EvaluationReportController::class, 'submission'])->name('submission');
         Route::get('/submission/{submission}/pdf', [EvaluationReportController::class, 'submissionPdf'])->name('submission.pdf');
+        Route::get('/submission/{submission}/anonymised-pdf', [EvaluationReportController::class, 'submissionAnonymisedPdf'])->name('submission.anonymised-pdf');
         Route::get('/procurement/{procurement}', [EvaluationReportController::class, 'procurement'])->name('procurement');
         Route::get('/procurement/{procurement}/pdf', [EvaluationReportController::class, 'procurementPdf'])->name('procurement.pdf');
         Route::get('/consolidated', [EvaluationReportController::class, 'consolidated'])->name('consolidated');

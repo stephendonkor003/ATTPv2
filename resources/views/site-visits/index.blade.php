@@ -25,7 +25,7 @@
                         <table class="table table-bordered">
                             <thead>
                                 <tr>
-                                    <th>Submission Code</th>
+                                    <th>Applicant</th>
                                     <th>Procurement</th>
                                     <th>Visit Date</th>
                                     <th>Assignment</th>
@@ -37,7 +37,7 @@
                                 @forelse($siteVisits as $visit)
                                     <tr>
                                         <td>
-                                            {{ $visit->submission->procurement_submission_code }}
+                                            {{ $visit->submission?->display_name ?? '-' }}
                                         </td>
                                         <td>
                                             {{ $visit->procurement->title ?? '-' }}

@@ -11,7 +11,7 @@
                     <h5 class="m-b-10">Add Observation</h5>
                     <p class="text-muted mb-0">
                         Site Visit:
-                        <strong>{{ $siteVisit->submission->procurement_submission_code }}</strong>
+                        <strong>{{ $siteVisit->submission?->display_name ?? '-' }}</strong>
                     </p>
                 </div>
             </div>
