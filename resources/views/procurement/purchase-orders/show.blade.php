@@ -2,132 +2,304 @@
 
 @push('styles')
     <style>
-        .po-show .hero-card {
-            background: linear-gradient(120deg, #1e293b 0%, #0f172a 40%, #0ea5e9 100%);
-            color: #fff;
-            border: none;
-            border-radius: 16px;
-        }
-
-        .po-show .hero-card p {
-            color: rgba(255, 255, 255, 0.78);
-        }
-
-        .po-show .detail-card {
+        .po-show .po-document {
+            background: #fff;
             border: 1px solid #e2e8f0;
-            border-radius: 16px;
-            box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+            border-radius: 8px;
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.07);
+        }
+
+        .po-show .po-document-header {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 20px;
+        }
+
+        .po-show .po-document-body {
+            padding: 20px;
         }
 
         .po-show .stat-tile {
             background: #f8fafc;
-            border-radius: 14px;
-            padding: 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 14px;
             height: 100%;
         }
 
         .po-show .stat-label {
             font-size: 0.72rem;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.04em;
             color: #64748b;
         }
 
         .po-show .stat-value {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: 700;
             color: #0f172a;
+            overflow-wrap: anywhere;
+        }
+
+        .po-show .section-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #64748b;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .po-show .white-space-pre-line {
+            white-space: pre-line;
         }
     </style>
 @endpush
 
 @section('content')
+    @php
+        $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+        $lineItems = $sourcePurchaseRequest?->items ?? collect();
+        $currency = $purchaseOrder->currency ?? $sourcePurchaseRequest?->currency ?? '';
+        $vendorContactName = $purchaseOrder->vendor_contact_name ?: ($purchaseOrder->vendor?->name ?? 'N/A');
+        $vendorContactEmail = $purchaseOrder->vendor_contact_email ?: ($purchaseOrder->vendor?->email ?? 'N/A');
+        $statusClass = match ($purchaseOrder->status) {
+            'issued' => 'bg-primary',
+            'closed' => 'bg-success',
+            'cancelled' => 'bg-danger',
+            default => 'bg-secondary',
+        };
+    @endphp
+
     <div class="nxl-container po-show">
-        <div class="card hero-card mb-4">
-            <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-start">
-                <div>
-                    <h4 class="fw-bold mb-1">Purchase Order</h4>
-                    <p class="mb-0">{{ $purchaseOrder->reference_no ?? 'N/A' }}</p>
-                </div>
-                <div class="d-flex flex-wrap gap-2 mt-3 mt-lg-0">
-                    <a href="{{ route('procurement.purchase-orders.pdf', $purchaseOrder) }}" class="btn btn-light">
-                        <i class="feather-eye me-1"></i> View PDF
-                    </a>
-                    <a href="{{ route('procurement.purchase-orders.download', $purchaseOrder) }}" class="btn btn-primary">
-                        <i class="feather-download me-1"></i> Download PDF
-                    </a>
-                    @can('finance.purchase_orders.delete')
-                        <form method="POST" action="{{ url('procurement/purchase-orders/' . $purchaseOrder->getKey() . '/delete') }}"
-                            onsubmit="return confirm('Delete this purchase order? Payment records will be kept but detached from this order.');">
-                            @csrf
-                            <button type="submit" class="btn btn-danger">
-                                <i class="feather-trash-2 me-1"></i> Delete
-                            </button>
-                        </form>
-                    @endcan
-                    <a href="{{ route('procurement.purchase-orders.index') }}" class="btn btn-outline-light">
-                        <i class="feather-arrow-left me-1"></i> Back
-                    </a>
-                </div>
+        <div class="page-header d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
+            <div>
+                <h4 class="fw-bold mb-1">{{ $purchaseOrder->po_title ?: 'Purchase Order' }}</h4>
+                <p class="text-muted mb-0">{{ $purchaseOrder->reference_no ?? 'N/A' }}</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{{ route('procurement.purchase-orders.pdf', $purchaseOrder) }}" class="btn btn-outline-primary">
+                    <i class="feather-eye me-1"></i> View PDF
+                </a>
+                <a href="{{ route('procurement.purchase-orders.download', $purchaseOrder) }}" class="btn btn-primary">
+                    <i class="feather-download me-1"></i> Download PDF
+                </a>
+                @can('finance.purchase_orders.delete')
+                    <form method="POST" action="{{ url('procurement/purchase-orders/' . $purchaseOrder->getKey() . '/delete') }}"
+                        onsubmit="return confirm('Delete this purchase order? Payment records will be kept but detached from this order.');">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="feather-trash-2 me-1"></i> Delete
+                        </button>
+                    </form>
+                @endcan
+                <a href="{{ route('procurement.purchase-orders.index') }}" class="btn btn-outline-secondary">
+                    <i class="feather-arrow-left me-1"></i> Back
+                </a>
             </div>
         </div>
 
-        <div class="card detail-card">
-            <div class="card-body">
+        @if (session('success'))
+            <div class="alert alert-success mt-3">{{ session('success') }}</div>
+        @endif
+
+        <div class="po-document mt-4">
+            <div class="po-document-header d-flex flex-column flex-lg-row justify-content-between gap-3">
+                <div>
+                    <div class="section-title">Official Purchase Order</div>
+                    <h5 class="fw-bold mb-1">{{ $purchaseOrder->reference_no ?? 'N/A' }}</h5>
+                    <div class="text-muted">{{ $purchaseOrder->po_title ?: 'Procurement purchase order' }}</div>
+                </div>
+                <div class="text-lg-end">
+                    <span class="badge {{ $statusClass }} text-capitalize px-3 py-2">
+                        {{ str_replace('_', ' ', $purchaseOrder->status ?? 'draft') }}
+                    </span>
+                    <div class="text-muted small mt-2">
+                        Issued: {{ $purchaseOrder->issued_at?->format('d M Y') ?? 'N/A' }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="po-document-body">
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="stat-tile">
-                            <div class="stat-label">Status</div>
-                            <div class="stat-value text-capitalize">{{ str_replace('_', ' ', $purchaseOrder->status ?? 'draft') }}</div>
+                            <div class="stat-label">PO Amount</div>
+                            <div class="stat-value">{{ $currency }} {{ number_format((float) $purchaseOrder->amount, 2) }}</div>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="stat-tile">
-                            <div class="stat-label">Issued At</div>
-                            <div class="stat-value">
-                                {{ $purchaseOrder->issued_at?->format('d M Y, H:i') ?? 'N/A' }}
-                            </div>
+                            <div class="stat-label">Paid</div>
+                            <div class="stat-value">{{ $currency }} {{ number_format($purchaseOrder->paidAmount(), 2) }}</div>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="stat-tile">
-                            <div class="stat-label">Approved Amount</div>
-                            <div class="stat-value">
-                                {{ $purchaseOrder->amount ? number_format($purchaseOrder->amount, 2) : 'N/A' }}
-                            </div>
+                            <div class="stat-label">Balance</div>
+                            <div class="stat-value">{{ $currency }} {{ number_format($purchaseOrder->remainingAmount(), 2) }}</div>
                         </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-tile">
+                            <div class="stat-label">Expected Delivery</div>
+                            <div class="stat-value">{{ $purchaseOrder->expected_delivery_date?->format('d M Y') ?? 'N/A' }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-4 mt-2">
+                    <div class="col-lg-6">
+                        <div class="section-title">Source Request and Funding</div>
+                        <table class="table table-sm">
+                            <tr>
+                                <th style="width: 180px;">Purchase Request</th>
+                                <td>{{ $sourcePurchaseRequest?->reference_no ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Program</th>
+                                <td>{{ $sourcePurchaseRequest?->programFunding?->program?->name ?? $sourcePurchaseRequest?->programFunding?->program_name ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Governance Node</th>
+                                <td>{{ $sourcePurchaseRequest?->governanceNode?->name ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Commitment Year</th>
+                                <td>{{ $purchaseOrder->budgetCommitment?->commitment_year ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Commitment Amount</th>
+                                <td>{{ $currency }} {{ number_format((float) ($purchaseOrder->budgetCommitment?->commitment_amount ?? 0), 2) }}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div class="col-lg-6">
+                        <div class="section-title">Procurement and Supplier</div>
+                        <table class="table table-sm">
+                            <tr>
+                                <th style="width: 180px;">Procurement</th>
+                                <td>{{ $purchaseOrder->procurement?->title ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Procurement Ref</th>
+                                <td>{{ $purchaseOrder->procurement?->reference_no ?? $purchaseOrder->contract_reference ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Vendor</th>
+                                <td>{{ $purchaseOrder->vendor?->name ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Vendor Contact</th>
+                                <td>
+                                    {{ $vendorContactName }}
+                                    <div class="small text-muted">{{ $vendorContactEmail }}</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Supplier Ref</th>
+                                <td>{{ $purchaseOrder->supplier_reference ?? 'N/A' }}</td>
+                            </tr>
+                        </table>
                     </div>
                 </div>
 
                 <div class="row g-4 mt-1">
-                    <div class="col-md-6">
-                        <div class="text-muted small">Procurement</div>
-                        <div class="fw-semibold">{{ $purchaseOrder->procurement?->title ?? 'N/A' }}</div>
-                        <div class="small text-muted">{{ $purchaseOrder->procurement?->reference_no ?? 'N/A' }}</div>
+                    <div class="col-lg-6">
+                        <div class="section-title">Delivery and Payment Terms</div>
+                        <table class="table table-sm">
+                            <tr>
+                                <th style="width: 180px;">Payment Terms</th>
+                                <td>{{ $purchaseOrder->payment_terms ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Delivery Terms</th>
+                                <td>{{ $purchaseOrder->delivery_terms ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Incoterm</th>
+                                <td>{{ $purchaseOrder->incoterm ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Valid Until</th>
+                                <td>{{ $purchaseOrder->valid_until?->format('d M Y') ?? 'N/A' }}</td>
+                            </tr>
+                        </table>
                     </div>
-                    <div class="col-md-6">
-                        <div class="text-muted small">Vendor</div>
-                        <div class="fw-semibold">{{ $purchaseOrder->vendor?->name ?? 'Vendor' }}</div>
-                        <div class="small text-muted">{{ $purchaseOrder->vendor?->email ?? 'N/A' }}</div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-muted small">Currency</div>
-                        <div class="fw-semibold">{{ $purchaseOrder->currency ?? 'N/A' }}</div>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="text-muted small">Sub-Activity</div>
-                        <div class="fw-semibold">{{ $purchaseOrder->subActivity?->name ?? 'N/A' }}</div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-muted small">Paid Amount</div>
-                        <div class="fw-semibold">
-                            {{ number_format($purchaseOrder->paidAmount(), 2) }} {{ $purchaseOrder->currency ?? '' }}
+
+                    <div class="col-lg-6">
+                        <div class="section-title">Addresses</div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="text-muted small">Bill To</div>
+                                <div class="fw-semibold white-space-pre-line">{{ $purchaseOrder->billing_address ?? 'N/A' }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="text-muted small">Ship To</div>
+                                <div class="fw-semibold white-space-pre-line">{{ $purchaseOrder->shipping_address ?? 'N/A' }}</div>
+                            </div>
+                            <div class="col-12">
+                                <div class="text-muted small">Delivery Location</div>
+                                <div class="fw-semibold white-space-pre-line">{{ $purchaseOrder->delivery_location ?? 'N/A' }}</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-8">
-                        <div class="text-muted small">Remaining Balance</div>
-                        <div class="fw-semibold">
-                            {{ number_format($purchaseOrder->remainingAmount(), 2) }} {{ $purchaseOrder->currency ?? '' }}
+                </div>
+
+                @if ($lineItems->isNotEmpty())
+                    <div class="mt-4">
+                        <div class="section-title">Line Items from Purchase Request</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Category</th>
+                                        <th>Resource</th>
+                                        <th>Description</th>
+                                        <th class="text-end">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($lineItems as $item)
+                                        <tr>
+                                            <td>{{ $loop->iteration }}</td>
+                                            <td>{{ $item->resourceCategory?->name ?? 'N/A' }}</td>
+                                            <td>{{ $item->resource?->name ?? 'N/A' }}</td>
+                                            <td>
+                                                <div>{{ $item->milestone ?? $item->object_type ?? 'N/A' }}</div>
+                                                <div class="small text-muted">{{ $item->budget_code ?? $item->work_plan_payment_basis ?? '' }}</div>
+                                            </td>
+                                            <td class="text-end fw-semibold">{{ $currency }} {{ number_format((float) $item->amount, 2) }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                @endif
+
+                <div class="row g-4 mt-1">
+                    <div class="col-lg-6">
+                        <div class="section-title">Quality and Warranty</div>
+                        <div class="mb-3">
+                            <div class="text-muted small">Inspection Requirements</div>
+                            <div>{{ $purchaseOrder->inspection_requirements ?? 'N/A' }}</div>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Warranty Terms</div>
+                            <div>{{ $purchaseOrder->warranty_terms ?? 'N/A' }}</div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="section-title">Conditions</div>
+                        <div class="mb-3">
+                            <div class="text-muted small">Special Instructions</div>
+                            <div>{{ $purchaseOrder->special_instructions ?? 'N/A' }}</div>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Terms and Conditions</div>
+                            <div>{{ $purchaseOrder->terms_conditions ?? 'N/A' }}</div>
                         </div>
                     </div>
                 </div>
@@ -141,11 +313,8 @@
                             View Invoice
                         </a>
                     </div>
-                @elseif ($purchaseOrder->negotiation)
-                    <div class="alert alert-info mt-4 mb-0">
-                        Linked Negotiation: {{ $purchaseOrder->negotiation->id }}
-                    </div>
                 @endif
+
                 <div class="mt-4">
                     @if ($purchaseOrder->po_type === 'think_tank_transfer' && $purchaseOrder->status === 'pending')
                         <span class="badge bg-warning-subtle text-warning">Payment Sent - Pending Think Tank Receipt</span>
@@ -161,10 +330,10 @@
 
                 @if ($purchaseOrder->disbursements->isNotEmpty())
                     <div class="mt-4">
-                        <h6 class="fw-semibold mb-3">Disbursement History</h6>
+                        <div class="section-title">Disbursement History</div>
                         <div class="table-responsive">
                             <table class="table align-middle">
-                                <thead>
+                                <thead class="table-light">
                                     <tr>
                                         <th>Receipt</th>
                                         <th>Amount</th>
@@ -177,10 +346,7 @@
                                     @foreach ($purchaseOrder->disbursements as $disbursement)
                                         <tr>
                                             <td>{{ $disbursement->reference_no ?? 'N/A' }}</td>
-                                            <td>
-                                                {{ $disbursement->amount ? number_format($disbursement->amount, 2) : 'N/A' }}
-                                                {{ $disbursement->currency ?? '' }}
-                                            </td>
+                                            <td>{{ $disbursement->amount ? number_format($disbursement->amount, 2) : 'N/A' }} {{ $disbursement->currency ?? '' }}</td>
                                             <td>{{ $disbursement->paid_at?->format('d M Y') ?? 'N/A' }}</td>
                                             <td>{{ $disbursement->payment_method ?? 'N/A' }}</td>
                                             <td>

@@ -14,6 +14,7 @@ use App\Http\Controllers\{
     LanguageController,
     ProfileController,
     ChangePasswordController,
+    DataWarehouseController,
     UserController,
     PrescreeningTemplateController,
     PrescreeningCriterionController,
@@ -1450,6 +1451,25 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])->group(function (
 
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
+
+    Route::prefix('data-warehouse')
+        ->name('data-warehouse.')
+        ->group(function () {
+            Route::get('/', [DataWarehouseController::class, 'index'])
+                ->name('index');
+            Route::get('/create', [DataWarehouseController::class, 'create'])
+                ->name('create');
+            Route::post('/', [DataWarehouseController::class, 'store'])
+                ->name('store');
+            Route::get('/categories', [DataWarehouseController::class, 'categories'])
+                ->name('categories');
+            Route::post('/categories', [DataWarehouseController::class, 'storeCategory'])
+                ->name('categories.store');
+            Route::get('/files/{file}/download', [DataWarehouseController::class, 'download'])
+                ->name('files.download');
+            Route::get('/{record}', [DataWarehouseController::class, 'show'])
+                ->name('show');
+        });
 
 
     /* =====================================================

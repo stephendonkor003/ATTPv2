@@ -285,6 +285,36 @@
                     </li>
                 @endcan
 
+                @if ($isAdminSidebarUser)
+                    <li class="nxl-item nxl-caption">
+                        <label>Data Warehouse</label>
+                    </li>
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-database"></i></span>
+                            <span class="nxl-mtext">Data Warehouse</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+                        <ul class="nxl-submenu">
+                            <li class="nxl-item">
+                                <a href="{{ route('data-warehouse.create') }}" class="nxl-link">
+                                    <i class="feather-upload-cloud me-2"></i> Add Historical Data
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('data-warehouse.categories') }}" class="nxl-link">
+                                    <i class="feather-folder me-2"></i> Data Category
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('data-warehouse.index') }}" class="nxl-link">
+                                    <i class="feather-info me-2"></i> View Info
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                @endif
+
                 {{-- ================= NEWS & COMMUNICATIONS ================= --}}
                 @if ($canSeeNewsCommunicationSidebar)
                     <li class="nxl-item nxl-caption">

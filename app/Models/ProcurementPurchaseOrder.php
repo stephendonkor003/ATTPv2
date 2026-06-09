@@ -15,23 +15,47 @@ class ProcurementPurchaseOrder extends BaseModel
         'negotiation_id',
         'invoice_id',
         'budget_commitment_id',
+        'purchase_request_id',
         'vendor_id',
         'sub_activity_id',
         'governance_node_id',
         'consortium_id',
         'think_tank_member_id',
         'reference_no',
+        'po_title',
+        'supplier_reference',
+        'contract_reference',
+        'buyer_contact_name',
+        'buyer_contact_email',
+        'buyer_contact_phone',
+        'vendor_contact_name',
+        'vendor_contact_email',
+        'vendor_contact_phone',
+        'billing_address',
+        'shipping_address',
+        'delivery_location',
+        'incoterm',
+        'delivery_terms',
+        'payment_terms',
+        'warranty_terms',
+        'inspection_requirements',
+        'special_instructions',
+        'terms_conditions',
         'po_type',
         'amount',
         'currency',
         'status',
         'created_by',
         'issued_at',
+        'expected_delivery_date',
+        'valid_until',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'issued_at' => 'datetime',
+        'expected_delivery_date' => 'date',
+        'valid_until' => 'date',
     ];
 
     public function procurement(): BelongsTo
@@ -52,6 +76,11 @@ class ProcurementPurchaseOrder extends BaseModel
     public function budgetCommitment(): BelongsTo
     {
         return $this->belongsTo(BudgetCommitment::class, 'budget_commitment_id');
+    }
+
+    public function purchaseRequest(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequest::class, 'purchase_request_id');
     }
 
     public function disbursements()

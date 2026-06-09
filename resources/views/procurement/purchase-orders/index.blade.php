@@ -57,7 +57,7 @@
             <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-start">
                 <div>
                     <h4 class="fw-bold mb-1">Purchase Orders</h4>
-                    <p class="mb-0">Track purchase orders tied to approved budget commitments.</p>
+                    <p class="mb-0">Track purchase orders tied to approved purchase requests and commitments.</p>
                 </div>
                 <div class="mt-3 mt-lg-0">
                     @can('finance.purchase_orders.create')
@@ -121,7 +121,7 @@
                         <tr>
                             <th class="ps-4">PO Reference</th>
                             <th>Procurement</th>
-                            <th>Commitment</th>
+                            <th>Purchase Request</th>
                             <th>Vendor</th>
                             <th class="text-center">Amount</th>
                             <th class="text-center">Status</th>
@@ -141,7 +141,7 @@
                                 </td>
                                 <td>
                                     <div class="fw-semibold">
-                                        {{ $purchaseOrder->budgetCommitment?->description ?? 'Approved Commitment' }}
+                                        {{ $purchaseOrder->purchaseRequest?->reference_no ?? $purchaseOrder->budgetCommitment?->purchaseRequest?->reference_no ?? 'N/A' }}
                                     </div>
                                     <small class="text-muted">
                                         {{ $purchaseOrder->budgetCommitment?->commitment_year ?? 'N/A' }}
