@@ -194,7 +194,7 @@
                 No approved purchase requests with remaining commitment balance are available for purchase order creation.
             </div>
         @else
-            <form method="POST" action="{{ route('procurement.purchase-orders.store') }}" id="purchaseOrderForm">
+            <form method="POST" action="{{ route('procurement.purchase-orders.store') }}" id="purchaseOrderForm" enctype="multipart/form-data">
                 @csrf
                 <input type="hidden" name="purchase_request_id" id="purchaseRequestIdInput" value="{{ $oldPurchaseRequestId }}">
                 <input type="hidden" name="budget_commitment_id" id="budgetCommitmentIdInput" value="{{ $oldCommitmentId }}">
@@ -387,6 +387,18 @@
                                 <label class="form-label fw-semibold">Contract Reference</label>
                                 <input type="text" name="contract_reference" class="form-control"
                                     value="{{ old('contract_reference') }}" maxlength="255">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">
+                                    Supporting Documentation <span class="text-danger">*</span>
+                                </label>
+                                <input type="file" name="supporting_document"
+                                    class="form-control @error('supporting_document') is-invalid @enderror"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip" required>
+                                <div class="form-text">Attach the signed contract, award memo, or other approval evidence. PDF, Office, image, or ZIP files up to 20 MB are accepted.</div>
+                                @error('supporting_document')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
 

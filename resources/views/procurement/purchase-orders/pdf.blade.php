@@ -262,6 +262,10 @@
                         <td class="label">Expected Delivery</td>
                         <td class="value">{{ $purchaseOrder->expected_delivery_date?->format('d M Y') ?? 'N/A' }}</td>
                     </tr>
+                    <tr>
+                        <td class="label">Supporting Doc</td>
+                        <td class="value" colspan="3">{{ $purchaseOrder->supporting_document_name ?? 'N/A' }}</td>
+                    </tr>
                 </table>
             </div>
         </div>

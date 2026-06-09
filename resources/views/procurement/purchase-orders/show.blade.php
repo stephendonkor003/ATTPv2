@@ -83,6 +83,11 @@
                 <a href="{{ route('procurement.purchase-orders.download', $purchaseOrder) }}" class="btn btn-primary">
                     <i class="feather-download me-1"></i> Download PDF
                 </a>
+                @if ($purchaseOrder->supporting_document_path)
+                    <a href="{{ route('procurement.purchase-orders.supporting-document', $purchaseOrder) }}?download=1" class="btn btn-outline-success">
+                        <i class="feather-paperclip me-1"></i> Supporting Document
+                    </a>
+                @endif
                 @can('finance.purchase_orders.delete')
                     <form method="POST" action="{{ url('procurement/purchase-orders/' . $purchaseOrder->getKey() . '/delete') }}"
                         onsubmit="return confirm('Delete this purchase order? Payment records will be kept but detached from this order.');">
@@ -199,6 +204,21 @@
                             <tr>
                                 <th>Supplier Ref</th>
                                 <td>{{ $purchaseOrder->supplier_reference ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Supporting Document</th>
+                                <td>
+                                    @if ($purchaseOrder->supporting_document_path)
+                                        <a href="{{ route('procurement.purchase-orders.supporting-document', $purchaseOrder) }}?download=1">
+                                            {{ $purchaseOrder->supporting_document_name ?? basename($purchaseOrder->supporting_document_path) }}
+                                        </a>
+                                        @if ($purchaseOrder->supporting_document_size)
+                                            <div class="small text-muted">{{ number_format($purchaseOrder->supporting_document_size / 1024, 1) }} KB</div>
+                                        @endif
+                                    @else
+                                        N/A
+                                    @endif
+                                </td>
                             </tr>
                         </table>
                     </div>

@@ -16,6 +16,7 @@ use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class ProcurementPurchaseOrderController extends Controller
@@ -165,6 +166,7 @@ class ProcurementPurchaseOrderController extends Controller
             'issued_at' => ['nullable', 'date'],
             'expected_delivery_date' => ['nullable', 'date'],
             'valid_until' => ['nullable', 'date'],
+            'supporting_document' => ['required', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
         ], [
             'purchase_request_id.required' => 'Select the approved purchase request before creating the purchase order.',
             'budget_commitment_id.required' => 'Select the approved commitment year that will fund this purchase order.',
@@ -172,6 +174,8 @@ class ProcurementPurchaseOrderController extends Controller
             'shipping_address.required' => 'Enter the ship-to address for this purchase order.',
             'delivery_terms.required' => 'Enter the delivery terms for this purchase order.',
             'payment_terms.required' => 'Enter the payment terms for this purchase order.',
+            'supporting_document.required' => 'Attach the supporting documentation before creating this purchase order.',
+            'supporting_document.mimes' => 'Supporting documentation must be a PDF, Office document, image, or ZIP file.',
         ]);
 
         $purchaseRequest = PurchaseRequest::with('commitments')->findOrFail($data['purchase_request_id']);
@@ -220,41 +224,47 @@ class ProcurementPurchaseOrderController extends Controller
             $vendor = User::query()->find($procurement->awarded_vendor_id);
         }
 
-        $purchaseOrder = ProcurementPurchaseOrder::create([
-            'budget_commitment_id' => $commitment->id,
-            'purchase_request_id' => $purchaseRequest->id,
-            'procurement_id' => $procurement?->id,
-            'vendor_id' => $vendor?->id,
-            'sub_activity_id' => $commitment->allocation_level === 'sub_activity' ? $commitment->allocation_id : null,
-            'governance_node_id' => $commitment->governance_node_id,
-            'reference_no' => ProcurementPurchaseOrder::generateReference(),
-            'po_title' => $data['po_title'] ?: 'Purchase Order for ' . $purchaseRequest->reference_no,
-            'supplier_reference' => $data['supplier_reference'] ?? null,
-            'contract_reference' => $data['contract_reference'] ?? null,
-            'buyer_contact_name' => $data['buyer_contact_name'] ?? auth()->user()?->name,
-            'buyer_contact_email' => $data['buyer_contact_email'] ?? auth()->user()?->email,
-            'buyer_contact_phone' => $data['buyer_contact_phone'] ?? null,
-            'vendor_contact_name' => $data['vendor_contact_name'] ?? $vendor?->name,
-            'vendor_contact_email' => $data['vendor_contact_email'] ?? $vendor?->email,
-            'vendor_contact_phone' => $data['vendor_contact_phone'] ?? $vendor?->payment_mobile_number,
-            'billing_address' => $data['billing_address'],
-            'shipping_address' => $data['shipping_address'],
-            'delivery_location' => $data['delivery_location'] ?? null,
-            'incoterm' => $data['incoterm'] ?? null,
-            'delivery_terms' => $data['delivery_terms'],
-            'payment_terms' => $data['payment_terms'],
-            'warranty_terms' => $data['warranty_terms'] ?? null,
-            'inspection_requirements' => $data['inspection_requirements'] ?? null,
-            'special_instructions' => $data['special_instructions'] ?? null,
-            'terms_conditions' => $data['terms_conditions'] ?? null,
-            'amount' => $data['amount'],
-            'currency' => $data['currency'] ?: $this->commitmentCurrency($commitment),
-            'status' => $data['status'],
-            'created_by' => auth()->id(),
-            'issued_at' => $data['issued_at'] ?? now(),
-            'expected_delivery_date' => $data['expected_delivery_date'] ?? $purchaseRequest->delivery_date?->toDateString(),
-            'valid_until' => $data['valid_until'] ?? null,
-        ]);
+        $purchaseOrder = DB::transaction(function () use ($commitment, $data, $procurement, $purchaseRequest, $request, $vendor) {
+            $purchaseOrder = ProcurementPurchaseOrder::create([
+                'budget_commitment_id' => $commitment->id,
+                'purchase_request_id' => $purchaseRequest->id,
+                'procurement_id' => $procurement?->id,
+                'vendor_id' => $vendor?->id,
+                'sub_activity_id' => $commitment->allocation_level === 'sub_activity' ? $commitment->allocation_id : null,
+                'governance_node_id' => $commitment->governance_node_id,
+                'reference_no' => ProcurementPurchaseOrder::generateReference(),
+                'po_title' => $data['po_title'] ?: 'Purchase Order for ' . $purchaseRequest->reference_no,
+                'supplier_reference' => $data['supplier_reference'] ?? null,
+                'contract_reference' => $data['contract_reference'] ?? null,
+                'buyer_contact_name' => $data['buyer_contact_name'] ?? auth()->user()?->name,
+                'buyer_contact_email' => $data['buyer_contact_email'] ?? auth()->user()?->email,
+                'buyer_contact_phone' => $data['buyer_contact_phone'] ?? null,
+                'vendor_contact_name' => $data['vendor_contact_name'] ?? $vendor?->name,
+                'vendor_contact_email' => $data['vendor_contact_email'] ?? $vendor?->email,
+                'vendor_contact_phone' => $data['vendor_contact_phone'] ?? $vendor?->payment_mobile_number,
+                'billing_address' => $data['billing_address'],
+                'shipping_address' => $data['shipping_address'],
+                'delivery_location' => $data['delivery_location'] ?? null,
+                'incoterm' => $data['incoterm'] ?? null,
+                'delivery_terms' => $data['delivery_terms'],
+                'payment_terms' => $data['payment_terms'],
+                'warranty_terms' => $data['warranty_terms'] ?? null,
+                'inspection_requirements' => $data['inspection_requirements'] ?? null,
+                'special_instructions' => $data['special_instructions'] ?? null,
+                'terms_conditions' => $data['terms_conditions'] ?? null,
+                'amount' => $data['amount'],
+                'currency' => $data['currency'] ?: $this->commitmentCurrency($commitment),
+                'status' => $data['status'],
+                'created_by' => auth()->id(),
+                'issued_at' => $data['issued_at'] ?? now(),
+                'expected_delivery_date' => $data['expected_delivery_date'] ?? $purchaseRequest->delivery_date?->toDateString(),
+                'valid_until' => $data['valid_until'] ?? null,
+            ]);
+
+            $this->attachSupportingDocument($request, $purchaseOrder);
+
+            return $purchaseOrder;
+        });
 
         return redirect()
             ->route('procurement.purchase-orders.show', $purchaseOrder)
@@ -333,12 +343,50 @@ class ProcurementPurchaseOrderController extends Controller
         return $pdf->download('purchase-order-' . ($purchaseOrder->reference_no ?? 'draft') . '.pdf');
     }
 
+    public function downloadSupportingDocument(Request $request, ProcurementPurchaseOrder $purchaseOrder)
+    {
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        $path = (string) ($purchaseOrder->supporting_document_path ?? '');
+        abort_if($path === '', 404, 'Supporting document not found.');
+
+        $privateDisk = Storage::disk('local');
+
+        if (! $privateDisk->exists($path) && Storage::disk('public')->exists($path)) {
+            $stream = Storage::disk('public')->readStream($path);
+            if ($stream !== false) {
+                $privateDisk->writeStream($path, $stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+                Storage::disk('public')->delete($path);
+            }
+        }
+
+        abort_unless($privateDisk->exists($path), 404, 'Supporting document file missing on disk.');
+
+        $headers = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        $fileName = $purchaseOrder->supporting_document_name ?: basename($path);
+
+        if ($request->boolean('download')) {
+            return $privateDisk->download($path, $fileName, $headers);
+        }
+
+        return $privateDisk->response($path, $fileName, $headers);
+    }
+
     public function destroy(ProcurementPurchaseOrder $purchaseOrder)
     {
         $this->assertPurchaseOrderInScope($purchaseOrder);
 
         DB::transaction(function () use ($purchaseOrder) {
             $purchaseOrder->disbursements()->update(['purchase_order_id' => null]);
+            $this->deleteSupportingDocument($purchaseOrder);
             $purchaseOrder->delete();
         });
 
@@ -588,5 +636,39 @@ class ProcurementPurchaseOrderController extends Controller
             'search_text' => $searchText,
             'label' => trim(($purchaseRequest->reference_no ?? 'Purchase Request') . ' | ' . $program . ' | ' . $currency . ' ' . number_format($remainingAmount, 2)),
         ];
+    }
+
+    private function attachSupportingDocument(Request $request, ProcurementPurchaseOrder $purchaseOrder): void
+    {
+        if (! $request->hasFile('supporting_document')) {
+            return;
+        }
+
+        $file = $request->file('supporting_document');
+        $path = $file->store("procurement_purchase_orders/{$purchaseOrder->id}/supporting-documents");
+
+        $purchaseOrder->update([
+            'supporting_document_path' => $path,
+            'supporting_document_name' => $file->getClientOriginalName(),
+            'supporting_document_mime_type' => $file->getClientMimeType(),
+            'supporting_document_size' => $file->getSize(),
+        ]);
+    }
+
+    private function deleteSupportingDocument(ProcurementPurchaseOrder $purchaseOrder): void
+    {
+        $path = (string) ($purchaseOrder->supporting_document_path ?? '');
+        if ($path === '') {
+            return;
+        }
+
+        if (Storage::disk('local')->exists($path)) {
+            Storage::disk('local')->delete($path);
+            return;
+        }
+
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
     }
 }

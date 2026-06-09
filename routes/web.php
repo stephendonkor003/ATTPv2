@@ -1684,6 +1684,8 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
         Route::delete('{purchaseOrder}', [ProcurementPurchaseOrderController::class, 'destroy'])
             ->middleware('permission:finance.purchase_orders.delete')
             ->name('destroy.legacy');
+        Route::get('{purchaseOrder}/supporting-document', [ProcurementPurchaseOrderController::class, 'downloadSupportingDocument'])
+            ->name('supporting-document');
         Route::get('{purchaseOrder}', [ProcurementPurchaseOrderController::class, 'show'])
             ->name('show');
         Route::get('{purchaseOrder}/pdf', [ProcurementPurchaseOrderController::class, 'pdf'])
