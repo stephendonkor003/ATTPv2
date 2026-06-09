@@ -57,6 +57,16 @@
 
                     <tbody>
                         @foreach ($purchaseRequests as $pr)
+                            @php
+                                $commitmentStatuses = $pr->commitments->pluck('status');
+                                $canEditThisPurchaseRequest = $canEditPurchaseRequests
+                                    && ($pr->status ?? 'draft') === 'draft'
+                                    && $commitmentStatuses->isNotEmpty()
+                                    && $commitmentStatuses->every(fn ($status) => $status === 'draft');
+                                $canDeleteThisPurchaseRequest = $canDeletePurchaseRequests
+                                    && ($pr->status ?? 'draft') !== 'approved'
+                                    && ! $commitmentStatuses->contains('approved');
+                            @endphp
                             <tr>
                                 <td>{{ $loop->iteration }}</td>
                                 <td class="fw-semibold">{{ $pr->reference_no }}</td>
@@ -91,6 +101,27 @@
                                         title="Download PDF">
                                         <i class="feather-download"></i>
                                     </a>
+
+                                    @if ($canEditThisPurchaseRequest)
+                                        <a href="{{ route('finance.purchase-requests.edit', $pr) }}"
+                                            class="btn btn-sm btn-outline-warning"
+                                            title="Edit Draft Purchase Request">
+                                            <i class="feather-edit-2"></i>
+                                        </a>
+                                    @endif
+
+                                    @if ($canDeleteThisPurchaseRequest)
+                                        <form method="POST"
+                                            action="{{ route('finance.purchase-requests.destroy', $pr) }}"
+                                            class="d-inline"
+                                            onsubmit="return confirm('Delete this purchase request and release its linked budget commitments?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Purchase Request">
+                                                <i class="feather-trash-2"></i>
+                                            </button>
+                                        </form>
+                                    @endif
 
                                     @if ($canApprovePurchaseRequests && in_array($pr->status, $decidableStatuses, true))
                                         <form method="POST" action="{{ route('finance.purchase-requests.approve', $pr) }}" class="d-inline">

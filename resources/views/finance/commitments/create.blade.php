@@ -12,9 +12,9 @@
 
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="page-header">
-            <h4 class="fw-bold">{{ $isEdit ? 'Edit Budget Commitment' : 'Create Budget Commitment' }}</h4>
+            <h4 class="fw-bold">{{ $isEdit ? 'Edit Purchase Request' : 'Create Budget Commitment' }}</h4>
             <p class="text-muted mb-0">
-                {{ $isEdit ? 'Update draft commitment details' : 'Commit approved allocations to specific resources' }}
+                {{ $isEdit ? 'Update draft purchase request details and yearly budget split' : 'Commit approved allocations to specific resources' }}
             </p>
         </div>
 
@@ -195,8 +195,8 @@
 	            {{-- ===================== PURCHASE REQUEST ITEMS ===================== --}}
 	            <div class="card shadow-sm mb-4 d-none" id="resourceSection">
 	                <div class="card-body">
-	                    <h6 class="fw-bold text-success mb-3">
-	                        Purchase Request (Auto-created)
+	                <h6 class="fw-bold text-success mb-3">
+	                        {{ $isEdit ? 'Purchase Request Details' : 'Purchase Request (Auto-created)' }}
 	                    </h6>
 	
 	                    <div class="row g-3">
@@ -266,7 +266,7 @@
             <div class="text-end">
                 <button class="btn btn-primary px-4" id="saveCommitmentBtn" type="submit">
                     <i class="feather-save me-1"></i>
-                    {{ $isEdit ? 'Update Commitment' : 'Save Commitment' }}
+                    {{ $isEdit ? 'Update Purchase Request' : 'Save Commitment' }}
                 </button>
             </div>
 

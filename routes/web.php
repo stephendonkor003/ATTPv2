@@ -967,6 +967,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	            ->middleware('permission:finance.purchase_requests.view')
 	            ->name('purchase-requests.download');
 
+	        Route::get('purchase-requests/{purchaseRequest}/edit', [PurchaseRequestController::class, 'edit'])
+	            ->middleware('permission:finance.commitments.edit')
+	            ->name('purchase-requests.edit');
+
 	        Route::post('purchase-requests/{purchaseRequest}/send', [PurchaseRequestController::class, 'send'])
 	            ->middleware('permission:finance.purchase_requests.send')
 	            ->name('purchase-requests.send');
@@ -978,6 +982,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	        Route::post('purchase-requests/{purchaseRequest}/reject', [PurchaseRequestController::class, 'reject'])
 	            ->middleware('permission:finance.purchase_requests.approve')
 	            ->name('purchase-requests.reject');
+
+	        Route::delete('purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'destroy'])
+	            ->middleware('permission:finance.commitments.delete')
+	            ->name('purchase-requests.destroy');
 
 
 

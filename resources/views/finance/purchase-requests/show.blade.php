@@ -12,6 +12,14 @@
         $decidableStatuses = ['draft', 'submitted'];
         $purchaseRequestStatus = $purchaseRequest->status ?? 'draft';
         $canDecidePurchaseRequest = $canApprovePurchaseRequests && in_array($purchaseRequestStatus, $decidableStatuses, true);
+        $commitmentStatuses = $purchaseRequest->commitments->pluck('status');
+        $canEditThisPurchaseRequest = $canEditPurchaseRequests
+            && $purchaseRequestStatus === 'draft'
+            && $commitmentStatuses->isNotEmpty()
+            && $commitmentStatuses->every(fn ($status) => $status === 'draft');
+        $canDeleteThisPurchaseRequest = $canDeletePurchaseRequests
+            && $purchaseRequestStatus !== 'approved'
+            && ! $commitmentStatuses->contains('approved');
     @endphp
 
     <div class="nxl-container">
@@ -24,10 +32,26 @@
                 </p>
             </div>
 
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
                 <a href="{{ route('finance.purchase-requests.index') }}" class="btn btn-outline-secondary">
                     <i class="feather-arrow-left me-1"></i> Back
                 </a>
+                @if ($canEditThisPurchaseRequest)
+                    <a href="{{ route('finance.purchase-requests.edit', $purchaseRequest) }}" class="btn btn-outline-warning">
+                        <i class="feather-edit-2 me-1"></i> Edit Draft
+                    </a>
+                @endif
+                @if ($canDeleteThisPurchaseRequest)
+                    <form method="POST"
+                        action="{{ route('finance.purchase-requests.destroy', $purchaseRequest) }}"
+                        onsubmit="return confirm('Delete this purchase request and release its linked budget commitments?');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="feather-trash-2 me-1"></i> Delete
+                        </button>
+                    </form>
+                @endif
                 <a href="{{ route('finance.purchase-requests.pdf', $purchaseRequest) }}" class="btn btn-outline-primary" target="_blank">
                     <i class="feather-file-text me-1"></i> View PDF
                 </a>

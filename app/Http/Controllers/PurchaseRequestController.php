@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Mail\PurchaseRequestMail;
 use App\Models\BudgetCommitment;
+use App\Models\ProcurementPurchaseOrder;
 use App\Models\PurchaseRequest;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class PurchaseRequestController extends Controller
             'programFunding.program',
             'governanceNode',
             'subActivity',
+            'commitments',
         ])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
@@ -35,11 +37,15 @@ class PurchaseRequestController extends Controller
             ->get();
 
         $canApprovePurchaseRequests = Auth::user()?->can('finance.purchase_requests.approve') === true;
+        $canEditPurchaseRequests = Auth::user()?->can('finance.commitments.edit') === true;
+        $canDeletePurchaseRequests = Auth::user()?->can('finance.commitments.delete') === true;
 
         return view('finance.purchase-requests.index', compact(
             'purchaseRequests',
             'canViewAll',
-            'canApprovePurchaseRequests'
+            'canApprovePurchaseRequests',
+            'canEditPurchaseRequests',
+            'canDeletePurchaseRequests'
         ));
     }
 
@@ -65,11 +71,15 @@ class PurchaseRequestController extends Controller
             ->sortKeys();
 
         $canApprovePurchaseRequests = Auth::user()?->can('finance.purchase_requests.approve') === true;
+        $canEditPurchaseRequests = Auth::user()?->can('finance.commitments.edit') === true;
+        $canDeletePurchaseRequests = Auth::user()?->can('finance.commitments.delete') === true;
 
         return view('finance.purchase-requests.show', compact(
             'purchaseRequest',
             'yearSplits',
-            'canApprovePurchaseRequests'
+            'canApprovePurchaseRequests',
+            'canEditPurchaseRequests',
+            'canDeletePurchaseRequests'
         ));
     }
 
@@ -140,6 +150,76 @@ class PurchaseRequestController extends Controller
         }
 
         return back()->with('success', 'Purchase request sent successfully.');
+    }
+
+    public function edit(PurchaseRequest $purchaseRequest)
+    {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+
+        if (!$this->purchaseRequestIsFullyDraft($purchaseRequest)) {
+            return back()->withErrors([
+                'status' => 'Only purchase requests with draft commitments can be edited.',
+            ]);
+        }
+
+        $commitment = $purchaseRequest->commitments()
+            ->where('status', BudgetCommitment::STATUS_DRAFT)
+            ->orderBy('commitment_year')
+            ->first();
+
+        if (!$commitment) {
+            return back()->withErrors([
+                'status' => 'This purchase request has no editable draft commitment.',
+            ]);
+        }
+
+        return redirect()->route('finance.commitments.edit', $commitment);
+    }
+
+    public function destroy(PurchaseRequest $purchaseRequest)
+    {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+
+        $purchaseRequest->load('commitments');
+
+        if ($purchaseRequest->status === 'approved') {
+            return back()->withErrors([
+                'status' => 'Approved purchase requests cannot be deleted because they may already be used for procurement.',
+            ]);
+        }
+
+        if ($purchaseRequest->commitments->contains('status', BudgetCommitment::STATUS_APPROVED)) {
+            return back()->withErrors([
+                'status' => 'This purchase request has approved commitments and cannot be deleted.',
+            ]);
+        }
+
+        $commitmentIds = $purchaseRequest->commitments->pluck('id')->filter()->values();
+        $hasPurchaseOrders = ProcurementPurchaseOrder::query()
+            ->where(function ($query) use ($purchaseRequest, $commitmentIds) {
+                $query->where('purchase_request_id', $purchaseRequest->id);
+
+                if ($commitmentIds->isNotEmpty()) {
+                    $query->orWhereIn('budget_commitment_id', $commitmentIds);
+                }
+            })
+            ->exists();
+
+        if ($hasPurchaseOrders) {
+            return back()->withErrors([
+                'status' => 'This purchase request is already linked to a purchase order and cannot be deleted.',
+            ]);
+        }
+
+        DB::transaction(function () use ($purchaseRequest) {
+            $purchaseRequest->commitments()->delete();
+            $purchaseRequest->items()->delete();
+            $purchaseRequest->delete();
+        });
+
+        return redirect()
+            ->route('finance.purchase-requests.index')
+            ->with('success', 'Purchase request deleted. Linked commitments were removed and the budget has been released.');
     }
 
     public function approve(PurchaseRequest $purchaseRequest)
@@ -287,5 +367,17 @@ class PurchaseRequestController extends Controller
         if (!$purchaseRequest->governance_node_id || !in_array($purchaseRequest->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this purchase request.');
         }
+    }
+
+    private function purchaseRequestIsFullyDraft(PurchaseRequest $purchaseRequest): bool
+    {
+        if (($purchaseRequest->status ?? 'draft') !== 'draft') {
+            return false;
+        }
+
+        $statuses = $purchaseRequest->commitments()->pluck('status');
+
+        return $statuses->isNotEmpty()
+            && $statuses->every(fn ($status) => $status === BudgetCommitment::STATUS_DRAFT);
     }
 }
