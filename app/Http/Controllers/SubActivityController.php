@@ -8,6 +8,8 @@ use App\Models\SubActivityAllocation;
 use App\Models\Program;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class SubActivityController extends Controller
 {
@@ -119,21 +121,124 @@ public function create(Activity $activity)
 
     public function editAllocations($id)
 {
-    $sub = SubActivity::with('allocations', 'activity.project.program')->findOrFail($id);
+    $sub = SubActivity::with([
+        'allocations',
+        'activity.allocations',
+        'activity.subActivities.allocations',
+        'activity.project.program',
+    ])->findOrFail($id);
     $this->assertSubActivityInScope($sub);
     return view('subactivities.edit_allocations', compact('sub'));
 }
 
 public function updateAllocations(Request $request, $id)
 {
-    $sub = SubActivity::with('activity.project')->findOrFail($id);
+    $sub = SubActivity::with([
+        'allocations',
+        'activity.allocations',
+        'activity.subActivities.allocations',
+        'activity.project',
+    ])->findOrFail($id);
     $this->assertSubActivityInScope($sub);
 
-    foreach ($request->allocations as $allocId => $amount) {
-        SubActivityAllocation::where('id', $allocId)->update(['amount' => $amount ?? 0]);
+    $validator = Validator::make($request->all(), [
+        'allocations' => 'required|array|min:1',
+        'allocations.*' => 'required|numeric|min:0',
+    ], [
+        'allocations.required' => 'No allocation rows were submitted. Please enter the yearly amounts and try again.',
+        'allocations.array' => 'The allocation data was not submitted in the expected format.',
+        'allocations.min' => 'Please provide at least one yearly allocation.',
+        'allocations.*.required' => 'Every year needs an allocation amount. Use 0 where there is no budget.',
+        'allocations.*.numeric' => 'Allocation amounts must be valid numbers.',
+        'allocations.*.min' => 'Allocation amounts cannot be negative.',
+    ]);
+
+    if ($validator->fails()) {
+        return back()
+            ->withErrors($validator)
+            ->withInput()
+            ->with('error', 'Sub-activity allocations were not saved. Please fix the highlighted allocation amounts.');
     }
 
-    return back()->with('success', 'Sub-Activity allocations updated successfully.');
+    $allocations = $this->normalizeAllocations((array) $request->input('allocations', []));
+    $activityYears = collect($sub->activity?->years() ?? [])->map(fn ($year) => (int) $year)->all();
+
+    if (empty($activityYears)) {
+        return back()
+            ->withInput()
+            ->with('error', 'Sub-activity allocations were not saved because the parent activity has no project years configured.');
+    }
+
+    $unexpectedYears = array_diff(array_keys($allocations), $activityYears);
+    if (!empty($unexpectedYears)) {
+        return back()
+            ->withInput()
+            ->with('error', 'Sub-activity allocations were not saved because these years do not belong to the parent activity: ' . implode(', ', $unexpectedYears) . '.');
+    }
+
+    foreach ($activityYears as $year) {
+        $allocations[$year] = $allocations[$year] ?? 0.0;
+    }
+
+    ksort($allocations);
+
+    $activityTotal = round((float) $sub->activity->allocations->sum('amount'), 2);
+    $otherSubActivitiesTotal = round((float) $sub->activity->subActivities
+        ->where('id', '!=', $sub->id)
+        ->sum(fn ($otherSubActivity) => $otherSubActivity->allocations->sum('amount')), 2);
+    $newSubActivityTotal = round(array_sum($allocations), 2);
+    $combinedTotal = round($otherSubActivitiesTotal + $newSubActivityTotal, 2);
+
+    if ($combinedTotal > $activityTotal) {
+        return back()
+            ->withInput()
+            ->with('error', 'Sub-activity allocations were not saved because the combined sub-activity total (' . number_format($combinedTotal, 2) . ') exceeds the parent activity budget (' . number_format($activityTotal, 2) . '). Reduce this sub-activity by at least ' . number_format($combinedTotal - $activityTotal, 2) . '.');
+    }
+
+    $activityAllocationsByYear = $sub->activity->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
+    foreach ($allocations as $year => $amount) {
+        $activityYearBudget = round((float) optional($activityAllocationsByYear->get($year))->amount, 2);
+        $otherSubActivitiesYearTotal = round((float) $sub->activity->subActivities
+            ->where('id', '!=', $sub->id)
+            ->sum(function ($otherSubActivity) use ($year) {
+                return $otherSubActivity->allocations
+                    ->where('year', $year)
+                    ->sum('amount');
+            }), 2);
+        $combinedYearTotal = round($otherSubActivitiesYearTotal + (float) $amount, 2);
+
+        if ($combinedYearTotal > $activityYearBudget) {
+            return back()
+                ->withInput()
+                ->with('error', 'Sub-activity allocations were not saved because year ' . $year . ' would exceed the parent activity budget. The parent activity has ' . number_format($activityYearBudget, 2) . ' for that year, while sub-activities would total ' . number_format($combinedYearTotal, 2) . '.');
+        }
+    }
+
+    try {
+        DB::transaction(function () use ($sub, $allocations) {
+            SubActivityAllocation::where('sub_activity_id', $sub->id)
+                ->whereNotIn('year', array_keys($allocations))
+                ->delete();
+
+            foreach ($allocations as $year => $amount) {
+                SubActivityAllocation::updateOrCreate(
+                    [
+                        'sub_activity_id' => $sub->id,
+                        'year' => $year,
+                    ],
+                    [
+                        'amount' => $amount,
+                    ]
+                );
+            }
+        });
+    } catch (\Throwable $e) {
+        return back()
+            ->withInput()
+            ->with('error', 'Sub-activity allocations were not saved because the database update failed: ' . $e->getMessage());
+    }
+
+    return back()->with('success', 'Sub-activity allocations updated successfully.');
 }
 
 public function destroy($id)
@@ -153,7 +258,7 @@ public function destroy($id)
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin()) {
+        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
             return null;
         }
 
@@ -188,6 +293,17 @@ public function destroy($id)
         if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this sub-activity.');
         }
+    }
+
+    private function normalizeAllocations(array $allocations): array
+    {
+        $normalized = [];
+
+        foreach ($allocations as $year => $amount) {
+            $normalized[(int) $year] = round((float) $amount, 2);
+        }
+
+        return $normalized;
     }
 
 

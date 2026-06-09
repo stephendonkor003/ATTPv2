@@ -48,7 +48,7 @@ class SectorController extends Controller
             'governance_node_id' => 'required|exists:myb_governance_nodes,id',
         ]);
 
-        $this->assertNodeInScope((int) $request->governance_node_id);
+        $this->assertNodeInScope($request->governance_node_id);
 
         Sector::create([
             'name' => $request->name,
@@ -76,7 +76,7 @@ class SectorController extends Controller
             'governance_node_id' => 'required|exists:myb_governance_nodes,id',
         ]);
 
-        $this->assertNodeInScope((int) $request->governance_node_id);
+        $this->assertNodeInScope($request->governance_node_id);
 
         $sector->update([
             'name' => $request->name,
@@ -138,7 +138,7 @@ class SectorController extends Controller
         }
     }
 
-    private function assertNodeInScope(int $nodeId): void
+    private function assertNodeInScope(string $nodeId): void
     {
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {

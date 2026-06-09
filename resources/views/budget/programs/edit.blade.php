@@ -50,13 +50,45 @@
                         @csrf
                         @method('PUT')
 
+                        @php
+                            $currentUser = auth()->user();
+                            $currentNodeId = optional($currentUser)->governance_node_id;
+                            $canChooseGovernanceNode = (bool) ($currentUser?->isAdmin() || $currentUser?->isSuperAdmin());
+                            $selectedGovernanceNodeId = old(
+                                'governance_node_id',
+                                $program->governance_node_id ?: ($canChooseGovernanceNode ? null : $currentNodeId)
+                            );
+                            $selectedSectorId = old('sector_id', $program->sector_id);
+                        @endphp
+
                         <div class="row g-4">
                             <div class="col-md-6">
+                                <label class="form-label fw-semibold">Governance Node <span class="text-danger">*</span></label>
+                                <select name="governance_node_id" id="governanceNodeSelect" class="form-select" required
+                                    @disabled(! $canChooseGovernanceNode)>
+                                    <option value="">-- Select Governance Node --</option>
+                                    @foreach ($nodes as $node)
+                                        <option value="{{ $node->id }}" @selected($selectedGovernanceNodeId == $node->id)>
+                                            {{ $node->name }} ({{ $node->level->name ?? 'Level' }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @unless($canChooseGovernanceNode)
+                                    <input type="hidden" name="governance_node_id" value="{{ $selectedGovernanceNodeId }}">
+                                @endunless
+                                @error('governance_node_id')
+                                    <small class="text-danger">{{ $message }}</small>
+                                @enderror
+                            </div>
+
+                            <div class="col-md-6">
                                 <label class="form-label fw-semibold">Sector <span class="text-danger">*</span></label>
-                                <select name="sector_id" class="form-select" required>
+                                <select name="sector_id" id="sectorSelect" class="form-select" required>
+                                    <option value="">-- Select Sector --</option>
                                     @foreach ($sectors as $sector)
                                         <option value="{{ $sector->id }}"
-                                            {{ $program->sector_id == $sector->id ? 'selected' : '' }}>
+                                            data-governance-node-id="{{ $sector->governance_node_id }}"
+                                            @selected($selectedSectorId == $sector->id)>
                                             {{ $sector->name }}
                                         </option>
                                     @endforeach
@@ -180,6 +212,35 @@
             const startYear = document.getElementById('startYear');
             const endYear = document.getElementById('endYear');
             const totalBudget = document.getElementById('totalBudget');
+            const governanceNodeSelect = document.getElementById('governanceNodeSelect');
+            const sectorSelect = document.getElementById('sectorSelect');
+
+            function filterSectorsByGovernance() {
+                if (!governanceNodeSelect || !sectorSelect) return;
+
+                const governanceNodeId = governanceNodeSelect.value || '';
+
+                Array.from(sectorSelect.options).forEach(option => {
+                    if (!option.value) {
+                        option.hidden = false;
+                        option.disabled = false;
+                        return;
+                    }
+
+                    const sectorNodeId = option.dataset.governanceNodeId || '';
+                    const canUseSector = !governanceNodeId || sectorNodeId === governanceNodeId;
+
+                    option.hidden = !canUseSector;
+                    option.disabled = !canUseSector;
+                });
+
+                const selectedOption = sectorSelect.options[sectorSelect.selectedIndex];
+                if (selectedOption && selectedOption.value && selectedOption.disabled) {
+                    sectorSelect.value = '';
+                }
+            }
+
+            governanceNodeSelect?.addEventListener('change', filterSectorsByGovernance);
 
             function updateCurrency(value) {
                 if (!value) return;
@@ -222,6 +283,7 @@
             totalBudget.value = '{{ $program->total_budget }}';
             startYear.value = '{{ $program->start_year }}';
             endYear.value = '{{ $program->end_year }}';
+            filterSectorsByGovernance();
         });
     </script>
 @endsection

@@ -17,6 +17,34 @@
                 @if (session('success'))
                     <div class="alert alert-success">{{ session('success') }}</div>
                 @endif
+                @if (session('error'))
+                    <div class="alert alert-danger">{{ session('error') }}</div>
+                @endif
+                @if ($errors->any())
+                    <div class="alert alert-danger">
+                        <ul class="mb-0">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                @php
+                    $allocationsByYear = $sub->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
+                    $activityAllocationsByYear = $sub->activity->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
+                    $otherSubActivityTotalsByYear = $sub->activity->subActivities
+                        ->where('id', '!=', $sub->id)
+                        ->flatMap(fn ($otherSubActivity) => $otherSubActivity->allocations)
+                        ->groupBy(fn ($allocation) => (int) $allocation->year)
+                        ->map(fn ($allocations) => (float) $allocations->sum('amount'));
+                    $currency = $sub->activity->project->currency ?? $sub->activity->project->program->currency ?? 'USD';
+                @endphp
+
+                <div class="alert alert-info">
+                    Update the yearly amounts for this sub-activity. The totals cannot exceed the parent activity
+                    allocation for each year.
+                </div>
 
                 <form action="{{ route('budget.subactivities.allocations.update', $sub->id) }}" method="POST">
                     @csrf
@@ -25,22 +53,43 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Year</th>
-                                <th>Allocation ({{ $sub->activity->project->program->currency }})</th>
+                                <th>Allocation ({{ $currency }})</th>
                             </tr>
                         </thead>
 
                         <tbody>
-                            @foreach ($sub->allocations as $alloc)
+                            @foreach ($sub->activity->years() as $year)
+                                @php
+                                    $year = (int) $year;
+                                    $allocation = $allocationsByYear->get($year);
+                                    $activityYearBudget = (float) optional($activityAllocationsByYear->get($year))->amount;
+                                    $otherSubActivityYearTotal = (float) ($otherSubActivityTotalsByYear[$year] ?? 0);
+                                    $availableForThisSubActivity = max($activityYearBudget - $otherSubActivityYearTotal, 0);
+                                    $currentAmount = old('allocations.' . $year, optional($allocation)->amount ?? 0);
+                                @endphp
                                 <tr>
-                                    <td>{{ $alloc->year }}</td>
                                     <td>
-                                        <input type="number" step="0.01" name="allocations[{{ $alloc->id }}]"
-                                            value="{{ $alloc->amount }}" class="form-control text-end">
+                                        <div class="fw-semibold">{{ $year }}</div>
+                                        <small class="text-muted">
+                                            Available: {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" min="0"
+                                            name="allocations[{{ $year }}]"
+                                            value="{{ $currentAmount }}"
+                                            class="form-control text-end allocation-input"
+                                            data-available="{{ $availableForThisSubActivity }}">
                                     </td>
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
+
+                    <div class="text-end">
+                        <span class="text-muted">This sub-activity total:</span>
+                        <strong id="allocationTotal">0.00</strong> {{ $currency }}
+                    </div>
 
                     <button class="btn btn-primary mt-3">Save Changes</button>
                 </form>
@@ -50,4 +99,25 @@
         </div>
 
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputs = Array.from(document.querySelectorAll('.allocation-input'));
+            const total = document.getElementById('allocationTotal');
+
+            function updateTotal() {
+                const sum = inputs.reduce((carry, input) => carry + (parseFloat(input.value) || 0), 0);
+                total.textContent = sum.toFixed(2);
+
+                inputs.forEach(input => {
+                    const available = parseFloat(input.dataset.available) || 0;
+                    const amount = parseFloat(input.value) || 0;
+                    input.classList.toggle('is-invalid', amount > available);
+                });
+            }
+
+            inputs.forEach(input => input.addEventListener('input', updateTotal));
+            updateTotal();
+        });
+    </script>
 @endsection

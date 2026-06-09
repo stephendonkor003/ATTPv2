@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Sector;
 use App\Models\Program;
 use App\Models\ProgramFunding;
+use App\Models\GovernanceNode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -92,7 +93,7 @@ class ProgramController extends Controller
         DB::beginTransaction();
 
         try {
-            $this->assertSectorInScope((int) $validated['sector_id']);
+            $this->assertSectorInScope($validated['sector_id']);
             $this->assertProgramNameAllowed($validated['program_name']);
 
             $fundingMap = $this->approvedProgramFundingMap();
@@ -179,12 +180,14 @@ class ProgramController extends Controller
     {
         $this->assertProgramInScope($program);
         $sectors = $this->availableSectors();
+        $nodes = $this->availableNodes();
         $approvedPrograms = $this->approvedProgramNames($program->name);
         $approvedProgramFunding = $this->approvedProgramFundingMap($program->name, $program);
 
         return view('budget.programs.edit', compact(
             'program',
             'sectors',
+            'nodes',
             'approvedPrograms',
             'approvedProgramFunding'
         ));
@@ -206,9 +209,12 @@ class ProgramController extends Controller
             'start_year'  => 'required|integer|min:1900|max:2100',
             'end_year'    => 'required|integer|min:1900|max:2100|gte:start_year',
             'description' => 'nullable|string',
+            'governance_node_id' => 'required|exists:myb_governance_nodes,id',
         ]);
 
-        $this->assertSectorInScope((int) $validated['sector_id']);
+        $this->assertNodeInScope($validated['governance_node_id']);
+        $this->assertSectorInScope($validated['sector_id']);
+        $this->assertSectorBelongsToNode($validated['sector_id'], $validated['governance_node_id']);
         $this->assertProgramNameAllowedForUpdate($validated['program_name'], $program);
 
         $fundingMap = $this->approvedProgramFundingMap();
@@ -251,6 +257,7 @@ class ProgramController extends Controller
             'expected_outcome_value' => $expectedOutcomeValue,
             'total_years' => $validated['total_years'],
             'updated_by' => $validated['updated_by'],
+            'governance_node_id' => $validated['governance_node_id'],
         ]);
 
         return redirect()
@@ -298,7 +305,7 @@ class ProgramController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin()) {
+        if (!$currentUser || $this->hasGlobalGovernanceScope()) {
             return null;
         }
 
@@ -319,6 +326,25 @@ class ProgramController extends Controller
                     ->whereNotNull('governance_node_id');
             })
             ->get();
+    }
+
+    private function availableNodes()
+    {
+        $scopedNodeIds = $this->scopedNodeIds();
+
+        return GovernanceNode::with('level')
+            ->orderBy('name')
+            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('id', $scopedNodeIds);
+            })
+            ->get();
+    }
+
+    private function hasGlobalGovernanceScope(): bool
+    {
+        $currentUser = Auth::user();
+
+        return (bool) ($currentUser && ($currentUser->isAdmin() || $currentUser->isSuperAdmin()));
     }
 
     private function approvedProgramNames(?string $includeName = null)
@@ -407,7 +433,7 @@ class ProgramController extends Controller
         }
     }
 
-    private function assertSectorInScope(int $sectorId): void
+    private function assertSectorInScope(string $sectorId): void
     {
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
@@ -417,6 +443,27 @@ class ProgramController extends Controller
         $sector = Sector::find($sectorId);
         if (!$sector || !$sector->governance_node_id || !in_array($sector->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this sector.');
+        }
+    }
+
+    private function assertNodeInScope(string $nodeId): void
+    {
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds === null) {
+            return;
+        }
+
+        if (!in_array($nodeId, $scopedNodeIds, true)) {
+            abort(403, 'You do not have access to assign this governance node.');
+        }
+    }
+
+    private function assertSectorBelongsToNode(string $sectorId, string $nodeId): void
+    {
+        $sector = Sector::find($sectorId);
+
+        if (!$sector || (string) $sector->governance_node_id !== (string) $nodeId) {
+            abort(422, 'Selected sector does not belong to the selected governance node.');
         }
     }
 }
