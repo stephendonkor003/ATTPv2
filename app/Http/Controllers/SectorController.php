@@ -103,7 +103,7 @@ class SectorController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin()) {
+        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
             return null;
         }
 
@@ -118,7 +118,8 @@ class SectorController extends Controller
     {
         $scopedNodeIds = $this->scopedNodeIds();
 
-        return GovernanceNode::orderBy('name')
+        return GovernanceNode::with('level')
+            ->orderBy('name')
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('id', $scopedNodeIds);
             })

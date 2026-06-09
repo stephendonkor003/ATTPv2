@@ -30,7 +30,9 @@
                     @method('PUT')
 
                     @php
-                        $currentNodeId = optional(auth()->user())->governance_node_id;
+                        $currentUser = auth()->user();
+                        $canChooseGovernanceNode = (bool) ($currentUser?->isAdmin() || $currentUser?->isSuperAdmin());
+                        $selectedGovernanceNodeId = old('governance_node_id', $sector->governance_node_id);
                     @endphp
 
                     <div class="mb-3">
@@ -46,17 +48,18 @@
 
                     <div class="mb-3">
                         <label class="form-label">Governance Node</label>
-                        <select name="governance_node_id" class="form-select" required disabled>
+                        <select name="governance_node_id" class="form-select" required @disabled(! $canChooseGovernanceNode)>
                             <option value="">-- Select Node --</option>
                             @foreach ($nodes as $node)
                                 <option value="{{ $node->id }}"
-                                    @selected(old('governance_node_id', $currentNodeId) == $node->id)>
+                                    @selected($selectedGovernanceNodeId == $node->id)>
                                     {{ $node->name }} ({{ $node->level->name ?? 'Level' }})
                                 </option>
                             @endforeach
                         </select>
-                        <input type="hidden" name="governance_node_id"
-                            value="{{ old('governance_node_id', $currentNodeId) }}">
+                        @unless($canChooseGovernanceNode)
+                            <input type="hidden" name="governance_node_id" value="{{ $selectedGovernanceNodeId }}">
+                        @endunless
                     </div>
 
                     <button class="btn btn-primary">Update Sector</button>
