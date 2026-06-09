@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        $statusClasses = [
+            'approved' => 'bg-success',
+            'submitted' => 'bg-warning text-dark',
+            'draft' => 'bg-secondary',
+            'rejected' => 'bg-danger',
+            'cancelled' => 'bg-danger',
+        ];
+        $decidableStatuses = ['draft', 'submitted'];
+    @endphp
+
     <div class="nxl-container">
 
         <div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
@@ -64,8 +75,8 @@
                                     {{ number_format((float) $pr->total_amount, 2) }}
                                 </td>
                                 <td>
-                                    <span class="badge {{ $pr->status === 'approved' ? 'bg-success' : ($pr->status === 'submitted' ? 'bg-warning text-dark' : ($pr->status === 'cancelled' ? 'bg-danger' : 'bg-secondary')) }}">
-                                        {{ ucfirst($pr->status) }}
+                                    <span class="badge {{ $statusClasses[$pr->status] ?? 'bg-secondary' }}">
+                                        {{ ucfirst(str_replace('_', ' ', $pr->status ?? 'draft')) }}
                                     </span>
                                 </td>
                                 <td>{{ $pr->created_at?->format('Y-m-d') ?? '—' }}</td>
@@ -80,6 +91,54 @@
                                         title="Download PDF">
                                         <i class="feather-download"></i>
                                     </a>
+
+                                    @if ($canApprovePurchaseRequests && in_array($pr->status, $decidableStatuses, true))
+                                        <form method="POST" action="{{ route('finance.purchase-requests.approve', $pr) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-success" title="Approve Purchase Request">
+                                                <i class="feather-check"></i>
+                                            </button>
+                                        </form>
+
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-danger"
+                                            title="Reject Purchase Request"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#rejectPurchaseRequestModal{{ $pr->id }}">
+                                            <i class="feather-x"></i>
+                                        </button>
+
+                                        <div class="modal fade" id="rejectPurchaseRequestModal{{ $pr->id }}" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered">
+                                                <div class="modal-content text-start">
+                                                    <form method="POST" action="{{ route('finance.purchase-requests.reject', $pr) }}">
+                                                        @csrf
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title">Reject Purchase Request</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <div class="mb-0">
+                                                                <label class="form-label">Reason for rejection</label>
+                                                                <textarea name="rejection_reason"
+                                                                    class="form-control"
+                                                                    rows="4"
+                                                                    minlength="5"
+                                                                    maxlength="1000"
+                                                                    required>{{ old('rejection_reason') }}</textarea>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-danger">
+                                                                <i class="feather-x me-1"></i> Reject
+                                                            </button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach

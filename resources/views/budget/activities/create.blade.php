@@ -10,14 +10,14 @@
                     <h4 class="mb-1">Create New Activity</h4>
                     <p class="text-muted mb-0">Add an activity under <strong>{{ $project->name }}</strong>.</p>
                 </div>
-                <a href="{{ route('activities.index', $project->id) }}" class="btn btn-outline-secondary">
+                <a href="{{ route('budget.activities.index') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left-circle me-1"></i> Back to Activities
                 </a>
             </div>
 
             <div class="card shadow-sm">
                 <div class="card-body">
-                    <form action="{{ route('activities.store', $project->id) }}" method="POST">
+                    <form action="{{ route('budget.activities.store') }}" method="POST">
                         @csrf
                         <div class="row g-4">
                             <div class="col-md-6">
@@ -46,7 +46,7 @@
                         </div>
 
                         <div class="mt-4 d-flex justify-content-end gap-2">
-                            <a href="{{ route('activities.index', $project->id) }}" class="btn btn-light border">Cancel</a>
+                            <a href="{{ route('budget.activities.index') }}" class="btn btn-light border">Cancel</a>
                             <button type="submit" class="btn btn-success">
                                 <i class="bi bi-check2-circle me-1"></i> Save Activity
                             </button>

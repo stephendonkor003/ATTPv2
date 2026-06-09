@@ -11,7 +11,7 @@
                     <h4 class="mb-1">Activities under {{ $project->name }}</h4>
                     <p class="text-muted mb-0">Manage all activities associated with this project.</p>
                 </div>
-                <a href="{{ route('activities.create', $project->id) }}" class="btn btn-success">
+                <a href="{{ route('budget.activities.create', $project->id) }}" class="btn btn-success">
                     <i class="bi bi-plus-circle me-1"></i> Add Activity
                 </a>
             </div>
@@ -39,15 +39,15 @@
                                     <td>{{ number_format($activity->total_budget, 2) }}</td>
                                     <td>{{ $activity->created_at->format('d M, Y') }}</td>
                                     <td class="text-center">
-                                        <a href="{{ route('activities.show', $activity->id) }}"
+                                        <a href="{{ route('budget.activities.show', $activity->id) }}"
                                             class="btn btn-sm btn-outline-info">
                                             <i class="bi bi-eye"></i>
                                         </a>
-                                        <a href="{{ route('activities.edit', $activity->id) }}"
+                                        <a href="{{ route('budget.activities.edit', $activity->id) }}"
                                             class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-pencil"></i>
                                         </a>
-                                        <form action="{{ route('activities.destroy', $activity->id) }}" method="POST"
+                                        <form action="{{ route('budget.activities.destroy', $activity->id) }}" method="POST"
                                             class="d-inline">
                                             @csrf @method('DELETE')
                                             <button class="btn btn-sm btn-outline-danger"

@@ -11,7 +11,7 @@
                     <h4 class="mb-1">{{ $activity->name }}</h4>
                     <p class="text-muted mb-0">Detailed information and budget allocations for this activity.</p>
                 </div>
-                <a href="{{ route('activities.index', $activity->project_id) }}" class="btn btn-outline-secondary">
+                <a href="{{ route('budget.activities.index') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left-circle me-1"></i> Back to Activities
                 </a>
             </div>

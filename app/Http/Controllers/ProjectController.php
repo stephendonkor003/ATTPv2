@@ -9,6 +9,7 @@ use App\Models\Sector;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 
 class ProjectController extends Controller
 {
@@ -186,6 +187,7 @@ class ProjectController extends Controller
             'program.indicators.frequency',
             'program.indicators.unit',
             'allocations',
+            'activities.allocations',
             'indicators.level',
             'indicators.frequency',
             'indicators.unit',
@@ -200,7 +202,7 @@ class ProjectController extends Controller
      */
     public function edit($id)
     {
-        $project  = Project::with('allocations', 'program')->findOrFail($id);
+        $project  = Project::with('allocations', 'activities.allocations', 'program')->findOrFail($id);
         $this->assertProjectInScope($project);
         $programs = $this->availablePrograms();
 
@@ -280,6 +282,8 @@ public function update(Request $request, $id)
         return back()->with('error', 'Unable to determine yearly allocations for this project.')->withInput();
     }
 
+    $allocations = $this->completeProjectAllocations($project, $allocations);
+
     $allocationTotal = round(array_sum($allocations), 2);
     if ($allocationTotal - (float) $request->total_budget > 0.01) {
         return back()
@@ -287,6 +291,13 @@ public function update(Request $request, $id)
                 'total_budget' => 'Yearly allocations (' . number_format($allocationTotal, 2) . ') exceed total budget (' . number_format((float) $request->total_budget, 2) . ').'
             ])
             ->withInput();
+    }
+
+    $childAllocationError = $this->projectChildAllocationError($project, $allocations);
+    if ($childAllocationError) {
+        return back()
+            ->withInput()
+            ->with('error', $childAllocationError);
     }
 
     DB::beginTransaction();
@@ -334,28 +345,59 @@ public function update(Request $request, $id)
 
     public function updateAllocations(Request $request, $id)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'allocations' => 'required|array|min:1',
             'allocations.*' => 'required|numeric|min:0',
+        ], [
+            'allocations.required' => 'No allocation rows were submitted. Please enter the yearly project amounts and try again.',
+            'allocations.array' => 'The allocation data was not submitted in the expected format.',
+            'allocations.min' => 'Please provide at least one yearly project allocation.',
+            'allocations.*.required' => 'Every project year needs an allocation amount. Use 0 where there is no budget.',
+            'allocations.*.numeric' => 'Project allocation amounts must be valid numbers.',
+            'allocations.*.min' => 'Project allocation amounts cannot be negative.',
         ]);
 
-        $project = Project::findOrFail($id);
+        if ($validator->fails()) {
+            return back()
+                ->withErrors($validator)
+                ->withInput()
+                ->with('error', 'Project allocations were not saved. Please fix the highlighted yearly amounts.');
+        }
+
+        $project = Project::with('activities.allocations')->findOrFail($id);
         $this->assertProjectInScope($project);
+
+        $unexpectedYears = $this->unexpectedProjectAllocationYears(
+            $project,
+            (array) $request->input('allocations', [])
+        );
+        if (!empty($unexpectedYears)) {
+            return back()
+                ->withInput()
+                ->with('error', 'Project allocations were not saved because these years are outside the project duration: ' . implode(', ', $unexpectedYears) . '.');
+        }
 
         $allocations = $this->normalizeProjectAllocations(
             $project,
             (array) $request->input('allocations', [])
         );
-
-        if (empty($allocations)) {
-            return back()->with('error', 'No valid allocation years were provided.');
-        }
+        $allocations = $this->completeProjectAllocations($project, $allocations);
 
         $allocationTotal = round(array_sum($allocations), 2);
         if ($allocationTotal - (float) $project->total_budget > 0.01) {
-            return back()->withErrors([
-                'allocations' => 'Allocations total (' . number_format($allocationTotal, 2) . ') cannot exceed project budget (' . number_format((float) $project->total_budget, 2) . ').',
-            ]);
+            return back()
+                ->withErrors([
+                    'allocations' => 'Project allocations total (' . number_format($allocationTotal, 2) . ') cannot exceed project budget (' . number_format((float) $project->total_budget, 2) . ').',
+                ])
+                ->withInput()
+                ->with('error', 'Project allocations were not saved because the yearly total is above the project budget.');
+        }
+
+        $childAllocationError = $this->projectChildAllocationError($project, $allocations);
+        if ($childAllocationError) {
+            return back()
+                ->withInput()
+                ->with('error', $childAllocationError);
         }
 
         DB::beginTransaction();
@@ -366,7 +408,9 @@ public function update(Request $request, $id)
             return back()->with('success', 'Project allocations updated successfully.');
         } catch (\Throwable $e) {
             DB::rollBack();
-            return back()->with('error', 'Unable to update allocations: ' . $e->getMessage());
+            return back()
+                ->withInput()
+                ->with('error', 'Project allocations were not saved because the database update failed: ' . $e->getMessage());
         }
     }
 
@@ -516,6 +560,52 @@ public function update(Request $request, $id)
         return $allocations;
     }
 
+    private function completeProjectAllocations(Project $project, array $allocations): array
+    {
+        foreach ($project->years() as $year) {
+            $allocations[(int) $year] = $allocations[(int) $year] ?? 0.0;
+        }
+
+        ksort($allocations);
+
+        return $allocations;
+    }
+
+    private function unexpectedProjectAllocationYears(Project $project, array $rawAllocations): array
+    {
+        $projectYears = array_map('intval', $project->years());
+        $unexpectedYears = [];
+
+        foreach (array_keys($rawAllocations) as $year) {
+            if (!in_array((int) $year, $projectYears, true)) {
+                $unexpectedYears[] = (int) $year;
+            }
+        }
+
+        return $unexpectedYears;
+    }
+
+    private function projectChildAllocationError(Project $project, array $allocations): ?string
+    {
+        $project->loadMissing('activities.allocations');
+
+        foreach ($project->years() as $year) {
+            $year = (int) $year;
+            $activityTotalForYear = round((float) $project->activities->sum(function ($activity) use ($year) {
+                return $activity->allocations
+                    ->where('year', $year)
+                    ->sum('amount');
+            }), 2);
+            $projectAllocationForYear = round((float) ($allocations[$year] ?? 0), 2);
+
+            if ($activityTotalForYear > $projectAllocationForYear) {
+                return 'Project allocations were not saved because year ' . $year . ' already has activity allocations totaling ' . number_format($activityTotalForYear, 2) . ', but the project allocation would be ' . number_format($projectAllocationForYear, 2) . '. Increase the project allocation for that year or reduce the activity allocations first.';
+            }
+        }
+
+        return null;
+    }
+
     private function persistProjectAllocations(Project $project, array $allocations): void
     {
         $years = array_keys($allocations);
@@ -547,7 +637,7 @@ public function update(Request $request, $id)
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin()) {
+        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
             return null;
         }
 

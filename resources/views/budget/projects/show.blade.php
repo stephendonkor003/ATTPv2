@@ -96,20 +96,61 @@
                     <h5 class="mb-0">Yearly Budget Allocations</h5>
                 </div>
                 <div class="card-body">
+                    @if (session('success'))
+                        <div class="alert alert-success">{{ session('success') }}</div>
+                    @endif
+                    @if (session('error'))
+                        <div class="alert alert-danger">{{ session('error') }}</div>
+                    @endif
+                    @if ($errors->any())
+                        <div class="alert alert-danger">
+                            <ul class="mb-0">
+                                @foreach ($errors->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    @php
+                        $allocationsByYear = $project->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
+                        $activityTotalsByYear = $project->activities
+                            ->flatMap(fn ($activity) => $activity->allocations)
+                            ->groupBy(fn ($allocation) => (int) $allocation->year)
+                            ->map(fn ($allocations) => (float) $allocations->sum('amount'));
+                        $currency = $project->currency ?? $project->program?->currency ?? 'USD';
+                    @endphp
+
                     <form action="{{ route('budget.projects.allocations.update', $project->id) }}" method="POST">
                         @csrf
 
                         <div class="row g-3 align-items-center">
-                            @foreach ($project->allocations->sortBy('year') as $alloc)
+                            @foreach ($project->years() as $year)
+                                @php
+                                    $year = (int) $year;
+                                    $allocation = $allocationsByYear->get($year);
+                                    $activityTotal = (float) ($activityTotalsByYear[$year] ?? 0);
+                                    $currentAmount = old('allocations.' . $year, optional($allocation)->amount ?? 0);
+                                @endphp
                                 <div class="col-md-3">
-                                    <label class="form-label fw-semibold">Year {{ $alloc->year }}</label>
-                                    <input type="number" name="allocations[{{ $alloc->year }}]"
-                                        class="form-control" step="0.01" min="0" value="{{ $alloc->amount }}">
+                                    <label class="form-label fw-semibold">Year {{ $year }}</label>
+                                    <input type="number" name="allocations[{{ $year }}]"
+                                        class="form-control allocation-input" step="0.01" min="0"
+                                        value="{{ $currentAmount }}" data-child-total="{{ $activityTotal }}">
+                                    <small class="text-muted">
+                                        Activity total: {{ number_format($activityTotal, 2) }} {{ $currency }}
+                                    </small>
                                 </div>
                             @endforeach
                         </div>
 
                         <input type="hidden" name="total_budget" value="{{ $project->total_budget }}">
+
+                        <div class="text-end mt-3">
+                            <span class="text-muted">Project allocation total:</span>
+                            <strong id="allocationTotal">0.00</strong> {{ $currency }}
+                            <span class="text-muted">/ {{ number_format((float) $project->total_budget, 2) }}</span>
+                        </div>
 
                         <div class="mt-4 d-flex justify-content-end gap-2">
                             <button type="submit" class="btn btn-success">
@@ -122,6 +163,24 @@
 
         </div>
     </main>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputs = Array.from(document.querySelectorAll('.allocation-input'));
+            const total = document.getElementById('allocationTotal');
+
+            function updateTotal() {
+                const sum = inputs.reduce((carry, input) => carry + (parseFloat(input.value) || 0), 0);
+                total.textContent = sum.toFixed(2);
+
+                inputs.forEach(input => {
+                    const childTotal = parseFloat(input.dataset.childTotal) || 0;
+                    const amount = parseFloat(input.value) || 0;
+                    input.classList.toggle('is-invalid', amount < childTotal);
+                });
+            }
+
+            inputs.forEach(input => input.addEventListener('input', updateTotal));
+            updateTotal();
+        });
+    </script>
 @endsection
-
-

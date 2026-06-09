@@ -15,7 +15,7 @@
                     </p>
                 </div>
 
-                <a href="{{ route('activities.index') }}" class="btn btn-outline-secondary">
+                <a href="{{ route('budget.activities.index') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left-circle me-1"></i> Back
                 </a>
             </div>
@@ -38,7 +38,7 @@
             @endif
 
             {{-- FORM --}}
-            <form action="{{ route('activities.update', $activity->id) }}" method="POST" id="editActivityForm">
+            <form action="{{ route('budget.activities.update', $activity->id) }}" method="POST" id="editActivityForm">
                 @csrf
                 @method('PUT')
 
@@ -129,7 +129,7 @@
                                     <tr>
                                         <td class="fw-semibold">{{ $alloc->year }}</td>
                                         <td>
-                                            <input type="number" step="0.01" name="allocations[{{ $alloc->id }}]"
+                                            <input type="number" step="0.01" name="allocations[{{ $alloc->year }}]"
                                                 class="form-control alloc-input" data-year="{{ $alloc->year }}"
                                                 value="{{ $alloc->amount }}">
                                         </td>

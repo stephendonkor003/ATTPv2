@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Mail\PurchaseRequestMail;
+use App\Models\BudgetCommitment;
 use App\Models\PurchaseRequest;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -32,7 +34,13 @@ class PurchaseRequestController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
-        return view('finance.purchase-requests.index', compact('purchaseRequests', 'canViewAll'));
+        $canApprovePurchaseRequests = Auth::user()?->can('finance.purchase_requests.approve') === true;
+
+        return view('finance.purchase-requests.index', compact(
+            'purchaseRequests',
+            'canViewAll',
+            'canApprovePurchaseRequests'
+        ));
     }
 
     public function show(PurchaseRequest $purchaseRequest)
@@ -47,6 +55,8 @@ class PurchaseRequestController extends Controller
             'items.resource',
             'commitments' => fn ($query) => $query->orderBy('commitment_year'),
             'creator',
+            'approver',
+            'rejector',
         ]);
 
         $yearSplits = $purchaseRequest->commitments
@@ -54,7 +64,13 @@ class PurchaseRequestController extends Controller
             ->map(fn ($rows) => round((float) $rows->sum('commitment_amount'), 2))
             ->sortKeys();
 
-        return view('finance.purchase-requests.show', compact('purchaseRequest', 'yearSplits'));
+        $canApprovePurchaseRequests = Auth::user()?->can('finance.purchase_requests.approve') === true;
+
+        return view('finance.purchase-requests.show', compact(
+            'purchaseRequest',
+            'yearSplits',
+            'canApprovePurchaseRequests'
+        ));
     }
 
     public function pdf(PurchaseRequest $purchaseRequest)
@@ -124,6 +140,122 @@ class PurchaseRequestController extends Controller
         }
 
         return back()->with('success', 'Purchase request sent successfully.');
+    }
+
+    public function approve(PurchaseRequest $purchaseRequest)
+    {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+
+        if ($purchaseRequest->status === 'approved') {
+            return back()->with('success', 'Purchase request is already approved.');
+        }
+
+        if (!in_array($purchaseRequest->status, ['draft', 'submitted'], true)) {
+            return back()->withErrors([
+                'status' => 'Only draft or submitted purchase requests can be approved.',
+            ]);
+        }
+
+        if (!$purchaseRequest->commitments()->exists()) {
+            return back()->withErrors([
+                'status' => 'This purchase request has no linked budget commitments to approve.',
+            ]);
+        }
+
+        $cancelledCommitments = $purchaseRequest->commitments()
+            ->where('status', BudgetCommitment::STATUS_CANCELLED)
+            ->exists();
+
+        if ($cancelledCommitments) {
+            return back()->withErrors([
+                'status' => 'This purchase request has cancelled commitments and cannot be approved. Please edit or recreate the request first.',
+            ]);
+        }
+
+        DB::transaction(function () use ($purchaseRequest) {
+            $purchaseRequest->update([
+                'status' => 'approved',
+                'approved_by' => Auth::id(),
+                'approved_at' => now(),
+                'rejection_reason' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
+            ]);
+
+            $purchaseRequest->commitments()
+                ->whereIn('status', [
+                    BudgetCommitment::STATUS_DRAFT,
+                    BudgetCommitment::STATUS_SUBMITTED,
+                    BudgetCommitment::STATUS_APPROVED,
+                ])
+                ->update([
+                    'status' => BudgetCommitment::STATUS_APPROVED,
+                    'approved_by' => Auth::id(),
+                    'approved_at' => now(),
+                    'rejection_reason' => null,
+                ]);
+        });
+
+        return back()->with('success', 'Purchase request approved. Linked budget commitments are now approved.');
+    }
+
+    public function reject(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+
+        if ($purchaseRequest->status === 'approved') {
+            return back()->withErrors([
+                'status' => 'Approved purchase requests cannot be rejected. Cancel the downstream procurement documents first if this decision must be reversed.',
+            ]);
+        }
+
+        if (!in_array($purchaseRequest->status, ['draft', 'submitted'], true)) {
+            return back()->withErrors([
+                'status' => 'Only draft or submitted purchase requests can be rejected.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'rejection_reason' => 'required|string|min:5|max:1000',
+        ], [
+            'rejection_reason.required' => 'Please enter the reason this purchase request is being rejected.',
+            'rejection_reason.min' => 'The rejection reason must be at least 5 characters.',
+        ]);
+
+        $approvedCommitments = $purchaseRequest->commitments()
+            ->where('status', BudgetCommitment::STATUS_APPROVED)
+            ->exists();
+
+        if ($approvedCommitments) {
+            return back()->withErrors([
+                'status' => 'This purchase request has approved commitments and cannot be rejected from here.',
+            ]);
+        }
+
+        DB::transaction(function () use ($purchaseRequest, $validated) {
+            $purchaseRequest->update([
+                'status' => 'rejected',
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejection_reason' => $validated['rejection_reason'],
+                'rejected_by' => Auth::id(),
+                'rejected_at' => now(),
+            ]);
+
+            $purchaseRequest->commitments()
+                ->whereIn('status', [
+                    BudgetCommitment::STATUS_DRAFT,
+                    BudgetCommitment::STATUS_SUBMITTED,
+                ])
+                ->update([
+                    'status' => BudgetCommitment::STATUS_CANCELLED,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                    'rejection_reason' => $validated['rejection_reason'],
+                ]);
+        });
+
+        return back()->with('success', 'Purchase request rejected. Linked draft commitments have been cancelled and the budget has been released.');
     }
 
     private function scopedNodeIds(): ?array

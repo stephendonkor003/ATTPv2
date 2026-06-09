@@ -182,6 +182,14 @@
                     <div class="text-end fw-bold mt-3">
                         Total: {{ number_format($totalAllocation, 2) }} {{ $project->currency }}
                     </div>
+
+                    <div class="text-end mt-3">
+                        @can('activities.edit')
+                            <a href="{{ route('budget.activities.edit', $activity->id) }}" class="btn btn-primary">
+                                <i class="bi bi-sliders"></i> Edit Allocations
+                            </a>
+                        @endcan
+                    </div>
                 </div>
             </div>
 

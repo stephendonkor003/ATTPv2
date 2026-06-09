@@ -27,6 +27,15 @@
             @if (session('error'))
                 <div class="alert alert-danger">{{ session('error') }}</div>
             @endif
+            @if ($errors->any())
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
 
             {{-- FORM --}}
             <form action="{{ route('budget.activities.update', $activity->id) }}" method="POST" id="editActivityForm">
@@ -65,21 +74,24 @@
                             <span class="text-muted">({{ $activity->project->currency }})</span>
                         </h5>
 
-                        {{-- MODE SWITCH --}}
-                        <div class="d-flex align-items-center mb-3">
-                            <label class="fw-semibold me-3">Allocation Mode:</label>
+                        @php
+                            $allocationsByYear = $activity->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
+                            $projectAllocationsByYear = $activity->project->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
+                            $otherActivityTotalsByYear = $activity->project->activities
+                                ->where('id', '!=', $activity->id)
+                                ->flatMap(fn ($otherActivity) => $otherActivity->allocations)
+                                ->groupBy(fn ($allocation) => (int) $allocation->year)
+                                ->map(fn ($allocations) => (float) $allocations->sum('amount'));
+                            $subActivityTotalsByYear = $activity->subActivities
+                                ->flatMap(fn ($subActivity) => $subActivity->allocations)
+                                ->groupBy(fn ($allocation) => (int) $allocation->year)
+                                ->map(fn ($allocations) => (float) $allocations->sum('amount'));
+                            $currency = $activity->project->currency ?? 'USD';
+                        @endphp
 
-                            <select id="allocationMode" class="form-select w-auto">
-                                <option value="amount">Amount</option>
-                                <option value="percentage">Percentage (%)</option>
-                            </select>
-                        </div>
-
-                        {{-- Total Project Budget Info --}}
                         <div class="alert alert-info py-2">
-                            Project Total Budget:
-                            <strong>{{ number_format($activity->project->total_budget, 2) }}
-                                {{ $activity->project->currency }}</strong>
+                            Update the yearly amounts for this activity. The totals cannot exceed the parent project
+                            allocation, and they cannot be lower than existing sub-activity allocations.
                         </div>
 
                         {{-- ALLOCATION TABLE --}}
@@ -88,24 +100,38 @@
                                 <tr>
                                     <th>Year</th>
                                     <th>Amount</th>
-                                    <th>AI Assist</th>
                                 </tr>
                             </thead>
 
                             <tbody id="allocationTable">
-                                @foreach ($activity->allocations as $alloc)
+                                @foreach ($activity->project->years() as $year)
+                                    @php
+                                        $year = (int) $year;
+                                        $allocation = $allocationsByYear->get($year);
+                                        $projectYearBudget = (float) optional($projectAllocationsByYear->get($year))->amount;
+                                        $otherActivityYearTotal = (float) ($otherActivityTotalsByYear[$year] ?? 0);
+                                        $subActivityYearTotal = (float) ($subActivityTotalsByYear[$year] ?? 0);
+                                        $availableForThisActivity = max($projectYearBudget - $otherActivityYearTotal, 0);
+                                        $currentAmount = old('allocations.' . $year, optional($allocation)->amount ?? 0);
+                                    @endphp
                                     <tr>
-                                        <td class="fw-semibold">{{ $alloc->year }}</td>
                                         <td>
-                                            <input type="number" step="0.01" name="allocations[{{ $alloc->id }}]"
-                                                class="form-control alloc-input" data-year="{{ $alloc->year }}"
-                                                value="{{ $alloc->amount }}">
+                                            <div class="fw-semibold">{{ $year }}</div>
+                                            <small class="text-muted d-block">
+                                                Available: {{ number_format($availableForThisActivity, 2) }} {{ $currency }}
+                                            </small>
+                                            <small class="text-muted d-block">
+                                                Sub-activity total: {{ number_format($subActivityYearTotal, 2) }} {{ $currency }}
+                                            </small>
                                         </td>
-
                                         <td>
-                                            <span class="badge bg-success ai-icon d-none" id="ai-{{ $alloc->year }}">
-                                                <i class="bi bi-magic"></i> AI Adjusted
-                                            </span>
+                                            <input type="number" step="0.01" min="0"
+                                                name="allocations[{{ $year }}]"
+                                                class="form-control alloc-input"
+                                                data-year="{{ $year }}"
+                                                data-available="{{ $availableForThisActivity }}"
+                                                data-child-total="{{ $subActivityYearTotal }}"
+                                                value="{{ $currentAmount }}">
                                         </td>
                                     </tr>
                                 @endforeach
@@ -114,8 +140,8 @@
 
                         {{-- Remaining Budget --}}
                         <div id="remainingBox" class="alert alert-warning mt-2">
-                            Remaining: <strong id="remainingValue">0.00</strong>
-                            {{ $activity->project->currency }}
+                            This activity total: <strong id="activityTotalValue">0.00</strong>
+                            {{ $currency }}
                         </div>
 
                     </div>
@@ -133,57 +159,29 @@
         </div>
     </main>
 
-    {{-- SMART AI & INTERACTION SCRIPT --}}
+    {{-- Allocation interaction script --}}
     <script>
-        const projectBudget = {{ $activity->project->total_budget }};
-        const inputs = document.querySelectorAll('.alloc-input');
-        const modeSelect = document.getElementById('allocationMode');
-        const remainingValue = document.getElementById('remainingValue');
+        const inputs = Array.from(document.querySelectorAll('.alloc-input'));
+        const activityTotalValue = document.getElementById('activityTotalValue');
         const remainingBox = document.getElementById('remainingBox');
 
         function recalc() {
-            let total = 0;
+            const total = inputs.reduce((carry, input) => carry + (parseFloat(input.value) || 0), 0);
+            activityTotalValue.innerText = total.toFixed(2);
 
-            inputs.forEach(inp => {
-                let val = parseFloat(inp.value) || 0;
-                total += val;
+            let hasInvalidAmount = false;
+            inputs.forEach(input => {
+                const available = parseFloat(input.dataset.available) || 0;
+                const childTotal = parseFloat(input.dataset.childTotal) || 0;
+                const amount = parseFloat(input.value) || 0;
+                const invalid = amount > available || amount < childTotal;
+
+                input.classList.toggle('is-invalid', invalid);
+                hasInvalidAmount = hasInvalidAmount || invalid;
             });
 
-            const remaining = projectBudget - total;
-            remainingValue.innerText = remaining.toFixed(2);
-
-            remainingBox.className =
-                remaining < 0 ? "alert alert-danger mt-2" : "alert alert-success mt-2";
+            remainingBox.className = hasInvalidAmount ? 'alert alert-danger mt-2' : 'alert alert-success mt-2';
         }
-
-        // Smart Auto Adjust Mode
-        function applySmartAI() {
-            let remaining = projectBudget;
-            let editable = [...inputs];
-
-            editable.forEach(inp => {
-                let autoValue = remaining / editable.length;
-                inp.classList.add("ai-blink");
-                inp.value = autoValue.toFixed(2);
-
-                let year = inp.dataset.year;
-                document.getElementById("ai-" + year).classList.remove('d-none');
-
-                setTimeout(() => inp.classList.remove("ai-blink"), 1200);
-            });
-
-            recalc();
-        }
-
-        modeSelect.addEventListener('change', () => {
-            if (modeSelect.value === "percentage") {
-                let per = 100 / inputs.length;
-                inputs.forEach(inp => inp.value = per);
-            } else {
-                applySmartAI();
-            }
-            recalc();
-        });
 
         inputs.forEach(inp => {
             inp.addEventListener('input', recalc);
@@ -191,26 +189,5 @@
 
         recalc();
     </script>
-
-    <style>
-        .ai-blink {
-            animation: blinkGlow 1.5s ease-out 1;
-            border: 2px solid #28a745 !important;
-        }
-
-        @keyframes blinkGlow {
-            0% {
-                box-shadow: 0 0 0px #28a745;
-            }
-
-            50% {
-                box-shadow: 0 0 10px #28a745;
-            }
-
-            100% {
-                box-shadow: 0 0 0px #28a745;
-            }
-        }
-    </style>
 
 @endsection

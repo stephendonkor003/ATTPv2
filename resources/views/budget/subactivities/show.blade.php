@@ -11,7 +11,7 @@
                     <h4 class="mb-1">{{ $subActivity->name }}</h4>
                     <p class="text-muted mb-0">Detailed view and yearly allocations for this sub-activity.</p>
                 </div>
-                <a href="{{ route('subactivities.index', $subActivity->activity_id) }}" class="btn btn-outline-secondary">
+                <a href="{{ route('budget.activities.show', $subActivity->activity_id) }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left-circle me-1"></i> Back to Sub-Activities
                 </a>
             </div>

@@ -1,6 +1,19 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        $statusClasses = [
+            'approved' => 'bg-success',
+            'submitted' => 'bg-warning text-dark',
+            'draft' => 'bg-secondary',
+            'rejected' => 'bg-danger',
+            'cancelled' => 'bg-danger',
+        ];
+        $decidableStatuses = ['draft', 'submitted'];
+        $purchaseRequestStatus = $purchaseRequest->status ?? 'draft';
+        $canDecidePurchaseRequest = $canApprovePurchaseRequests && in_array($purchaseRequestStatus, $decidableStatuses, true);
+    @endphp
+
     <div class="nxl-container">
 
         <div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
@@ -75,8 +88,8 @@
                             <tr>
                                 <th>Status</th>
                                 <td>
-                                    <span class="badge {{ $purchaseRequest->status === 'approved' ? 'bg-success' : ($purchaseRequest->status === 'submitted' ? 'bg-warning text-dark' : ($purchaseRequest->status === 'cancelled' ? 'bg-danger' : 'bg-secondary')) }}">
-                                        {{ ucfirst($purchaseRequest->status) }}
+                                    <span class="badge {{ $statusClasses[$purchaseRequestStatus] ?? 'bg-secondary' }}">
+                                        {{ ucfirst(str_replace('_', ' ', $purchaseRequestStatus)) }}
                                     </span>
                                 </td>
                             </tr>
@@ -94,6 +107,13 @@
                             <div class="mt-3">
                                 <div class="fw-semibold mb-1">Description</div>
                                 <div class="text-muted">{{ $purchaseRequest->description }}</div>
+                            </div>
+                        @endif
+
+                        @if ($purchaseRequestStatus === 'rejected' && !empty($purchaseRequest->rejection_reason))
+                            <div class="alert alert-danger mt-3 mb-0">
+                                <div class="fw-semibold mb-1">Rejection reason</div>
+                                <div>{{ $purchaseRequest->rejection_reason }}</div>
                             </div>
                         @endif
                     </div>
@@ -177,6 +197,70 @@
                         @endif
                     </div>
                 </div>
+
+                @if ($canApprovePurchaseRequests || in_array($purchaseRequestStatus, ['approved', 'rejected'], true))
+                    <div class="card shadow-sm mt-4">
+                        <div class="card-body">
+                            <h6 class="fw-bold mb-3">Approval Decision</h6>
+
+                            @if ($purchaseRequestStatus === 'approved')
+                                <div class="alert alert-success mb-0">
+                                    Approved by {{ $purchaseRequest->approver?->name ?? 'System' }}
+                                    @if ($purchaseRequest->approved_at)
+                                        on {{ $purchaseRequest->approved_at->format('Y-m-d H:i') }}
+                                    @endif
+                                </div>
+                            @elseif ($purchaseRequestStatus === 'rejected')
+                                <div class="alert alert-danger mb-0">
+                                    <div class="fw-semibold">Rejected by {{ $purchaseRequest->rejector?->name ?? 'System' }}</div>
+                                    @if ($purchaseRequest->rejected_at)
+                                        <div class="small mb-2">{{ $purchaseRequest->rejected_at->format('Y-m-d H:i') }}</div>
+                                    @endif
+                                    <div>{{ $purchaseRequest->rejection_reason ?? 'No reason recorded.' }}</div>
+                                </div>
+                            @elseif ($canDecidePurchaseRequest)
+                                <form method="POST" action="{{ route('finance.purchase-requests.approve', $purchaseRequest) }}">
+                                    @csrf
+                                    <button type="submit" class="btn btn-success w-100">
+                                        <i class="feather-check me-1"></i> Approve Purchase Request
+                                    </button>
+                                </form>
+
+                                <button type="button"
+                                    class="btn btn-outline-danger w-100 mt-2"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#rejectPurchaseRequestForm"
+                                    aria-expanded="false"
+                                    aria-controls="rejectPurchaseRequestForm">
+                                    <i class="feather-x me-1"></i> Reject Purchase Request
+                                </button>
+
+                                <div class="collapse mt-3" id="rejectPurchaseRequestForm">
+                                    <form method="POST" action="{{ route('finance.purchase-requests.reject', $purchaseRequest) }}">
+                                        @csrf
+                                        <div class="mb-3">
+                                            <label class="form-label">Reason for rejection</label>
+                                            <textarea name="rejection_reason"
+                                                class="form-control @error('rejection_reason') is-invalid @enderror"
+                                                rows="4"
+                                                minlength="5"
+                                                maxlength="1000"
+                                                required>{{ old('rejection_reason') }}</textarea>
+                                            @error('rejection_reason')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <button type="submit" class="btn btn-danger w-100">
+                                            <i class="feather-x me-1"></i> Confirm Rejection
+                                        </button>
+                                    </form>
+                                </div>
+                            @else
+                                <div class="text-muted">No approval action is available for the current status.</div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
 
                 @can('finance.purchase_requests.send')
                     <div class="card shadow-sm mt-4">

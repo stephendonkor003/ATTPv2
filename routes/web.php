@@ -970,6 +970,14 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	            ->middleware('permission:finance.purchase_requests.send')
 	            ->name('purchase-requests.send');
 
+	        Route::post('purchase-requests/{purchaseRequest}/approve', [PurchaseRequestController::class, 'approve'])
+	            ->middleware('permission:finance.purchase_requests.approve')
+	            ->name('purchase-requests.approve');
+
+	        Route::post('purchase-requests/{purchaseRequest}/reject', [PurchaseRequestController::class, 'reject'])
+	            ->middleware('permission:finance.purchase_requests.approve')
+	            ->name('purchase-requests.reject');
+
 
 
 

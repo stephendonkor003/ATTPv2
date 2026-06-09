@@ -10,14 +10,14 @@
                     <h4 class="mb-1">Edit Activity</h4>
                     <p class="text-muted mb-0">Modify details for this activity.</p>
                 </div>
-                <a href="{{ route('activities.index', $activity->project_id) }}" class="btn btn-outline-secondary">
+                <a href="{{ route('budget.activities.index') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left-circle me-1"></i> Back to Activities
                 </a>
             </div>
 
             <div class="card shadow-sm">
                 <div class="card-body">
-                    <form action="{{ route('activities.update', $activity->id) }}" method="POST">
+                    <form action="{{ route('budget.activities.update', $activity->id) }}" method="POST">
                         @csrf
                         @method('PUT')
 
@@ -41,7 +41,7 @@
                         </div>
 
                         <div class="mt-4 d-flex justify-content-end gap-2">
-                            <a href="{{ route('activities.index', $activity->project_id) }}"
+                            <a href="{{ route('budget.activities.index') }}"
                                 class="btn btn-light border">Cancel</a>
                             <button type="submit" class="btn btn-primary">
                                 <i class="bi bi-save2 me-1"></i> Update Activity

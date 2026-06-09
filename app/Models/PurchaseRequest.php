@@ -23,6 +23,11 @@ class PurchaseRequest extends BaseModel
         'total_amount',
         'description',
         'status',
+        'approved_by',
+        'approved_at',
+        'rejection_reason',
+        'rejected_by',
+        'rejected_at',
         'work_plan_source',
         'work_plan_component',
         'work_plan_sub_component',
@@ -34,6 +39,8 @@ class PurchaseRequest extends BaseModel
         'total_amount' => 'decimal:2',
         'commitment_date' => 'date',
         'delivery_date' => 'date',
+        'approved_at' => 'datetime',
+        'rejected_at' => 'datetime',
     ];
 
     public function programFunding(): BelongsTo
@@ -64,5 +71,15 @@ class PurchaseRequest extends BaseModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejector(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 }

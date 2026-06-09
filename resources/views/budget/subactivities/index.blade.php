@@ -11,7 +11,7 @@
                     <h4 class="mb-1">Sub-Activities under {{ $activity->name }}</h4>
                     <p class="text-muted mb-0">Manage all sub-activities associated with this activity.</p>
                 </div>
-                <a href="{{ route('subactivities.create', $activity->id) }}" class="btn btn-success">
+                <a href="{{ route('budget.subactivities.create', $activity->id) }}" class="btn btn-success">
                     <i class="bi bi-plus-circle me-1"></i> Add Sub-Activity
                 </a>
             </div>
@@ -39,15 +39,15 @@
                                     <td>{{ number_format($sub->total_budget, 2) }}</td>
                                     <td>{{ $sub->created_at->format('d M, Y') }}</td>
                                     <td class="text-center">
-                                        <a href="{{ route('subactivities.show', $sub->id) }}"
+                                        <a href="{{ route('budget.subactivities.show', $sub->id) }}"
                                             class="btn btn-sm btn-outline-info">
                                             <i class="bi bi-eye"></i>
                                         </a>
-                                        <a href="{{ route('subactivities.edit', $sub->id) }}"
+                                        <a href="{{ route('budget.subactivities.edit', $sub->id) }}"
                                             class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-pencil"></i>
                                         </a>
-                                        <form action="{{ route('subactivities.destroy', $sub->id) }}" method="POST"
+                                        <form action="{{ route('budget.subactivities.destroy', $sub->id) }}" method="POST"
                                             class="d-inline">
                                             @csrf @method('DELETE')
                                             <button class="btn btn-sm btn-outline-danger"

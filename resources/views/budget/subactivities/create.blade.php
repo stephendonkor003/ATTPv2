@@ -10,14 +10,14 @@
                     <h4 class="mb-1">Create New Sub-Activity</h4>
                     <p class="text-muted mb-0">Add a new sub-activity under <strong>{{ $activity->name }}</strong>.</p>
                 </div>
-                <a href="{{ route('subactivities.index', $activity->id) }}" class="btn btn-outline-secondary">
+                <a href="{{ route('budget.activities.show', $activity->id) }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left-circle me-1"></i> Back to Sub-Activities
                 </a>
             </div>
 
             <div class="card shadow-sm">
                 <div class="card-body">
-                    <form action="{{ route('subactivities.store', $activity->id) }}" method="POST">
+                    <form action="{{ route('budget.subactivities.store') }}" method="POST">
                         @csrf
 
                         <div class="row g-4">
@@ -47,7 +47,7 @@
                         </div>
 
                         <div class="mt-4 d-flex justify-content-end gap-2">
-                            <a href="{{ route('subactivities.index', $activity->id) }}"
+                            <a href="{{ route('budget.activities.show', $activity->id) }}"
                                 class="btn btn-light border">Cancel</a>
                             <button type="submit" class="btn btn-success">
                                 <i class="bi bi-check2-circle me-1"></i> Save Sub-Activity
