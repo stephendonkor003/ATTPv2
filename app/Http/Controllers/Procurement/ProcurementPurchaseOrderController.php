@@ -319,7 +319,7 @@ class ProcurementPurchaseOrderController extends Controller
 
         $purchaseOrder->load([
             'procurement',
-            'deliverables',
+            'deliverables' => fn($q) => $q->withTrashed()->with('deletedBy'),
             'vendor',
             'subActivity',
             'negotiation',

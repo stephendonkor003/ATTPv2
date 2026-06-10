@@ -18,31 +18,36 @@ class ProcurementDeliverableController extends Controller
     public function index(Request $request)
     {
         $procurementId = $request->string('procurement_id')->toString();
-        $vendorId = $request->string('vendor_id')->toString();
-        $status = $request->string('status')->toString();
-        $type = $request->string('type')->toString();
+        $vendorId      = $request->string('vendor_id')->toString();
+        $status        = $request->string('status')->toString();
+        $type          = $request->string('type')->toString();
 
-        $baseQuery = ProcurementDeliverable::query();
-        if ($procurementId) {
-            $baseQuery->where('procurement_id', $procurementId);
-        }
-        if ($vendorId) {
-            $baseQuery->where('vendor_id', $vendorId);
-        }
+        // Counts: active records only
+        $baseQuery = ProcurementDeliverable::query()
+            ->when($procurementId, fn($q) => $q->where('procurement_id', $procurementId))
+            ->when($vendorId, fn($q) => $q->where('vendor_id', $vendorId));
 
         $counts = [
-            'total' => (clone $baseQuery)->count(),
-            'pending' => (clone $baseQuery)->where('status', 'pending')->count(),
-            'completed' => (clone $baseQuery)->where('status', 'completed')->count(),
-            'cancelled' => (clone $baseQuery)->where('status', 'cancelled')->count(),
+            'total'          => (clone $baseQuery)->count(),
+            'pending'        => (clone $baseQuery)->where('status', 'pending')->count(),
+            'completed'      => (clone $baseQuery)->where('status', 'completed')->count(),
+            'cancelled'      => (clone $baseQuery)->where('status', 'cancelled')->count(),
             'awaiting_admin' => (clone $baseQuery)->where('admin_approval_status', 'pending')->count(),
-            'awaiting_vendor' => (clone $baseQuery)->where('vendor_approval_status', 'pending')->count(),
+            'awaiting_vendor'=> (clone $baseQuery)->where('vendor_approval_status', 'pending')->count(),
+            'removed'        => ProcurementDeliverable::onlyTrashed()
+                ->when($procurementId, fn($q) => $q->where('procurement_id', $procurementId))
+                ->when($vendorId, fn($q) => $q->where('vendor_id', $vendorId))
+                ->count(),
         ];
 
-        $deliverables = $baseQuery
-            ->with(['procurement', 'vendor'])
-            ->when($status, fn($query) => $query->where('status', $status))
-            ->when($type, fn($query) => $query->where('type', $type))
+        // Listing: include soft-deleted so removed ones are still visible
+        $deliverables = ProcurementDeliverable::withTrashed()
+            ->with(['procurement', 'vendor', 'deletedBy'])
+            ->when($procurementId, fn($q) => $q->where('procurement_id', $procurementId))
+            ->when($vendorId, fn($q) => $q->where('vendor_id', $vendorId))
+            ->when($status, fn($q) => $q->where('status', $status))
+            ->when($type, fn($q) => $q->where('type', $type))
+            ->orderByRaw('deleted_at IS NOT NULL')        // active rows first
             ->orderByRaw('COALESCE(timeline_start, created_at)')
             ->orderBy('sequence')
             ->paginate(20)
@@ -54,13 +59,13 @@ class ProcurementDeliverableController extends Controller
         return view('procurement.deliverables.index', [
             'deliverables' => $deliverables,
             'procurements' => $procurements,
-            'vendors' => $vendors,
-            'counts' => $counts,
-            'filters' => [
+            'vendors'      => $vendors,
+            'counts'       => $counts,
+            'filters'      => [
                 'procurement_id' => $procurementId,
-                'vendor_id' => $vendorId,
-                'status' => $status,
-                'type' => $type,
+                'vendor_id'      => $vendorId,
+                'status'         => $status,
+                'type'           => $type,
             ],
         ]);
     }
@@ -129,14 +134,45 @@ class ProcurementDeliverableController extends Controller
             ->with('success', $count === 1 ? 'Deliverable created.' : "{$count} deliverables created.");
     }
 
+    public function edit(ProcurementDeliverable $deliverable)
+    {
+        return view('procurement.deliverables.edit', [
+            'deliverable' => $deliverable->load(['procurement', 'vendor']),
+        ]);
+    }
+
+    public function update(Request $request, ProcurementDeliverable $deliverable)
+    {
+        $data = $request->validate([
+            'title'          => ['required', 'string', 'max:255'],
+            'type'           => ['required', 'in:deliverable,milestone'],
+            'frequency'      => ['required', 'in:one_time,daily,weekly,monthly,quarterly,yearly'],
+            'description'    => ['nullable', 'string', 'max:3000'],
+            'timeline_start' => ['nullable', 'date'],
+            'timeline_end'   => ['nullable', 'date'],
+            'amount'         => ['nullable', 'numeric', 'min:0'],
+            'currency'       => ['nullable', 'string', 'max:10'],
+            'sequence'       => ['nullable', 'integer', 'min:1'],
+            'notes'          => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $deliverable->update($data);
+
+        return redirect()
+            ->route('procurement.deliverables.index', ['procurement_id' => $deliverable->procurement_id])
+            ->with('success', 'Deliverable updated.');
+    }
+
     public function destroy(ProcurementDeliverable $deliverable)
     {
-        $procurementId = $deliverable->procurement_id;
+        $procurementId  = $deliverable->procurement_id;
+        $deliverable->deleted_by = auth()->id();
+        $deliverable->save();
         $deliverable->delete();
 
         return redirect()
             ->route('procurement.deliverables.index', ['procurement_id' => $procurementId])
-            ->with('success', 'Deliverable deleted.');
+            ->with('success', 'Deliverable removed.');
     }
 
     public function sheet(Request $request)

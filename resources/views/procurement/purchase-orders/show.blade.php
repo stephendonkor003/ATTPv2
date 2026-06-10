@@ -230,6 +230,7 @@
                     <div class="row g-3">
                         @foreach ($purchaseOrder->deliverables->sortBy('sequence') as $dlv)
                             @php
+                                $isRemoved = $dlv->trashed();
                                 $dlvStatusClass = match($dlv->status) {
                                     'completed'  => 'success',
                                     'in_progress'=> 'primary',
@@ -238,15 +239,20 @@
                                 };
                             @endphp
                             <div class="col-md-4">
-                                <div class="stat-tile h-100">
+                                <div class="stat-tile h-100{{ $isRemoved ? ' opacity-50' : '' }}"
+                                     style="{{ $isRemoved ? 'border:1px solid #f5c6cb;background:#fff5f5;' : '' }}">
                                     <div class="d-flex justify-content-between align-items-start mb-1">
                                         <span class="badge bg-light text-dark border">
                                             {{ $dlv->type === 'milestone' ? 'Milestone' : 'Deliverable' }}
                                             #{{ $dlv->sequence }}
                                         </span>
-                                        <span class="badge bg-{{ $dlvStatusClass }}">
-                                            {{ ucwords(str_replace('_', ' ', $dlv->status)) }}
-                                        </span>
+                                        @if ($isRemoved)
+                                            <span class="badge bg-danger">Removed</span>
+                                        @else
+                                            <span class="badge bg-{{ $dlvStatusClass }}">
+                                                {{ ucwords(str_replace('_', ' ', $dlv->status)) }}
+                                            </span>
+                                        @endif
                                     </div>
                                     <div class="fw-semibold mt-2">{{ $dlv->title }}</div>
                                     @if ($dlv->description)
@@ -265,16 +271,24 @@
                                             {{ $dlv->currency ?? '' }} {{ number_format((float) $dlv->amount, 2) }}
                                         </div>
                                     @endif
-                                    <div class="small mt-2">
-                                        Vendor:
-                                        <span class="badge bg-{{ $dlv->vendor_approval_status === 'approved' ? 'success' : ($dlv->vendor_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
-                                            {{ ucfirst($dlv->vendor_approval_status) }}
-                                        </span>
-                                        &nbsp;Admin:
-                                        <span class="badge bg-{{ $dlv->admin_approval_status === 'approved' ? 'success' : ($dlv->admin_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
-                                            {{ ucfirst($dlv->admin_approval_status) }}
-                                        </span>
-                                    </div>
+                                    @if ($isRemoved)
+                                        <div class="small text-danger mt-2 pt-2 border-top">
+                                            <i class="feather-user-x me-1"></i>
+                                            Removed by <strong>{{ $dlv->deletedBy?->name ?? 'Unknown' }}</strong>
+                                            on {{ $dlv->deleted_at?->format('d M Y, g:i A') }}
+                                        </div>
+                                    @else
+                                        <div class="small mt-2">
+                                            Vendor:
+                                            <span class="badge bg-{{ $dlv->vendor_approval_status === 'approved' ? 'success' : ($dlv->vendor_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
+                                                {{ ucfirst($dlv->vendor_approval_status) }}
+                                            </span>
+                                            &nbsp;Admin:
+                                            <span class="badge bg-{{ $dlv->admin_approval_status === 'approved' ? 'success' : ($dlv->admin_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
+                                                {{ ucfirst($dlv->admin_approval_status) }}
+                                            </span>
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         @endforeach

@@ -5,9 +5,12 @@ namespace App\Models;
 use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ProcurementDeliverable extends BaseModel
 {
+    use SoftDeletes;
+
     protected $table = 'procurement_deliverables';
 
     protected $fillable = [
@@ -33,6 +36,7 @@ class ProcurementDeliverable extends BaseModel
         'cancelled_at',
         'notes',
         'created_by',
+        'deleted_by',
     ];
 
     protected $casts = [
@@ -43,6 +47,7 @@ class ProcurementDeliverable extends BaseModel
         'admin_approved_at' => 'datetime',
         'completed_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'deleted_at' => 'datetime',
     ];
 
     public function procurement(): BelongsTo
@@ -53,6 +58,11 @@ class ProcurementDeliverable extends BaseModel
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'vendor_id');
+    }
+
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
     }
 
     public function purchaseOrders(): BelongsToMany

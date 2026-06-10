@@ -1740,6 +1740,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:procurement.manage
             ->name('store');
         Route::get('/sheet', [ProcurementDeliverableController::class, 'sheet'])
             ->name('sheet');
+        Route::get('/{deliverable}/edit', [ProcurementDeliverableController::class, 'edit'])
+            ->name('edit');
+        Route::put('/{deliverable}', [ProcurementDeliverableController::class, 'update'])
+            ->name('update');
         Route::post('/{deliverable}/approve', [ProcurementDeliverableController::class, 'approve'])
             ->name('approve');
         Route::post('/{deliverable}/reject', [ProcurementDeliverableController::class, 'reject'])

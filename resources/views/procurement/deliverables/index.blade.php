@@ -31,7 +31,7 @@
             <div class="col-md-2">
                 <div class="card shadow-sm h-100">
                     <div class="card-body">
-                        <div class="text-muted small">Total</div>
+                        <div class="text-muted small">Active Total</div>
                         <div class="fs-4 fw-bold">{{ $counts['total'] ?? 0 }}</div>
                     </div>
                 </div>
@@ -76,6 +76,16 @@
                     </div>
                 </div>
             </div>
+            @if (($counts['removed'] ?? 0) > 0)
+            <div class="col-md-2">
+                <div class="card shadow-sm h-100 border-danger">
+                    <div class="card-body">
+                        <div class="text-danger small">Removed</div>
+                        <div class="fs-4 fw-bold text-danger">{{ $counts['removed'] }}</div>
+                    </div>
+                </div>
+            </div>
+            @endif
         </div>
 
         <div class="card shadow-sm mb-4">
@@ -156,7 +166,8 @@
                     </thead>
                     <tbody>
                         @foreach ($deliverables as $deliverable)
-                            <tr>
+                            @php $isRemoved = $deliverable->trashed(); @endphp
+                            <tr class="{{ $isRemoved ? 'table-danger' : '' }}" style="{{ $isRemoved ? 'opacity:.7' : '' }}">
                                 <td>
                                     <div class="fw-semibold">{{ $deliverable->procurement?->title ?? 'N/A' }}</div>
                                     <small class="text-muted">{{ $deliverable->procurement?->reference_no ?? 'N/A' }}</small>
@@ -168,6 +179,13 @@
                                 <td>
                                     <div class="fw-semibold">{{ $deliverable->title }}</div>
                                     <span class="badge bg-light text-dark">{{ ucfirst($deliverable->type) }}</span>
+                                    @if ($isRemoved)
+                                        <div class="small text-danger mt-1">
+                                            <i class="feather-x-circle me-1"></i>
+                                            Removed by <strong>{{ $deliverable->deletedBy?->name ?? 'Unknown' }}</strong>
+                                            on {{ $deliverable->deleted_at?->format('d M Y, g:i A') }}
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>
                                     <div class="small">
@@ -184,67 +202,84 @@
                                     {{ $deliverable->currency ?? '' }}
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge bg-{{ $deliverable->status === 'completed' ? 'success' : ($deliverable->status === 'cancelled' ? 'danger' : 'warning') }}">
-                                        {{ ucwords(str_replace('_', ' ', $deliverable->status)) }}
-                                    </span>
+                                    @if ($isRemoved)
+                                        <span class="badge bg-danger">Removed</span>
+                                    @else
+                                        <span class="badge bg-{{ $deliverable->status === 'completed' ? 'success' : ($deliverable->status === 'cancelled' ? 'danger' : 'warning') }}">
+                                            {{ ucwords(str_replace('_', ' ', $deliverable->status)) }}
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="text-center">
-                                    <div class="small">
-                                        Vendor:
-                                        <span class="badge bg-{{ $deliverable->vendor_approval_status === 'approved' ? 'success' : ($deliverable->vendor_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
-                                            {{ ucfirst($deliverable->vendor_approval_status) }}
-                                        </span>
-                                    </div>
-                                    <div class="small mt-1">
-                                        Admin:
-                                        <span class="badge bg-{{ $deliverable->admin_approval_status === 'approved' ? 'success' : ($deliverable->admin_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
-                                            {{ ucfirst($deliverable->admin_approval_status) }}
-                                        </span>
-                                    </div>
+                                    @if (!$isRemoved)
+                                        <div class="small">
+                                            Vendor:
+                                            <span class="badge bg-{{ $deliverable->vendor_approval_status === 'approved' ? 'success' : ($deliverable->vendor_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
+                                                {{ ucfirst($deliverable->vendor_approval_status) }}
+                                            </span>
+                                        </div>
+                                        <div class="small mt-1">
+                                            Admin:
+                                            <span class="badge bg-{{ $deliverable->admin_approval_status === 'approved' ? 'success' : ($deliverable->admin_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
+                                                {{ ucfirst($deliverable->admin_approval_status) }}
+                                            </span>
+                                        </div>
+                                    @else
+                                        <span class="text-muted small">—</span>
+                                    @endif
                                 </td>
                                 <td class="text-center">
-                                    <div class="d-flex flex-column gap-2">
-                                        <form method="POST" action="{{ route('procurement.deliverables.status', $deliverable) }}">
-                                            @csrf
-                                            <div class="input-group input-group-sm">
-                                                <select name="status" class="form-select">
-                                                    @foreach (['pending', 'in_progress', 'completed', 'cancelled'] as $statusOption)
-                                                        <option value="{{ $statusOption }}"
-                                                            @selected($deliverable->status === $statusOption)>
-                                                            {{ ucwords(str_replace('_', ' ', $statusOption)) }}
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                                <button class="btn btn-outline-primary">Update</button>
-                                            </div>
-                                        </form>
+                                    @if ($isRemoved)
+                                        <span class="text-muted small fst-italic">No actions</span>
+                                    @else
+                                        <div class="d-flex flex-column gap-2">
+                                            <a href="{{ route('procurement.deliverables.edit', $deliverable) }}"
+                                               class="btn btn-sm btn-outline-secondary w-100">
+                                                <i class="feather-edit-2 me-1"></i> Edit
+                                            </a>
 
-                                        @if ($deliverable->admin_approval_status === 'pending')
-                                            <form method="POST" action="{{ route('procurement.deliverables.approve', $deliverable) }}">
-                                                @csrf
-                                                <button class="btn btn-sm btn-success w-100">Approve</button>
-                                            </form>
-
-                                            <form method="POST" action="{{ route('procurement.deliverables.reject', $deliverable) }}">
+                                            <form method="POST" action="{{ route('procurement.deliverables.status', $deliverable) }}">
                                                 @csrf
                                                 <div class="input-group input-group-sm">
-                                                    <input type="text" name="reason" class="form-control"
-                                                        placeholder="Rejection reason" required>
-                                                    <button class="btn btn-outline-danger">Reject</button>
+                                                    <select name="status" class="form-select">
+                                                        @foreach (['pending', 'in_progress', 'completed', 'cancelled'] as $statusOption)
+                                                            <option value="{{ $statusOption }}"
+                                                                @selected($deliverable->status === $statusOption)>
+                                                                {{ ucwords(str_replace('_', ' ', $statusOption)) }}
+                                                            </option>
+                                                        @endforeach
+                                                    </select>
+                                                    <button class="btn btn-outline-primary">Update</button>
                                                 </div>
                                             </form>
-                                        @endif
 
-                                        <form method="POST"
-                                              action="{{ route('procurement.deliverables.destroy', $deliverable) }}"
-                                              onsubmit="return confirm('Delete this deliverable? It will be unlinked from any purchase orders.')">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button class="btn btn-sm btn-outline-danger w-100">
-                                                <i class="feather-trash-2 me-1"></i> Delete
-                                            </button>
-                                        </form>
-                                    </div>
+                                            @if ($deliverable->admin_approval_status === 'pending')
+                                                <form method="POST" action="{{ route('procurement.deliverables.approve', $deliverable) }}">
+                                                    @csrf
+                                                    <button class="btn btn-sm btn-success w-100">Approve</button>
+                                                </form>
+
+                                                <form method="POST" action="{{ route('procurement.deliverables.reject', $deliverable) }}">
+                                                    @csrf
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="text" name="reason" class="form-control"
+                                                            placeholder="Rejection reason" required>
+                                                        <button class="btn btn-outline-danger">Reject</button>
+                                                    </div>
+                                                </form>
+                                            @endif
+
+                                            <form method="POST"
+                                                  action="{{ route('procurement.deliverables.destroy', $deliverable) }}"
+                                                  onsubmit="return confirm('Remove this deliverable? It will be marked as removed but will remain visible on any linked Purchase Orders.')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button class="btn btn-sm btn-outline-danger w-100">
+                                                    <i class="feather-trash-2 me-1"></i> Remove
+                                                </button>
+                                            </form>
+                                        </div>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach
