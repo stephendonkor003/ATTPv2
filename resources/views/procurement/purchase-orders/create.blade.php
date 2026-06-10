@@ -152,21 +152,49 @@
 
         .po-create .deliverable-card {
             border: 1.5px solid var(--po-border);
-            border-radius: 8px;
-            padding: 12px 14px;
+            border-radius: 10px;
+            padding: 14px 16px;
             background: #fff;
             cursor: pointer;
-            transition: border-color .15s, background .15s;
+            transition: border-color .15s, background .15s, box-shadow .15s;
             user-select: none;
+            height: 100%;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
         }
-        .po-create .deliverable-card:has(input:checked),
+        .po-create .deliverable-card:hover {
+            border-color: #93c5fd;
+            background: #f8fbff;
+        }
         .po-create .deliverable-card.checked {
             border-color: var(--po-blue);
             background: #eff6ff;
+            box-shadow: 0 0 0 3px rgba(37,99,235,.1);
         }
         .po-create .deliverable-card input[type="checkbox"] {
             accent-color: var(--po-blue);
+            width: 17px;
+            height: 17px;
+            flex-shrink: 0;
+            margin-top: 2px;
+            cursor: pointer;
         }
+        .po-create .dlv-freq-badge {
+            display: inline-block;
+            font-size: .68rem;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+        .po-create .dlv-freq-one_time  { background:#f1f5f9; color:#475569; }
+        .po-create .dlv-freq-daily     { background:#dbeafe; color:#1d4ed8; }
+        .po-create .dlv-freq-weekly    { background:#ede9fe; color:#6d28d9; }
+        .po-create .dlv-freq-monthly   { background:#d1fae5; color:#065f46; }
+        .po-create .dlv-freq-quarterly { background:#fef3c7; color:#92400e; }
+        .po-create .dlv-freq-yearly    { background:#fee2e2; color:#991b1b; }
 
         @media (max-width: 991.98px) {
             .po-create .workspace {
@@ -348,27 +376,6 @@
                                 </select>
                             </div>
 
-                            <div class="col-12" id="deliverablePickerWrap" style="display:none;">
-                                <label class="form-label fw-semibold">
-                                    Deliverables <span class="text-danger">*</span>
-                                    <span class="text-muted fw-normal small">(select one or more)</span>
-                                </label>
-                                @error('deliverable_ids')
-                                    <div class="text-danger small mb-2">{{ $message }}</div>
-                                @enderror
-                                <div id="deliverablePickerEmpty" class="text-muted small fst-italic d-none">
-                                    No deliverables found for this procurement.
-                                    <a href="{{ route('procurement.deliverables.create') }}" target="_blank" class="ms-1">Create one</a>.
-                                </div>
-                                <div id="deliverablePickerList" class="row g-2"></div>
-                                <div class="form-text mt-1">
-                                    Can't find one?
-                                    <a id="deliverableCreateLink" href="{{ route('procurement.deliverables.create') }}" target="_blank">
-                                        Create a deliverable
-                                    </a> for this procurement, then refresh the page.
-                                </div>
-                            </div>
-
                             <div class="col-lg-6">
                                 <label class="form-label fw-semibold">Vendor / Supplier</label>
                                 <select name="vendor_id" id="vendorSelect" class="form-select">
@@ -438,6 +445,54 @@
                                 @error('supporting_document')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
+                            </div>
+                        </div>
+
+                        {{-- ── Deliverables Section ─────────────────────── --}}
+                        <div class="form-section" id="deliverableSection">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <div class="section-title mb-0">Deliverables</div>
+                                    <div class="small text-muted mt-1">
+                                        Link the specific deliverables this purchase order covers.
+                                    </div>
+                                </div>
+                                <span id="dlvSelectedBadge" class="badge bg-primary" style="display:none;font-size:.8rem;padding:6px 10px;">
+                                    0 selected
+                                </span>
+                            </div>
+
+                            @error('deliverable_ids')
+                                <div class="alert alert-warning py-2 mb-3">{{ $message }}</div>
+                            @enderror
+
+                            {{-- State: no procurement chosen yet --}}
+                            <div id="dlvStateNone" class="empty-state">
+                                <i class="feather-link" style="font-size:1.4rem;display:block;margin-bottom:8px;opacity:.4"></i>
+                                Select a procurement above to load its deliverables here.
+                            </div>
+
+                            {{-- State: procurement chosen but no deliverables exist --}}
+                            <div id="dlvStateEmpty" class="empty-state d-none">
+                                <i class="feather-inbox" style="font-size:1.4rem;display:block;margin-bottom:8px;opacity:.4"></i>
+                                No deliverables found for this procurement.
+                                <div class="mt-2">
+                                    <a id="dlvCreateLink" href="{{ route('procurement.deliverables.create') }}"
+                                       target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <i class="feather-plus me-1"></i> Create Deliverables
+                                    </a>
+                                    <span class="text-muted small ms-2">(opens in new tab — refresh after saving)</span>
+                                </div>
+                            </div>
+
+                            {{-- State: deliverable cards grid --}}
+                            <div id="dlvPickerList" class="row g-3 d-none"></div>
+
+                            <div id="dlvCreateHint" class="form-text mt-2 d-none">
+                                Missing a deliverable?
+                                <a id="dlvCreateLinkHint" href="{{ route('procurement.deliverables.create') }}"
+                                   target="_blank">Create more deliverables</a>
+                                for this procurement, then refresh the page.
                             </div>
                         </div>
 
@@ -745,69 +800,114 @@
                 });
             }
 
-            const deliverablePickerWrap  = document.getElementById('deliverablePickerWrap');
-            const deliverablePickerList  = document.getElementById('deliverablePickerList');
-            const deliverablePickerEmpty = document.getElementById('deliverablePickerEmpty');
-            const deliverableCreateLink  = document.getElementById('deliverableCreateLink');
-            const oldDeliverableIds      = @json(old('deliverable_ids', []));
+            const dlvStateNone      = document.getElementById('dlvStateNone');
+            const dlvStateEmpty     = document.getElementById('dlvStateEmpty');
+            const dlvPickerList     = document.getElementById('dlvPickerList');
+            const dlvCreateLink     = document.getElementById('dlvCreateLink');
+            const dlvCreateLinkHint = document.getElementById('dlvCreateLinkHint');
+            const dlvCreateHint     = document.getElementById('dlvCreateHint');
+            const dlvSelectedBadge  = document.getElementById('dlvSelectedBadge');
+            const oldDeliverableIds = @json(old('deliverable_ids', []));
+
+            const FREQ_LABELS = {
+                one_time: 'One-time', daily: 'Daily', weekly: 'Weekly',
+                monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly',
+            };
+
+            function setDlvCreateHref(procurementId) {
+                [dlvCreateLink, dlvCreateLinkHint].forEach(el => {
+                    if (!el) return;
+                    try {
+                        const url = new URL(el.href, location.origin);
+                        if (procurementId) url.searchParams.set('procurement_id', procurementId);
+                        else url.searchParams.delete('procurement_id');
+                        el.href = url.toString();
+                    } catch (e) {}
+                });
+            }
+
+            function updateSelectedBadge() {
+                const n = dlvPickerList ? dlvPickerList.querySelectorAll('input[type="checkbox"]:checked').length : 0;
+                if (dlvSelectedBadge) {
+                    dlvSelectedBadge.style.display = n > 0 ? '' : 'none';
+                    dlvSelectedBadge.textContent   = n + (n === 1 ? ' selected' : ' selected');
+                }
+            }
 
             function updateDeliverableSelect(procurementId) {
                 const deliverables = (procurementId && deliverablesByProcurement[procurementId]) || [];
-
-                // Update the "Create a deliverable" link to pre-fill procurement
-                if (deliverableCreateLink && procurementId) {
-                    const url = new URL(deliverableCreateLink.href, location.origin);
-                    url.searchParams.set('procurement_id', procurementId);
-                    deliverableCreateLink.href = url.toString();
-                }
+                setDlvCreateHref(procurementId);
 
                 if (!procurementId) {
-                    deliverablePickerWrap.style.display = 'none';
-                    deliverablePickerList.innerHTML = '';
+                    dlvStateNone  && dlvStateNone.classList.remove('d-none');
+                    dlvStateEmpty && dlvStateEmpty.classList.add('d-none');
+                    dlvPickerList && dlvPickerList.classList.add('d-none');
+                    dlvCreateHint && dlvCreateHint.classList.add('d-none');
+                    if (dlvPickerList) dlvPickerList.innerHTML = '';
+                    if (dlvSelectedBadge) dlvSelectedBadge.style.display = 'none';
                     return;
                 }
 
-                deliverablePickerWrap.style.display = '';
+                dlvStateNone && dlvStateNone.classList.add('d-none');
 
                 if (deliverables.length === 0) {
-                    deliverablePickerList.innerHTML = '';
-                    deliverablePickerEmpty.classList.remove('d-none');
+                    dlvStateEmpty && dlvStateEmpty.classList.remove('d-none');
+                    dlvPickerList && dlvPickerList.classList.add('d-none');
+                    dlvCreateHint && dlvCreateHint.classList.add('d-none');
+                    if (dlvPickerList) dlvPickerList.innerHTML = '';
+                    if (dlvSelectedBadge) dlvSelectedBadge.style.display = 'none';
                     return;
                 }
 
-                deliverablePickerEmpty.classList.add('d-none');
-                deliverablePickerList.innerHTML = '';
+                dlvStateEmpty && dlvStateEmpty.classList.add('d-none');
+                dlvPickerList && dlvPickerList.classList.remove('d-none');
+                dlvCreateHint && dlvCreateHint.classList.remove('d-none');
+                dlvPickerList.innerHTML = '';
 
                 deliverables.forEach((d) => {
                     const isChecked = oldDeliverableIds.includes(d.id);
+                    const freq      = d.frequency || 'one_time';
+                    const freqLabel = FREQ_LABELS[freq] || freq;
                     const typeLabel = d.type === 'milestone'
-                        ? '<span class="badge bg-warning text-dark me-1">Milestone</span>'
-                        : '<span class="badge bg-secondary me-1">Deliverable</span>';
-                    const timeline = (d.start && d.end) ? `<div class="text-muted" style="font-size:.78rem">${d.start} → ${d.end}</div>` : '';
-                    const amountHtml = (d.amount > 0) ? `<div class="text-muted" style="font-size:.78rem">${d.currency || ''} ${Number(d.amount).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>` : '';
-                    const desc = d.description ? `<div class="text-muted mt-1" style="font-size:.8rem;line-height:1.35">${d.description}</div>` : '';
+                        ? '<span class="badge bg-warning text-dark" style="font-size:.68rem">Milestone</span>'
+                        : '<span class="badge bg-light text-dark border" style="font-size:.68rem">Deliverable</span>';
+                    const timeline  = (d.start && d.end)
+                        ? `<div class="text-muted mt-1" style="font-size:.76rem"><i class="feather-calendar" style="font-size:.7rem"></i> ${d.start} &rarr; ${d.end}</div>`
+                        : '';
+                    const amtHtml   = (d.amount > 0)
+                        ? `<div class="text-muted" style="font-size:.76rem">${d.currency || ''} ${Number(d.amount).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`
+                        : '';
+                    const descHtml  = d.description
+                        ? `<div class="text-muted mt-2" style="font-size:.78rem;line-height:1.4;max-height:2.8em;overflow:hidden">${d.description}</div>`
+                        : '';
 
-                    const col = document.createElement('div');
-                    col.className = 'col-md-4';
+                    const col  = document.createElement('div');
+                    col.className = 'col-md-4 col-lg-3';
 
                     const card = document.createElement('label');
-                    card.className = 'deliverable-card w-100 d-flex gap-3 align-items-start' + (isChecked ? ' checked' : '');
+                    card.className = 'deliverable-card' + (isChecked ? ' checked' : '');
                     card.innerHTML = `
-                        <input type="checkbox" name="deliverable_ids[]" value="${d.id}" class="mt-1 flex-shrink-0"${isChecked ? ' checked' : ''}>
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold" style="font-size:.9rem">${d.title}</div>
-                            <div class="mt-1">${typeLabel}</div>
-                            ${timeline}${amountHtml}${desc}
+                        <input type="checkbox" name="deliverable_ids[]" value="${d.id}"${isChecked ? ' checked' : ''}>
+                        <div style="flex:1;min-width:0">
+                            <div class="fw-semibold" style="font-size:.88rem;line-height:1.3">${d.title}</div>
+                            <div class="d-flex flex-wrap gap-1 mt-1 align-items-center">
+                                ${typeLabel}
+                                <span class="dlv-freq-badge dlv-freq-${freq}">${freqLabel}</span>
+                            </div>
+                            ${timeline}${amtHtml}${descHtml}
                         </div>
                     `;
 
                     card.querySelector('input').addEventListener('change', function () {
                         card.classList.toggle('checked', this.checked);
+                        updateSelectedBadge();
                     });
 
                     col.appendChild(card);
-                    deliverablePickerList.appendChild(col);
+                    dlvPickerList.appendChild(col);
                 });
+
+                updateSelectedBadge();
             }
 
             search?.addEventListener('input', renderRequestList);
