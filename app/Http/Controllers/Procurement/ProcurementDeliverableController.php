@@ -81,42 +81,52 @@ class ProcurementDeliverableController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'procurement_id'  => ['required', 'exists:procurements,id'],
-            'vendor_id'       => ['nullable', 'exists:users,id'],
-            'title'           => ['required', 'string', 'max:255'],
-            'type'            => ['required', 'in:deliverable,milestone'],
-            'description'     => ['nullable', 'string', 'max:3000'],
-            'timeline_start'  => ['nullable', 'date'],
-            'timeline_end'    => ['nullable', 'date', 'after_or_equal:timeline_start'],
-            'amount'          => ['nullable', 'numeric', 'min:0'],
-            'currency'        => ['nullable', 'string', 'max:10'],
-            'sequence'        => ['nullable', 'integer', 'min:1'],
-            'notes'           => ['nullable', 'string', 'max:2000'],
+            'procurement_id'          => ['required', 'exists:procurements,id'],
+            'vendor_id'               => ['nullable', 'exists:users,id'],
+            'deliverables'            => ['required', 'array', 'min:1'],
+            'deliverables.*.title'    => ['required', 'string', 'max:255'],
+            'deliverables.*.type'     => ['required', 'in:deliverable,milestone'],
+            'deliverables.*.frequency'=> ['required', 'in:one_time,daily,weekly,monthly,quarterly,yearly'],
+            'deliverables.*.description'   => ['nullable', 'string', 'max:3000'],
+            'deliverables.*.timeline_start'=> ['nullable', 'date'],
+            'deliverables.*.timeline_end'  => ['nullable', 'date'],
+            'deliverables.*.amount'        => ['nullable', 'numeric', 'min:0'],
+            'deliverables.*.currency'      => ['nullable', 'string', 'max:10'],
+            'deliverables.*.sequence'      => ['nullable', 'integer', 'min:1'],
+            'deliverables.*.notes'         => ['nullable', 'string', 'max:2000'],
         ], [
-            'timeline_end.after_or_equal' => 'The end date must be on or after the start date.',
+            'deliverables.required'              => 'Add at least one deliverable.',
+            'deliverables.*.title.required'      => 'Each deliverable must have a title.',
+            'deliverables.*.type.required'       => 'Each deliverable must have a type.',
+            'deliverables.*.frequency.required'  => 'Each deliverable must have a schedule frequency.',
         ]);
 
-        ProcurementDeliverable::create([
-            'procurement_id'        => $data['procurement_id'],
-            'vendor_id'             => $data['vendor_id'] ?? null,
-            'title'                 => $data['title'],
-            'type'                  => $data['type'],
-            'description'           => $data['description'] ?? null,
-            'timeline_start'        => $data['timeline_start'] ?? null,
-            'timeline_end'          => $data['timeline_end'] ?? null,
-            'amount'                => $data['amount'] ?? null,
-            'currency'              => $data['currency'] ?? null,
-            'sequence'              => $data['sequence'] ?? 1,
-            'status'                => 'pending',
-            'vendor_approval_status' => 'pending',
-            'admin_approval_status' => 'pending',
-            'notes'                 => $data['notes'] ?? null,
-            'created_by'            => auth()->id(),
-        ]);
+        foreach ($data['deliverables'] as $index => $dlv) {
+            ProcurementDeliverable::create([
+                'procurement_id'         => $data['procurement_id'],
+                'vendor_id'              => $data['vendor_id'] ?? null,
+                'title'                  => $dlv['title'],
+                'type'                   => $dlv['type'],
+                'frequency'              => $dlv['frequency'],
+                'description'            => $dlv['description'] ?? null,
+                'timeline_start'         => $dlv['timeline_start'] ?? null,
+                'timeline_end'           => $dlv['timeline_end'] ?? null,
+                'amount'                 => $dlv['amount'] ?? null,
+                'currency'               => $dlv['currency'] ?? null,
+                'sequence'               => $dlv['sequence'] ?? ($index + 1),
+                'status'                 => 'pending',
+                'vendor_approval_status' => 'pending',
+                'admin_approval_status'  => 'pending',
+                'notes'                  => $dlv['notes'] ?? null,
+                'created_by'             => auth()->id(),
+            ]);
+        }
+
+        $count = count($data['deliverables']);
 
         return redirect()
             ->route('procurement.deliverables.index', ['procurement_id' => $data['procurement_id']])
-            ->with('success', 'Deliverable created successfully.');
+            ->with('success', $count === 1 ? 'Deliverable created.' : "{$count} deliverables created.");
     }
 
     public function destroy(ProcurementDeliverable $deliverable)

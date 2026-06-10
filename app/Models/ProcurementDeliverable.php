@@ -21,6 +21,7 @@ class ProcurementDeliverable extends BaseModel
         'amount',
         'currency',
         'sequence',
+        'frequency',
         'status',
         'vendor_approval_status',
         'admin_approval_status',
