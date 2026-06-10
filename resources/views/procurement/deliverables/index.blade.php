@@ -13,6 +13,10 @@
                 <a href="{{ route('procurement.deliverables.sheet') }}" class="btn btn-outline-primary">
                     View Process Sheet
                 </a>
+                <a href="{{ route('procurement.deliverables.create', array_filter(['procurement_id' => $filters['procurement_id']])) }}"
+                   class="btn btn-primary">
+                    <i class="feather-plus me-1"></i> Create Deliverable
+                </a>
             </div>
         </div>
 
@@ -230,6 +234,16 @@
                                                 </div>
                                             </form>
                                         @endif
+
+                                        <form method="POST"
+                                              action="{{ route('procurement.deliverables.destroy', $deliverable) }}"
+                                              onsubmit="return confirm('Delete this deliverable? It will be unlinked from any purchase orders.')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button class="btn btn-sm btn-outline-danger w-100">
+                                                <i class="feather-trash-2 me-1"></i> Delete
+                                            </button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>

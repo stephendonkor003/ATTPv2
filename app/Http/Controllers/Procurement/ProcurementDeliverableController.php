@@ -65,6 +65,70 @@ class ProcurementDeliverableController extends Controller
         ]);
     }
 
+    public function create(Request $request)
+    {
+        $procurements = Procurement::orderBy('reference_no')->get();
+        $vendors = User::where('user_type', 'vendor')->orderBy('name')->get();
+        $selectedProcurementId = $request->get('procurement_id');
+
+        return view('procurement.deliverables.create', [
+            'procurements' => $procurements,
+            'vendors' => $vendors,
+            'selectedProcurementId' => $selectedProcurementId,
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'procurement_id'  => ['required', 'exists:procurements,id'],
+            'vendor_id'       => ['nullable', 'exists:users,id'],
+            'title'           => ['required', 'string', 'max:255'],
+            'type'            => ['required', 'in:deliverable,milestone'],
+            'description'     => ['nullable', 'string', 'max:3000'],
+            'timeline_start'  => ['nullable', 'date'],
+            'timeline_end'    => ['nullable', 'date', 'after_or_equal:timeline_start'],
+            'amount'          => ['nullable', 'numeric', 'min:0'],
+            'currency'        => ['nullable', 'string', 'max:10'],
+            'sequence'        => ['nullable', 'integer', 'min:1'],
+            'notes'           => ['nullable', 'string', 'max:2000'],
+        ], [
+            'timeline_end.after_or_equal' => 'The end date must be on or after the start date.',
+        ]);
+
+        ProcurementDeliverable::create([
+            'procurement_id'        => $data['procurement_id'],
+            'vendor_id'             => $data['vendor_id'] ?? null,
+            'title'                 => $data['title'],
+            'type'                  => $data['type'],
+            'description'           => $data['description'] ?? null,
+            'timeline_start'        => $data['timeline_start'] ?? null,
+            'timeline_end'          => $data['timeline_end'] ?? null,
+            'amount'                => $data['amount'] ?? null,
+            'currency'              => $data['currency'] ?? null,
+            'sequence'              => $data['sequence'] ?? 1,
+            'status'                => 'pending',
+            'vendor_approval_status' => 'pending',
+            'admin_approval_status' => 'pending',
+            'notes'                 => $data['notes'] ?? null,
+            'created_by'            => auth()->id(),
+        ]);
+
+        return redirect()
+            ->route('procurement.deliverables.index', ['procurement_id' => $data['procurement_id']])
+            ->with('success', 'Deliverable created successfully.');
+    }
+
+    public function destroy(ProcurementDeliverable $deliverable)
+    {
+        $procurementId = $deliverable->procurement_id;
+        $deliverable->delete();
+
+        return redirect()
+            ->route('procurement.deliverables.index', ['procurement_id' => $procurementId])
+            ->with('success', 'Deliverable deleted.');
+    }
+
     public function sheet(Request $request)
     {
         $procurementId = $request->string('procurement_id')->toString();

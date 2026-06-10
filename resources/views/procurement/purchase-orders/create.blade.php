@@ -150,6 +150,24 @@
             background: #f8fafc;
         }
 
+        .po-create .deliverable-card {
+            border: 1.5px solid var(--po-border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            background: #fff;
+            cursor: pointer;
+            transition: border-color .15s, background .15s;
+            user-select: none;
+        }
+        .po-create .deliverable-card:has(input:checked),
+        .po-create .deliverable-card.checked {
+            border-color: var(--po-blue);
+            background: #eff6ff;
+        }
+        .po-create .deliverable-card input[type="checkbox"] {
+            accent-color: var(--po-blue);
+        }
+
         @media (max-width: 991.98px) {
             .po-create .workspace {
                 grid-template-columns: 1fr;
@@ -330,21 +348,24 @@
                                 </select>
                             </div>
 
-                            <div class="col-lg-6" id="deliverableSelectWrap" style="display:none;">
+                            <div class="col-12" id="deliverablePickerWrap" style="display:none;">
                                 <label class="form-label fw-semibold">
-                                    Deliverable <span class="text-danger">*</span>
+                                    Deliverables <span class="text-danger">*</span>
+                                    <span class="text-muted fw-normal small">(select one or more)</span>
                                 </label>
-                                <select name="deliverable_id" id="deliverableSelect"
-                                        class="form-select @error('deliverable_id') is-invalid @enderror">
-                                    <option value="">— Select a deliverable —</option>
-                                </select>
-                                <div class="form-text">Select the specific deliverable this purchase order covers.</div>
-                                @error('deliverable_id')
-                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                @error('deliverable_ids')
+                                    <div class="text-danger small mb-2">{{ $message }}</div>
                                 @enderror
-                                <div id="deliverableDetail" class="mt-2 p-2 bg-light border rounded small d-none">
-                                    <div class="text-muted mb-1">Deliverable details</div>
-                                    <div id="deliverableDetailText"></div>
+                                <div id="deliverablePickerEmpty" class="text-muted small fst-italic d-none">
+                                    No deliverables found for this procurement.
+                                    <a href="{{ route('procurement.deliverables.create') }}" target="_blank" class="ms-1">Create one</a>.
+                                </div>
+                                <div id="deliverablePickerList" class="row g-2"></div>
+                                <div class="form-text mt-1">
+                                    Can't find one?
+                                    <a id="deliverableCreateLink" href="{{ route('procurement.deliverables.create') }}" target="_blank">
+                                        Create a deliverable
+                                    </a> for this procurement, then refresh the page.
                                 </div>
                             </div>
 
@@ -724,60 +745,70 @@
                 });
             }
 
-            const deliverableWrap   = document.getElementById('deliverableSelectWrap');
-            const deliverableSelect = document.getElementById('deliverableSelect');
-            const deliverableDetail = document.getElementById('deliverableDetail');
-            const deliverableDetailText = document.getElementById('deliverableDetailText');
+            const deliverablePickerWrap  = document.getElementById('deliverablePickerWrap');
+            const deliverablePickerList  = document.getElementById('deliverablePickerList');
+            const deliverablePickerEmpty = document.getElementById('deliverablePickerEmpty');
+            const deliverableCreateLink  = document.getElementById('deliverableCreateLink');
+            const oldDeliverableIds      = @json(old('deliverable_ids', []));
 
             function updateDeliverableSelect(procurementId) {
                 const deliverables = (procurementId && deliverablesByProcurement[procurementId]) || [];
 
-                if (!procurementId || deliverables.length === 0) {
-                    deliverableWrap.style.display = 'none';
-                    deliverableSelect.innerHTML = '<option value="">— Select a deliverable —</option>';
-                    deliverableSelect.removeAttribute('required');
-                    deliverableDetail.classList.add('d-none');
+                // Update the "Create a deliverable" link to pre-fill procurement
+                if (deliverableCreateLink && procurementId) {
+                    const url = new URL(deliverableCreateLink.href, location.origin);
+                    url.searchParams.set('procurement_id', procurementId);
+                    deliverableCreateLink.href = url.toString();
+                }
+
+                if (!procurementId) {
+                    deliverablePickerWrap.style.display = 'none';
+                    deliverablePickerList.innerHTML = '';
                     return;
                 }
 
-                deliverableWrap.style.display = '';
-                deliverableSelect.setAttribute('required', '');
+                deliverablePickerWrap.style.display = '';
 
-                deliverableSelect.innerHTML = '<option value="">— Select a deliverable —</option>';
+                if (deliverables.length === 0) {
+                    deliverablePickerList.innerHTML = '';
+                    deliverablePickerEmpty.classList.remove('d-none');
+                    return;
+                }
+
+                deliverablePickerEmpty.classList.add('d-none');
+                deliverablePickerList.innerHTML = '';
+
                 deliverables.forEach((d) => {
-                    const opt = document.createElement('option');
-                    opt.value = d.id;
-                    opt.textContent = (d.type === 'milestone' ? '[Milestone] ' : '') + d.title;
-                    opt.dataset.description = d.description || '';
-                    opt.dataset.status = d.status || '';
-                    opt.dataset.start = d.start || '';
-                    opt.dataset.end = d.end || '';
-                    opt.dataset.amount = d.amount || '';
-                    opt.dataset.currency = d.currency || '';
-                    if (oldDeliverableId && d.id === oldDeliverableId) opt.selected = true;
-                    deliverableSelect.appendChild(opt);
+                    const isChecked = oldDeliverableIds.includes(d.id);
+                    const typeLabel = d.type === 'milestone'
+                        ? '<span class="badge bg-warning text-dark me-1">Milestone</span>'
+                        : '<span class="badge bg-secondary me-1">Deliverable</span>';
+                    const timeline = (d.start && d.end) ? `<div class="text-muted" style="font-size:.78rem">${d.start} → ${d.end}</div>` : '';
+                    const amountHtml = (d.amount > 0) ? `<div class="text-muted" style="font-size:.78rem">${d.currency || ''} ${Number(d.amount).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>` : '';
+                    const desc = d.description ? `<div class="text-muted mt-1" style="font-size:.8rem;line-height:1.35">${d.description}</div>` : '';
+
+                    const col = document.createElement('div');
+                    col.className = 'col-md-4';
+
+                    const card = document.createElement('label');
+                    card.className = 'deliverable-card w-100 d-flex gap-3 align-items-start' + (isChecked ? ' checked' : '');
+                    card.innerHTML = `
+                        <input type="checkbox" name="deliverable_ids[]" value="${d.id}" class="mt-1 flex-shrink-0"${isChecked ? ' checked' : ''}>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size:.9rem">${d.title}</div>
+                            <div class="mt-1">${typeLabel}</div>
+                            ${timeline}${amountHtml}${desc}
+                        </div>
+                    `;
+
+                    card.querySelector('input').addEventListener('change', function () {
+                        card.classList.toggle('checked', this.checked);
+                    });
+
+                    col.appendChild(card);
+                    deliverablePickerList.appendChild(col);
                 });
-
-                updateDeliverableDetail();
             }
-
-            function updateDeliverableDetail() {
-                const opt = deliverableSelect.options[deliverableSelect.selectedIndex];
-                if (!opt || !opt.value) {
-                    deliverableDetail.classList.add('d-none');
-                    return;
-                }
-                const parts = [];
-                if (opt.dataset.description) parts.push(opt.dataset.description);
-                if (opt.dataset.start && opt.dataset.end) parts.push(`Timeline: ${opt.dataset.start} → ${opt.dataset.end}`);
-                if (opt.dataset.amount && parseFloat(opt.dataset.amount) > 0)
-                    parts.push(`Amount: ${opt.dataset.currency} ${Number(opt.dataset.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
-                if (opt.dataset.status) parts.push(`Status: ${opt.dataset.status.replace('_', ' ')}`);
-                deliverableDetailText.innerHTML = parts.map(p => `<div>${p}</div>`).join('');
-                deliverableDetail.classList.toggle('d-none', parts.length === 0);
-            }
-
-            deliverableSelect?.addEventListener('change', updateDeliverableDetail);
 
             search?.addEventListener('input', renderRequestList);
             vendorSelect?.addEventListener('change', () => fillVendorContacts(vendorSelect.value, true));

@@ -54,6 +54,16 @@ class ProcurementDeliverable extends BaseModel
         return $this->belongsTo(User::class, 'vendor_id');
     }
 
+    public function purchaseOrders(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            ProcurementPurchaseOrder::class,
+            'procurement_purchase_order_deliverables',
+            'deliverable_id',
+            'purchase_order_id'
+        )->withTimestamps();
+    }
+
     public function invoices(): BelongsToMany
     {
         return $this->belongsToMany(

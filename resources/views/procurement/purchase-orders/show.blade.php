@@ -191,32 +191,6 @@
                                 <td>{{ $purchaseOrder->procurement?->reference_no ?? $purchaseOrder->contract_reference ?? 'N/A' }}</td>
                             </tr>
                             <tr>
-                                <th>Deliverable</th>
-                                <td>
-                                    @if ($purchaseOrder->deliverable)
-                                        <span class="fw-semibold">{{ $purchaseOrder->deliverable->title }}</span>
-                                        @if ($purchaseOrder->deliverable->type === 'milestone')
-                                            <span class="badge bg-secondary ms-1">Milestone</span>
-                                        @endif
-                                        @if ($purchaseOrder->deliverable->description)
-                                            <div class="small text-muted">{{ $purchaseOrder->deliverable->description }}</div>
-                                        @endif
-                                        @if ($purchaseOrder->deliverable->timeline_start || $purchaseOrder->deliverable->timeline_end)
-                                            <div class="small text-muted">
-                                                {{ $purchaseOrder->deliverable->timeline_start?->format('d M Y') ?? '?' }}
-                                                →
-                                                {{ $purchaseOrder->deliverable->timeline_end?->format('d M Y') ?? '?' }}
-                                            </div>
-                                        @endif
-                                        <span class="badge bg-{{ match($purchaseOrder->deliverable->status) { 'completed' => 'success', 'in_progress' => 'primary', 'cancelled' => 'danger', default => 'secondary' } }} mt-1">
-                                            {{ ucfirst(str_replace('_', ' ', $purchaseOrder->deliverable->status)) }}
-                                        </span>
-                                    @else
-                                        <span class="text-muted">N/A</span>
-                                    @endif
-                                </td>
-                            </tr>
-                            <tr>
                                 <th>Vendor</th>
                                 <td>{{ $purchaseOrder->vendor?->name ?? 'N/A' }}</td>
                             </tr>
@@ -249,6 +223,64 @@
                         </table>
                     </div>
                 </div>
+
+                @if ($purchaseOrder->deliverables->isNotEmpty())
+                <div class="mt-4">
+                    <div class="section-title">Deliverables &amp; Milestones</div>
+                    <div class="row g-3">
+                        @foreach ($purchaseOrder->deliverables->sortBy('sequence') as $dlv)
+                            @php
+                                $dlvStatusClass = match($dlv->status) {
+                                    'completed'  => 'success',
+                                    'in_progress'=> 'primary',
+                                    'cancelled'  => 'danger',
+                                    default      => 'secondary',
+                                };
+                            @endphp
+                            <div class="col-md-4">
+                                <div class="stat-tile h-100">
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <span class="badge bg-light text-dark border">
+                                            {{ $dlv->type === 'milestone' ? 'Milestone' : 'Deliverable' }}
+                                            #{{ $dlv->sequence }}
+                                        </span>
+                                        <span class="badge bg-{{ $dlvStatusClass }}">
+                                            {{ ucwords(str_replace('_', ' ', $dlv->status)) }}
+                                        </span>
+                                    </div>
+                                    <div class="fw-semibold mt-2">{{ $dlv->title }}</div>
+                                    @if ($dlv->description)
+                                        <div class="small text-muted mt-1">{{ $dlv->description }}</div>
+                                    @endif
+                                    @if ($dlv->timeline_start || $dlv->timeline_end)
+                                        <div class="small text-muted mt-2">
+                                            <i class="feather-calendar me-1"></i>
+                                            {{ $dlv->timeline_start?->format('d M Y') ?? '?' }}
+                                            →
+                                            {{ $dlv->timeline_end?->format('d M Y') ?? '?' }}
+                                        </div>
+                                    @endif
+                                    @if ($dlv->amount)
+                                        <div class="small text-muted mt-1">
+                                            {{ $dlv->currency ?? '' }} {{ number_format((float) $dlv->amount, 2) }}
+                                        </div>
+                                    @endif
+                                    <div class="small mt-2">
+                                        Vendor:
+                                        <span class="badge bg-{{ $dlv->vendor_approval_status === 'approved' ? 'success' : ($dlv->vendor_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
+                                            {{ ucfirst($dlv->vendor_approval_status) }}
+                                        </span>
+                                        &nbsp;Admin:
+                                        <span class="badge bg-{{ $dlv->admin_approval_status === 'approved' ? 'success' : ($dlv->admin_approval_status === 'rejected' ? 'danger' : 'secondary') }}">
+                                            {{ ucfirst($dlv->admin_approval_status) }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+                @endif
 
                 <div class="row g-4 mt-1">
                     <div class="col-lg-6">

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
 
 class ProcurementPurchaseOrder extends BaseModel
@@ -12,7 +13,6 @@ class ProcurementPurchaseOrder extends BaseModel
 
     protected $fillable = [
         'procurement_id',
-        'deliverable_id',
         'negotiation_id',
         'invoice_id',
         'budget_commitment_id',
@@ -68,9 +68,14 @@ class ProcurementPurchaseOrder extends BaseModel
         return $this->belongsTo(Procurement::class, 'procurement_id');
     }
 
-    public function deliverable(): BelongsTo
+    public function deliverables(): BelongsToMany
     {
-        return $this->belongsTo(ProcurementDeliverable::class, 'deliverable_id');
+        return $this->belongsToMany(
+            ProcurementDeliverable::class,
+            'procurement_purchase_order_deliverables',
+            'purchase_order_id',
+            'deliverable_id'
+        )->withTimestamps();
     }
 
     public function negotiation(): BelongsTo

@@ -1734,6 +1734,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:procurement.manage
     ->group(function () {
         Route::get('/', [ProcurementDeliverableController::class, 'index'])
             ->name('index');
+        Route::get('/create', [ProcurementDeliverableController::class, 'create'])
+            ->name('create');
+        Route::post('/', [ProcurementDeliverableController::class, 'store'])
+            ->name('store');
         Route::get('/sheet', [ProcurementDeliverableController::class, 'sheet'])
             ->name('sheet');
         Route::post('/{deliverable}/approve', [ProcurementDeliverableController::class, 'approve'])
@@ -1742,6 +1746,8 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:procurement.manage
             ->name('reject');
         Route::post('/{deliverable}/status', [ProcurementDeliverableController::class, 'updateStatus'])
             ->name('status');
+        Route::delete('/{deliverable}', [ProcurementDeliverableController::class, 'destroy'])
+            ->name('destroy');
     });
 
 
