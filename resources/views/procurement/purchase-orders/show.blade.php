@@ -191,6 +191,32 @@
                                 <td>{{ $purchaseOrder->procurement?->reference_no ?? $purchaseOrder->contract_reference ?? 'N/A' }}</td>
                             </tr>
                             <tr>
+                                <th>Deliverable</th>
+                                <td>
+                                    @if ($purchaseOrder->deliverable)
+                                        <span class="fw-semibold">{{ $purchaseOrder->deliverable->title }}</span>
+                                        @if ($purchaseOrder->deliverable->type === 'milestone')
+                                            <span class="badge bg-secondary ms-1">Milestone</span>
+                                        @endif
+                                        @if ($purchaseOrder->deliverable->description)
+                                            <div class="small text-muted">{{ $purchaseOrder->deliverable->description }}</div>
+                                        @endif
+                                        @if ($purchaseOrder->deliverable->timeline_start || $purchaseOrder->deliverable->timeline_end)
+                                            <div class="small text-muted">
+                                                {{ $purchaseOrder->deliverable->timeline_start?->format('d M Y') ?? '?' }}
+                                                →
+                                                {{ $purchaseOrder->deliverable->timeline_end?->format('d M Y') ?? '?' }}
+                                            </div>
+                                        @endif
+                                        <span class="badge bg-{{ match($purchaseOrder->deliverable->status) { 'completed' => 'success', 'in_progress' => 'primary', 'cancelled' => 'danger', default => 'secondary' } }} mt-1">
+                                            {{ ucfirst(str_replace('_', ' ', $purchaseOrder->deliverable->status)) }}
+                                        </span>
+                                    @else
+                                        <span class="text-muted">N/A</span>
+                                    @endif
+                                </td>
+                            </tr>
+                            <tr>
                                 <th>Vendor</th>
                                 <td>{{ $purchaseOrder->vendor?->name ?? 'N/A' }}</td>
                             </tr>

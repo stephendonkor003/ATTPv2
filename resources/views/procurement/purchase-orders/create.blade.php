@@ -323,11 +323,29 @@
                                 <select name="procurement_id" id="procurementSelect" class="form-select">
                                     <option value="">Optional procurement link</option>
                                     @foreach ($procurements as $procurement)
-                                        <option value="{{ $procurement->id }}" @selected(old('procurement_id') === $procurement->id)>
+                                        <option value="{{ $procurement->id }}" @selected(old('procurement_id') === (string) $procurement->id)>
                                             {{ $procurement->title }} ({{ $procurement->reference_no ?? 'N/A' }})
                                         </option>
                                     @endforeach
                                 </select>
+                            </div>
+
+                            <div class="col-lg-6" id="deliverableSelectWrap" style="display:none;">
+                                <label class="form-label fw-semibold">
+                                    Deliverable <span class="text-danger">*</span>
+                                </label>
+                                <select name="deliverable_id" id="deliverableSelect"
+                                        class="form-select @error('deliverable_id') is-invalid @enderror">
+                                    <option value="">— Select a deliverable —</option>
+                                </select>
+                                <div class="form-text">Select the specific deliverable this purchase order covers.</div>
+                                @error('deliverable_id')
+                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                @enderror
+                                <div id="deliverableDetail" class="mt-2 p-2 bg-light border rounded small d-none">
+                                    <div class="text-muted mb-1">Deliverable details</div>
+                                    <div id="deliverableDetailText"></div>
+                                </div>
                             </div>
 
                             <div class="col-lg-6">
@@ -505,9 +523,11 @@
             const purchaseRequests = @json($purchaseRequests);
             const procurements = @json($procurementOptions);
             const vendors = @json($vendorOptions);
+            const deliverablesByProcurement = @json($deliverablesByProcurement);
             const oldPurchaseRequestId = @json($oldPurchaseRequestId);
             const oldCommitmentId = @json($oldCommitmentId);
             const oldAmount = @json(old('amount'));
+            const oldDeliverableId = @json(old('deliverable_id'));
 
             const list = document.getElementById('purchaseRequestList');
             const search = document.getElementById('purchaseRequestSearch');
@@ -704,6 +724,61 @@
                 });
             }
 
+            const deliverableWrap   = document.getElementById('deliverableSelectWrap');
+            const deliverableSelect = document.getElementById('deliverableSelect');
+            const deliverableDetail = document.getElementById('deliverableDetail');
+            const deliverableDetailText = document.getElementById('deliverableDetailText');
+
+            function updateDeliverableSelect(procurementId) {
+                const deliverables = (procurementId && deliverablesByProcurement[procurementId]) || [];
+
+                if (!procurementId || deliverables.length === 0) {
+                    deliverableWrap.style.display = 'none';
+                    deliverableSelect.innerHTML = '<option value="">— Select a deliverable —</option>';
+                    deliverableSelect.removeAttribute('required');
+                    deliverableDetail.classList.add('d-none');
+                    return;
+                }
+
+                deliverableWrap.style.display = '';
+                deliverableSelect.setAttribute('required', '');
+
+                deliverableSelect.innerHTML = '<option value="">— Select a deliverable —</option>';
+                deliverables.forEach((d) => {
+                    const opt = document.createElement('option');
+                    opt.value = d.id;
+                    opt.textContent = (d.type === 'milestone' ? '[Milestone] ' : '') + d.title;
+                    opt.dataset.description = d.description || '';
+                    opt.dataset.status = d.status || '';
+                    opt.dataset.start = d.start || '';
+                    opt.dataset.end = d.end || '';
+                    opt.dataset.amount = d.amount || '';
+                    opt.dataset.currency = d.currency || '';
+                    if (oldDeliverableId && d.id === oldDeliverableId) opt.selected = true;
+                    deliverableSelect.appendChild(opt);
+                });
+
+                updateDeliverableDetail();
+            }
+
+            function updateDeliverableDetail() {
+                const opt = deliverableSelect.options[deliverableSelect.selectedIndex];
+                if (!opt || !opt.value) {
+                    deliverableDetail.classList.add('d-none');
+                    return;
+                }
+                const parts = [];
+                if (opt.dataset.description) parts.push(opt.dataset.description);
+                if (opt.dataset.start && opt.dataset.end) parts.push(`Timeline: ${opt.dataset.start} → ${opt.dataset.end}`);
+                if (opt.dataset.amount && parseFloat(opt.dataset.amount) > 0)
+                    parts.push(`Amount: ${opt.dataset.currency} ${Number(opt.dataset.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                if (opt.dataset.status) parts.push(`Status: ${opt.dataset.status.replace('_', ' ')}`);
+                deliverableDetailText.innerHTML = parts.map(p => `<div>${p}</div>`).join('');
+                deliverableDetail.classList.toggle('d-none', parts.length === 0);
+            }
+
+            deliverableSelect?.addEventListener('change', updateDeliverableDetail);
+
             search?.addEventListener('input', renderRequestList);
             vendorSelect?.addEventListener('change', () => fillVendorContacts(vendorSelect.value, true));
             procurementSelect?.addEventListener('change', () => {
@@ -712,7 +787,13 @@
                     vendorSelect.value = procurement.awarded_vendor_id;
                     fillVendorContacts(procurement.awarded_vendor_id, true);
                 }
+                updateDeliverableSelect(procurementSelect.value);
             });
+
+            // Restore deliverable dropdown on validation failure
+            if (procurementSelect?.value) {
+                updateDeliverableSelect(procurementSelect.value);
+            }
 
             document.getElementById('purchaseOrderForm')?.addEventListener('submit', function (event) {
                 warning.classList.add('d-none');

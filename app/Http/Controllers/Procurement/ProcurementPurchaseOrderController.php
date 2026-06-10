@@ -7,6 +7,7 @@ use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use App\Models\Activity;
 use App\Models\BudgetCommitment;
 use App\Models\Procurement;
+use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProgramFunding;
 use App\Models\Project;
@@ -119,6 +120,28 @@ class ProcurementPurchaseOrderController extends Controller
             ])
             ->values();
 
+        $procurementIds = $procurements->pluck('id');
+
+        $deliverablesRaw = ProcurementDeliverable::whereIn('procurement_id', $procurementIds)
+            ->orderBy('sequence')
+            ->orderBy('title')
+            ->get();
+
+        $deliverablesByProcurement = $deliverablesRaw
+            ->groupBy(fn (ProcurementDeliverable $d) => (string) $d->procurement_id)
+            ->map(fn ($group) => $group->map(fn (ProcurementDeliverable $d) => [
+                'id'          => (string) $d->id,
+                'title'       => $d->title,
+                'type'        => $d->type,
+                'description' => $d->description,
+                'status'      => $d->status,
+                'amount'      => (float) ($d->amount ?? 0),
+                'currency'    => $d->currency,
+                'start'       => $d->timeline_start?->format('M d, Y'),
+                'end'         => $d->timeline_end?->format('M d, Y'),
+            ])->values())
+            ->toArray();
+
         $buyerDefaults = [
             'name' => auth()->user()?->name,
             'email' => auth()->user()?->email,
@@ -128,6 +151,7 @@ class ProcurementPurchaseOrderController extends Controller
             'purchaseRequests',
             'procurements',
             'procurementOptions',
+            'deliverablesByProcurement',
             'vendors',
             'vendorOptions',
             'buyerDefaults'
@@ -140,6 +164,7 @@ class ProcurementPurchaseOrderController extends Controller
             'purchase_request_id' => ['required', 'exists:myb_purchase_requests,id'],
             'budget_commitment_id' => ['required', 'exists:myb_budget_commitments,id'],
             'procurement_id' => ['nullable', 'exists:procurements,id'],
+            'deliverable_id' => ['nullable', 'required_with:procurement_id', 'exists:procurement_deliverables,id'],
             'vendor_id' => ['nullable', 'exists:users,id'],
             'po_title' => ['nullable', 'string', 'max:255'],
             'supplier_reference' => ['nullable', 'string', 'max:255'],
@@ -170,6 +195,7 @@ class ProcurementPurchaseOrderController extends Controller
         ], [
             'purchase_request_id.required' => 'Select the approved purchase request before creating the purchase order.',
             'budget_commitment_id.required' => 'Select the approved commitment year that will fund this purchase order.',
+            'deliverable_id.required_with' => 'Select a deliverable for the chosen procurement.',
             'billing_address.required' => 'Enter the bill-to address for this purchase order.',
             'shipping_address.required' => 'Enter the ship-to address for this purchase order.',
             'delivery_terms.required' => 'Enter the delivery terms for this purchase order.',
@@ -210,9 +236,19 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $procurement = null;
+        $deliverable = null;
         if (!empty($data['procurement_id'])) {
             $procurement = Procurement::findOrFail($data['procurement_id']);
             $this->assertProcurementInScope($procurement);
+
+            if (!empty($data['deliverable_id'])) {
+                $deliverable = ProcurementDeliverable::findOrFail($data['deliverable_id']);
+                if ((string) $deliverable->procurement_id !== (string) $procurement->id) {
+                    throw ValidationException::withMessages([
+                        'deliverable_id' => 'The selected deliverable does not belong to the chosen procurement.',
+                    ]);
+                }
+            }
         }
 
         $vendor = null;
@@ -224,11 +260,12 @@ class ProcurementPurchaseOrderController extends Controller
             $vendor = User::query()->find($procurement->awarded_vendor_id);
         }
 
-        $purchaseOrder = DB::transaction(function () use ($commitment, $data, $procurement, $purchaseRequest, $request, $vendor) {
+        $purchaseOrder = DB::transaction(function () use ($commitment, $data, $deliverable, $procurement, $purchaseRequest, $request, $vendor) {
             $purchaseOrder = ProcurementPurchaseOrder::create([
                 'budget_commitment_id' => $commitment->id,
                 'purchase_request_id' => $purchaseRequest->id,
                 'procurement_id' => $procurement?->id,
+                'deliverable_id' => $deliverable?->id,
                 'vendor_id' => $vendor?->id,
                 'sub_activity_id' => $commitment->allocation_level === 'sub_activity' ? $commitment->allocation_id : null,
                 'governance_node_id' => $commitment->governance_node_id,
@@ -277,6 +314,7 @@ class ProcurementPurchaseOrderController extends Controller
 
         $purchaseOrder->load([
             'procurement',
+            'deliverable',
             'vendor',
             'subActivity',
             'negotiation',
