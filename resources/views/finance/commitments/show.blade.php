@@ -304,7 +304,8 @@
                         <button type="button"
                             class="btn btn-outline-danger js-delete-commitment"
                             data-info-url="{{ route('finance.commitments.destroy-info', $commitment) }}"
-                            data-delete-url="{{ route('finance.commitments.destroy', $commitment) }}">
+                            data-delete-url="{{ route('finance.commitments.destroy', $commitment) }}"
+                            data-force-delete-url="{{ route('finance.commitments.force-destroy', $commitment) }}">
                             <i class="feather-trash-2 me-1"></i>
                             Delete
                         </button>
@@ -385,6 +386,13 @@
         @method('DELETE')
     </form>
 
+    <form id="forceDeleteCommitmentForm" method="POST"
+          action="{{ route('finance.commitments.force-destroy', $commitment) }}"
+          style="display:none">
+        @csrf
+        @method('DELETE')
+    </form>
+
     @push('scripts')
     <script>
     (function () {
@@ -443,9 +451,10 @@
         }
 
         document.querySelector('.js-delete-commitment')?.addEventListener('click', function () {
-            const infoUrl = this.dataset.infoUrl;
-            const body    = document.getElementById('deleteCommitmentModalBody');
-            const footer  = document.getElementById('deleteCommitmentModalFooter');
+            const infoUrl        = this.dataset.infoUrl;
+            const forceDeleteUrl = this.dataset.forceDeleteUrl;
+            const body           = document.getElementById('deleteCommitmentModalBody');
+            const footer         = document.getElementById('deleteCommitmentModalFooter');
             body.innerHTML = `<div class="text-center py-3">
                 <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
                 <div class="small text-muted mt-2">Loading impact details…</div>
@@ -467,6 +476,18 @@
                             this.disabled = true;
                             this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Deleting…';
                             document.getElementById('deleteCommitmentForm').submit();
+                        });
+                    } else if (data.is_admin && forceDeleteUrl) {
+                        document.getElementById('forceDeleteCommitmentForm').action = forceDeleteUrl;
+                        footer.innerHTML = `
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-danger" id="forceDeleteBtn">
+                                <i class="feather-zap me-1"></i> Force Delete (Admin Only)
+                            </button>`;
+                        document.getElementById('forceDeleteBtn').addEventListener('click', function () {
+                            this.disabled = true;
+                            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Force Deleting…';
+                            document.getElementById('forceDeleteCommitmentForm').submit();
                         });
                     } else {
                         footer.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>`;

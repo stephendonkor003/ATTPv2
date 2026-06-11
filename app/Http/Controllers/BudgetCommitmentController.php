@@ -954,6 +954,7 @@ class BudgetCommitmentController extends Controller
         return response()->json([
             'can_delete'  => $canDelete,
             'block_reason'=> $blockReason,
+            'is_admin'    => Auth::user()?->isAdmin() ?? false,
             'summary'     => [
                 'amount'   => number_format((float) $commitment->commitment_amount, 2),
                 'currency' => $currency,
@@ -1004,6 +1005,41 @@ class BudgetCommitmentController extends Controller
         return redirect()
             ->route('finance.commitments.index')
             ->with('success', 'Budget commitment and all linked records deleted.');
+    }
+
+    public function forceDestroy(BudgetCommitment $commitment)
+    {
+        $this->assertCommitmentInScope($commitment);
+
+        if (!Auth::user()?->isAdmin()) {
+            abort(403, 'Only administrators can force-delete commitments.');
+        }
+
+        $purchaseRequest = $commitment->purchaseRequest;
+
+        DB::transaction(function () use ($purchaseRequest, $commitment) {
+            if ($purchaseRequest) {
+                $pos = ProcurementPurchaseOrder::query()
+                    ->where(function ($q) use ($purchaseRequest, $commitment) {
+                        $q->where('purchase_request_id', $purchaseRequest->id)
+                          ->orWhere('budget_commitment_id', $commitment->id);
+                    })->get();
+
+                foreach ($pos as $po) {
+                    $this->deletePurchaseOrderCascade($po);
+                }
+
+                $purchaseRequest->commitments()->delete();
+                $purchaseRequest->items()->delete();
+                $purchaseRequest->delete();
+            } else {
+                $commitment->delete();
+            }
+        });
+
+        return redirect()
+            ->route('finance.commitments.index')
+            ->with('success', 'Budget commitment and all linked records have been force-deleted.');
     }
 
     private function deletePurchaseOrderCascade(ProcurementPurchaseOrder $po): void

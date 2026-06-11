@@ -241,6 +241,7 @@ class PurchaseRequestController extends Controller
         return response()->json([
             'can_delete'   => $canDelete,
             'block_reason' => $blockReason,
+            'is_admin'     => Auth::user()?->isAdmin() ?? false,
             'summary' => [
                 'reference_no' => $purchaseRequest->reference_no,
                 'total_amount' => number_format((float) $purchaseRequest->total_amount, 2),
@@ -289,6 +290,40 @@ class PurchaseRequestController extends Controller
         return redirect()
             ->route('finance.purchase-requests.index')
             ->with('success', 'Purchase request and all linked records deleted.');
+    }
+
+    public function forceDestroy(PurchaseRequest $purchaseRequest)
+    {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+
+        if (!Auth::user()?->isAdmin()) {
+            abort(403, 'Only administrators can force-delete purchase requests.');
+        }
+
+        $purchaseRequest->load('commitments');
+        $commitmentIds = $purchaseRequest->commitments->pluck('id')->filter()->values();
+
+        DB::transaction(function () use ($purchaseRequest, $commitmentIds) {
+            $pos = ProcurementPurchaseOrder::query()
+                ->where(function ($q) use ($purchaseRequest, $commitmentIds) {
+                    $q->where('purchase_request_id', $purchaseRequest->id);
+                    if ($commitmentIds->isNotEmpty()) {
+                        $q->orWhereIn('budget_commitment_id', $commitmentIds);
+                    }
+                })->get();
+
+            foreach ($pos as $po) {
+                $this->deletePurchaseOrderCascade($po);
+            }
+
+            $purchaseRequest->commitments()->delete();
+            $purchaseRequest->items()->delete();
+            $purchaseRequest->delete();
+        });
+
+        return redirect()
+            ->route('finance.purchase-requests.index')
+            ->with('success', 'Purchase request and all linked records have been force-deleted.');
     }
 
     private function deletePurchaseOrderCascade(ProcurementPurchaseOrder $po): void

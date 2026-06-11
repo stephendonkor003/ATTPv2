@@ -164,7 +164,8 @@
                                             class="btn btn-sm btn-outline-danger js-delete-commitment"
                                             title="Delete Commitment"
                                             data-info-url="{{ route('finance.commitments.destroy-info', $c->id) }}"
-                                            data-delete-url="{{ route('finance.commitments.destroy', $c->id) }}">
+                                            data-delete-url="{{ route('finance.commitments.destroy', $c->id) }}"
+                                            data-force-delete-url="{{ route('finance.commitments.force-destroy', $c->id) }}">
                                             <i class="feather-trash-2"></i>
                                         </button>
                                     @endcan
@@ -205,6 +206,11 @@
 
     {{-- Hidden form that gets its action set dynamically --}}
     <form id="deleteCommitmentForm" method="POST" style="display:none">
+        @csrf
+        @method('DELETE')
+    </form>
+
+    <form id="forceDeleteCommitmentForm" method="POST" style="display:none">
         @csrf
         @method('DELETE')
     </form>
@@ -292,13 +298,15 @@
         const btn = e.target.closest('.js-delete-commitment');
         if (!btn) return;
 
-        const infoUrl   = btn.dataset.infoUrl;
-        const deleteUrl = btn.dataset.deleteUrl;
+        const infoUrl        = btn.dataset.infoUrl;
+        const deleteUrl      = btn.dataset.deleteUrl;
+        const forceDeleteUrl = btn.dataset.forceDeleteUrl;
 
-        const modal       = document.getElementById('deleteCommitmentModal');
-        const body        = document.getElementById('deleteCommitmentModalBody');
-        const footer      = document.getElementById('deleteCommitmentModalFooter');
-        const deleteForm  = document.getElementById('deleteCommitmentForm');
+        const modal           = document.getElementById('deleteCommitmentModal');
+        const body            = document.getElementById('deleteCommitmentModalBody');
+        const footer          = document.getElementById('deleteCommitmentModalFooter');
+        const deleteForm      = document.getElementById('deleteCommitmentForm');
+        const forceDeleteForm = document.getElementById('forceDeleteCommitmentForm');
 
         // Reset to loading state
         body.innerHTML = `<div class="text-center py-3">
@@ -326,6 +334,18 @@
                         this.disabled = true;
                         this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Deleting…';
                         deleteForm.submit();
+                    });
+                } else if (data.is_admin && forceDeleteUrl) {
+                    forceDeleteForm.action = forceDeleteUrl;
+                    footer.innerHTML = `
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger" id="forceDeleteBtn">
+                            <i class="feather-zap me-1"></i> Force Delete (Admin Only)
+                        </button>`;
+                    document.getElementById('forceDeleteBtn').addEventListener('click', function () {
+                        this.disabled = true;
+                        this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Force Deleting…';
+                        forceDeleteForm.submit();
                     });
                 } else {
                     footer.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>`;

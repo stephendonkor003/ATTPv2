@@ -951,6 +951,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	            ->middleware('permission:finance.commitments.delete')
 	            ->name('commitments.destroy');
 
+	        Route::delete('commitments/{commitment}/force', [BudgetCommitmentController::class, 'forceDestroy'])
+	            ->middleware('permission:finance.commitments.delete')
+	            ->name('commitments.force-destroy');
+
 	        /* =====================================================
 	         | PURCHASE REQUESTS (AUTO-CREATED FROM COMMITMENTS)
 	         ===================================================== */
@@ -994,6 +998,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	        Route::delete('purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'destroy'])
 	            ->middleware('permission:finance.commitments.delete')
 	            ->name('purchase-requests.destroy');
+
+	        Route::delete('purchase-requests/{purchaseRequest}/force', [PurchaseRequestController::class, 'forceDestroy'])
+	            ->middleware('permission:finance.commitments.delete')
+	            ->name('purchase-requests.force-destroy');
 
 
 

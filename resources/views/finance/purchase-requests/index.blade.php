@@ -115,7 +115,8 @@
                                             class="btn btn-sm btn-outline-danger js-delete-pr"
                                             title="Delete Purchase Request"
                                             data-info-url="{{ route('finance.purchase-requests.destroy-info', $pr) }}"
-                                            data-delete-url="{{ route('finance.purchase-requests.destroy', $pr) }}">
+                                            data-delete-url="{{ route('finance.purchase-requests.destroy', $pr) }}"
+                                            data-force-delete-url="{{ route('finance.purchase-requests.force-destroy', $pr) }}">
                                             <i class="feather-trash-2"></i>
                                         </button>
                                     @endif
@@ -205,6 +206,11 @@
         @method('DELETE')
     </form>
 
+    <form id="forceDeletePrForm" method="POST" style="display:none">
+        @csrf
+        @method('DELETE')
+    </form>
+
 @push('scripts')
 <script>
 (function () {
@@ -264,11 +270,13 @@
         const btn = e.target.closest('.js-delete-pr');
         if (!btn) return;
 
-        const infoUrl   = btn.dataset.infoUrl;
-        const deleteUrl = btn.dataset.deleteUrl;
-        const body      = document.getElementById('deletePrModalBody');
-        const footer    = document.getElementById('deletePrModalFooter');
-        const form      = document.getElementById('deletePrForm');
+        const infoUrl        = btn.dataset.infoUrl;
+        const deleteUrl      = btn.dataset.deleteUrl;
+        const forceDeleteUrl = btn.dataset.forceDeleteUrl;
+        const body           = document.getElementById('deletePrModalBody');
+        const footer         = document.getElementById('deletePrModalFooter');
+        const form           = document.getElementById('deletePrForm');
+        const forceForm      = document.getElementById('forceDeletePrForm');
 
         body.innerHTML = `<div class="text-center py-3">
             <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
@@ -293,6 +301,18 @@
                         this.disabled = true;
                         this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Deleting…';
                         form.submit();
+                    });
+                } else if (data.is_admin && forceDeleteUrl) {
+                    forceForm.action = forceDeleteUrl;
+                    footer.innerHTML = `
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger" id="forcePrDeleteBtn">
+                            <i class="feather-zap me-1"></i> Force Delete (Admin Only)
+                        </button>`;
+                    document.getElementById('forcePrDeleteBtn').addEventListener('click', function () {
+                        this.disabled = true;
+                        this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Force Deleting…';
+                        forceForm.submit();
                     });
                 } else {
                     footer.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>`;
