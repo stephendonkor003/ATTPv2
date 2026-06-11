@@ -105,6 +105,17 @@
                 ],
             ])
             ->all();
+        $lineItemModalPayload = $purchaseRequest->items
+            ->mapWithKeys(fn ($item) => [
+                (string) $item->id => [
+                    'title' => $item->resource?->name ?? $item->resourceCategory?->name ?? 'Line item',
+                    'category' => $item->resourceCategory?->name ?? 'N/A',
+                    'deliverable' => $item->deliverable?->title ?? 'No deliverable linked',
+                    'amount' => number_format((float) $item->amount, 2),
+                    'currency' => $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '',
+                ],
+            ])
+            ->all();
     @endphp
 
     <div class="nxl-container">
@@ -563,15 +574,7 @@
     @push('scripts')
         <script>
             (function () {
-                const itemData = @json($purchaseRequest->items->mapWithKeys(fn ($item) => [
-                    (string) $item->id => [
-                        'title' => $item->resource?->name ?? $item->resourceCategory?->name ?? 'Line item',
-                        'category' => $item->resourceCategory?->name ?? 'N/A',
-                        'deliverable' => $item->deliverable?->title ?? 'No deliverable linked',
-                        'amount' => number_format((float) $item->amount, 2),
-                        'currency' => $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '',
-                    ],
-                ])->all());
+                const itemData = @json($lineItemModalPayload);
                 const evidenceData = @json($lineItemEvidencePayload);
 
                 const modal = document.getElementById('prLineItemEvidenceModal');
