@@ -301,15 +301,13 @@
                     @endcan
 
                     @can('finance.commitments.delete')
-                        @if ($commitment->status === 'draft')
-                            <button type="button"
-                                class="btn btn-outline-danger js-delete-commitment"
-                                data-info-url="{{ route('finance.commitments.destroy-info', $commitment) }}"
-                                data-delete-url="{{ route('finance.commitments.destroy', $commitment) }}">
-                                <i class="feather-trash-2 me-1"></i>
-                                Delete
-                            </button>
-                        @endif
+                        <button type="button"
+                            class="btn btn-outline-danger js-delete-commitment"
+                            data-info-url="{{ route('finance.commitments.destroy-info', $commitment) }}"
+                            data-delete-url="{{ route('finance.commitments.destroy', $commitment) }}">
+                            <i class="feather-trash-2 me-1"></i>
+                            Delete
+                        </button>
                     @endcan
 
                     @if ($commitment->status === 'draft')
@@ -357,7 +355,6 @@
     </div>
 
 @can('finance.commitments.delete')
-@if ($commitment->status === 'draft')
     {{-- Cascade-Delete Modal --}}
     <div class="modal fade" id="deleteCommitmentModal" tabindex="-1" aria-labelledby="deleteCommitmentModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -482,6 +479,5 @@
     })();
     </script>
     @endpush
-@endif
 @endcan
 @endsection

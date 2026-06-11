@@ -160,15 +160,13 @@
                                         @endif
                                     @endcan
                                     @can('finance.commitments.delete')
-                                        @if ($c->status === 'draft')
-                                            <button type="button"
-                                                class="btn btn-sm btn-outline-danger js-delete-commitment"
-                                                title="Delete Commitment"
-                                                data-info-url="{{ route('finance.commitments.destroy-info', $c->id) }}"
-                                                data-delete-url="{{ route('finance.commitments.destroy', $c->id) }}">
-                                                <i class="feather-trash-2"></i>
-                                            </button>
-                                        @endif
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-danger js-delete-commitment"
+                                            title="Delete Commitment"
+                                            data-info-url="{{ route('finance.commitments.destroy-info', $c->id) }}"
+                                            data-delete-url="{{ route('finance.commitments.destroy', $c->id) }}">
+                                            <i class="feather-trash-2"></i>
+                                        </button>
                                     @endcan
                                 </td>
 

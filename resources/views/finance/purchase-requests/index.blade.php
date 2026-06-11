@@ -110,7 +110,7 @@
                                         </a>
                                     @endif
 
-                                    @if ($canDeleteThisPurchaseRequest)
+                                    @if ($canDeletePurchaseRequests)
                                         <button type="button"
                                             class="btn btn-sm btn-outline-danger js-delete-pr"
                                             title="Delete Purchase Request"

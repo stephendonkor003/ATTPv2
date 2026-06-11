@@ -41,7 +41,7 @@
                         <i class="feather-edit-2 me-1"></i> Edit Draft
                     </a>
                 @endif
-                @if ($canDeleteThisPurchaseRequest)
+                @if ($canDeletePurchaseRequests)
                     <button type="button"
                         class="btn btn-outline-danger js-delete-pr"
                         data-info-url="{{ route('finance.purchase-requests.destroy-info', $purchaseRequest) }}"
@@ -331,7 +331,7 @@
 
     </div>
 
-@if ($canDeleteThisPurchaseRequest)
+@if ($canDeletePurchaseRequests)
     {{-- Cascade-Delete PR Modal --}}
     <div class="modal fade" id="deletePrModal" tabindex="-1" aria-labelledby="deletePrModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
