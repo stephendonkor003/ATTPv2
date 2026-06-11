@@ -111,6 +111,9 @@ class ProcurementDisbursementController extends Controller
             $deliverables = $this->eligibleDeliverablesForPurchaseOrder($order);
             $sourcePurchaseRequest = $order->purchaseRequest ?: $order->budgetCommitment?->purchaseRequest;
             $evidenceByItem = $order->lineItemEvidence->keyBy(fn (ProcurementPurchaseOrderItemEvidence $evidence) => (string) $evidence->purchase_request_item_id);
+            $poAmount = round((float) ($order->amount ?? 0), 2);
+            $paidAmount = round($order->paidAmount(), 2);
+            $balanceAmount = round(max($poAmount - $paidAmount, 0), 2);
             $lineItems = $sourcePurchaseRequest?->items?->map(function ($item) use ($evidenceByItem, $order) {
                 $evidence = $evidenceByItem->get((string) $item->id);
 
@@ -148,10 +151,12 @@ class ProcurementDisbursementController extends Controller
                     'vendor_email'         => $order->vendor?->email,
                     'vendor_contact_name'  => $order->vendor_contact_name,
                     'vendor_contact_phone' => $order->vendor_contact_phone,
-                    'amount'               => (float) ($order->amount ?? 0),
+                    'amount'               => $poAmount,
                     'currency'             => $order->currency ?? 'USD',
-                    'remaining'            => round($order->remainingAmount(), 2),
-                    'paid'                 => round($order->paidAmount(), 2),
+                    'paid_amount'          => $paidAmount,
+                    'balance_amount'       => $balanceAmount,
+                    'remaining'            => $balanceAmount,
+                    'paid'                 => $paidAmount,
                     'payment_terms'        => $order->payment_terms,
                     'delivery_terms'       => $order->delivery_terms,
                     'expected_delivery'    => $order->expected_delivery_date?->format('M d, Y'),

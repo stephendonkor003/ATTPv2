@@ -921,22 +921,26 @@
                 renderDeliverables(po);
                 renderLineItems(po);
 
-                setText('po-amount', fmt(po.amount));
-                setText('po-paid', fmt(po.paid));
-                setText('po-remaining', fmt(po.remaining));
+                const totalAmount = Number(po.amount || 0);
+                const paidAmount = Number(po.paid_amount ?? po.paid ?? 0);
+                const balanceAmount = Number(po.balance_amount ?? po.remaining ?? Math.max(totalAmount - paidAmount, 0));
+
+                setText('po-amount', fmt(totalAmount));
+                setText('po-paid', fmt(paidAmount));
+                setText('po-remaining', fmt(balanceAmount));
                 document.querySelectorAll('.po-currency-tag').forEach((element) => {
                     element.textContent = po.currency || '';
                 });
 
                 const currency = po.currency || 'USD';
                 if (currPrefix) currPrefix.textContent = currency;
-                if (amountHint) amountHint.textContent = `${fmt(po.remaining)} ${currency}`;
+                if (amountHint) amountHint.textContent = `${fmt(balanceAmount)} ${currency}`;
                 if (amountInput) {
-                    amountInput.max = po.remaining;
+                    amountInput.max = balanceAmount;
                     if (!amountInput.dataset.userSet) {
-                        amountInput.value = po.remaining;
-                    } else if (parseFloat(amountInput.value) > po.remaining) {
-                        amountInput.value = po.remaining;
+                        amountInput.value = balanceAmount;
+                    } else if (parseFloat(amountInput.value || 0) > balanceAmount) {
+                        amountInput.value = balanceAmount;
                     }
                 }
 
