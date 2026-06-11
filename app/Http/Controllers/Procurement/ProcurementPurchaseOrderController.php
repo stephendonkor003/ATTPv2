@@ -57,36 +57,72 @@ class ProcurementPurchaseOrderController extends Controller
 
     public function create()
     {
+        return view('procurement.purchase-orders.create', $this->purchaseOrderFormContext());
+    }
+
+    public function edit(ProcurementPurchaseOrder $purchaseOrder)
+    {
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        $purchaseOrder->load([
+            'deliverables',
+            'lineItemEvidence',
+            'purchaseRequest.items.resourceCategory',
+            'purchaseRequest.items.resource',
+            'purchaseRequest.items.deliverable',
+            'purchaseRequest.commitments' => fn ($query) => $query->where('status', BudgetCommitment::STATUS_APPROVED)
+                ->orderBy('commitment_year'),
+            'budgetCommitment.purchaseRequest.items.resourceCategory',
+            'budgetCommitment.purchaseRequest.items.resource',
+            'budgetCommitment.purchaseRequest.items.deliverable',
+            'budgetCommitment.purchaseRequest.commitments' => fn ($query) => $query->where('status', BudgetCommitment::STATUS_APPROVED)
+                ->orderBy('commitment_year'),
+        ]);
+
+        return view('procurement.purchase-orders.create', $this->purchaseOrderFormContext($purchaseOrder));
+    }
+
+    private function purchaseOrderFormContext(?ProcurementPurchaseOrder $purchaseOrder = null): array
+    {
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
-            abort(403, 'You do not have access to create purchase orders.');
+            abort(403, 'You do not have access to purchase orders.');
         }
 
-        $purchaseRequests = PurchaseRequest::with([
-            'programFunding.program',
-            'governanceNode',
-            'subActivity',
-            'items.resourceCategory',
-            'items.resource',
-            'items.deliverable',
-            'commitments' => fn ($query) => $query->where('status', BudgetCommitment::STATUS_APPROVED)
-                ->orderBy('commitment_year'),
-        ])
-            ->where('status', 'approved')
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
-                $query->whereIn('governance_node_id', $scopedNodeIds)
-                    ->whereNotNull('governance_node_id');
-            })
-            ->whereHas('commitments', function ($query) {
-                $query->where('status', BudgetCommitment::STATUS_APPROVED)
-                    ->whereNotNull('commitment_amount');
-            })
-            ->orderByDesc('approved_at')
-            ->orderByDesc('created_at')
-            ->get()
-            ->map(fn (PurchaseRequest $purchaseRequest) => $this->purchaseRequestCreateOption($purchaseRequest))
-            ->filter()
-            ->values();
+        if ($purchaseOrder) {
+            $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+            $purchaseRequests = collect([$sourcePurchaseRequest])
+                ->filter()
+                ->map(fn (PurchaseRequest $purchaseRequest) => $this->purchaseRequestCreateOption($purchaseRequest, $purchaseOrder))
+                ->filter()
+                ->values();
+        } else {
+            $purchaseRequests = PurchaseRequest::with([
+                'programFunding.program',
+                'governanceNode',
+                'subActivity',
+                'items.resourceCategory',
+                'items.resource',
+                'items.deliverable',
+                'commitments' => fn ($query) => $query->where('status', BudgetCommitment::STATUS_APPROVED)
+                    ->orderBy('commitment_year'),
+            ])
+                ->where('status', 'approved')
+                ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                    $query->whereIn('governance_node_id', $scopedNodeIds)
+                        ->whereNotNull('governance_node_id');
+                })
+                ->whereHas('commitments', function ($query) {
+                    $query->where('status', BudgetCommitment::STATUS_APPROVED)
+                        ->whereNotNull('commitment_amount');
+                })
+                ->orderByDesc('approved_at')
+                ->orderByDesc('created_at')
+                ->get()
+                ->map(fn (PurchaseRequest $purchaseRequest) => $this->purchaseRequestCreateOption($purchaseRequest))
+                ->filter()
+                ->values();
+        }
 
         $procurements = Procurement::query()
             ->with('awardedVendor')
@@ -149,15 +185,37 @@ class ProcurementPurchaseOrderController extends Controller
             'email' => auth()->user()?->email,
         ];
 
-        return view('procurement.purchase-orders.create', compact(
+        $itemEvidenceDefaults = [];
+        if ($purchaseOrder) {
+            $itemEvidenceDefaults = $purchaseOrder->lineItemEvidence
+                ->mapWithKeys(fn (ProcurementPurchaseOrderItemEvidence $evidence) => [
+                    (string) $evidence->purchase_request_item_id => [
+                        'is_met' => $evidence->is_met ? '1' : '0',
+                        'deliverable_date' => $evidence->deliverable_date?->format('Y-m-d'),
+                        'notes' => $evidence->notes,
+                        'existing_documents' => collect($evidence->documents ?? [])
+                            ->map(fn ($document) => [
+                                'name' => $document['name'] ?? 'Document',
+                                'display_name' => $document['display_name'] ?? null,
+                            ])
+                            ->values()
+                            ->all(),
+                    ],
+                ])
+                ->all();
+        }
+
+        return compact(
             'purchaseRequests',
             'procurements',
             'procurementOptions',
             'deliverablesByProcurement',
             'vendors',
             'vendorOptions',
-            'buyerDefaults'
-        ));
+            'buyerDefaults',
+            'purchaseOrder',
+            'itemEvidenceDefaults'
+        );
     }
 
     public function store(Request $request)
@@ -344,6 +402,189 @@ class ProcurementPurchaseOrderController extends Controller
         return redirect()
             ->route('procurement.purchase-orders.show', $purchaseOrder)
             ->with('success', 'Purchase order created from approved purchase request ' . $purchaseRequest->reference_no . '.');
+    }
+
+    public function update(Request $request, ProcurementPurchaseOrder $purchaseOrder)
+    {
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        $data = $request->validate([
+            'purchase_request_id' => ['required', 'exists:myb_purchase_requests,id'],
+            'budget_commitment_id' => ['required', 'exists:myb_budget_commitments,id'],
+            'procurement_id' => ['nullable', 'exists:procurements,id'],
+            'deliverable_ids'   => ['nullable', 'array'],
+            'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
+            'vendor_id' => ['nullable', 'exists:users,id'],
+            'po_title' => ['nullable', 'string', 'max:255'],
+            'supplier_reference' => ['nullable', 'string', 'max:255'],
+            'contract_reference' => ['nullable', 'string', 'max:255'],
+            'buyer_contact_name' => ['nullable', 'string', 'max:255'],
+            'buyer_contact_email' => ['nullable', 'email', 'max:255'],
+            'buyer_contact_phone' => ['nullable', 'string', 'max:100'],
+            'vendor_contact_name' => ['nullable', 'string', 'max:255'],
+            'vendor_contact_email' => ['nullable', 'email', 'max:255'],
+            'vendor_contact_phone' => ['nullable', 'string', 'max:100'],
+            'billing_address' => ['required', 'string', 'max:2000'],
+            'shipping_address' => ['required', 'string', 'max:2000'],
+            'delivery_location' => ['nullable', 'string', 'max:2000'],
+            'incoterm' => ['nullable', 'string', 'max:30'],
+            'delivery_terms' => ['required', 'string', 'max:255'],
+            'payment_terms' => ['required', 'string', 'max:255'],
+            'warranty_terms' => ['nullable', 'string', 'max:2000'],
+            'inspection_requirements' => ['nullable', 'string', 'max:2000'],
+            'special_instructions' => ['nullable', 'string', 'max:2000'],
+            'terms_conditions' => ['nullable', 'string', 'max:5000'],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'currency' => ['nullable', 'string', 'max:10'],
+            'status' => ['required', 'in:draft,issued,closed,cancelled'],
+            'issued_at' => ['nullable', 'date'],
+            'expected_delivery_date' => ['nullable', 'date'],
+            'valid_until' => ['nullable', 'date'],
+            'supporting_document' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
+            'item_evidence' => ['nullable', 'array'],
+            'item_evidence.*.is_met' => ['nullable', 'boolean'],
+            'item_evidence.*.deliverable_date' => ['nullable', 'date'],
+            'item_evidence.*.notes' => ['nullable', 'string', 'max:3000'],
+            'item_evidence.*.document_names' => ['nullable', 'array', 'max:20'],
+            'item_evidence.*.document_names.*' => ['nullable', 'string', 'max:255'],
+            'item_evidence.*.documents' => ['nullable', 'array', 'max:20'],
+            'item_evidence.*.documents.*' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
+        ], [
+            'purchase_request_id.required' => 'Select the approved purchase request before saving the purchase order.',
+            'budget_commitment_id.required' => 'Select the approved commitment year that funds this purchase order.',
+            'billing_address.required' => 'Enter the bill-to address for this purchase order.',
+            'shipping_address.required' => 'Enter the ship-to address for this purchase order.',
+            'delivery_terms.required' => 'Enter the delivery terms for this purchase order.',
+            'payment_terms.required' => 'Enter the payment terms for this purchase order.',
+            'supporting_document.mimes' => 'Supporting documentation must be a PDF, Office document, image, or ZIP file.',
+            'item_evidence.*.documents.*.mimes' => 'Line item evidence must be a PDF, Office document, image, or ZIP file.',
+        ]);
+
+        $purchaseRequest = PurchaseRequest::with(['commitments', 'items.deliverable'])->findOrFail($data['purchase_request_id']);
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+
+        if ($purchaseRequest->status !== 'approved') {
+            throw ValidationException::withMessages([
+                'purchase_request_id' => 'Only approved purchase requests can be used on purchase orders.',
+            ]);
+        }
+
+        $commitment = BudgetCommitment::findOrFail($data['budget_commitment_id']);
+        $this->assertCommitmentInScope($commitment);
+
+        if ((string) $commitment->purchase_request_id !== (string) $purchaseRequest->id) {
+            throw ValidationException::withMessages([
+                'budget_commitment_id' => 'The selected commitment does not belong to the selected purchase request.',
+            ]);
+        }
+
+        if ($commitment->status !== BudgetCommitment::STATUS_APPROVED) {
+            throw ValidationException::withMessages([
+                'budget_commitment_id' => 'Purchase orders can only be tied to approved commitments.',
+            ]);
+        }
+
+        $remaining = $this->remainingCommitmentAmount($commitment, $purchaseOrder);
+        if ((float) $data['amount'] > $remaining) {
+            throw ValidationException::withMessages([
+                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of ' . number_format($remaining, 2) . '.',
+            ]);
+        }
+
+        $submittedDeliverableIds = collect($data['deliverable_ids'] ?? [])
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+        $itemDeliverableIds = $purchaseRequest->items
+            ->pluck('deliverable_id')
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+        $deliverableIds = $submittedDeliverableIds
+            ->merge($itemDeliverableIds)
+            ->unique()
+            ->values();
+
+        $procurement = null;
+        if (!empty($data['procurement_id'])) {
+            $procurement = Procurement::findOrFail($data['procurement_id']);
+            $this->assertProcurementInScope($procurement);
+
+            if ($deliverableIds->isNotEmpty()) {
+                $invalid = ProcurementDeliverable::whereIn('id', $deliverableIds)
+                    ->where('procurement_id', '!=', $procurement->id)
+                    ->exists();
+
+                if ($invalid) {
+                    throw ValidationException::withMessages([
+                        'deliverable_ids' => 'One or more selected deliverables do not belong to the chosen procurement.',
+                    ]);
+                }
+            }
+        } elseif ($submittedDeliverableIds->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'procurement_id' => 'Select the procurement before choosing additional deliverables.',
+            ]);
+        }
+
+        $vendor = null;
+        if (!empty($data['vendor_id'])) {
+            $vendor = User::query()
+                ->where('user_type', 'vendor')
+                ->findOrFail($data['vendor_id']);
+        } elseif ($procurement?->awarded_vendor_id) {
+            $vendor = User::query()->find($procurement->awarded_vendor_id);
+        }
+
+        DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseOrder, $purchaseRequest, $request, $vendor) {
+            $purchaseOrder->update([
+                'budget_commitment_id' => $commitment->id,
+                'purchase_request_id' => $purchaseRequest->id,
+                'procurement_id' => $procurement?->id,
+                'vendor_id' => $vendor?->id,
+                'sub_activity_id' => $commitment->allocation_level === 'sub_activity' ? $commitment->allocation_id : null,
+                'governance_node_id' => $commitment->governance_node_id,
+                'po_title' => $data['po_title'] ?: 'Purchase Order for ' . $purchaseRequest->reference_no,
+                'supplier_reference' => $data['supplier_reference'] ?? null,
+                'contract_reference' => $data['contract_reference'] ?? null,
+                'buyer_contact_name' => $data['buyer_contact_name'] ?? auth()->user()?->name,
+                'buyer_contact_email' => $data['buyer_contact_email'] ?? auth()->user()?->email,
+                'buyer_contact_phone' => $data['buyer_contact_phone'] ?? null,
+                'vendor_contact_name' => $data['vendor_contact_name'] ?? $vendor?->name,
+                'vendor_contact_email' => $data['vendor_contact_email'] ?? $vendor?->email,
+                'vendor_contact_phone' => $data['vendor_contact_phone'] ?? $vendor?->payment_mobile_number,
+                'billing_address' => $data['billing_address'],
+                'shipping_address' => $data['shipping_address'],
+                'delivery_location' => $data['delivery_location'] ?? null,
+                'incoterm' => $data['incoterm'] ?? null,
+                'delivery_terms' => $data['delivery_terms'],
+                'payment_terms' => $data['payment_terms'],
+                'warranty_terms' => $data['warranty_terms'] ?? null,
+                'inspection_requirements' => $data['inspection_requirements'] ?? null,
+                'special_instructions' => $data['special_instructions'] ?? null,
+                'terms_conditions' => $data['terms_conditions'] ?? null,
+                'amount' => $data['amount'],
+                'currency' => $data['currency'] ?: $this->commitmentCurrency($commitment),
+                'status' => $data['status'],
+                'issued_at' => $data['issued_at'] ?? $purchaseOrder->issued_at ?? now(),
+                'expected_delivery_date' => $data['expected_delivery_date'] ?? $purchaseRequest->delivery_date?->toDateString(),
+                'valid_until' => $data['valid_until'] ?? null,
+            ]);
+
+            if ($request->hasFile('supporting_document')) {
+                $this->deleteSupportingDocument($purchaseOrder);
+                $this->attachSupportingDocument($request, $purchaseOrder);
+            }
+
+            $purchaseOrder->deliverables()->sync($deliverableIds->all());
+            $this->storeLineItemEvidence($request, $purchaseOrder, $purchaseRequest, true);
+        });
+
+        return redirect()
+            ->route('procurement.purchase-orders.show', $purchaseOrder)
+            ->with('success', 'Purchase order updated successfully.');
     }
 
     public function show(ProcurementPurchaseOrder $purchaseOrder)
@@ -561,11 +802,12 @@ class ProcurementPurchaseOrderController extends Controller
         }
     }
 
-    private function remainingCommitmentAmount(BudgetCommitment $commitment): float
+    private function remainingCommitmentAmount(BudgetCommitment $commitment, ?ProcurementPurchaseOrder $ignorePurchaseOrder = null): float
     {
         $committed = (float) ($commitment->commitment_amount ?? 0);
         $issued = (float) ProcurementPurchaseOrder::query()
             ->where('budget_commitment_id', $commitment->id)
+            ->when($ignorePurchaseOrder, fn ($query) => $query->where($ignorePurchaseOrder->getKeyName(), '!=', $ignorePurchaseOrder->getKey()))
             ->whereNotIn('status', ['cancelled'])
             ->sum('amount');
 
@@ -668,12 +910,12 @@ class ProcurementPurchaseOrderController extends Controller
         return 'USD';
     }
 
-    private function purchaseRequestCreateOption(PurchaseRequest $purchaseRequest): ?array
+    private function purchaseRequestCreateOption(PurchaseRequest $purchaseRequest, ?ProcurementPurchaseOrder $purchaseOrder = null): ?array
     {
         $commitments = $purchaseRequest->commitments
             ->filter(fn (BudgetCommitment $commitment) => $commitment->status === BudgetCommitment::STATUS_APPROVED)
-            ->map(function (BudgetCommitment $commitment) {
-                $remaining = $this->remainingCommitmentAmount($commitment);
+            ->map(function (BudgetCommitment $commitment) use ($purchaseOrder) {
+                $remaining = $this->remainingCommitmentAmount($commitment, $purchaseOrder);
                 if ($remaining <= 0) {
                     return null;
                 }
@@ -776,11 +1018,19 @@ class ProcurementPurchaseOrderController extends Controller
         ]);
     }
 
-    private function storeLineItemEvidence(Request $request, ProcurementPurchaseOrder $purchaseOrder, PurchaseRequest $purchaseRequest): void
+    private function storeLineItemEvidence(
+        Request $request,
+        ProcurementPurchaseOrder $purchaseOrder,
+        PurchaseRequest $purchaseRequest,
+        bool $preserveExistingDocuments = false
+    ): void
     {
         $evidenceInput = $request->input('item_evidence', []);
         $filesInput = $request->file('item_evidence', []);
         $items = $purchaseRequest->items->keyBy(fn ($item) => (string) $item->id);
+        $existingEvidence = $preserveExistingDocuments
+            ? $purchaseOrder->lineItemEvidence()->get()->keyBy(fn (ProcurementPurchaseOrderItemEvidence $evidence) => (string) $evidence->purchase_request_item_id)
+            : collect();
 
         foreach ($evidenceInput as $itemId => $input) {
             if (!$items->has((string) $itemId)) {
@@ -794,7 +1044,10 @@ class ProcurementPurchaseOrderController extends Controller
             $deliverableDate = trim((string) ($input['deliverable_date'] ?? ''));
             $notes = trim((string) ($input['notes'] ?? ''));
             $documentNames = $input['document_names'] ?? [];
-            $documents = [];
+            $existing = $existingEvidence->get((string) $itemId);
+            $documents = $preserveExistingDocuments
+                ? collect($existing?->documents ?? [])->filter(fn ($document) => is_array($document))->values()->all()
+                : [];
 
             foreach (($filesInput[$itemId]['documents'] ?? []) as $index => $file) {
                 if (!$file || !$file->isValid()) {
@@ -815,6 +1068,10 @@ class ProcurementPurchaseOrderController extends Controller
             }
 
             if (!$isMet && $deliverableDate === '' && $notes === '' && empty($documents)) {
+                if ($existing) {
+                    $existing->delete();
+                }
+
                 continue;
             }
 

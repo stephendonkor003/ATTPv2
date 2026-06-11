@@ -1,5 +1,72 @@
 @extends('layouts.app')
 
+@push('styles')
+    <style>
+        .pr-line-evidence-status {
+            min-width: 104px;
+            border-radius: 999px;
+        }
+
+        .pr-line-evidence-modal.show {
+            background: rgba(16, 24, 40, .42);
+            display: block;
+        }
+
+        .pr-line-evidence-modal .modal-dialog {
+            max-width: min(860px, calc(100vw - 28px));
+        }
+
+        .pr-line-evidence-modal .modal-content {
+            border: 0;
+            border-radius: 14px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+            overflow: hidden;
+        }
+
+        .pr-line-evidence-summary {
+            background: #f8fafc;
+            border: 1px solid #e3eaf4;
+            border-left: 3px solid #0f766e;
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+
+        .pr-evidence-document-row {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.25fr) auto;
+            gap: 8px;
+            align-items: end;
+            background: #fff;
+            border: 1px solid #e3eaf4;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .pr-evidence-document-row + .pr-evidence-document-row {
+            margin-top: 8px;
+        }
+
+        .pr-evidence-document-label {
+            color: #667085;
+            display: block;
+            font-size: .72rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+
+        body.pr-line-evidence-modal-open {
+            overflow: hidden;
+        }
+
+        @media (max-width: 575.98px) {
+            .pr-evidence-document-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+@endpush
+
 @section('content')
     @php
         $statusClasses = [
@@ -20,6 +87,24 @@
         $canDeleteThisPurchaseRequest = $canDeletePurchaseRequests
             && $purchaseRequestStatus !== 'approved'
             && ! $commitmentStatuses->contains('approved');
+        $lineItemEvidencePayload = $lineItemEvidenceByItem
+            ->mapWithKeys(fn ($evidence) => [
+                (string) $evidence->purchase_request_item_id => [
+                    'is_met' => (bool) $evidence->is_met,
+                    'deliverable_date' => $evidence->deliverable_date?->format('Y-m-d'),
+                    'notes' => $evidence->notes,
+                    'documents' => collect($evidence->documents ?? [])
+                        ->map(fn ($document, $index) => [
+                            'index' => $index,
+                            'name' => $document['name'] ?? 'Document',
+                            'display_name' => $document['display_name'] ?? null,
+                            'url' => route('procurement.purchase-orders.line-item-evidence.document', [$evidencePurchaseOrder, $evidence, $index]) . '?download=1',
+                        ])
+                        ->values()
+                        ->all(),
+                ],
+            ])
+            ->all();
     @endphp
 
     <div class="nxl-container">
@@ -143,16 +228,32 @@
 
                 <div class="card shadow-sm mt-4">
                     <div class="card-body">
-                        <h6 class="fw-bold mb-3">Requested Items</h6>
+                        <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
+                            <div>
+                                <h6 class="fw-bold mb-1">Line Items from Purchase Request</h6>
+                                @if ($evidencePurchaseOrder)
+                                    <div class="small text-muted">
+                                        Evidence is linked to purchase order {{ $evidencePurchaseOrder->reference_no ?? 'N/A' }}.
+                                    </div>
+                                @else
+                                    <div class="small text-muted">
+                                        Create a purchase order for this request before adding deliverable evidence.
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
 
                         <div class="table-responsive">
                             <table class="table table-sm align-middle">
                                 <thead class="table-light">
                                     <tr>
                                         <th>#</th>
+                                        <th class="text-center">Deliverable Check</th>
                                         <th>Category</th>
                                         <th>Resource Item</th>
                                         <th>Deliverable</th>
+                                        <th>Date</th>
+                                        <th>Evidence</th>
                                         <th>Milestone / Description</th>
                                         <th>Milestone Date</th>
                                         <th class="text-end">Amount</th>
@@ -160,14 +261,63 @@
                                 </thead>
                                 <tbody>
                                     @foreach ($purchaseRequest->items as $item)
+                                        @php
+                                            $itemEvidence = $lineItemEvidenceByItem->get($item->id);
+                                            $itemDocuments = collect($itemEvidence?->documents ?? []);
+                                            $isConfirmed = (bool) $itemEvidence?->is_met;
+                                        @endphp
                                         <tr>
                                             <td>{{ $loop->iteration }}</td>
+                                            <td class="text-center">
+                                                @if ($evidencePurchaseOrder && $canManageLineItemEvidence)
+                                                    <input type="checkbox"
+                                                        class="form-check-input pr-evidence-open"
+                                                        data-item-id="{{ $item->id }}"
+                                                        @checked($isConfirmed)
+                                                        aria-label="Open deliverable evidence for {{ $item->resource?->name ?? $item->resourceCategory?->name ?? 'line item' }}">
+                                                @else
+                                                    <input type="checkbox" class="form-check-input" @checked($isConfirmed) disabled>
+                                                @endif
+                                                <div class="mt-1">
+                                                    @if ($itemEvidence)
+                                                        <span class="badge {{ $isConfirmed ? 'bg-success-subtle text-success' : 'bg-info-subtle text-info' }} pr-line-evidence-status">
+                                                            {{ $isConfirmed ? 'Confirmed' : 'Recorded' }}
+                                                        </span>
+                                                    @else
+                                                        <span class="badge bg-light text-muted border pr-line-evidence-status">Pending</span>
+                                                    @endif
+                                                </div>
+                                            </td>
                                             <td>{{ $item->resourceCategory?->name ?? '—' }}</td>
                                             <td>{{ $item->resource?->name ?? '—' }}</td>
                                             <td>
                                                 <div class="fw-semibold">{{ $item->deliverable?->title ?? '—' }}</div>
                                                 @if ($item->deliverable?->procurement)
                                                     <div class="small text-muted">{{ $item->deliverable->procurement->reference_no ?? $item->deliverable->procurement->title }}</div>
+                                                @endif
+                                            </td>
+                                            <td>{{ $itemEvidence?->deliverable_date?->format('Y-m-d') ?? '—' }}</td>
+                                            <td>
+                                                @if ($evidencePurchaseOrder && $canManageLineItemEvidence)
+                                                    <button type="button"
+                                                        class="btn btn-sm btn-outline-primary pr-evidence-open"
+                                                        data-item-id="{{ $item->id }}">
+                                                        <i class="feather-upload-cloud me-1"></i> Evidence
+                                                    </button>
+                                                @elseif (! $evidencePurchaseOrder)
+                                                    <span class="badge bg-light text-muted border">PO required</span>
+                                                @endif
+
+                                                @if ($itemDocuments->isNotEmpty())
+                                                    <div class="d-flex flex-wrap gap-1 mt-1">
+                                                        @foreach ($itemDocuments as $documentIndex => $document)
+                                                            <a href="{{ route('procurement.purchase-orders.line-item-evidence.document', [$evidencePurchaseOrder, $itemEvidence, $documentIndex]) }}?download=1"
+                                                                class="badge bg-light text-dark border"
+                                                                title="{{ $document['name'] ?? 'Document' }}">
+                                                                {{ $document['display_name'] ?? $document['name'] ?? 'Document' }}
+                                                            </a>
+                                                        @endforeach
+                                                    </div>
                                                 @endif
                                             </td>
                                             <td>{{ $item->milestone ?? '—' }}</td>
@@ -181,7 +331,7 @@
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <th colspan="6" class="text-end">Total</th>
+                                        <th colspan="9" class="text-end">Total</th>
                                         <th class="text-end">
                                             {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
                                             {{ number_format((float) $purchaseRequest->total_amount, 2) }}
@@ -338,6 +488,231 @@
         </div>
 
     </div>
+
+@if ($evidencePurchaseOrder && $canManageLineItemEvidence)
+    <div class="modal fade pr-line-evidence-modal" id="prLineItemEvidenceModal" tabindex="-1" aria-labelledby="prLineItemEvidenceTitle" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <form class="modal-content" method="POST" action="{{ route('finance.purchase-requests.line-item-evidence.store', $purchaseRequest) }}" enctype="multipart/form-data" id="prLineItemEvidenceForm">
+                @csrf
+                <input type="hidden" name="purchase_request_item_id" id="prEvidenceItemId">
+
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title mb-1" id="prLineItemEvidenceTitle">Deliverable Evidence</h5>
+                        <div class="small text-muted" id="prLineItemEvidenceSubtitle"></div>
+                    </div>
+                    <button type="button" class="btn-close pr-line-evidence-close" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="pr-line-evidence-summary mb-3">
+                        <div class="small text-muted">Linked Deliverable</div>
+                        <div class="fw-semibold" id="prLineItemEvidenceDeliverable">N/A</div>
+                        <div class="small text-muted mt-1">Purchase Order: {{ $evidencePurchaseOrder->reference_no ?? 'N/A' }}</div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-2">
+                                <input type="checkbox" class="form-check-input" name="is_met" id="prEvidenceMet" value="1">
+                                <label class="form-check-label fw-semibold" for="prEvidenceMet">
+                                    Confirm this deliverable for the line item
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="prEvidenceDate">Date</label>
+                            <input type="date" name="deliverable_date" id="prEvidenceDate" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="prEvidenceNotes">Notes</label>
+                            <textarea name="notes" id="prEvidenceNotes" class="form-control" rows="4" maxlength="3000"
+                                placeholder="Add acceptance notes, delivery comments, or review observations."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 d-none" id="prExistingDocumentsWrap">
+                        <label class="form-label fw-semibold">Existing Documents</label>
+                        <div class="d-flex flex-wrap gap-1" id="prExistingDocuments"></div>
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-semibold mb-0">Relevant Documents</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="prEvidenceAddDocument">
+                                <i class="feather-plus me-1"></i> Add Document
+                            </button>
+                        </div>
+                        <div id="prEvidenceDocumentList"></div>
+                        <div class="form-text">PDF, Office, image, or ZIP files up to 20 MB each.</div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light pr-line-evidence-close">Close</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="feather-save me-1"></i> Save Evidence
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+@endif
+
+@if ($evidencePurchaseOrder && $canManageLineItemEvidence)
+    @push('scripts')
+        <script>
+            (function () {
+                const itemData = @json($purchaseRequest->items->mapWithKeys(fn ($item) => [
+                    (string) $item->id => [
+                        'title' => $item->resource?->name ?? $item->resourceCategory?->name ?? 'Line item',
+                        'category' => $item->resourceCategory?->name ?? 'N/A',
+                        'deliverable' => $item->deliverable?->title ?? 'No deliverable linked',
+                        'amount' => number_format((float) $item->amount, 2),
+                        'currency' => $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '',
+                    ],
+                ])->all());
+                const evidenceData = @json($lineItemEvidencePayload);
+
+                const modal = document.getElementById('prLineItemEvidenceModal');
+                const form = document.getElementById('prLineItemEvidenceForm');
+                const itemIdInput = document.getElementById('prEvidenceItemId');
+                const title = document.getElementById('prLineItemEvidenceTitle');
+                const subtitle = document.getElementById('prLineItemEvidenceSubtitle');
+                const deliverable = document.getElementById('prLineItemEvidenceDeliverable');
+                const metInput = document.getElementById('prEvidenceMet');
+                const dateInput = document.getElementById('prEvidenceDate');
+                const notesInput = document.getElementById('prEvidenceNotes');
+                const documentList = document.getElementById('prEvidenceDocumentList');
+                const existingWrap = document.getElementById('prExistingDocumentsWrap');
+                const existingDocuments = document.getElementById('prExistingDocuments');
+                const addDocumentBtn = document.getElementById('prEvidenceAddDocument');
+
+                function escapeHtml(value) {
+                    return String(value || '').replace(/[&<>"']/g, (char) => ({
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        '"': '&quot;',
+                        "'": '&#039;',
+                    }[char]));
+                }
+
+                function addDocumentRow(documentName = '') {
+                    if (!documentList) return;
+
+                    const row = document.createElement('div');
+                    row.className = 'pr-evidence-document-row';
+                    row.innerHTML = `
+                        <div>
+                            <label class="pr-evidence-document-label">Document Name</label>
+                            <input type="text" name="document_names[]" class="form-control" maxlength="255"
+                                placeholder="Signed contract, delivery note, acceptance memo"
+                                value="${escapeHtml(documentName)}">
+                        </div>
+                        <div>
+                            <label class="pr-evidence-document-label">Upload File</label>
+                            <input type="file" name="documents[]" class="form-control"
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip">
+                        </div>
+                        <button type="button" class="btn btn-outline-danger pr-evidence-document-remove" aria-label="Remove document row">
+                            <i class="feather-trash-2"></i>
+                        </button>
+                    `;
+                    row.querySelector('.pr-evidence-document-remove')?.addEventListener('click', () => row.remove());
+                    documentList.appendChild(row);
+                }
+
+                function showModal() {
+                    if (!modal) return;
+
+                    document.body.classList.add('pr-line-evidence-modal-open');
+                    modal.classList.add('show');
+                    modal.style.display = 'block';
+                    modal.removeAttribute('aria-hidden');
+                    modal.setAttribute('aria-modal', 'true');
+                    modal.setAttribute('role', 'dialog');
+
+                    setTimeout(() => metInput?.focus(), 0);
+                }
+
+                function closeModal() {
+                    if (!modal) return;
+
+                    modal.classList.remove('show');
+                    modal.style.display = 'none';
+                    modal.setAttribute('aria-hidden', 'true');
+                    modal.removeAttribute('aria-modal');
+                    modal.removeAttribute('role');
+                    document.body.classList.remove('pr-line-evidence-modal-open');
+                }
+
+                function openForItem(itemId) {
+                    const item = itemData[itemId] || {};
+                    const evidence = evidenceData[itemId] || {};
+
+                    if (form) {
+                        form.reset();
+                    }
+                    if (documentList) {
+                        documentList.innerHTML = '';
+                    }
+                    if (existingDocuments) {
+                        existingDocuments.innerHTML = '';
+                    }
+
+                    if (itemIdInput) itemIdInput.value = itemId;
+                    if (title) title.textContent = item.title || 'Line item';
+                    if (subtitle) subtitle.textContent = `${item.category || 'N/A'} | ${item.currency || ''} ${item.amount || '0.00'}`;
+                    if (deliverable) deliverable.textContent = item.deliverable || 'No deliverable linked';
+                    if (metInput) metInput.checked = Boolean(evidence.is_met);
+                    if (dateInput) dateInput.value = evidence.deliverable_date || '';
+                    if (notesInput) notesInput.value = evidence.notes || '';
+
+                    const documents = Array.isArray(evidence.documents) ? evidence.documents : [];
+                    if (existingWrap) {
+                        existingWrap.classList.toggle('d-none', documents.length === 0);
+                    }
+                    documents.forEach((fileDocument) => {
+                        const link = document.createElement('a');
+                        link.href = fileDocument.url || '#';
+                        link.className = 'badge bg-light text-dark border';
+                        link.textContent = fileDocument.display_name || fileDocument.name || 'Document';
+                        link.title = fileDocument.name || 'Document';
+                        existingDocuments?.appendChild(link);
+                    });
+
+                    addDocumentRow();
+                    showModal();
+                }
+
+                document.querySelectorAll('.pr-evidence-open').forEach((trigger) => {
+                    trigger.addEventListener('click', (event) => {
+                        if (trigger.matches('input[type="checkbox"]')) {
+                            event.preventDefault();
+                        }
+                        openForItem(trigger.dataset.itemId);
+                    });
+                });
+
+                addDocumentBtn?.addEventListener('click', () => addDocumentRow());
+                document.querySelectorAll('.pr-line-evidence-close').forEach((button) => {
+                    button.addEventListener('click', closeModal);
+                });
+                modal?.addEventListener('mousedown', (event) => {
+                    if (event.target === modal) {
+                        closeModal();
+                    }
+                });
+                document.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape' && modal?.classList.contains('show')) {
+                        closeModal();
+                    }
+                });
+            })();
+        </script>
+    @endpush
+@endif
 
 @if ($canDeletePurchaseRequests)
     {{-- Cascade-Delete PR Modal --}}

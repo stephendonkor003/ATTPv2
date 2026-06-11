@@ -983,6 +983,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	            ->middleware('permission:finance.purchase_requests.send')
 	            ->name('purchase-requests.send');
 
+	        Route::post('purchase-requests/{purchaseRequest}/line-item-evidence', [PurchaseRequestController::class, 'storeLineItemEvidence'])
+	            ->middleware('permission:finance.purchase_orders.create')
+	            ->name('purchase-requests.line-item-evidence.store');
+
 	        Route::post('purchase-requests/{purchaseRequest}/approve', [PurchaseRequestController::class, 'approve'])
 	            ->middleware('permission:finance.purchase_requests.approve')
 	            ->name('purchase-requests.approve');
@@ -1694,6 +1698,12 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
         Route::post('/', [ProcurementPurchaseOrderController::class, 'store'])
             ->middleware('permission:finance.purchase_orders.create')
             ->name('store');
+        Route::get('{purchaseOrder}/edit', [ProcurementPurchaseOrderController::class, 'edit'])
+            ->middleware('permission:finance.purchase_orders.create')
+            ->name('edit');
+        Route::match(['put', 'patch'], '{purchaseOrder}', [ProcurementPurchaseOrderController::class, 'update'])
+            ->middleware('permission:finance.purchase_orders.create')
+            ->name('update');
         Route::post('{purchaseOrder}/delete', [ProcurementPurchaseOrderController::class, 'destroy'])
             ->middleware('permission:finance.purchase_orders.delete')
             ->name('destroy');

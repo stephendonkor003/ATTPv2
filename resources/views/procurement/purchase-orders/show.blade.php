@@ -78,6 +78,11 @@
                 <p class="text-muted mb-0">{{ $purchaseOrder->reference_no ?? 'N/A' }}</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
+                @can('finance.purchase_orders.create')
+                    <a href="{{ route('procurement.purchase-orders.edit', $purchaseOrder) }}" class="btn btn-outline-secondary">
+                        <i class="feather-edit-2 me-1"></i> Edit
+                    </a>
+                @endcan
                 <a href="{{ route('procurement.purchase-orders.pdf', $purchaseOrder) }}" class="btn btn-outline-primary">
                     <i class="feather-eye me-1"></i> View PDF
                 </a>

@@ -126,7 +126,7 @@
                             <th class="text-center">Amount</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">Issued</th>
-                            <th class="text-center" width="170">Action</th>
+                            <th class="text-center" width="230">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -169,6 +169,12 @@
                                             class="btn btn-sm btn-outline-primary">
                                             View
                                         </a>
+                                        @can('finance.purchase_orders.create')
+                                            <a href="{{ route('procurement.purchase-orders.edit', $purchaseOrder) }}"
+                                                class="btn btn-sm btn-outline-secondary">
+                                                Edit
+                                            </a>
+                                        @endcan
                                         @can('finance.purchase_orders.delete')
                                             <form method="POST"
                                                 action="{{ url('procurement/purchase-orders/' . $purchaseOrder->getKey() . '/delete') }}"

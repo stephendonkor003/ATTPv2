@@ -245,6 +245,12 @@
             margin-top: 8px;
         }
 
+        .po-create .existing-evidence-documents {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
         .po-create .evidence-modal-summary {
             background: #ffffff;
             border: 1px solid #e3eaf4;
@@ -444,17 +450,35 @@
 
 @section('content')
     @php
-        $oldPurchaseRequestId = old('purchase_request_id');
-        $oldCommitmentId = old('budget_commitment_id');
+        $isEdit = isset($purchaseOrder) && $purchaseOrder;
+        $oldPurchaseRequestId = old('purchase_request_id', $isEdit ? (string) $purchaseOrder->purchase_request_id : null);
+        $oldCommitmentId = old('budget_commitment_id', $isEdit ? (string) $purchaseOrder->budget_commitment_id : null);
+        $selectedProcurementId = old('procurement_id', $isEdit ? (string) $purchaseOrder->procurement_id : null);
+        $selectedVendorId = old('vendor_id', $isEdit ? (string) $purchaseOrder->vendor_id : null);
+        $selectedStatus = old('status', $isEdit ? $purchaseOrder->status : 'draft');
+        $selectedIncoterm = old('incoterm', $isEdit ? $purchaseOrder->incoterm : null);
+        $selectedDeliverableIds = old('deliverable_ids', $isEdit ? $purchaseOrder->deliverables->pluck('id')->map(fn ($id) => (string) $id)->all() : []);
+        $submittedItemEvidence = old('item_evidence');
+        $lineItemEvidenceInput = is_array($submittedItemEvidence) ? $submittedItemEvidence : ($itemEvidenceDefaults ?? []);
+
+        if (is_array($submittedItemEvidence) && !empty($itemEvidenceDefaults)) {
+            foreach ($itemEvidenceDefaults as $itemId => $defaults) {
+                if (isset($lineItemEvidenceInput[$itemId])) {
+                    $lineItemEvidenceInput[$itemId]['existing_documents'] = $defaults['existing_documents'] ?? [];
+                }
+            }
+        }
     @endphp
 
     <div class="nxl-container po-create">
         <div class="page-band mb-4 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
-                <h4 class="fw-bold mb-1">Create Purchase Order</h4>
-                <p class="text-muted mb-0">Select an approved purchase request, confirm the funding year, then issue a standards-ready purchase order.</p>
+                <h4 class="fw-bold mb-1">{{ $isEdit ? 'Edit Purchase Order' : 'Create Purchase Order' }}</h4>
+                <p class="text-muted mb-0">
+                    {{ $isEdit ? 'Update purchase order details, deliverables, dates, and supporting evidence.' : 'Select an approved purchase request, confirm the funding year, then issue a standards-ready purchase order.' }}
+                </p>
             </div>
-            <a href="{{ route('procurement.purchase-orders.index') }}" class="btn btn-outline-secondary">
+            <a href="{{ $isEdit ? route('procurement.purchase-orders.show', $purchaseOrder) : route('procurement.purchase-orders.index') }}" class="btn btn-outline-secondary">
                 <i class="feather-arrow-left me-1"></i> Back
             </a>
         </div>
@@ -465,11 +489,14 @@
 
         @if ($purchaseRequests->isEmpty())
             <div class="alert alert-warning">
-                No approved purchase requests with remaining commitment balance are available for purchase order creation.
+                {{ $isEdit ? 'The source purchase request for this purchase order could not be loaded for editing.' : 'No approved purchase requests with remaining commitment balance are available for purchase order creation.' }}
             </div>
         @else
-            <form method="POST" action="{{ route('procurement.purchase-orders.store') }}" id="purchaseOrderForm" enctype="multipart/form-data">
+            <form method="POST" action="{{ $isEdit ? route('procurement.purchase-orders.update', $purchaseOrder) : route('procurement.purchase-orders.store') }}" id="purchaseOrderForm" enctype="multipart/form-data">
                 @csrf
+                @if ($isEdit)
+                    @method('PUT')
+                @endif
                 <input type="hidden" name="purchase_request_id" id="purchaseRequestIdInput" value="{{ $oldPurchaseRequestId }}">
                 <input type="hidden" name="budget_commitment_id" id="budgetCommitmentIdInput" value="{{ $oldCommitmentId }}">
 
@@ -500,7 +527,7 @@
                         </div>
                         <div class="panel-body">
                             <div id="requestEmptyState" class="empty-state">
-                                Use the search list to select an approved purchase request.
+                                {{ $isEdit ? 'Loading the purchase request linked to this purchase order.' : 'Use the search list to select an approved purchase request.' }}
                             </div>
 
                             <div id="requestDetails" class="d-none">
@@ -584,13 +611,15 @@
                             <div class="col-lg-8">
                                 <label class="form-label fw-semibold">PO Title</label>
                                 <input type="text" name="po_title" id="poTitleInput" class="form-control"
-                                    value="{{ old('po_title') }}" maxlength="255">
+                                    value="{{ old('po_title', $isEdit ? $purchaseOrder->po_title : null) }}" maxlength="255">
                             </div>
                             <div class="col-lg-4">
                                 <label class="form-label fw-semibold">Status</label>
                                 <select name="status" class="form-select">
-                                    <option value="draft" @selected(old('status', 'draft') === 'draft')>Draft</option>
-                                    <option value="issued" @selected(old('status') === 'issued')>Issued</option>
+                                    <option value="draft" @selected($selectedStatus === 'draft')>Draft</option>
+                                    <option value="issued" @selected($selectedStatus === 'issued')>Issued</option>
+                                    <option value="closed" @selected($selectedStatus === 'closed')>Closed</option>
+                                    <option value="cancelled" @selected($selectedStatus === 'cancelled')>Cancelled</option>
                                 </select>
                             </div>
 
@@ -599,7 +628,7 @@
                                 <select name="procurement_id" id="procurementSelect" class="form-select">
                                     <option value="">Optional procurement link</option>
                                     @foreach ($procurements as $procurement)
-                                        <option value="{{ $procurement->id }}" @selected(old('procurement_id') === (string) $procurement->id)>
+                                        <option value="{{ $procurement->id }}" @selected($selectedProcurementId === (string) $procurement->id)>
                                             {{ $procurement->title }} ({{ $procurement->reference_no ?? 'N/A' }})
                                         </option>
                                     @endforeach
@@ -611,7 +640,7 @@
                                 <select name="vendor_id" id="vendorSelect" class="form-select">
                                     <option value="">Optional vendor</option>
                                     @foreach ($vendors as $vendor)
-                                        <option value="{{ $vendor->id }}" @selected(old('vendor_id') === $vendor->id)>
+                                        <option value="{{ $vendor->id }}" @selected($selectedVendorId === (string) $vendor->id)>
                                             {{ $vendor->name }} - {{ $vendor->email }}
                                         </option>
                                     @endforeach
@@ -621,35 +650,35 @@
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">PO Amount <span class="text-danger">*</span></label>
                                 <input type="number" step="0.01" min="0.01" name="amount" id="amountInput"
-                                    class="form-control" value="{{ old('amount') }}" required>
+                                    class="form-control" value="{{ old('amount', $isEdit ? $purchaseOrder->amount : null) }}" required>
                                 <div class="form-text" id="amountHelp">Select a funding year to set the maximum amount.</div>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Currency</label>
                                 <input type="text" name="currency" id="currencyInput" class="form-control"
-                                    value="{{ old('currency', 'USD') }}" maxlength="10">
+                                    value="{{ old('currency', $isEdit ? $purchaseOrder->currency : 'USD') }}" maxlength="10">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Issue Date</label>
                                 <input type="date" name="issued_at" class="form-control"
-                                    value="{{ old('issued_at', now()->toDateString()) }}">
+                                    value="{{ old('issued_at', $isEdit ? $purchaseOrder->issued_at?->format('Y-m-d') : now()->toDateString()) }}">
                             </div>
 
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Expected Delivery</label>
                                 <input type="date" name="expected_delivery_date" id="expectedDeliveryInput" class="form-control"
-                                    value="{{ old('expected_delivery_date') }}">
+                                    value="{{ old('expected_delivery_date', $isEdit ? $purchaseOrder->expected_delivery_date?->format('Y-m-d') : null) }}">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Valid Until</label>
-                                <input type="date" name="valid_until" class="form-control" value="{{ old('valid_until') }}">
+                                <input type="date" name="valid_until" class="form-control" value="{{ old('valid_until', $isEdit ? $purchaseOrder->valid_until?->format('Y-m-d') : null) }}">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Incoterm</label>
                                 <select name="incoterm" class="form-select">
                                     <option value="">Not applicable</option>
                                     @foreach (['EXW', 'FCA', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP', 'FAS', 'FOB', 'CFR', 'CIF'] as $term)
-                                        <option value="{{ $term }}" @selected(old('incoterm') === $term)>{{ $term }}</option>
+                                        <option value="{{ $term }}" @selected($selectedIncoterm === $term)>{{ $term }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -657,21 +686,30 @@
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Supplier Reference</label>
                                 <input type="text" name="supplier_reference" class="form-control"
-                                    value="{{ old('supplier_reference') }}" maxlength="255">
+                                    value="{{ old('supplier_reference', $isEdit ? $purchaseOrder->supplier_reference : null) }}" maxlength="255">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Contract Reference</label>
                                 <input type="text" name="contract_reference" class="form-control"
-                                    value="{{ old('contract_reference') }}" maxlength="255">
+                                    value="{{ old('contract_reference', $isEdit ? $purchaseOrder->contract_reference : null) }}" maxlength="255">
                             </div>
                             <div class="col-12">
                                 <label class="form-label fw-semibold">
-                                    Supporting Documentation <span class="text-danger">*</span>
+                                    {{ $isEdit ? 'Replace Supporting Documentation' : 'Supporting Documentation' }}
+                                    @unless ($isEdit)
+                                        <span class="text-danger">*</span>
+                                    @endunless
                                 </label>
                                 <input type="file" name="supporting_document"
                                     class="form-control @error('supporting_document') is-invalid @enderror"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip" required>
-                                <div class="form-text">Attach the signed contract, award memo, or other approval evidence. PDF, Office, image, or ZIP files up to 20 MB are accepted.</div>
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip" {{ ! $isEdit ? 'required' : '' }}>
+                                <div class="form-text">
+                                    @if ($isEdit && $purchaseOrder->supporting_document_path)
+                                        Current file: {{ $purchaseOrder->supporting_document_name ?? basename($purchaseOrder->supporting_document_path) }}. Upload a new file only when replacing it.
+                                    @else
+                                        Attach the signed contract, award memo, or other approval evidence. PDF, Office, image, or ZIP files up to 20 MB are accepted.
+                                    @endif
+                                </div>
                                 @error('supporting_document')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
@@ -732,46 +770,46 @@
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Buyer Contact</label>
                                     <input type="text" name="buyer_contact_name" class="form-control"
-                                        value="{{ old('buyer_contact_name', $buyerDefaults['name']) }}">
+                                        value="{{ old('buyer_contact_name', $isEdit ? $purchaseOrder->buyer_contact_name : $buyerDefaults['name']) }}">
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Buyer Email</label>
                                     <input type="email" name="buyer_contact_email" class="form-control"
-                                        value="{{ old('buyer_contact_email', $buyerDefaults['email']) }}">
+                                        value="{{ old('buyer_contact_email', $isEdit ? $purchaseOrder->buyer_contact_email : $buyerDefaults['email']) }}">
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Buyer Phone</label>
                                     <input type="text" name="buyer_contact_phone" class="form-control"
-                                        value="{{ old('buyer_contact_phone') }}">
+                                        value="{{ old('buyer_contact_phone', $isEdit ? $purchaseOrder->buyer_contact_phone : null) }}">
                                 </div>
 
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Supplier Contact</label>
                                     <input type="text" name="vendor_contact_name" id="vendorContactNameInput" class="form-control"
-                                        value="{{ old('vendor_contact_name') }}">
+                                        value="{{ old('vendor_contact_name', $isEdit ? $purchaseOrder->vendor_contact_name : null) }}">
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Supplier Email</label>
                                     <input type="email" name="vendor_contact_email" id="vendorContactEmailInput" class="form-control"
-                                        value="{{ old('vendor_contact_email') }}">
+                                        value="{{ old('vendor_contact_email', $isEdit ? $purchaseOrder->vendor_contact_email : null) }}">
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Supplier Phone</label>
                                     <input type="text" name="vendor_contact_phone" id="vendorContactPhoneInput" class="form-control"
-                                        value="{{ old('vendor_contact_phone') }}">
+                                        value="{{ old('vendor_contact_phone', $isEdit ? $purchaseOrder->vendor_contact_phone : null) }}">
                                 </div>
 
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">Bill To <span class="text-danger">*</span></label>
-                                    <textarea name="billing_address" class="form-control" rows="3" required>{{ old('billing_address') }}</textarea>
+                                    <textarea name="billing_address" class="form-control" rows="3" required>{{ old('billing_address', $isEdit ? $purchaseOrder->billing_address : null) }}</textarea>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">Ship To <span class="text-danger">*</span></label>
-                                    <textarea name="shipping_address" class="form-control" rows="3" required>{{ old('shipping_address') }}</textarea>
+                                    <textarea name="shipping_address" class="form-control" rows="3" required>{{ old('shipping_address', $isEdit ? $purchaseOrder->shipping_address : null) }}</textarea>
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label fw-semibold">Delivery Location</label>
-                                    <textarea name="delivery_location" id="deliveryLocationInput" class="form-control" rows="2">{{ old('delivery_location') }}</textarea>
+                                    <textarea name="delivery_location" id="deliveryLocationInput" class="form-control" rows="2">{{ old('delivery_location', $isEdit ? $purchaseOrder->delivery_location : null) }}</textarea>
                                 </div>
                             </div>
                         </div>
@@ -782,12 +820,12 @@
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">Delivery Terms <span class="text-danger">*</span></label>
                                     <input type="text" name="delivery_terms" class="form-control"
-                                        value="{{ old('delivery_terms', 'Delivery in accordance with the agreed purchase request schedule') }}" required>
+                                        value="{{ old('delivery_terms', $isEdit ? $purchaseOrder->delivery_terms : 'Delivery in accordance with the agreed purchase request schedule') }}" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">Payment Terms <span class="text-danger">*</span></label>
                                     <input type="text" name="payment_terms" class="form-control"
-                                        value="{{ old('payment_terms', 'Payment after acceptance of goods/services and valid invoice') }}" required>
+                                        value="{{ old('payment_terms', $isEdit ? $purchaseOrder->payment_terms : 'Payment after acceptance of goods/services and valid invoice') }}" required>
                                 </div>
                                 <div class="col-12">
                                     <details class="border rounded p-3">
@@ -795,19 +833,19 @@
                                         <div class="row g-3 mt-1">
                                             <div class="col-md-6">
                                                 <label class="form-label fw-semibold">Warranty / Support</label>
-                                                <textarea name="warranty_terms" class="form-control" rows="3">{{ old('warranty_terms') }}</textarea>
+                                                <textarea name="warranty_terms" class="form-control" rows="3">{{ old('warranty_terms', $isEdit ? $purchaseOrder->warranty_terms : null) }}</textarea>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label fw-semibold">Inspection and Acceptance</label>
-                                                <textarea name="inspection_requirements" class="form-control" rows="3">{{ old('inspection_requirements', 'Goods and services are subject to inspection and written acceptance by the authorized receiving officer.') }}</textarea>
+                                                <textarea name="inspection_requirements" class="form-control" rows="3">{{ old('inspection_requirements', $isEdit ? $purchaseOrder->inspection_requirements : 'Goods and services are subject to inspection and written acceptance by the authorized receiving officer.') }}</textarea>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label fw-semibold">Special Instructions</label>
-                                                <textarea name="special_instructions" class="form-control" rows="4">{{ old('special_instructions') }}</textarea>
+                                                <textarea name="special_instructions" class="form-control" rows="4">{{ old('special_instructions', $isEdit ? $purchaseOrder->special_instructions : null) }}</textarea>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label fw-semibold">Terms and Conditions</label>
-                                                <textarea name="terms_conditions" class="form-control" rows="4">{{ old('terms_conditions', 'Supplier must comply with applicable procurement rules, tax obligations, anti-fraud requirements, confidentiality obligations, and delivery documentation standards.') }}</textarea>
+                                                <textarea name="terms_conditions" class="form-control" rows="4">{{ old('terms_conditions', $isEdit ? $purchaseOrder->terms_conditions : 'Supplier must comply with applicable procurement rules, tax obligations, anti-fraud requirements, confidentiality obligations, and delivery documentation standards.') }}</textarea>
                                             </div>
                                         </div>
                                     </details>
@@ -818,9 +856,9 @@
                         <div id="poFormWarning" class="alert alert-warning d-none mt-4"></div>
 
                         <div class="d-flex justify-content-end gap-2 mt-4">
-                            <a href="{{ route('procurement.purchase-orders.index') }}" class="btn btn-light">Cancel</a>
+                            <a href="{{ $isEdit ? route('procurement.purchase-orders.show', $purchaseOrder) : route('procurement.purchase-orders.index') }}" class="btn btn-light">Cancel</a>
                             <button type="submit" class="btn btn-primary">
-                                <i class="feather-save me-1"></i> Create Purchase Order
+                                <i class="feather-save me-1"></i> {{ $isEdit ? 'Save Changes' : 'Create Purchase Order' }}
                             </button>
                         </div>
                     </div>
@@ -868,9 +906,9 @@
             const deliverablesByProcurement = @json($deliverablesByProcurement);
             const oldPurchaseRequestId = @json($oldPurchaseRequestId);
             const oldCommitmentId = @json($oldCommitmentId);
-            const oldAmount = @json(old('amount'));
+            const oldAmount = @json(old('amount', $isEdit ? $purchaseOrder->amount : null));
             const oldDeliverableId = @json(old('deliverable_id'));
-            const oldItemEvidence = @json(old('item_evidence', []));
+            const oldItemEvidence = @json($lineItemEvidenceInput);
 
             const list = document.getElementById('purchaseRequestList');
             const search = document.getElementById('purchaseRequestSearch');
@@ -1100,6 +1138,23 @@
                 const previousDocumentNames = Array.isArray(previous.document_names)
                     ? previous.document_names.filter((name) => String(name || '').trim() !== '')
                     : [];
+                const previousExistingDocuments = Array.isArray(previous.existing_documents)
+                    ? previous.existing_documents
+                    : [];
+                const existingDocumentHtml = previousExistingDocuments.length > 0
+                    ? `
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Existing Documents</label>
+                            <div class="existing-evidence-documents">
+                                ${previousExistingDocuments.map((document) => `
+                                    <span class="badge bg-light text-dark border existing-evidence-document">
+                                        ${escapeHtml(document.display_name || document.name || 'Document')}
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `
+                    : '';
 
                 fieldset = document.createElement('div');
                 fieldset.className = 'line-item-evidence-fieldset';
@@ -1123,6 +1178,7 @@
                             maxlength="3000"
                             placeholder="Add acceptance notes, delivery comments, or review observations.">${escapeHtml(previous.notes || '')}</textarea>
                     </div>
+                    ${existingDocumentHtml}
                     <div>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label fw-semibold mb-0">Relevant Documents</label>
@@ -1164,8 +1220,9 @@
 
                 const confirmed = fieldset.querySelector('.modal-evidence-met')?.checked || false;
                 const notes = (fieldset.querySelector('.modal-evidence-notes')?.value || '').trim();
-                const fileCount = Array.from(fieldset.querySelectorAll('.evidence-document-input'))
+                const newFileCount = Array.from(fieldset.querySelectorAll('.evidence-document-input'))
                     .reduce((total, input) => total + (input.files ? input.files.length : 0), 0);
+                const fileCount = newFileCount + fieldset.querySelectorAll('.existing-evidence-document').length;
                 const deliverableDate = (document.querySelector(`.line-item-date-input[data-item-id="${itemId}"]`)?.value || '').trim();
 
                 const rowCheck = document.querySelector(`.line-item-evidence-check[data-item-id="${itemId}"]`);
@@ -1323,7 +1380,7 @@
             const dlvCreateLinkHint = document.getElementById('dlvCreateLinkHint');
             const dlvCreateHint     = document.getElementById('dlvCreateHint');
             const dlvSelectedBadge  = document.getElementById('dlvSelectedBadge');
-            const oldDeliverableIds = @json(old('deliverable_ids', []));
+            const oldDeliverableIds = @json($selectedDeliverableIds);
 
             const FREQ_LABELS = {
                 one_time: 'One-time', daily: 'Daily', weekly: 'Weekly',

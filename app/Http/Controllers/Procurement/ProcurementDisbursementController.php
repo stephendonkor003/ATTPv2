@@ -9,6 +9,7 @@ use App\Models\ProcurementAuditLog;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
+use App\Models\ProcurementPurchaseOrderItemEvidence;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -63,7 +64,12 @@ class ProcurementDisbursementController extends Controller
             'procurement', 'vendor', 'disbursements', 'thinkTankMember',
             'consortium', 'subActivity', 'governanceNode',
             'deliverables.procurement',
+            'lineItemEvidence',
+            'purchaseRequest.items.resourceCategory',
+            'purchaseRequest.items.resource',
             'purchaseRequest.items.deliverable.procurement',
+            'budgetCommitment.purchaseRequest.items.resourceCategory',
+            'budgetCommitment.purchaseRequest.items.resource',
             'budgetCommitment.purchaseRequest.items.deliverable.procurement',
         ])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
@@ -85,7 +91,12 @@ class ProcurementDisbursementController extends Controller
                 'procurement', 'vendor', 'disbursements', 'thinkTankMember',
                 'consortium', 'subActivity', 'governanceNode',
                 'deliverables.procurement',
+                'lineItemEvidence',
+                'purchaseRequest.items.resourceCategory',
+                'purchaseRequest.items.resource',
                 'purchaseRequest.items.deliverable.procurement',
+                'budgetCommitment.purchaseRequest.items.resourceCategory',
+                'budgetCommitment.purchaseRequest.items.resource',
                 'budgetCommitment.purchaseRequest.items.deliverable.procurement',
             ])->find($purchaseOrderId);
 
@@ -98,6 +109,35 @@ class ProcurementDisbursementController extends Controller
 
         $purchaseOrdersData = $purchaseOrders->mapWithKeys(function (ProcurementPurchaseOrder $order) {
             $deliverables = $this->eligibleDeliverablesForPurchaseOrder($order);
+            $sourcePurchaseRequest = $order->purchaseRequest ?: $order->budgetCommitment?->purchaseRequest;
+            $evidenceByItem = $order->lineItemEvidence->keyBy(fn (ProcurementPurchaseOrderItemEvidence $evidence) => (string) $evidence->purchase_request_item_id);
+            $lineItems = $sourcePurchaseRequest?->items?->map(function ($item) use ($evidenceByItem, $order) {
+                $evidence = $evidenceByItem->get((string) $item->id);
+
+                return [
+                    'id' => (string) $item->id,
+                    'category' => $item->resourceCategory?->name ?: 'N/A',
+                    'resource' => $item->resource?->name ?: 'N/A',
+                    'description' => $item->milestone ?: $item->observations ?: $item->object_type ?: 'N/A',
+                    'budget_code' => $item->budget_code,
+                    'amount' => round((float) $item->amount, 2),
+                    'deliverable_id' => $item->deliverable_id ? (string) $item->deliverable_id : null,
+                    'deliverable_title' => $item->deliverable?->title,
+                    'evidence' => $evidence ? [
+                        'is_met' => (bool) $evidence->is_met,
+                        'deliverable_date' => $evidence->deliverable_date?->format('Y-m-d'),
+                        'notes' => $evidence->notes,
+                        'documents' => collect($evidence->documents ?? [])
+                            ->map(fn ($document, $index) => [
+                                'name' => $document['name'] ?? 'Document',
+                                'display_name' => $document['display_name'] ?? null,
+                                'url' => route('procurement.purchase-orders.line-item-evidence.document', [$order, $evidence, $index]) . '?download=1',
+                            ])
+                            ->values()
+                            ->all(),
+                    ] : null,
+                ];
+            })->values() ?? collect();
 
             return [
                 $order->id => [
@@ -132,6 +172,7 @@ class ProcurementDisbursementController extends Controller
                         'currency'        => $deliverable->currency,
                         'procurement_ref' => $deliverable->procurement?->reference_no,
                     ])->values()->all(),
+                    'line_items'           => $lineItems->all(),
                 ],
             ];
         })->toArray();
@@ -154,6 +195,16 @@ class ProcurementDisbursementController extends Controller
             'transfer_reference' => 'nullable|string|max:255',
             'paid_at'            => 'required|date',
             'notes'              => 'nullable|string|max:2000',
+            'item_evidence' => ['nullable', 'array'],
+            'item_evidence.*.is_met' => ['nullable', 'boolean'],
+            'item_evidence.*.deliverable_date' => ['nullable', 'date'],
+            'item_evidence.*.notes' => ['nullable', 'string', 'max:3000'],
+            'item_evidence.*.document_names' => ['nullable', 'array', 'max:20'],
+            'item_evidence.*.document_names.*' => ['nullable', 'string', 'max:255'],
+            'item_evidence.*.documents' => ['nullable', 'array', 'max:20'],
+            'item_evidence.*.documents.*' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
+        ], [
+            'item_evidence.*.documents.*.mimes' => 'Line item evidence must be a PDF, Office document, image, or ZIP file.',
         ]);
 
         $purchaseOrder = ProcurementPurchaseOrder::with([
@@ -164,7 +215,12 @@ class ProcurementDisbursementController extends Controller
             'thinkTankMember',
             'consortium',
             'deliverables.procurement',
+            'lineItemEvidence',
+            'purchaseRequest.items.resourceCategory',
+            'purchaseRequest.items.resource',
             'purchaseRequest.items.deliverable.procurement',
+            'budgetCommitment.purchaseRequest.items.resourceCategory',
+            'budgetCommitment.purchaseRequest.items.resource',
             'budgetCommitment.purchaseRequest.items.deliverable.procurement',
         ])
             ->findOrFail($data['purchase_order_id']);
@@ -200,6 +256,8 @@ class ProcurementDisbursementController extends Controller
         if ($data['amount'] > $remaining) {
             return back()->with('error', 'Disbursement amount exceeds remaining balance of ' . number_format($remaining, 2) . '.');
         }
+
+        $this->storeLineItemEvidence($request, $purchaseOrder);
 
         $disbursement = ProcurementDisbursement::create([
             'purchase_order_id'  => $purchaseOrder->id,
@@ -378,6 +436,86 @@ class ProcurementDisbursementController extends Controller
             ->filter()
             ->unique('id')
             ->values();
+    }
+
+    private function storeLineItemEvidence(Request $request, ProcurementPurchaseOrder $purchaseOrder): void
+    {
+        $purchaseOrder->loadMissing([
+            'lineItemEvidence',
+            'purchaseRequest.items.deliverable',
+            'budgetCommitment.purchaseRequest.items.deliverable',
+        ]);
+
+        $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+        if (! $sourcePurchaseRequest) {
+            return;
+        }
+
+        $evidenceInput = $request->input('item_evidence', []);
+        $filesInput = $request->file('item_evidence', []);
+        $items = $sourcePurchaseRequest->items->keyBy(fn ($item) => (string) $item->id);
+        $existingEvidence = $purchaseOrder->lineItemEvidence->keyBy(fn (ProcurementPurchaseOrderItemEvidence $evidence) => (string) $evidence->purchase_request_item_id);
+
+        foreach ($evidenceInput as $itemId => $input) {
+            if (! $items->has((string) $itemId)) {
+                throw ValidationException::withMessages([
+                    'item_evidence' => 'One or more line item evidence records do not belong to the selected purchase order.',
+                ]);
+            }
+
+            $item = $items->get((string) $itemId);
+            $existing = $existingEvidence->get((string) $itemId);
+            $documents = collect($existing?->documents ?? [])
+                ->filter(fn ($document) => is_array($document))
+                ->values()
+                ->all();
+            $documentNames = $input['document_names'] ?? [];
+
+            foreach (($filesInput[$itemId]['documents'] ?? []) as $index => $file) {
+                if (! $file || ! $file->isValid()) {
+                    continue;
+                }
+
+                $displayName = trim((string) ($documentNames[$index] ?? ''));
+                $path = $file->store("procurement_purchase_orders/{$purchaseOrder->id}/line-item-evidence/{$itemId}");
+                $documents[] = [
+                    'path' => $path,
+                    'name' => $file->getClientOriginalName(),
+                    'display_name' => $displayName !== '' ? $displayName : null,
+                    'mime_type' => $file->getClientMimeType(),
+                    'size' => $file->getSize(),
+                    'uploaded_by' => auth()->id(),
+                    'uploaded_at' => now()->toIso8601String(),
+                ];
+            }
+
+            $isMet = (bool) ($input['is_met'] ?? false);
+            $deliverableDate = trim((string) ($input['deliverable_date'] ?? ''));
+            $notes = trim((string) ($input['notes'] ?? ''));
+
+            if (! $isMet && $deliverableDate === '' && $notes === '' && empty($documents)) {
+                if ($existing) {
+                    $existing->delete();
+                }
+
+                continue;
+            }
+
+            ProcurementPurchaseOrderItemEvidence::updateOrCreate(
+                [
+                    'purchase_order_id' => $purchaseOrder->id,
+                    'purchase_request_item_id' => $itemId,
+                ],
+                [
+                    'deliverable_id' => $item->deliverable_id,
+                    'is_met' => $isMet,
+                    'deliverable_date' => $deliverableDate !== '' ? $deliverableDate : null,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'documents' => $documents,
+                    'created_by' => auth()->id(),
+                ]
+            );
+        }
     }
 
     private function sendReceipt(ProcurementDisbursement $disbursement): void
