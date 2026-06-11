@@ -42,15 +42,12 @@
                     </a>
                 @endif
                 @if ($canDeleteThisPurchaseRequest)
-                    <form method="POST"
-                        action="{{ route('finance.purchase-requests.destroy', $purchaseRequest) }}"
-                        onsubmit="return confirm('Delete this purchase request and release its linked budget commitments?');">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="btn btn-outline-danger">
-                            <i class="feather-trash-2 me-1"></i> Delete
-                        </button>
-                    </form>
+                    <button type="button"
+                        class="btn btn-outline-danger js-delete-pr"
+                        data-info-url="{{ route('finance.purchase-requests.destroy-info', $purchaseRequest) }}"
+                        data-delete-url="{{ route('finance.purchase-requests.destroy', $purchaseRequest) }}">
+                        <i class="feather-trash-2 me-1"></i> Delete
+                    </button>
                 @endif
                 <a href="{{ route('finance.purchase-requests.pdf', $purchaseRequest) }}" class="btn btn-outline-primary" target="_blank">
                     <i class="feather-file-text me-1"></i> View PDF
@@ -333,4 +330,129 @@
         </div>
 
     </div>
+
+@if ($canDeleteThisPurchaseRequest)
+    {{-- Cascade-Delete PR Modal --}}
+    <div class="modal fade" id="deletePrModal" tabindex="-1" aria-labelledby="deletePrModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="deletePrModalLabel">
+                        <i class="feather-alert-triangle text-danger me-2"></i>Delete Purchase Request
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="deletePrModalBody">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                        <div class="small text-muted mt-2">Loading impact details…</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0" id="deletePrModalFooter">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form id="deletePrForm" method="POST"
+          action="{{ route('finance.purchase-requests.destroy', $purchaseRequest) }}"
+          style="display:none">
+        @csrf
+        @method('DELETE')
+    </form>
+
+    @push('scripts')
+    <script>
+    (function () {
+        const STATUS_COLORS = {
+            draft: 'secondary', submitted: 'warning', approved: 'success',
+            cancelled: 'danger', completed: 'success',
+        };
+        function statusBadge(status) {
+            const col = STATUS_COLORS[status] || 'secondary';
+            return `<span class="badge bg-${col} text-${col === 'warning' ? 'dark' : 'white'}">${status}</span>`;
+        }
+        function buildBody(data) {
+            const s = data.summary;
+            let html = `<p class="mb-3 text-muted" style="font-size:.9rem">
+                <strong>${s.reference_no}</strong> &mdash; ${s.currency} ${s.total_amount} &mdash; ${statusBadge(s.status)}
+            </p>`;
+            if (!data.can_delete) {
+                return html + `<div class="alert alert-danger mb-0">
+                    <i class="feather-x-circle me-2"></i><strong>Cannot delete:</strong> ${data.block_reason}
+                </div>`;
+            }
+            if (data.chain.length === 0) {
+                return html + `<div class="alert alert-warning mb-0">This purchase request will be permanently deleted.</div>`;
+            }
+            html += `<p class="fw-semibold mb-2" style="font-size:.85rem">The following records will also be permanently deleted:</p>
+                     <div class="list-group list-group-flush mb-3">`;
+            data.chain.forEach(item => {
+                if (item.type === 'purchase_request') {
+                    html += `<div class="list-group-item px-0 py-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div><span class="badge bg-primary me-1" style="font-size:.68rem">Purchase Request</span><strong>${item.reference_no}</strong></div>
+                            ${statusBadge(item.status)}
+                        </div>
+                        <div class="text-muted small mt-1">${item.currency} ${item.total_amount} &mdash; ${item.commitment_count} commitment${item.commitment_count !== 1 ? 's' : ''}, ${item.item_count} item${item.item_count !== 1 ? 's' : ''}</div>
+                    </div>`;
+                } else if (item.type === 'purchase_order') {
+                    const extras = [];
+                    if (item.disbursement_count > 0) extras.push(`${item.disbursement_count} disbursement${item.disbursement_count !== 1 ? 's' : ''}`);
+                    if (item.has_invoice) extras.push('invoice');
+                    if (item.has_negotiation) extras.push('negotiation');
+                    html += `<div class="list-group-item px-0 py-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div><span class="badge bg-warning text-dark me-1" style="font-size:.68rem">Purchase Order</span><strong>${item.reference_no}</strong></div>
+                            ${statusBadge(item.status)}
+                        </div>
+                        <div class="text-muted small mt-1">${item.currency} ${item.amount} &mdash; ${item.vendor}${extras.length ? ' &mdash; includes: ' + extras.join(', ') : ''}</div>
+                    </div>`;
+                }
+            });
+            html += `</div><div class="alert alert-danger mb-0" style="font-size:.85rem">
+                <i class="feather-alert-triangle me-1"></i><strong>This action cannot be undone.</strong>
+            </div>`;
+            return html;
+        }
+
+        document.querySelector('.js-delete-pr')?.addEventListener('click', function () {
+            const infoUrl = this.dataset.infoUrl;
+            const body    = document.getElementById('deletePrModalBody');
+            const footer  = document.getElementById('deletePrModalFooter');
+            body.innerHTML = `<div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                <div class="small text-muted mt-2">Loading impact details…</div>
+            </div>`;
+            footer.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>`;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('deletePrModal')).show();
+
+            fetch(infoUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(r => r.json())
+                .then(data => {
+                    body.innerHTML = buildBody(data);
+                    if (data.can_delete) {
+                        footer.innerHTML = `
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-danger" id="confirmPrDeleteBtn">
+                                <i class="feather-trash-2 me-1"></i> Delete All
+                            </button>`;
+                        document.getElementById('confirmPrDeleteBtn').addEventListener('click', function () {
+                            this.disabled = true;
+                            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Deleting…';
+                            document.getElementById('deletePrForm').submit();
+                        });
+                    } else {
+                        footer.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>`;
+                    }
+                })
+                .catch(() => {
+                    body.innerHTML = `<div class="alert alert-danger">Failed to load details. Please try again.</div>`;
+                });
+        });
+    })();
+    </script>
+    @endpush
+@endif
 @endsection

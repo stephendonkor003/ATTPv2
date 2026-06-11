@@ -176,6 +176,81 @@ class PurchaseRequestController extends Controller
         return redirect()->route('finance.commitments.edit', $commitment);
     }
 
+    public function destroyInfo(PurchaseRequest $purchaseRequest): \Illuminate\Http\JsonResponse
+    {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+
+        $purchaseRequest->load('commitments');
+        $currency = $purchaseRequest->currency
+            ?? $purchaseRequest->programFunding?->program?->currency
+            ?? '';
+
+        $canDelete   = true;
+        $blockReason = null;
+
+        if ($purchaseRequest->status === 'approved') {
+            $canDelete   = false;
+            $blockReason = 'Approved purchase requests cannot be deleted.';
+        } elseif ($purchaseRequest->commitments->contains('status', BudgetCommitment::STATUS_APPROVED)) {
+            $canDelete   = false;
+            $blockReason = 'This purchase request has approved commitments and cannot be deleted.';
+        }
+
+        $commitmentIds = $purchaseRequest->commitments->pluck('id')->filter()->values();
+
+        $chain = [[
+            'type'         => 'purchase_request',
+            'reference_no' => $purchaseRequest->reference_no,
+            'status'       => $purchaseRequest->status,
+            'item_count'   => $purchaseRequest->items()->count(),
+            'total_amount' => number_format((float) $purchaseRequest->total_amount, 2),
+            'currency'     => $currency,
+            'commitment_count' => $purchaseRequest->commitments->count(),
+        ]];
+
+        $pos = ProcurementPurchaseOrder::query()
+            ->where(function ($q) use ($purchaseRequest, $commitmentIds) {
+                $q->where('purchase_request_id', $purchaseRequest->id);
+                if ($commitmentIds->isNotEmpty()) {
+                    $q->orWhereIn('budget_commitment_id', $commitmentIds);
+                }
+            })
+            ->withCount('disbursements')
+            ->get();
+
+        foreach ($pos as $po) {
+            $lockedStatuses = ['approved', 'completed'];
+            if ($canDelete && in_array($po->status, $lockedStatuses, true)) {
+                $canDelete   = false;
+                $blockReason = 'A linked purchase order is in ' . $po->status . ' status and cannot be deleted.';
+            }
+
+            $chain[] = [
+                'type'               => 'purchase_order',
+                'reference_no'       => $po->reference_no ?? '—',
+                'status'             => $po->status,
+                'vendor'             => $po->vendor?->name ?? '—',
+                'amount'             => number_format((float) $po->amount, 2),
+                'currency'           => $po->currency ?? $currency,
+                'disbursement_count' => $po->disbursements_count,
+                'has_invoice'        => (bool) $po->invoice_id,
+                'has_negotiation'    => (bool) $po->negotiation_id,
+            ];
+        }
+
+        return response()->json([
+            'can_delete'   => $canDelete,
+            'block_reason' => $blockReason,
+            'summary' => [
+                'reference_no' => $purchaseRequest->reference_no,
+                'total_amount' => number_format((float) $purchaseRequest->total_amount, 2),
+                'currency'     => $currency,
+                'status'       => $purchaseRequest->status,
+            ],
+            'chain' => $chain,
+        ]);
+    }
+
     public function destroy(PurchaseRequest $purchaseRequest)
     {
         $this->assertPurchaseRequestInScope($purchaseRequest);
@@ -183,35 +258,29 @@ class PurchaseRequestController extends Controller
         $purchaseRequest->load('commitments');
 
         if ($purchaseRequest->status === 'approved') {
-            return back()->withErrors([
-                'status' => 'Approved purchase requests cannot be deleted because they may already be used for procurement.',
-            ]);
+            return back()->with('error', 'Approved purchase requests cannot be deleted.');
         }
 
         if ($purchaseRequest->commitments->contains('status', BudgetCommitment::STATUS_APPROVED)) {
-            return back()->withErrors([
-                'status' => 'This purchase request has approved commitments and cannot be deleted.',
-            ]);
+            return back()->with('error', 'This purchase request has approved commitments and cannot be deleted.');
         }
 
         $commitmentIds = $purchaseRequest->commitments->pluck('id')->filter()->values();
-        $hasPurchaseOrders = ProcurementPurchaseOrder::query()
-            ->where(function ($query) use ($purchaseRequest, $commitmentIds) {
-                $query->where('purchase_request_id', $purchaseRequest->id);
 
-                if ($commitmentIds->isNotEmpty()) {
-                    $query->orWhereIn('budget_commitment_id', $commitmentIds);
-                }
-            })
-            ->exists();
+        DB::transaction(function () use ($purchaseRequest, $commitmentIds) {
+            // Cascade-delete linked purchase orders and their sub-records
+            $pos = ProcurementPurchaseOrder::query()
+                ->where(function ($q) use ($purchaseRequest, $commitmentIds) {
+                    $q->where('purchase_request_id', $purchaseRequest->id);
+                    if ($commitmentIds->isNotEmpty()) {
+                        $q->orWhereIn('budget_commitment_id', $commitmentIds);
+                    }
+                })->get();
 
-        if ($hasPurchaseOrders) {
-            return back()->withErrors([
-                'status' => 'This purchase request is already linked to a purchase order and cannot be deleted.',
-            ]);
-        }
+            foreach ($pos as $po) {
+                $this->deletePurchaseOrderCascade($po);
+            }
 
-        DB::transaction(function () use ($purchaseRequest) {
             $purchaseRequest->commitments()->delete();
             $purchaseRequest->items()->delete();
             $purchaseRequest->delete();
@@ -219,7 +288,29 @@ class PurchaseRequestController extends Controller
 
         return redirect()
             ->route('finance.purchase-requests.index')
-            ->with('success', 'Purchase request deleted. Linked commitments were removed and the budget has been released.');
+            ->with('success', 'Purchase request and all linked records deleted.');
+    }
+
+    private function deletePurchaseOrderCascade(ProcurementPurchaseOrder $po): void
+    {
+        $invoiceId     = $po->invoice_id;
+        $negotiationId = $po->negotiation_id;
+
+        $po->disbursements()->delete();
+        $po->deliverables()->detach();
+
+        $po->invoice_id     = null;
+        $po->negotiation_id = null;
+        $po->save();
+
+        $po->delete();
+
+        if ($invoiceId) {
+            \App\Models\ProcurementInvoice::find($invoiceId)?->delete();
+        }
+        if ($negotiationId) {
+            \App\Models\ProcurementContractNegotiation::find($negotiationId)?->delete();
+        }
     }
 
     public function approve(PurchaseRequest $purchaseRequest)

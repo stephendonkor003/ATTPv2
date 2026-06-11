@@ -943,6 +943,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.commitments.edit')
             ->name('commitments.update');
 
+	        Route::get('commitments/{commitment}/delete-info', [BudgetCommitmentController::class, 'destroyInfo'])
+	            ->middleware('permission:finance.commitments.delete')
+	            ->name('commitments.destroy-info');
+
 	        Route::delete('commitments/{commitment}', [BudgetCommitmentController::class, 'destroy'])
 	            ->middleware('permission:finance.commitments.delete')
 	            ->name('commitments.destroy');
@@ -982,6 +986,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	        Route::post('purchase-requests/{purchaseRequest}/reject', [PurchaseRequestController::class, 'reject'])
 	            ->middleware('permission:finance.purchase_requests.approve')
 	            ->name('purchase-requests.reject');
+
+	        Route::get('purchase-requests/{purchaseRequest}/delete-info', [PurchaseRequestController::class, 'destroyInfo'])
+	            ->middleware('permission:finance.commitments.delete')
+	            ->name('purchase-requests.destroy-info');
 
 	        Route::delete('purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'destroy'])
 	            ->middleware('permission:finance.commitments.delete')

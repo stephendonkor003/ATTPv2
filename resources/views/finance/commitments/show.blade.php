@@ -302,15 +302,13 @@
 
                     @can('finance.commitments.delete')
                         @if ($commitment->status === 'draft')
-                            <form method="POST" action="{{ route('finance.commitments.destroy', $commitment) }}"
-                                onsubmit="return confirm('Delete this draft commitment?');">
-                                @csrf
-                                @method('DELETE')
-                                <button class="btn btn-outline-danger">
-                                    <i class="feather-trash-2 me-1"></i>
-                                    Delete
-                                </button>
-                            </form>
+                            <button type="button"
+                                class="btn btn-outline-danger js-delete-commitment"
+                                data-info-url="{{ route('finance.commitments.destroy-info', $commitment) }}"
+                                data-delete-url="{{ route('finance.commitments.destroy', $commitment) }}">
+                                <i class="feather-trash-2 me-1"></i>
+                                Delete
+                            </button>
                         @endif
                     @endcan
 
@@ -357,4 +355,133 @@
         </div>
 
     </div>
+
+@can('finance.commitments.delete')
+@if ($commitment->status === 'draft')
+    {{-- Cascade-Delete Modal --}}
+    <div class="modal fade" id="deleteCommitmentModal" tabindex="-1" aria-labelledby="deleteCommitmentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="deleteCommitmentModalLabel">
+                        <i class="feather-alert-triangle text-danger me-2"></i>Delete Budget Commitment
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="deleteCommitmentModalBody">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                        <div class="small text-muted mt-2">Loading impact details…</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0" id="deleteCommitmentModalFooter">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form id="deleteCommitmentForm" method="POST"
+          action="{{ route('finance.commitments.destroy', $commitment) }}"
+          style="display:none">
+        @csrf
+        @method('DELETE')
+    </form>
+
+    @push('scripts')
+    <script>
+    (function () {
+        const STATUS_COLORS = {
+            draft: 'secondary', submitted: 'warning', approved: 'success',
+            cancelled: 'danger', completed: 'success',
+        };
+        function statusBadge(status) {
+            const col = STATUS_COLORS[status] || 'secondary';
+            return `<span class="badge bg-${col} text-${col === 'warning' ? 'dark' : 'white'}">${status}</span>`;
+        }
+        function buildModalBody(data) {
+            const s = data.summary;
+            let html = `<p class="mb-3 text-muted" style="font-size:.9rem">
+                Commitment <strong>${s.currency} ${s.amount}</strong> &mdash; Year ${s.year} &mdash; ${statusBadge(s.status)}
+            </p>`;
+            if (!data.can_delete) {
+                return html + `<div class="alert alert-danger mb-0">
+                    <i class="feather-x-circle me-2"></i><strong>Cannot delete:</strong> ${data.block_reason}
+                </div>`;
+            }
+            if (data.chain.length === 0) {
+                return html + `<div class="alert alert-warning mb-3">
+                    This commitment will be permanently deleted. This action cannot be undone.
+                </div>`;
+            }
+            html += `<p class="fw-semibold mb-2" style="font-size:.85rem">The following records will also be permanently deleted:</p>
+                     <div class="list-group list-group-flush mb-3">`;
+            data.chain.forEach(item => {
+                if (item.type === 'purchase_request') {
+                    html += `<div class="list-group-item px-0 py-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div><span class="badge bg-primary me-1" style="font-size:.68rem">Purchase Request</span><strong>${item.reference_no}</strong></div>
+                            ${statusBadge(item.status)}
+                        </div>
+                        <div class="text-muted small mt-1">${item.currency} ${item.total_amount} &mdash; ${item.item_count} item${item.item_count !== 1 ? 's' : ''}</div>
+                    </div>`;
+                } else if (item.type === 'purchase_order') {
+                    const extras = [];
+                    if (item.disbursement_count > 0) extras.push(`${item.disbursement_count} disbursement${item.disbursement_count !== 1 ? 's' : ''}`);
+                    if (item.has_invoice) extras.push('invoice');
+                    if (item.has_negotiation) extras.push('negotiation');
+                    html += `<div class="list-group-item px-0 py-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div><span class="badge bg-warning text-dark me-1" style="font-size:.68rem">Purchase Order</span><strong>${item.reference_no}</strong></div>
+                            ${statusBadge(item.status)}
+                        </div>
+                        <div class="text-muted small mt-1">${item.currency} ${item.amount} &mdash; ${item.vendor}${extras.length ? ' &mdash; includes: ' + extras.join(', ') : ''}</div>
+                    </div>`;
+                }
+            });
+            html += `</div><div class="alert alert-danger mb-0" style="font-size:.85rem">
+                <i class="feather-alert-triangle me-1"></i><strong>This action cannot be undone.</strong>
+            </div>`;
+            return html;
+        }
+
+        document.querySelector('.js-delete-commitment')?.addEventListener('click', function () {
+            const infoUrl = this.dataset.infoUrl;
+            const body    = document.getElementById('deleteCommitmentModalBody');
+            const footer  = document.getElementById('deleteCommitmentModalFooter');
+            body.innerHTML = `<div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                <div class="small text-muted mt-2">Loading impact details…</div>
+            </div>`;
+            footer.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>`;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteCommitmentModal')).show();
+
+            fetch(infoUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(r => r.json())
+                .then(data => {
+                    body.innerHTML = buildModalBody(data);
+                    if (data.can_delete) {
+                        footer.innerHTML = `
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                                <i class="feather-trash-2 me-1"></i> Delete All
+                            </button>`;
+                        document.getElementById('confirmDeleteBtn').addEventListener('click', function () {
+                            this.disabled = true;
+                            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Deleting…';
+                            document.getElementById('deleteCommitmentForm').submit();
+                        });
+                    } else {
+                        footer.innerHTML = `<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>`;
+                    }
+                })
+                .catch(() => {
+                    body.innerHTML = `<div class="alert alert-danger">Failed to load details. Please try again.</div>`;
+                });
+        });
+    })();
+    </script>
+    @endpush
+@endif
+@endcan
 @endsection

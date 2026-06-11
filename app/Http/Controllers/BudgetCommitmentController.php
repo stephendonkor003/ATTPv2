@@ -11,6 +11,7 @@ use App\Models\Activity;
 use App\Models\SubActivity;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
+use App\Models\ProcurementPurchaseOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -885,6 +886,84 @@ class BudgetCommitmentController extends Controller
         }
     }
 
+    public function destroyInfo(BudgetCommitment $commitment): \Illuminate\Http\JsonResponse
+    {
+        $this->assertCommitmentInScope($commitment);
+
+        $pr = $commitment->purchaseRequest;
+        $currency = $commitment->programFunding?->program?->currency ?? '';
+
+        $canDelete   = true;
+        $blockReason = null;
+
+        if ($commitment->status !== self::STATUS_DRAFT) {
+            $canDelete   = false;
+            $blockReason = 'Only draft commitments can be deleted.';
+        }
+
+        $chain = [];
+
+        if ($pr) {
+            $nonDraftExists = $pr->commitments()
+                ->where('status', '!=', self::STATUS_DRAFT)
+                ->exists();
+
+            if ($nonDraftExists) {
+                $canDelete   = false;
+                $blockReason = 'This purchase request has non-draft commitments and cannot be deleted.';
+            }
+
+            $chain[] = [
+                'type'         => 'purchase_request',
+                'reference_no' => $pr->reference_no,
+                'status'       => $pr->status,
+                'item_count'   => $pr->items()->count(),
+                'total_amount' => number_format((float) $pr->total_amount, 2),
+                'currency'     => $pr->currency ?? $currency,
+            ];
+
+            $pos = ProcurementPurchaseOrder::query()
+                ->where(function ($q) use ($pr, $commitment) {
+                    $q->where('purchase_request_id', $pr->id)
+                      ->orWhere('budget_commitment_id', $commitment->id);
+                })
+                ->withCount('disbursements')
+                ->get();
+
+            foreach ($pos as $po) {
+                $lockedStatuses = ['approved', 'completed'];
+                if ($canDelete && in_array($po->status, $lockedStatuses, true)) {
+                    $canDelete   = false;
+                    $blockReason = 'A linked purchase order is in ' . $po->status . ' status and cannot be deleted.';
+                }
+
+                $chain[] = [
+                    'type'               => 'purchase_order',
+                    'reference_no'       => $po->reference_no ?? '—',
+                    'status'             => $po->status,
+                    'vendor'             => $po->vendor?->name ?? '—',
+                    'amount'             => number_format((float) $po->amount, 2),
+                    'currency'           => $po->currency ?? $currency,
+                    'disbursement_count' => $po->disbursements_count,
+                    'has_invoice'        => (bool) $po->invoice_id,
+                    'has_negotiation'    => (bool) $po->negotiation_id,
+                ];
+            }
+        }
+
+        return response()->json([
+            'can_delete'  => $canDelete,
+            'block_reason'=> $blockReason,
+            'summary'     => [
+                'amount'   => number_format((float) $commitment->commitment_amount, 2),
+                'currency' => $currency,
+                'year'     => $commitment->commitment_year,
+                'status'   => $commitment->status,
+            ],
+            'chain' => $chain,
+        ]);
+    }
+
     public function destroy(BudgetCommitment $commitment)
     {
         $this->assertCommitmentInScope($commitment);
@@ -896,24 +975,58 @@ class BudgetCommitmentController extends Controller
                 ->where('status', '!=', self::STATUS_DRAFT)
                 ->exists();
             if ($nonDraftExists) {
-                abort(403, 'Only draft commitments can be deleted.');
+                return back()->with('error', 'Only draft commitments can be deleted.');
             }
 
-            DB::transaction(function () use ($purchaseRequest) {
+            DB::transaction(function () use ($purchaseRequest, $commitment) {
+                // Cascade-delete linked purchase orders and their sub-records
+                $pos = ProcurementPurchaseOrder::query()
+                    ->where(function ($q) use ($purchaseRequest, $commitment) {
+                        $q->where('purchase_request_id', $purchaseRequest->id)
+                          ->orWhere('budget_commitment_id', $commitment->id);
+                    })->get();
+
+                foreach ($pos as $po) {
+                    $this->deletePurchaseOrderCascade($po);
+                }
+
                 $purchaseRequest->commitments()->delete();
                 $purchaseRequest->items()->delete();
                 $purchaseRequest->delete();
             });
         } else {
             if ($commitment->status !== self::STATUS_DRAFT) {
-                abort(403, 'Only draft commitments can be deleted.');
+                return back()->with('error', 'Only draft commitments can be deleted.');
             }
             $commitment->delete();
         }
 
         return redirect()
             ->route('finance.commitments.index')
-            ->with('success', 'Budget commitment deleted.');
+            ->with('success', 'Budget commitment and all linked records deleted.');
+    }
+
+    private function deletePurchaseOrderCascade(ProcurementPurchaseOrder $po): void
+    {
+        $invoiceId     = $po->invoice_id;
+        $negotiationId = $po->negotiation_id;
+
+        $po->disbursements()->delete();
+        $po->deliverables()->detach();
+
+        // Null out BelongsTo FKs before deleting referenced records
+        $po->invoice_id     = null;
+        $po->negotiation_id = null;
+        $po->save();
+
+        $po->delete();
+
+        if ($invoiceId) {
+            \App\Models\ProcurementInvoice::find($invoiceId)?->delete();
+        }
+        if ($negotiationId) {
+            \App\Models\ProcurementContractNegotiation::find($negotiationId)?->delete();
+        }
     }
 
     /* =========================================================
