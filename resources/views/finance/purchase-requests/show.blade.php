@@ -152,6 +152,7 @@
                                         <th>#</th>
                                         <th>Category</th>
                                         <th>Resource Item</th>
+                                        <th>Deliverable</th>
                                         <th>Milestone / Description</th>
                                         <th>Milestone Date</th>
                                         <th class="text-end">Amount</th>
@@ -163,6 +164,12 @@
                                             <td>{{ $loop->iteration }}</td>
                                             <td>{{ $item->resourceCategory?->name ?? '—' }}</td>
                                             <td>{{ $item->resource?->name ?? '—' }}</td>
+                                            <td>
+                                                <div class="fw-semibold">{{ $item->deliverable?->title ?? '—' }}</div>
+                                                @if ($item->deliverable?->procurement)
+                                                    <div class="small text-muted">{{ $item->deliverable->procurement->reference_no ?? $item->deliverable->procurement->title }}</div>
+                                                @endif
+                                            </td>
                                             <td>{{ $item->milestone ?? '—' }}</td>
                                             <td>{{ $item->milestone_date?->format('Y-m-d') ?? '—' }}</td>
                                             <td class="text-end fw-semibold">
@@ -174,7 +181,7 @@
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <th colspan="5" class="text-end">Total</th>
+                                        <th colspan="6" class="text-end">Total</th>
                                         <th class="text-end">
                                             {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
                                             {{ number_format((float) $purchaseRequest->total_amount, 2) }}

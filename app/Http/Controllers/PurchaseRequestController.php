@@ -59,6 +59,7 @@ class PurchaseRequestController extends Controller
             'subActivity',
             'items.resourceCategory',
             'items.resource',
+            'items.deliverable.procurement',
             'commitments' => fn ($query) => $query->orderBy('commitment_year'),
             'creator',
             'approver',
@@ -93,6 +94,7 @@ class PurchaseRequestController extends Controller
             'subActivity',
             'items.resourceCategory',
             'items.resource',
+            'items.deliverable.procurement',
             'commitments' => fn ($query) => $query->orderBy('commitment_year'),
             'creator',
         ]);
@@ -114,6 +116,7 @@ class PurchaseRequestController extends Controller
             'subActivity',
             'items.resourceCategory',
             'items.resource',
+            'items.deliverable.procurement',
             'commitments' => fn ($query) => $query->orderBy('commitment_year'),
             'creator',
         ]);

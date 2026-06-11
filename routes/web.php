@@ -1702,6 +1702,9 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
             ->name('destroy.legacy');
         Route::get('{purchaseOrder}/supporting-document', [ProcurementPurchaseOrderController::class, 'downloadSupportingDocument'])
             ->name('supporting-document');
+        Route::get('{purchaseOrder}/line-item-evidence/{evidence}/documents/{document}', [ProcurementPurchaseOrderController::class, 'downloadLineItemEvidenceDocument'])
+            ->whereNumber('document')
+            ->name('line-item-evidence.document');
         Route::get('{purchaseOrder}', [ProcurementPurchaseOrderController::class, 'show'])
             ->name('show');
         Route::get('{purchaseOrder}/pdf', [ProcurementPurchaseOrderController::class, 'pdf'])

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class ProcurementPurchaseOrder extends BaseModel
@@ -101,6 +102,11 @@ class ProcurementPurchaseOrder extends BaseModel
     public function disbursements()
     {
         return $this->hasMany(ProcurementDisbursement::class, 'purchase_order_id');
+    }
+
+    public function lineItemEvidence(): HasMany
+    {
+        return $this->hasMany(ProcurementPurchaseOrderItemEvidence::class, 'purchase_order_id');
     }
 
     public function paidAmount(): float

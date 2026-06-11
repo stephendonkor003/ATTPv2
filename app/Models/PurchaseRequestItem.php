@@ -13,6 +13,7 @@ class PurchaseRequestItem extends BaseModel
         'purchase_request_id',
         'resource_category_id',
         'resource_id',
+        'deliverable_id',
         'milestone',
         'milestone_date',
         'amount',
@@ -63,6 +64,11 @@ class PurchaseRequestItem extends BaseModel
     public function resource(): BelongsTo
     {
         return $this->belongsTo(Resource::class, 'resource_id');
+    }
+
+    public function deliverable(): BelongsTo
+    {
+        return $this->belongsTo(ProcurementDeliverable::class, 'deliverable_id');
     }
 
     public function awpReview()

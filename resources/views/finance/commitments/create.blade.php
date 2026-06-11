@@ -232,9 +232,10 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th style="width: 22%;">Resource Category</th>
-                                        <th style="width: 22%;">Resource Item</th>
-                                        <th style="width: 20%;">Milestone / Description</th>
-                                        <th style="width: 14%;">Milestone Date</th>
+                                        <th style="width: 18%;">Resource Item</th>
+                                        <th style="width: 22%;">Deliverable</th>
+                                        <th style="width: 18%;">Milestone / Description</th>
+                                        <th style="width: 12%;">Milestone Date</th>
                                         <th style="width: 170px;" class="text-end">Price / Amount</th>
                                         <th style="width: 80px;" class="text-center">Action</th>
                                     </tr>
@@ -310,6 +311,21 @@
 		                    <option value="{{ $cat->id }}">{{ $cat->name }}</option>
 		                @endforeach
 		            `;
+
+                    const deliverableOptionsHtml = `
+                        <option value="">Select Deliverable</option>
+                        @foreach ($deliverables ?? collect() as $deliverable)
+                            @php
+                                $deliverableLabel = collect([
+                                    $deliverable->title,
+                                    $deliverable->procurement?->reference_no,
+                                    $deliverable->vendor?->name,
+                                    $deliverable->amount ? (($deliverable->currency ?? '') . ' ' . number_format((float) $deliverable->amount, 2)) : null,
+                                ])->filter()->implode(' | ');
+                            @endphp
+                            <option value="{{ $deliverable->id }}">{{ $deliverableLabel }}</option>
+                        @endforeach
+                    `;
 
 	            let breakdown = [];
 
@@ -635,6 +651,11 @@
                                     </select>
                                 </td>
                                 <td>
+                                    <select class="form-select item-deliverable" data-field="deliverable_id" required>
+                                        ${deliverableOptionsHtml}
+                                    </select>
+                                </td>
+                                <td>
                                     <input type="text"
                                         class="form-control item-milestone"
                                         data-field="milestone"
@@ -661,6 +682,7 @@
                             renumberItemRows();
 
                             const categorySelect = tr.querySelector('.item-category');
+                            const deliverableSelect = tr.querySelector('.item-deliverable');
                             const amountInput = tr.querySelector('.item-amount');
                             const milestoneInput = tr.querySelector('.item-milestone');
                             const milestoneDateInput = tr.querySelector('.item-milestone-date');
@@ -668,6 +690,10 @@
                             if (item && item.resource_category_id) {
                                 categorySelect.value = item.resource_category_id;
                                 loadResourcesForRow(tr, item.resource_category_id, item.resource_id || '');
+                            }
+
+                            if (item && item.deliverable_id) {
+                                deliverableSelect.value = item.deliverable_id;
                             }
 
                             if (item && item.amount) {
@@ -707,6 +733,7 @@
                 if (rows.length <= 1) {
                     row.querySelector('.item-category').value = '';
                     row.querySelector('.item-resource').innerHTML = '<option value="">Select Resource</option>';
+                    row.querySelector('.item-deliverable').value = '';
                     row.querySelector('.item-amount').value = '';
                     row.querySelector('.item-milestone').value = '';
                     row.querySelector('.item-milestone-date').value = '';
@@ -723,6 +750,7 @@
                 const oldItems = @json(old('items', $isEdit ? $items : []));
                 const legacyCategory = @json(old('resource_category_id'));
                 const legacyResource = @json(old('resource_id'));
+                const legacyDeliverable = @json(old('deliverable_id'));
                 const legacyAmount = @json(old('commitment_amount'));
 	
 		                if (Array.isArray(oldItems) && oldItems.length) {
@@ -734,6 +762,7 @@
 		                    addItemRow({
 		                        resource_category_id: legacyCategory,
 		                        resource_id: legacyResource,
+                                deliverable_id: legacyDeliverable,
 		                        amount: legacyAmount,
 		                    });
 		                    return;

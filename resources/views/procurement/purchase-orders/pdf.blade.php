@@ -277,10 +277,11 @@
                     <thead>
                         <tr>
                             <th style="width: 28px;">#</th>
-                            <th style="width: 18%;">Category</th>
-                            <th style="width: 20%;">Resource</th>
+                            <th style="width: 16%;">Category</th>
+                            <th style="width: 16%;">Resource</th>
+                            <th style="width: 18%;">Deliverable</th>
                             <th>Description</th>
-                            <th style="width: 22%;">Milestone Date</th>
+                            <th style="width: 14%;">Milestone Date</th>
                             <th class="right" style="width: 16%;">Amount</th>
                         </tr>
                     </thead>
@@ -290,6 +291,7 @@
                                 <td>{{ $loop->iteration }}</td>
                                 <td>{{ $item->resourceCategory?->name ?? 'N/A' }}</td>
                                 <td>{{ $item->resource?->name ?? 'N/A' }}</td>
+                                <td>{{ $item->deliverable?->title ?? 'N/A' }}</td>
                                 <td>
                                     {{ $item->milestone ?? $item->object_type ?? 'N/A' }}
                                     @if ($item->budget_code || $item->work_plan_payment_basis)
@@ -301,17 +303,17 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6">No purchase request line items were found.</td>
+                                <td colspan="7">No purchase request line items were found.</td>
                             </tr>
                         @endforelse
                     </tbody>
                     <tfoot>
                         <tr>
-                            <th colspan="5" class="right">Purchase Order Amount</th>
+                            <th colspan="6" class="right">Purchase Order Amount</th>
                             <th class="right">{{ $currency }} {{ number_format($poAmount, 2) }}</th>
                         </tr>
                         <tr>
-                            <th colspan="5" class="right">Selected Commitment Amount</th>
+                            <th colspan="6" class="right">Selected Commitment Amount</th>
                             <th class="right">{{ $currency }} {{ number_format($commitmentAmount, 2) }}</th>
                         </tr>
                     </tfoot>

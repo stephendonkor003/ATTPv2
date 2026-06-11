@@ -59,6 +59,7 @@
     @php
         $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
         $lineItems = $sourcePurchaseRequest?->items ?? collect();
+        $evidenceByItem = $purchaseOrder->lineItemEvidence->keyBy('purchase_request_item_id');
         $currency = $purchaseOrder->currency ?? $sourcePurchaseRequest?->currency ?? '';
         $vendorContactName = $purchaseOrder->vendor_contact_name ?: ($purchaseOrder->vendor?->name ?? 'N/A');
         $vendorContactEmail = $purchaseOrder->vendor_contact_email ?: ($purchaseOrder->vendor?->email ?? 'N/A');
@@ -348,16 +349,48 @@
                                         <th>#</th>
                                         <th>Category</th>
                                         <th>Resource</th>
+                                        <th>Deliverable</th>
+                                        <th>Date</th>
+                                        <th>Evidence</th>
                                         <th>Description</th>
                                         <th class="text-end">Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($lineItems as $item)
+                                        @php
+                                            $itemEvidence = $evidenceByItem->get($item->id);
+                                            $itemDocuments = collect($itemEvidence?->documents ?? []);
+                                        @endphp
                                         <tr>
                                             <td>{{ $loop->iteration }}</td>
                                             <td>{{ $item->resourceCategory?->name ?? 'N/A' }}</td>
                                             <td>{{ $item->resource?->name ?? 'N/A' }}</td>
+                                            <td>{{ $item->deliverable?->title ?? 'N/A' }}</td>
+                                            <td>{{ $itemEvidence?->deliverable_date?->format('M d, Y') ?? 'N/A' }}</td>
+                                            <td>
+                                                @if ($itemEvidence)
+                                                    <span class="badge {{ $itemEvidence->is_met ? 'bg-success' : 'bg-info' }}">
+                                                        {{ $itemEvidence->is_met ? 'Confirmed' : 'Recorded' }}
+                                                    </span>
+                                                    @if ($itemEvidence->notes)
+                                                        <div class="small text-muted mt-1">{{ $itemEvidence->notes }}</div>
+                                                    @endif
+                                                    @if ($itemDocuments->isNotEmpty())
+                                                        <div class="d-flex flex-wrap gap-1 mt-1">
+                                                            @foreach ($itemDocuments as $documentIndex => $document)
+                                                                <a href="{{ route('procurement.purchase-orders.line-item-evidence.document', [$purchaseOrder, $itemEvidence, $documentIndex]) }}?download=1"
+                                                                    class="badge bg-light text-dark border"
+                                                                    title="{{ $document['name'] ?? 'Document' }}">
+                                                                    {{ $document['display_name'] ?? $document['name'] ?? 'Document' }}
+                                                                </a>
+                                                            @endforeach
+                                                        </div>
+                                                    @endif
+                                                @else
+                                                    <span class="badge bg-light text-muted border">Pending</span>
+                                                @endif
+                                            </td>
                                             <td>
                                                 <div>{{ $item->milestone ?? $item->object_type ?? 'N/A' }}</div>
                                                 <div class="small text-muted">{{ $item->budget_code ?? $item->work_plan_payment_basis ?? '' }}</div>
@@ -428,6 +461,7 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th>Receipt</th>
+                                        <th>Deliverable</th>
                                         <th>Amount</th>
                                         <th>Paid At</th>
                                         <th>Method</th>
@@ -438,6 +472,7 @@
                                     @foreach ($purchaseOrder->disbursements as $disbursement)
                                         <tr>
                                             <td>{{ $disbursement->reference_no ?? 'N/A' }}</td>
+                                            <td>{{ $disbursement->deliverable?->title ?? 'N/A' }}</td>
                                             <td>{{ $disbursement->amount ? number_format($disbursement->amount, 2) : 'N/A' }} {{ $disbursement->currency ?? '' }}</td>
                                             <td>{{ $disbursement->paid_at?->format('d M Y') ?? 'N/A' }}</td>
                                             <td>{{ $disbursement->payment_method ?? 'N/A' }}</td>

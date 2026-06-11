@@ -47,6 +47,13 @@
                         <div class="fw-semibold">{{ $disbursement->purchaseOrder?->reference_no ?? 'N/A' }}</div>
                     </div>
                     <div class="col-md-4">
+                        <div class="text-muted small">Deliverable</div>
+                        <div class="fw-semibold">{{ $disbursement->deliverable?->title ?? 'N/A' }}</div>
+                        <div class="small text-muted">
+                            {{ $disbursement->deliverable?->procurement?->reference_no ?? $disbursement->deliverable?->status ?? '' }}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
                         <div class="text-muted small">Paid At</div>
                         <div class="fw-semibold">{{ $disbursement->paid_at?->format('d M Y') ?? 'N/A' }}</div>
                     </div>

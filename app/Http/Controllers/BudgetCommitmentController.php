@@ -11,6 +11,7 @@ use App\Models\Activity;
 use App\Models\SubActivity;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
+use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementPurchaseOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -77,6 +78,7 @@ class BudgetCommitmentController extends Controller
                         ->whereNotNull('governance_node_id');
                 })
                 ->get(),
+            'deliverables' => $this->deliverableOptions(),
         ]);
     }
 
@@ -95,11 +97,13 @@ class BudgetCommitmentController extends Controller
         // Backwards compatible: allow old single-item fields if items[] isn't provided
         'resource_category_id' => 'nullable|exists:myb_resource_categories,id',
         'resource_id'          => 'nullable|exists:myb_resources,id',
+        'deliverable_id'       => 'nullable|exists:procurement_deliverables,id',
         'commitment_amount'    => 'nullable|numeric|min:0.01',
 
         'items'                => 'nullable|array|min:1',
         'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
         'items.*.resource_id'          => 'required|exists:myb_resources,id',
+        'items.*.deliverable_id'       => 'required|exists:procurement_deliverables,id',
         'items.*.amount'               => 'required|numeric|min:0.01',
         'items.*.milestone'            => 'nullable|string|max:255',
         'items.*.milestone_date'       => 'nullable|date',
@@ -144,6 +148,7 @@ class BudgetCommitmentController extends Controller
 		            if (
 		                empty($validated['resource_category_id'])
 		                || empty($validated['resource_id'])
+		                || empty($validated['deliverable_id'])
 		                || empty($validated['commitment_amount'])
 		            ) {
 		                return back()
@@ -157,6 +162,7 @@ class BudgetCommitmentController extends Controller
 		                [
 		                    'resource_category_id' => $validated['resource_category_id'],
 		                    'resource_id' => $validated['resource_id'],
+		                    'deliverable_id' => $validated['deliverable_id'],
 		                    'amount' => $validated['commitment_amount'],
 		                ],
 		            ]);
@@ -171,6 +177,7 @@ class BudgetCommitmentController extends Controller
             return [
                 'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
                 'resource_id' => (string) ($item['resource_id'] ?? ''),
+                'deliverable_id' => (string) ($item['deliverable_id'] ?? ''),
                 'amount' => round((float) ($item['amount'] ?? 0), 2),
                 'milestone' => $milestone !== '' ? $milestone : null,
                 'milestone_date' => $milestoneDate ?: null,
@@ -188,6 +195,7 @@ class BudgetCommitmentController extends Controller
 
 		        foreach ($items as $item) {
 		            $this->assertResourceCategoryInScope($item['resource_category_id']);
+		            $this->assertDeliverableInScope($item['deliverable_id']);
 
 		            $resource = Resource::find($item['resource_id']);
 		            if (!$resource) {
@@ -355,6 +363,7 @@ class BudgetCommitmentController extends Controller
                 'purchase_request_id' => $purchaseRequest->id,
                 'resource_category_id' => $item['resource_category_id'],
                 'resource_id' => $item['resource_id'],
+                'deliverable_id' => $item['deliverable_id'],
                 'amount' => $item['amount'],
                 'milestone' => $item['milestone'] ?? null,
                 'milestone_date' => $item['milestone_date'] ?? null,
@@ -432,6 +441,7 @@ class BudgetCommitmentController extends Controller
 	            'resource',
 	            'purchaseRequest.items.resourceCategory',
 	            'purchaseRequest.items.resource',
+	            'purchaseRequest.items.deliverable.procurement',
 	        ]);
 
         return view('finance.commitments.show', compact('commitment'));
@@ -492,7 +502,7 @@ class BudgetCommitmentController extends Controller
             abort(403, 'Only draft commitments can be edited.');
         }
 
-        $commitment->load(['purchaseRequest.items', 'programFunding']);
+        $commitment->load(['purchaseRequest.items.deliverable.procurement', 'programFunding']);
 
         $subActivity = SubActivity::find($commitment->allocation_id);
         $activityId = $subActivity?->activity_id;
@@ -503,6 +513,7 @@ class BudgetCommitmentController extends Controller
                 return [
                     'resource_category_id' => $item->resource_category_id,
                     'resource_id' => $item->resource_id,
+                    'deliverable_id' => $item->deliverable_id,
                     'amount' => (float) $item->amount,
                     'milestone' => $item->milestone,
                     'milestone_date' => $item->milestone_date?->format('Y-m-d'),
@@ -532,6 +543,7 @@ class BudgetCommitmentController extends Controller
                 'year' => $commitment->purchaseRequest?->start_year ?? $commitment->commitment_year,
             ],
             'items' => $items,
+            'deliverables' => $this->deliverableOptions(),
         ]);
     }
 
@@ -552,11 +564,13 @@ class BudgetCommitmentController extends Controller
             // Backwards compatible: allow old single-item fields if items[] isn't provided
             'resource_category_id' => 'nullable|exists:myb_resource_categories,id',
             'resource_id'          => 'nullable|exists:myb_resources,id',
+            'deliverable_id'       => 'nullable|exists:procurement_deliverables,id',
             'commitment_amount'    => 'nullable|numeric|min:0.01',
 
             'items'                => 'nullable|array|min:1',
             'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
             'items.*.resource_id'          => 'required|exists:myb_resources,id',
+            'items.*.deliverable_id'       => 'required|exists:procurement_deliverables,id',
             'items.*.amount'               => 'required|numeric|min:0.01',
             'items.*.milestone'            => 'nullable|string|max:255',
             'items.*.milestone_date'       => 'nullable|date',
@@ -592,6 +606,7 @@ class BudgetCommitmentController extends Controller
                 if (
                     empty($validated['resource_category_id'])
                     || empty($validated['resource_id'])
+                    || empty($validated['deliverable_id'])
                     || empty($validated['commitment_amount'])
                 ) {
                     return back()
@@ -605,6 +620,7 @@ class BudgetCommitmentController extends Controller
                     [
                         'resource_category_id' => $validated['resource_category_id'],
                         'resource_id' => $validated['resource_id'],
+                        'deliverable_id' => $validated['deliverable_id'],
                         'amount' => $validated['commitment_amount'],
                     ],
                 ]);
@@ -619,6 +635,7 @@ class BudgetCommitmentController extends Controller
                 return [
                     'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
                     'resource_id' => (string) ($item['resource_id'] ?? ''),
+                    'deliverable_id' => (string) ($item['deliverable_id'] ?? ''),
                     'amount' => round((float) ($item['amount'] ?? 0), 2),
                     'milestone' => $milestone !== '' ? $milestone : null,
                     'milestone_date' => $milestoneDate ?: null,
@@ -636,6 +653,7 @@ class BudgetCommitmentController extends Controller
 
             foreach ($items as $item) {
                 $this->assertResourceCategoryInScope($item['resource_category_id']);
+                $this->assertDeliverableInScope($item['deliverable_id']);
 
                 $resource = Resource::find($item['resource_id']);
                 if (!$resource) {
@@ -813,6 +831,7 @@ class BudgetCommitmentController extends Controller
                     'purchase_request_id' => $purchaseRequest->id,
                     'resource_category_id' => $item['resource_category_id'],
                     'resource_id' => $item['resource_id'],
+                    'deliverable_id' => $item['deliverable_id'],
                     'amount' => $item['amount'],
                     'milestone' => $item['milestone'] ?? null,
                     'milestone_date' => $item['milestone_date'] ?? null,
@@ -1632,6 +1651,26 @@ protected function aiSummary(array $allocated, array $committed)
     };
 }
 
+    private function deliverableOptions()
+    {
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+            return collect();
+        }
+
+        return ProcurementDeliverable::with(['procurement', 'vendor'])
+            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereHas('procurement', function ($procurementQuery) use ($scopedNodeIds) {
+                    $procurementQuery->whereIn('governance_node_id', $scopedNodeIds)
+                        ->whereNotNull('governance_node_id');
+                });
+            })
+            ->orderByRaw('COALESCE(timeline_start, created_at)')
+            ->orderBy('sequence')
+            ->orderBy('title')
+            ->get();
+    }
+
     private function scopedNodeIds(): ?array
     {
         $currentUser = Auth::user();
@@ -1726,6 +1765,24 @@ protected function aiSummary(array $allocated, array $committed)
         $nodeId = ResourceCategory::find($categoryId)?->governance_node_id;
         if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this resource category.');
+        }
+    }
+
+    private function assertDeliverableInScope(string $deliverableId): void
+    {
+        $deliverable = ProcurementDeliverable::with('procurement')->find($deliverableId);
+        if (!$deliverable) {
+            abort(422, 'Selected deliverable was not found.');
+        }
+
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds === null) {
+            return;
+        }
+
+        $nodeId = $deliverable->procurement?->governance_node_id;
+        if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
+            abort(403, 'You do not have access to this deliverable.');
         }
     }
 

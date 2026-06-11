@@ -121,6 +121,10 @@
                     <td class="value">{{ $disbursement->purchaseOrder?->reference_no ?? 'N/A' }}</td>
                 </tr>
                 <tr>
+                    <td class="label">Deliverable</td>
+                    <td class="value">{{ $disbursement->deliverable?->title ?? 'N/A' }}</td>
+                </tr>
+                <tr>
                     <td class="label">Procurement</td>
                     <td class="value">{{ $disbursement->procurement?->title ?? 'N/A' }}</td>
                 </tr>

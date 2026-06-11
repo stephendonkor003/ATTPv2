@@ -9,6 +9,7 @@ use App\Models\BudgetCommitment;
 use App\Models\Procurement;
 use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementPurchaseOrder;
+use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\ProgramFunding;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
@@ -67,6 +68,7 @@ class ProcurementPurchaseOrderController extends Controller
             'subActivity',
             'items.resourceCategory',
             'items.resource',
+            'items.deliverable',
             'commitments' => fn ($query) => $query->where('status', BudgetCommitment::STATUS_APPROVED)
                 ->orderBy('commitment_year'),
         ])
@@ -193,6 +195,14 @@ class ProcurementPurchaseOrderController extends Controller
             'expected_delivery_date' => ['nullable', 'date'],
             'valid_until' => ['nullable', 'date'],
             'supporting_document' => ['required', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
+            'item_evidence' => ['nullable', 'array'],
+            'item_evidence.*.is_met' => ['nullable', 'boolean'],
+            'item_evidence.*.deliverable_date' => ['nullable', 'date'],
+            'item_evidence.*.notes' => ['nullable', 'string', 'max:3000'],
+            'item_evidence.*.document_names' => ['nullable', 'array', 'max:20'],
+            'item_evidence.*.document_names.*' => ['nullable', 'string', 'max:255'],
+            'item_evidence.*.documents' => ['nullable', 'array', 'max:20'],
+            'item_evidence.*.documents.*' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
         ], [
             'purchase_request_id.required' => 'Select the approved purchase request before creating the purchase order.',
             'budget_commitment_id.required' => 'Select the approved commitment year that will fund this purchase order.',
@@ -202,9 +212,10 @@ class ProcurementPurchaseOrderController extends Controller
             'payment_terms.required' => 'Enter the payment terms for this purchase order.',
             'supporting_document.required' => 'Attach the supporting documentation before creating this purchase order.',
             'supporting_document.mimes' => 'Supporting documentation must be a PDF, Office document, image, or ZIP file.',
+            'item_evidence.*.documents.*.mimes' => 'Line item evidence must be a PDF, Office document, image, or ZIP file.',
         ]);
 
-        $purchaseRequest = PurchaseRequest::with('commitments')->findOrFail($data['purchase_request_id']);
+        $purchaseRequest = PurchaseRequest::with(['commitments', 'items.deliverable'])->findOrFail($data['purchase_request_id']);
         $this->assertPurchaseRequestInScope($purchaseRequest);
 
         if ($purchaseRequest->status !== 'approved') {
@@ -235,13 +246,29 @@ class ProcurementPurchaseOrderController extends Controller
             ]);
         }
 
+        $submittedDeliverableIds = collect($data['deliverable_ids'] ?? [])
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+        $itemDeliverableIds = $purchaseRequest->items
+            ->pluck('deliverable_id')
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+        $deliverableIds = $submittedDeliverableIds
+            ->merge($itemDeliverableIds)
+            ->unique()
+            ->values();
+
         $procurement = null;
         if (!empty($data['procurement_id'])) {
             $procurement = Procurement::findOrFail($data['procurement_id']);
             $this->assertProcurementInScope($procurement);
 
-            if (!empty($data['deliverable_ids'])) {
-                $invalid = ProcurementDeliverable::whereIn('id', $data['deliverable_ids'])
+            if ($deliverableIds->isNotEmpty()) {
+                $invalid = ProcurementDeliverable::whereIn('id', $deliverableIds)
                     ->where('procurement_id', '!=', $procurement->id)
                     ->exists();
 
@@ -251,6 +278,10 @@ class ProcurementPurchaseOrderController extends Controller
                     ]);
                 }
             }
+        } elseif ($submittedDeliverableIds->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'procurement_id' => 'Select the procurement before choosing additional deliverables.',
+            ]);
         }
 
         $vendor = null;
@@ -262,7 +293,7 @@ class ProcurementPurchaseOrderController extends Controller
             $vendor = User::query()->find($procurement->awarded_vendor_id);
         }
 
-        $purchaseOrder = DB::transaction(function () use ($commitment, $data, $procurement, $purchaseRequest, $request, $vendor) {
+        $purchaseOrder = DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseRequest, $request, $vendor) {
             $purchaseOrder = ProcurementPurchaseOrder::create([
                 'budget_commitment_id' => $commitment->id,
                 'purchase_request_id' => $purchaseRequest->id,
@@ -301,9 +332,11 @@ class ProcurementPurchaseOrderController extends Controller
 
             $this->attachSupportingDocument($request, $purchaseOrder);
 
-            if (!empty($data['deliverable_ids'])) {
-                $purchaseOrder->deliverables()->sync($data['deliverable_ids']);
+            if ($deliverableIds->isNotEmpty()) {
+                $purchaseOrder->deliverables()->sync($deliverableIds->all());
             }
+
+            $this->storeLineItemEvidence($request, $purchaseOrder, $purchaseRequest);
 
             return $purchaseOrder;
         });
@@ -324,11 +357,14 @@ class ProcurementPurchaseOrderController extends Controller
             'subActivity',
             'negotiation',
             'invoice',
-            'disbursements',
+            'disbursements.deliverable',
+            'lineItemEvidence.deliverable',
             'budgetCommitment.purchaseRequest.items.resourceCategory',
             'budgetCommitment.purchaseRequest.items.resource',
+            'budgetCommitment.purchaseRequest.items.deliverable',
             'purchaseRequest.items.resourceCategory',
             'purchaseRequest.items.resource',
+            'purchaseRequest.items.deliverable',
             'purchaseRequest.programFunding.program',
             'purchaseRequest.governanceNode',
         ]);
@@ -342,14 +378,17 @@ class ProcurementPurchaseOrderController extends Controller
 
         $purchaseOrder->load([
             'procurement',
+            'deliverables',
             'vendor',
             'subActivity',
             'negotiation',
             'invoice',
             'budgetCommitment.purchaseRequest.items.resourceCategory',
             'budgetCommitment.purchaseRequest.items.resource',
+            'budgetCommitment.purchaseRequest.items.deliverable',
             'purchaseRequest.items.resourceCategory',
             'purchaseRequest.items.resource',
+            'purchaseRequest.items.deliverable',
             'purchaseRequest.programFunding.program',
             'purchaseRequest.governanceNode',
         ]);
@@ -367,14 +406,17 @@ class ProcurementPurchaseOrderController extends Controller
 
         $purchaseOrder->load([
             'procurement',
+            'deliverables',
             'vendor',
             'subActivity',
             'negotiation',
             'invoice',
             'budgetCommitment.purchaseRequest.items.resourceCategory',
             'budgetCommitment.purchaseRequest.items.resource',
+            'budgetCommitment.purchaseRequest.items.deliverable',
             'purchaseRequest.items.resourceCategory',
             'purchaseRequest.items.resource',
+            'purchaseRequest.items.deliverable',
             'purchaseRequest.programFunding.program',
             'purchaseRequest.governanceNode',
         ]);
@@ -423,12 +465,45 @@ class ProcurementPurchaseOrderController extends Controller
         return $privateDisk->response($path, $fileName, $headers);
     }
 
+    public function downloadLineItemEvidenceDocument(
+        Request $request,
+        ProcurementPurchaseOrder $purchaseOrder,
+        ProcurementPurchaseOrderItemEvidence $evidence,
+        int $document
+    ) {
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        abort_unless((string) $evidence->purchase_order_id === (string) $purchaseOrder->id, 404);
+
+        $documents = $evidence->documents ?? [];
+        $file = $documents[$document] ?? null;
+        abort_unless(is_array($file) && !empty($file['path']), 404, 'Evidence document not found.');
+
+        $privateDisk = Storage::disk('local');
+        abort_unless($privateDisk->exists($file['path']), 404, 'Evidence document file missing on disk.');
+
+        $headers = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        $fileName = $file['name'] ?? basename($file['path']);
+
+        if ($request->boolean('download')) {
+            return $privateDisk->download($file['path'], $fileName, $headers);
+        }
+
+        return $privateDisk->response($file['path'], $fileName, $headers);
+    }
+
     public function destroy(ProcurementPurchaseOrder $purchaseOrder)
     {
         $this->assertPurchaseOrderInScope($purchaseOrder);
 
         DB::transaction(function () use ($purchaseOrder) {
             $purchaseOrder->disbursements()->update(['purchase_order_id' => null]);
+            $this->deleteLineItemEvidenceDocuments($purchaseOrder);
             $this->deleteSupportingDocument($purchaseOrder);
             $purchaseOrder->delete();
         });
@@ -637,12 +712,15 @@ class ProcurementPurchaseOrderController extends Controller
 
         $items = $purchaseRequest->items
             ->map(fn ($item) => [
+                'id' => (string) $item->id,
                 'category' => $item->resourceCategory?->name ?: 'N/A',
                 'resource' => $item->resource?->name ?: 'N/A',
                 'description' => $item->milestone ?: $item->observations ?: $item->object_type ?: 'N/A',
                 'milestone_date' => $item->milestone_date?->format('Y-m-d'),
                 'amount' => round((float) $item->amount, 2),
                 'budget_code' => $item->budget_code,
+                'deliverable_id' => $item->deliverable_id,
+                'deliverable_title' => $item->deliverable?->title,
                 'units' => $item->work_plan_units,
                 'payment_basis' => $item->work_plan_payment_basis,
             ])
@@ -696,6 +774,79 @@ class ProcurementPurchaseOrderController extends Controller
             'supporting_document_mime_type' => $file->getClientMimeType(),
             'supporting_document_size' => $file->getSize(),
         ]);
+    }
+
+    private function storeLineItemEvidence(Request $request, ProcurementPurchaseOrder $purchaseOrder, PurchaseRequest $purchaseRequest): void
+    {
+        $evidenceInput = $request->input('item_evidence', []);
+        $filesInput = $request->file('item_evidence', []);
+        $items = $purchaseRequest->items->keyBy(fn ($item) => (string) $item->id);
+
+        foreach ($evidenceInput as $itemId => $input) {
+            if (!$items->has((string) $itemId)) {
+                throw ValidationException::withMessages([
+                    'item_evidence' => 'One or more line item evidence records do not belong to the selected purchase request.',
+                ]);
+            }
+
+            $item = $items->get((string) $itemId);
+            $isMet = (bool) ($input['is_met'] ?? false);
+            $deliverableDate = trim((string) ($input['deliverable_date'] ?? ''));
+            $notes = trim((string) ($input['notes'] ?? ''));
+            $documentNames = $input['document_names'] ?? [];
+            $documents = [];
+
+            foreach (($filesInput[$itemId]['documents'] ?? []) as $index => $file) {
+                if (!$file || !$file->isValid()) {
+                    continue;
+                }
+
+                $displayName = trim((string) ($documentNames[$index] ?? ''));
+                $path = $file->store("procurement_purchase_orders/{$purchaseOrder->id}/line-item-evidence/{$itemId}");
+                $documents[] = [
+                    'path' => $path,
+                    'name' => $file->getClientOriginalName(),
+                    'display_name' => $displayName !== '' ? $displayName : null,
+                    'mime_type' => $file->getClientMimeType(),
+                    'size' => $file->getSize(),
+                    'uploaded_by' => auth()->id(),
+                    'uploaded_at' => now()->toIso8601String(),
+                ];
+            }
+
+            if (!$isMet && $deliverableDate === '' && $notes === '' && empty($documents)) {
+                continue;
+            }
+
+            ProcurementPurchaseOrderItemEvidence::updateOrCreate(
+                [
+                    'purchase_order_id' => $purchaseOrder->id,
+                    'purchase_request_item_id' => $itemId,
+                ],
+                [
+                    'deliverable_id' => $item->deliverable_id,
+                    'is_met' => $isMet,
+                    'deliverable_date' => $deliverableDate !== '' ? $deliverableDate : null,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'documents' => $documents,
+                    'created_by' => auth()->id(),
+                ]
+            );
+        }
+    }
+
+    private function deleteLineItemEvidenceDocuments(ProcurementPurchaseOrder $purchaseOrder): void
+    {
+        $purchaseOrder->loadMissing('lineItemEvidence');
+
+        foreach ($purchaseOrder->lineItemEvidence as $evidence) {
+            foreach (($evidence->documents ?? []) as $document) {
+                $path = $document['path'] ?? null;
+                if ($path && Storage::disk('local')->exists($path)) {
+                    Storage::disk('local')->delete($path);
+                }
+            }
+        }
     }
 
     private function deleteSupportingDocument(ProcurementPurchaseOrder $purchaseOrder): void

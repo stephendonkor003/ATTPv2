@@ -206,6 +206,7 @@
                                             <th style="width: 50px;">#</th>
                                             <th>Category</th>
                                             <th>Resource Item</th>
+                                            <th>Deliverable</th>
                                             <th>Milestone / Description</th>
                                             <th>Milestone Date</th>
                                             <th class="text-end" style="width: 160px;">Amount</th>
@@ -217,6 +218,12 @@
                                                 <td>{{ $loop->iteration }}</td>
                                                 <td>{{ $item->resourceCategory->name ?? '—' }}</td>
                                                 <td>{{ $item->resource->name ?? '—' }}</td>
+                                                <td>
+                                                    <div class="fw-semibold">{{ $item->deliverable?->title ?? '—' }}</div>
+                                                    @if ($item->deliverable?->procurement)
+                                                        <div class="small text-muted">{{ $item->deliverable->procurement->reference_no ?? $item->deliverable->procurement->title }}</div>
+                                                    @endif
+                                                </td>
                                                 <td>{{ $item->milestone ?? '—' }}</td>
                                                 <td>{{ $item->milestone_date?->format('Y-m-d') ?? '—' }}</td>
                                                 <td class="text-end fw-semibold">

@@ -148,6 +148,15 @@
 
                         <hr class="my-3">
 
+                        <div class="row g-3 mb-3">
+                            <div class="col-12">
+                                <div class="small text-muted mb-1">Linked Deliverables</div>
+                                <div id="po-deliverables" class="d-flex flex-wrap gap-2">-</div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3">
+
                         {{-- Financial summary --}}
                         <div class="row g-3">
                             <div class="col-md-4">
@@ -207,6 +216,23 @@
                                 </div>
                                 @error('amount')
                                     <div class="invalid-feedback d-block">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">
+                                    Deliverable <span class="text-danger" id="deliverableRequiredMark">*</span>
+                                </label>
+                                <select name="deliverable_id"
+                                        id="deliverableSelect"
+                                        class="form-control @error('deliverable_id') is-invalid @enderror">
+                                    <option value="">Select deliverable</option>
+                                </select>
+                                <div class="small text-muted mt-1" id="deliverableHelp">
+                                    Select the deliverable this payment is for.
+                                </div>
+                                @error('deliverable_id')
+                                    <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
                             </div>
 
@@ -291,13 +317,25 @@
     const poPanel      = document.getElementById('poDetailsPanel');
     const disbPanel    = document.getElementById('disbursementPanel');
     const amountInput  = document.getElementById('amountInput');
+    const deliverableSelect = document.getElementById('deliverableSelect');
     const currPrefix   = document.getElementById('currency-prefix');
     const amountHint   = document.getElementById('amount-max-hint');
+    const deliverableHelp = document.getElementById('deliverableHelp');
+    const deliverableRequiredMark = document.getElementById('deliverableRequiredMark');
+    const oldDeliverableId = @json(old('deliverable_id'));
 
     if (!select) return;
 
     const fmt = (val) =>
         Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+    }[char]));
 
     const setText = (id, val) => {
         const el = document.getElementById(id);
@@ -312,6 +350,81 @@
         cancelled:    '<span class="badge bg-danger">Cancelled</span>',
     };
 
+    function renderDeliverables(po) {
+        const deliverables = Array.isArray(po.deliverables) ? po.deliverables : [];
+        const list = document.getElementById('po-deliverables');
+
+        if (list) {
+            if (deliverables.length === 0) {
+                list.innerHTML = '<span class="text-muted">No deliverables linked to this purchase order.</span>';
+            } else {
+                list.innerHTML = deliverables.map((deliverable) => {
+                    const amount = Number(deliverable.amount || 0);
+                    const amountText = amount > 0
+                        ? ` | ${deliverable.currency || po.currency || ''} ${fmt(amount)}`
+                        : '';
+                    const refText = deliverable.procurement_ref ? ` | ${deliverable.procurement_ref}` : '';
+
+                    return `
+                        <span class="badge bg-light text-dark border px-3 py-2 text-start">
+                            ${escapeHtml(deliverable.title || 'Untitled deliverable')}${escapeHtml(refText)}${escapeHtml(amountText)}
+                        </span>
+                    `;
+                }).join('');
+            }
+        }
+
+        if (!deliverableSelect) {
+            return;
+        }
+
+        deliverableSelect.innerHTML = '';
+
+        if (deliverables.length === 0) {
+            deliverableSelect.required = false;
+            deliverableSelect.disabled = true;
+            deliverableSelect.innerHTML = '<option value="">No deliverables linked to this PO</option>';
+            if (deliverableHelp) {
+                deliverableHelp.textContent = 'This purchase order has no deliverables linked yet.';
+            }
+            if (deliverableRequiredMark) {
+                deliverableRequiredMark.classList.add('d-none');
+            }
+            return;
+        }
+
+        deliverableSelect.required = true;
+        deliverableSelect.disabled = false;
+        if (deliverableHelp) {
+            deliverableHelp.textContent = 'Select the deliverable this payment is for.';
+        }
+        if (deliverableRequiredMark) {
+            deliverableRequiredMark.classList.remove('d-none');
+        }
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select deliverable';
+        deliverableSelect.appendChild(placeholder);
+
+        deliverables.forEach((deliverable) => {
+            const option = document.createElement('option');
+            option.value = deliverable.id;
+            option.textContent = [
+                deliverable.title || 'Untitled deliverable',
+                deliverable.procurement_ref || null,
+                deliverable.amount > 0 ? `${deliverable.currency || po.currency || ''} ${fmt(deliverable.amount)}` : null,
+            ].filter(Boolean).join(' | ');
+            deliverableSelect.appendChild(option);
+        });
+
+        if (oldDeliverableId && deliverables.some((deliverable) => deliverable.id === oldDeliverableId)) {
+            deliverableSelect.value = oldDeliverableId;
+        } else if (deliverables.length === 1) {
+            deliverableSelect.value = deliverables[0].id;
+        }
+    }
+
     function update() {
         const id = select.value;
         const po = poData[id];
@@ -319,6 +432,11 @@
         if (!po) {
             poPanel.classList.add('d-none');
             disbPanel.classList.add('d-none');
+            if (deliverableSelect) {
+                deliverableSelect.innerHTML = '<option value="">Select deliverable</option>';
+                deliverableSelect.required = false;
+                deliverableSelect.disabled = true;
+            }
             return;
         }
 
@@ -347,6 +465,7 @@
         setText('po-contract-ref', po.contract_reference);
         setText('po-expected-delivery', po.expected_delivery);
         setText('po-valid-until', po.valid_until);
+        renderDeliverables(po);
 
         // Financial
         setText('po-amount', fmt(po.amount));

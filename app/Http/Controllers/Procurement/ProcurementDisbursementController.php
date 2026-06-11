@@ -12,6 +12,7 @@ use App\Models\ProcurementPurchaseOrder;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 
 class ProcurementDisbursementController extends Controller
 {
@@ -29,7 +30,7 @@ class ProcurementDisbursementController extends Controller
             abort(403, 'You do not have access to disbursements.');
         }
 
-        $disbursements = ProcurementDisbursement::with(['purchaseOrder', 'vendor', 'procurement', 'thinkTankMember', 'consortium'])
+        $disbursements = ProcurementDisbursement::with(['purchaseOrder', 'deliverable.procurement', 'vendor', 'procurement', 'thinkTankMember', 'consortium'])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
@@ -61,6 +62,9 @@ class ProcurementDisbursementController extends Controller
         $purchaseOrders = ProcurementPurchaseOrder::with([
             'procurement', 'vendor', 'disbursements', 'thinkTankMember',
             'consortium', 'subActivity', 'governanceNode',
+            'deliverables.procurement',
+            'purchaseRequest.items.deliverable.procurement',
+            'budgetCommitment.purchaseRequest.items.deliverable.procurement',
         ])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
@@ -80,6 +84,9 @@ class ProcurementDisbursementController extends Controller
             $po = ProcurementPurchaseOrder::with([
                 'procurement', 'vendor', 'disbursements', 'thinkTankMember',
                 'consortium', 'subActivity', 'governanceNode',
+                'deliverables.procurement',
+                'purchaseRequest.items.deliverable.procurement',
+                'budgetCommitment.purchaseRequest.items.deliverable.procurement',
             ])->find($purchaseOrderId);
 
             if ($po) {
@@ -89,32 +96,45 @@ class ProcurementDisbursementController extends Controller
             }
         }
 
-        $purchaseOrdersData = $purchaseOrders->mapWithKeys(fn (ProcurementPurchaseOrder $order) => [
-            $order->id => [
-                'reference_no'         => $order->reference_no,
-                'po_title'             => $order->po_title,
-                'procurement_title'    => $order->procurement?->title ?? ($order->thinkTankMember?->name ?? 'Fund Transfer'),
-                'vendor_name'          => $order->vendor?->name,
-                'vendor_email'         => $order->vendor?->email,
-                'vendor_contact_name'  => $order->vendor_contact_name,
-                'vendor_contact_phone' => $order->vendor_contact_phone,
-                'amount'               => (float) ($order->amount ?? 0),
-                'currency'             => $order->currency ?? 'USD',
-                'remaining'            => round($order->remainingAmount(), 2),
-                'paid'                 => round($order->paidAmount(), 2),
-                'payment_terms'        => $order->payment_terms,
-                'delivery_terms'       => $order->delivery_terms,
-                'expected_delivery'    => $order->expected_delivery_date?->format('M d, Y'),
-                'valid_until'          => $order->valid_until?->format('M d, Y'),
-                'sub_activity'         => $order->subActivity?->name,
-                'governance_node'      => $order->governanceNode?->name,
-                'status'               => $order->status,
-                'po_type'              => $order->po_type,
-                'incoterm'             => $order->incoterm,
-                'contract_reference'   => $order->contract_reference,
-                'supplier_reference'   => $order->supplier_reference,
-            ],
-        ])->toArray();
+        $purchaseOrdersData = $purchaseOrders->mapWithKeys(function (ProcurementPurchaseOrder $order) {
+            $deliverables = $this->eligibleDeliverablesForPurchaseOrder($order);
+
+            return [
+                $order->id => [
+                    'reference_no'         => $order->reference_no,
+                    'po_title'             => $order->po_title,
+                    'procurement_title'    => $order->procurement?->title ?? ($order->thinkTankMember?->name ?? 'Fund Transfer'),
+                    'vendor_name'          => $order->vendor?->name,
+                    'vendor_email'         => $order->vendor?->email,
+                    'vendor_contact_name'  => $order->vendor_contact_name,
+                    'vendor_contact_phone' => $order->vendor_contact_phone,
+                    'amount'               => (float) ($order->amount ?? 0),
+                    'currency'             => $order->currency ?? 'USD',
+                    'remaining'            => round($order->remainingAmount(), 2),
+                    'paid'                 => round($order->paidAmount(), 2),
+                    'payment_terms'        => $order->payment_terms,
+                    'delivery_terms'       => $order->delivery_terms,
+                    'expected_delivery'    => $order->expected_delivery_date?->format('M d, Y'),
+                    'valid_until'          => $order->valid_until?->format('M d, Y'),
+                    'sub_activity'         => $order->subActivity?->name,
+                    'governance_node'      => $order->governanceNode?->name,
+                    'status'               => $order->status,
+                    'po_type'              => $order->po_type,
+                    'incoterm'             => $order->incoterm,
+                    'contract_reference'   => $order->contract_reference,
+                    'supplier_reference'   => $order->supplier_reference,
+                    'deliverables'         => $deliverables->map(fn ($deliverable) => [
+                        'id'              => (string) $deliverable->id,
+                        'title'           => $deliverable->title,
+                        'type'            => $deliverable->type,
+                        'status'          => $deliverable->status,
+                        'amount'          => (float) ($deliverable->amount ?? 0),
+                        'currency'        => $deliverable->currency,
+                        'procurement_ref' => $deliverable->procurement?->reference_no,
+                    ])->values()->all(),
+                ],
+            ];
+        })->toArray();
 
         return view('procurement.disbursements.create', [
             'purchaseOrder'      => $purchaseOrder,
@@ -128,6 +148,7 @@ class ProcurementDisbursementController extends Controller
     {
         $data = $request->validate([
             'purchase_order_id'  => 'required|exists:procurement_purchase_orders,id',
+            'deliverable_id'     => 'nullable|exists:procurement_deliverables,id',
             'amount'             => 'required|numeric|min:0.01',
             'payment_method'     => 'required|string|max:100',
             'transfer_reference' => 'nullable|string|max:255',
@@ -135,9 +156,37 @@ class ProcurementDisbursementController extends Controller
             'notes'              => 'nullable|string|max:2000',
         ]);
 
-        $purchaseOrder = ProcurementPurchaseOrder::with(['procurement', 'vendor', 'subActivity', 'disbursements', 'thinkTankMember', 'consortium'])
+        $purchaseOrder = ProcurementPurchaseOrder::with([
+            'procurement',
+            'vendor',
+            'subActivity',
+            'disbursements',
+            'thinkTankMember',
+            'consortium',
+            'deliverables.procurement',
+            'purchaseRequest.items.deliverable.procurement',
+            'budgetCommitment.purchaseRequest.items.deliverable.procurement',
+        ])
             ->findOrFail($data['purchase_order_id']);
         $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        $eligibleDeliverables = $this->eligibleDeliverablesForPurchaseOrder($purchaseOrder);
+        $eligibleDeliverableIds = $eligibleDeliverables
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->values();
+
+        if ($eligibleDeliverables->isNotEmpty() && empty($data['deliverable_id'])) {
+            throw ValidationException::withMessages([
+                'deliverable_id' => 'Select the deliverable this disbursement is paying for.',
+            ]);
+        }
+
+        if (!empty($data['deliverable_id']) && !$eligibleDeliverableIds->contains((string) $data['deliverable_id'])) {
+            throw ValidationException::withMessages([
+                'deliverable_id' => 'The selected deliverable is not linked to this purchase order.',
+            ]);
+        }
 
         if (!$purchaseOrder->amount || $purchaseOrder->amount <= 0) {
             return back()->with('error', 'Purchase order amount is missing. Please update the purchase order first.');
@@ -154,6 +203,7 @@ class ProcurementDisbursementController extends Controller
 
         $disbursement = ProcurementDisbursement::create([
             'purchase_order_id'  => $purchaseOrder->id,
+            'deliverable_id'     => $data['deliverable_id'] ?? null,
             'procurement_id'     => $purchaseOrder->procurement_id,
             'vendor_id'          => $purchaseOrder->vendor_id,
             'sub_activity_id'    => $purchaseOrder->sub_activity_id,
@@ -180,6 +230,7 @@ class ProcurementDisbursementController extends Controller
             'metadata' => [
                 'purchase_order_id' => $purchaseOrder->id,
                 'disbursement_id' => $disbursement->id,
+                'deliverable_id' => $disbursement->deliverable_id,
                 'amount' => $disbursement->amount,
             ],
             'created_at' => now(),
@@ -195,7 +246,7 @@ class ProcurementDisbursementController extends Controller
     public function show(ProcurementDisbursement $disbursement)
     {
         $this->assertDisbursementInScope($disbursement);
-        $disbursement->load(['purchaseOrder', 'vendor', 'procurement', 'subActivity']);
+        $disbursement->load(['purchaseOrder', 'deliverable.procurement', 'vendor', 'procurement', 'subActivity']);
 
         return view('procurement.disbursements.show', compact('disbursement'));
     }
@@ -203,7 +254,7 @@ class ProcurementDisbursementController extends Controller
     public function pdf(ProcurementDisbursement $disbursement)
     {
         $this->assertDisbursementInScope($disbursement);
-        $disbursement->load(['purchaseOrder', 'vendor', 'procurement', 'subActivity']);
+        $disbursement->load(['purchaseOrder', 'deliverable.procurement', 'vendor', 'procurement', 'subActivity']);
 
         $pdf = Pdf::loadView('procurement.disbursements.pdf', [
             'disbursement' => $disbursement,
@@ -215,7 +266,7 @@ class ProcurementDisbursementController extends Controller
     public function download(ProcurementDisbursement $disbursement)
     {
         $this->assertDisbursementInScope($disbursement);
-        $disbursement->load(['purchaseOrder', 'vendor', 'procurement', 'subActivity']);
+        $disbursement->load(['purchaseOrder', 'deliverable.procurement', 'vendor', 'procurement', 'subActivity']);
 
         $pdf = Pdf::loadView('procurement.disbursements.pdf', [
             'disbursement' => $disbursement,
@@ -243,7 +294,13 @@ class ProcurementDisbursementController extends Controller
 
     private function ensureInvoiceForPaidPurchaseOrder(ProcurementPurchaseOrder $purchaseOrder): void
     {
-        $purchaseOrder->loadMissing(['invoice', 'disbursements']);
+        $purchaseOrder->loadMissing([
+            'invoice.deliverables',
+            'disbursements',
+            'deliverables',
+            'purchaseRequest.items.deliverable',
+            'budgetCommitment.purchaseRequest.items.deliverable',
+        ]);
 
         $latestDisbursement = $purchaseOrder->disbursements
             ->sortByDesc(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at?->timestamp ?? 0)
@@ -257,6 +314,8 @@ class ProcurementDisbursementController extends Controller
                 'approved_by' => $purchaseOrder->invoice->approved_by ?: auth()->id(),
                 'approved_at' => $purchaseOrder->invoice->approved_at ?: now(),
             ]);
+
+            $this->syncInvoiceDeliverables($purchaseOrder->invoice, $purchaseOrder);
 
             return;
         }
@@ -278,6 +337,47 @@ class ProcurementDisbursementController extends Controller
         ]);
 
         $purchaseOrder->update(['invoice_id' => $invoice->id]);
+        $this->syncInvoiceDeliverables($invoice, $purchaseOrder);
+    }
+
+    private function syncInvoiceDeliverables(ProcurementInvoice $invoice, ProcurementPurchaseOrder $purchaseOrder): void
+    {
+        $deliverableIds = $purchaseOrder->disbursements
+            ->pluck('deliverable_id')
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        if ($deliverableIds->isEmpty()) {
+            $deliverableIds = $this->eligibleDeliverablesForPurchaseOrder($purchaseOrder)
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->unique()
+                ->values();
+        }
+
+        if ($deliverableIds->isNotEmpty()) {
+            $invoice->deliverables()->syncWithoutDetaching($deliverableIds->all());
+        }
+    }
+
+    private function eligibleDeliverablesForPurchaseOrder(ProcurementPurchaseOrder $purchaseOrder)
+    {
+        $purchaseOrder->loadMissing([
+            'deliverables.procurement',
+            'purchaseRequest.items.deliverable.procurement',
+            'budgetCommitment.purchaseRequest.items.deliverable.procurement',
+        ]);
+
+        $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+        $itemDeliverables = $sourcePurchaseRequest?->items?->pluck('deliverable')->filter() ?? collect();
+
+        return $purchaseOrder->deliverables
+            ->merge($itemDeliverables)
+            ->filter()
+            ->unique('id')
+            ->values();
     }
 
     private function sendReceipt(ProcurementDisbursement $disbursement): void
@@ -287,7 +387,7 @@ class ProcurementDisbursementController extends Controller
             return;
         }
 
-        $disbursement->loadMissing(['purchaseOrder', 'procurement', 'subActivity']);
+        $disbursement->loadMissing(['purchaseOrder', 'deliverable.procurement', 'procurement', 'subActivity']);
 
         $pdf = Pdf::loadView('procurement.disbursements.pdf', [
             'disbursement' => $disbursement,

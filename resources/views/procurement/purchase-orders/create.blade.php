@@ -3,37 +3,48 @@
 @push('styles')
     <style>
         .po-create {
-            --po-ink: #172033;
-            --po-muted: #64748b;
+            --po-ink: #111827;
+            --po-muted: #667085;
             --po-border: #dbe3ef;
             --po-panel: #ffffff;
-            --po-soft: #f6f8fb;
+            --po-page: #f4f7fb;
+            --po-soft: #f8fafc;
+            --po-soft-accent: #ecfdf5;
             --po-accent: #0f766e;
-            --po-blue: #2563eb;
+            --po-accent-dark: #0b5d55;
+            --po-blue: #1d4ed8;
+            background: linear-gradient(180deg, #f8fafc 0, #f4f7fb 260px, #f6f8fb 100%);
+            min-height: calc(100vh - 80px);
+            padding-bottom: 30px;
         }
 
         .po-create .page-band {
-            background: #fff;
-            border: 1px solid var(--po-border);
-            border-radius: 8px;
+            background: #ffffff;
+            border: 1px solid #dde5ef;
+            border-left: 4px solid var(--po-accent);
+            border-radius: 10px;
             padding: 18px 20px;
+            box-shadow: 0 14px 36px rgba(15, 23, 42, .06);
         }
 
         .po-create .workspace {
             display: grid;
-            grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-            gap: 18px;
+            grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+            gap: 16px;
         }
 
         .po-create .panel {
             background: var(--po-panel);
-            border: 1px solid var(--po-border);
-            border-radius: 8px;
+            border: 1px solid #dfe7f2;
+            border-radius: 10px;
+            box-shadow: 0 16px 38px rgba(15, 23, 42, .06);
+            overflow: hidden;
         }
 
         .po-create .panel-header {
             padding: 14px 16px;
-            border-bottom: 1px solid var(--po-border);
+            border-bottom: 1px solid #e5ebf4;
+            background: #fbfcfe;
         }
 
         .po-create .panel-body {
@@ -43,7 +54,7 @@
         .po-create .request-list {
             display: grid;
             gap: 8px;
-            max-height: 580px;
+            max-height: 500px;
             overflow: auto;
             padding-right: 4px;
         }
@@ -55,13 +66,14 @@
             border-radius: 8px;
             background: #fff;
             padding: 11px 12px;
-            transition: border-color .15s ease, background .15s ease;
+            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease;
         }
 
         .po-create .request-option.active,
         .po-create .request-option:hover {
             border-color: var(--po-accent);
-            background: #f0fdfa;
+            background: var(--po-soft-accent);
+            box-shadow: inset 3px 0 0 var(--po-accent);
         }
 
         .po-create .request-title {
@@ -83,18 +95,19 @@
         }
 
         .po-create .metric {
-            background: var(--po-soft);
-            border: 1px solid #e8eef7;
+            background: #ffffff;
+            border: 1px solid #e3eaf4;
+            border-left: 3px solid var(--po-accent);
             border-radius: 8px;
             padding: 12px;
-            min-height: 82px;
+            min-height: 78px;
         }
 
         .po-create .metric-label {
             color: var(--po-muted);
             font-size: .72rem;
             text-transform: uppercase;
-            letter-spacing: .04em;
+            letter-spacing: .03em;
         }
 
         .po-create .metric-value {
@@ -116,12 +129,14 @@
             border-radius: 8px;
             padding: 12px;
             text-align: left;
+            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
         }
 
         .po-create .commitment-option.active,
         .po-create .commitment-option:hover {
-            border-color: var(--po-blue);
-            background: #eff6ff;
+            border-color: var(--po-accent);
+            background: var(--po-soft-accent);
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, .08);
         }
 
         .po-create .section-title {
@@ -131,14 +146,159 @@
         }
 
         .po-create .line-table {
-            max-height: 280px;
+            max-height: 320px;
             overflow: auto;
+            border: 1px solid #e3eaf4;
+            border-radius: 8px;
+            background: #ffffff;
+        }
+
+        .po-create .line-table table {
+            margin-bottom: 0;
+        }
+
+        .po-create .line-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f8fafc;
+            color: #475467;
+            font-size: .74rem;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+
+        .po-create .line-table tbody tr:hover {
+            background: #fbfdff;
         }
 
         .po-create .form-section {
-            border-top: 1px solid var(--po-border);
-            padding-top: 18px;
-            margin-top: 18px;
+            background: #ffffff;
+            border: 1px solid #e4eaf3;
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 16px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, .035);
+        }
+
+        .po-create details.form-section {
+            background: #fbfcfe;
+        }
+
+        .po-create details.form-section > summary {
+            cursor: pointer;
+            color: var(--po-ink);
+            font-weight: 800;
+            list-style: none;
+        }
+
+        .po-create details.form-section > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .po-create details.form-section > summary::after {
+            content: "+";
+            float: right;
+            color: var(--po-muted);
+            font-weight: 700;
+        }
+
+        .po-create details.form-section[open] > summary::after {
+            content: "-";
+        }
+
+        .po-create .line-item-summary {
+            line-height: 1.35;
+        }
+
+        .po-create .line-item-evidence-check {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--po-accent);
+            cursor: pointer;
+        }
+
+        .po-create .line-item-date-input {
+            min-width: 145px;
+        }
+
+        .po-create .evidence-status {
+            min-width: 108px;
+            border-radius: 999px;
+        }
+
+        .po-create .evidence-status.bg-success-subtle {
+            background: #dcfce7 !important;
+            color: #166534 !important;
+        }
+
+        .po-create .evidence-status.bg-info-subtle {
+            background: #e0f2fe !important;
+            color: #075985 !important;
+        }
+
+        .po-create .evidence-field-bank {
+            display: none;
+        }
+
+        .po-create .evidence-document-row + .evidence-document-row {
+            margin-top: 8px;
+        }
+
+        .po-create .evidence-modal-summary {
+            background: #ffffff;
+            border: 1px solid #e3eaf4;
+            border-left: 3px solid var(--po-accent);
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+
+        .po-create .evidence-document-row {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.25fr) auto;
+            gap: 8px;
+            align-items: end;
+            background: #ffffff;
+            border: 1px solid #e3eaf4;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .po-create .evidence-document-label {
+            color: var(--po-muted);
+            display: block;
+            font-size: .72rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+
+        .po-create .evidence-edit-btn {
+            border-color: #9db5d3;
+            color: #1f3f68;
+            background: #ffffff;
+        }
+
+        .po-create .evidence-edit-btn:hover {
+            border-color: var(--po-accent);
+            color: var(--po-accent-dark);
+            background: var(--po-soft-accent);
+        }
+
+        .po-create .btn-primary,
+        .po-create .btn-outline-primary:hover {
+            background: var(--po-accent);
+            border-color: var(--po-accent);
+        }
+
+        .po-create .btn-outline-primary {
+            color: var(--po-accent);
+            border-color: var(--po-accent);
+        }
+
+        .po-create .btn-primary:hover {
+            background: var(--po-accent-dark);
+            border-color: var(--po-accent-dark);
         }
 
         .po-create .empty-state {
@@ -164,16 +324,16 @@
             align-items: flex-start;
         }
         .po-create .deliverable-card:hover {
-            border-color: #93c5fd;
-            background: #f8fbff;
+            border-color: var(--po-accent);
+            background: var(--po-soft-accent);
         }
         .po-create .deliverable-card.checked {
-            border-color: var(--po-blue);
-            background: #eff6ff;
-            box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+            border-color: var(--po-accent);
+            background: var(--po-soft-accent);
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, .1);
         }
         .po-create .deliverable-card input[type="checkbox"] {
-            accent-color: var(--po-blue);
+            accent-color: var(--po-accent);
             width: 17px;
             height: 17px;
             flex-shrink: 0;
@@ -196,6 +356,70 @@
         .po-create .dlv-freq-quarterly { background:#fef3c7; color:#92400e; }
         .po-create .dlv-freq-yearly    { background:#fee2e2; color:#991b1b; }
 
+        #lineItemEvidenceModal {
+            z-index: 1095 !important;
+            background: transparent;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+
+        #lineItemEvidenceModal.show {
+            background: rgba(16, 24, 40, .42) !important;
+        }
+
+        #lineItemEvidenceModal .modal-dialog {
+            max-width: min(860px, calc(100vw - 28px));
+            position: relative;
+            z-index: 2;
+            filter: none !important;
+            -webkit-filter: none !important;
+        }
+
+        #lineItemEvidenceModal .modal-content {
+            background: #ffffff;
+            border: 0;
+            border-radius: 14px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+            overflow: hidden;
+            filter: none !important;
+            -webkit-filter: none !important;
+            opacity: 1 !important;
+        }
+
+        #lineItemEvidenceModal .modal-header,
+        #lineItemEvidenceModal .modal-footer {
+            background: #ffffff;
+            border-color: #e5ebf4;
+        }
+
+        #lineItemEvidenceModal .modal-header {
+            padding: 18px 20px;
+        }
+
+        #lineItemEvidenceModal .modal-body {
+            background: #f7f9fc;
+            padding: 18px 20px;
+        }
+
+        body.line-evidence-modal-open {
+            overflow: hidden;
+        }
+
+        body.line-evidence-modal-open .nxl-container.po-create {
+            filter: none !important;
+            -webkit-filter: none !important;
+        }
+
+        body.line-evidence-modal-open .modal-backdrop {
+            display: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        body.modal-open .modal-backdrop {
+            z-index: 1085 !important;
+        }
+
         @media (max-width: 991.98px) {
             .po-create .workspace {
                 grid-template-columns: 1fr;
@@ -208,6 +432,10 @@
 
         @media (max-width: 575.98px) {
             .po-create .metric-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .po-create .evidence-document-row {
                 grid-template-columns: 1fr;
             }
         }
@@ -330,10 +558,12 @@
                                         <table class="table table-sm align-middle">
                                             <thead class="table-light">
                                                 <tr>
-                                                    <th>Category</th>
-                                                    <th>Item</th>
-                                                    <th>Description</th>
+                                                    <th style="width: 110px;" class="text-center">Deliverable Check</th>
+                                                    <th>Requested Item</th>
+                                                    <th>Linked Deliverable</th>
+                                                    <th style="width: 170px;">Date</th>
                                                     <th class="text-end">Amount</th>
+                                                    <th style="width: 150px;" class="text-center">Evidence</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="requestItemsBody"></tbody>
@@ -448,13 +678,13 @@
                             </div>
                         </div>
 
-                        {{-- ── Deliverables Section ─────────────────────── --}}
-                        <div class="form-section" id="deliverableSection">
+                        {{-- Deliverables Section --}}
+                        <details class="form-section" id="deliverableSection">
+                            <summary>Additional Procurement Deliverables</summary>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div>
-                                    <div class="section-title mb-0">Deliverables</div>
                                     <div class="small text-muted mt-1">
-                                        Link the specific deliverables this purchase order covers.
+                                        Optional: link extra procurement deliverables beyond those already attached to the requested line items.
                                     </div>
                                 </div>
                                 <span id="dlvSelectedBadge" class="badge bg-primary" style="display:none;font-size:.8rem;padding:6px 10px;">
@@ -494,7 +724,7 @@
                                    target="_blank">Create more deliverables</a>
                                 for this procurement, then refresh the page.
                             </div>
-                        </div>
+                        </details>
 
                         <div class="form-section">
                             <div class="section-title">Parties and Addresses</div>
@@ -559,21 +789,28 @@
                                     <input type="text" name="payment_terms" class="form-control"
                                         value="{{ old('payment_terms', 'Payment after acceptance of goods/services and valid invoice') }}" required>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Warranty / Support</label>
-                                    <textarea name="warranty_terms" class="form-control" rows="3">{{ old('warranty_terms') }}</textarea>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Inspection and Acceptance</label>
-                                    <textarea name="inspection_requirements" class="form-control" rows="3">{{ old('inspection_requirements', 'Goods and services are subject to inspection and written acceptance by the authorized receiving officer.') }}</textarea>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Special Instructions</label>
-                                    <textarea name="special_instructions" class="form-control" rows="4">{{ old('special_instructions') }}</textarea>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Terms and Conditions</label>
-                                    <textarea name="terms_conditions" class="form-control" rows="4">{{ old('terms_conditions', 'Supplier must comply with applicable procurement rules, tax obligations, anti-fraud requirements, confidentiality obligations, and delivery documentation standards.') }}</textarea>
+                                <div class="col-12">
+                                    <details class="border rounded p-3">
+                                        <summary class="fw-semibold">Optional Terms and Instructions</summary>
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Warranty / Support</label>
+                                                <textarea name="warranty_terms" class="form-control" rows="3">{{ old('warranty_terms') }}</textarea>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Inspection and Acceptance</label>
+                                                <textarea name="inspection_requirements" class="form-control" rows="3">{{ old('inspection_requirements', 'Goods and services are subject to inspection and written acceptance by the authorized receiving officer.') }}</textarea>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Special Instructions</label>
+                                                <textarea name="special_instructions" class="form-control" rows="4">{{ old('special_instructions') }}</textarea>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Terms and Conditions</label>
+                                                <textarea name="terms_conditions" class="form-control" rows="4">{{ old('terms_conditions', 'Supplier must comply with applicable procurement rules, tax obligations, anti-fraud requirements, confidentiality obligations, and delivery documentation standards.') }}</textarea>
+                                            </div>
+                                        </div>
+                                    </details>
                                 </div>
                             </div>
                         </div>
@@ -585,6 +822,35 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="feather-save me-1"></i> Create Purchase Order
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="lineItemEvidenceBank" class="evidence-field-bank"></div>
+
+                <div class="modal fade" id="lineItemEvidenceModal" tabindex="-1" aria-labelledby="lineItemEvidenceTitle" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <div>
+                                    <h5 class="modal-title mb-1" id="lineItemEvidenceTitle">Deliverable Confirmation</h5>
+                                    <div class="small text-muted" id="lineItemEvidenceSubtitle"></div>
+                                </div>
+                                <button type="button" class="btn-close line-item-evidence-close" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="evidence-modal-summary mb-3">
+                                    <div class="small text-muted">Deliverable</div>
+                                    <div class="fw-semibold" id="lineItemEvidenceDeliverable">N/A</div>
+                                </div>
+                                <div id="lineItemEvidenceModalFields"></div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light line-item-evidence-close">Close</button>
+                                <button type="button" class="btn btn-primary" id="lineItemEvidenceDoneBtn">
+                                    <i class="feather-check me-1"></i> Done
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -604,6 +870,7 @@
             const oldCommitmentId = @json($oldCommitmentId);
             const oldAmount = @json(old('amount'));
             const oldDeliverableId = @json(old('deliverable_id'));
+            const oldItemEvidence = @json(old('item_evidence', []));
 
             const list = document.getElementById('purchaseRequestList');
             const search = document.getElementById('purchaseRequestSearch');
@@ -621,9 +888,27 @@
             const deliveryLocationInput = document.getElementById('deliveryLocationInput');
             const procurementSelect = document.getElementById('procurementSelect');
             const vendorSelect = document.getElementById('vendorSelect');
+            const evidenceBank = document.getElementById('lineItemEvidenceBank');
+            const evidenceModalEl = document.getElementById('lineItemEvidenceModal');
+            const evidenceModalFields = document.getElementById('lineItemEvidenceModalFields');
+            const evidenceModalTitle = document.getElementById('lineItemEvidenceTitle');
+            const evidenceModalSubtitle = document.getElementById('lineItemEvidenceSubtitle');
+            const evidenceModalDeliverable = document.getElementById('lineItemEvidenceDeliverable');
+            const evidenceDoneBtn = document.getElementById('lineItemEvidenceDoneBtn');
+            const evidenceCloseBtns = evidenceModalEl
+                ? evidenceModalEl.querySelectorAll('.line-item-evidence-close')
+                : [];
+            let activeEvidenceFieldset = null;
 
             const money = (currency, value) => `${currency || ''} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
             const text = (value) => value || '-';
+            const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;',
+            }[char]));
 
             function filteredRequests() {
                 const term = (search?.value || '').trim().toLowerCase();
@@ -758,27 +1043,258 @@
                 }
             }
 
+            function returnActiveEvidenceFieldset() {
+                if (activeEvidenceFieldset && evidenceBank) {
+                    evidenceBank.appendChild(activeEvidenceFieldset);
+                    activeEvidenceFieldset = null;
+                }
+            }
+
+            function addEvidenceDocumentRow(fieldset, itemId, documentName = '') {
+                const list = fieldset.querySelector('.evidence-document-list');
+                if (!list) return;
+
+                const row = document.createElement('div');
+                row.className = 'evidence-document-row';
+                row.innerHTML = `
+                    <div>
+                        <label class="evidence-document-label">Document Name</label>
+                        <input type="text"
+                            name="item_evidence[${itemId}][document_names][]"
+                            class="form-control evidence-document-name"
+                            maxlength="255"
+                            placeholder="Signed contract, delivery note, acceptance memo"
+                            value="${escapeHtml(documentName)}">
+                    </div>
+                    <div>
+                        <label class="evidence-document-label">Upload File</label>
+                        <input type="file"
+                            name="item_evidence[${itemId}][documents][]"
+                            class="form-control evidence-document-input"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip">
+                    </div>
+                    <button type="button" class="btn btn-outline-danger evidence-document-remove" aria-label="Remove document row">
+                        <i class="feather-trash-2"></i>
+                    </button>
+                `;
+
+                row.querySelector('.evidence-document-input').addEventListener('change', () => {
+                    updateEvidenceRowState(itemId);
+                });
+                row.querySelector('.evidence-document-remove').addEventListener('click', () => {
+                    row.remove();
+                    updateEvidenceRowState(itemId);
+                });
+
+                list.appendChild(row);
+            }
+
+            function ensureEvidenceFieldset(item) {
+                if (!item?.id || !evidenceBank) return null;
+
+                let fieldset = document.querySelector(`.line-item-evidence-fieldset[data-item-id="${item.id}"]`);
+                if (fieldset) return fieldset;
+
+                const previous = oldItemEvidence[item.id] || {};
+                const isConfirmed = previous.is_met === '1' || previous.is_met === 1 || previous.is_met === true;
+                const previousDocumentNames = Array.isArray(previous.document_names)
+                    ? previous.document_names.filter((name) => String(name || '').trim() !== '')
+                    : [];
+
+                fieldset = document.createElement('div');
+                fieldset.className = 'line-item-evidence-fieldset';
+                fieldset.dataset.itemId = item.id;
+                fieldset.innerHTML = `
+                    <div class="form-check form-switch mb-3">
+                        <input type="checkbox"
+                            class="form-check-input modal-evidence-met"
+                            id="modalEvidenceMet-${item.id}"
+                            name="item_evidence[${item.id}][is_met]"
+                            value="1"${isConfirmed ? ' checked' : ''}>
+                        <label class="form-check-label fw-semibold" for="modalEvidenceMet-${item.id}">
+                            Confirm this deliverable for the line item
+                        </label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Notes</label>
+                        <textarea name="item_evidence[${item.id}][notes]"
+                            class="form-control modal-evidence-notes"
+                            rows="4"
+                            maxlength="3000"
+                            placeholder="Add acceptance notes, delivery comments, or review observations.">${escapeHtml(previous.notes || '')}</textarea>
+                    </div>
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-semibold mb-0">Relevant Documents</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary evidence-document-add">
+                                <i class="feather-plus me-1"></i> Add Document
+                            </button>
+                        </div>
+                        <div class="evidence-document-list"></div>
+                        <div class="form-text">PDF, Office, image, or ZIP files up to 20 MB each.</div>
+                    </div>
+                `;
+
+                fieldset.querySelector('.modal-evidence-met').addEventListener('change', (event) => {
+                    const rowCheck = document.querySelector(`.line-item-evidence-check[data-item-id="${item.id}"]`);
+                    if (rowCheck) {
+                        rowCheck.checked = event.target.checked;
+                    }
+                    updateEvidenceRowState(item.id);
+                });
+                fieldset.querySelector('.modal-evidence-notes').addEventListener('input', () => {
+                    updateEvidenceRowState(item.id);
+                });
+                fieldset.querySelector('.evidence-document-add').addEventListener('click', () => {
+                    addEvidenceDocumentRow(fieldset, item.id);
+                });
+
+                evidenceBank.appendChild(fieldset);
+                if (previousDocumentNames.length > 0) {
+                    previousDocumentNames.forEach((name) => addEvidenceDocumentRow(fieldset, item.id, name));
+                } else {
+                    addEvidenceDocumentRow(fieldset, item.id);
+                }
+                return fieldset;
+            }
+
+            function updateEvidenceRowState(itemId) {
+                const fieldset = document.querySelector(`.line-item-evidence-fieldset[data-item-id="${itemId}"]`);
+                if (!fieldset) return;
+
+                const confirmed = fieldset.querySelector('.modal-evidence-met')?.checked || false;
+                const notes = (fieldset.querySelector('.modal-evidence-notes')?.value || '').trim();
+                const fileCount = Array.from(fieldset.querySelectorAll('.evidence-document-input'))
+                    .reduce((total, input) => total + (input.files ? input.files.length : 0), 0);
+                const deliverableDate = (document.querySelector(`.line-item-date-input[data-item-id="${itemId}"]`)?.value || '').trim();
+
+                const rowCheck = document.querySelector(`.line-item-evidence-check[data-item-id="${itemId}"]`);
+                if (rowCheck) {
+                    rowCheck.checked = confirmed;
+                }
+
+                const status = document.querySelector(`.evidence-status[data-item-id="${itemId}"]`);
+                if (status) {
+                    if (confirmed) {
+                        status.className = 'badge bg-success-subtle text-success evidence-status';
+                        status.textContent = fileCount > 0 ? `Confirmed (${fileCount})` : 'Confirmed';
+                    } else if (fileCount > 0 || notes !== '') {
+                        status.className = 'badge bg-info-subtle text-info evidence-status';
+                        status.textContent = fileCount > 0 ? `Docs (${fileCount})` : 'Notes added';
+                    } else if (deliverableDate !== '') {
+                        status.className = 'badge bg-info-subtle text-info evidence-status';
+                        status.textContent = 'Date set';
+                    } else {
+                        status.className = 'badge bg-light text-muted border evidence-status';
+                        status.textContent = 'Pending';
+                    }
+                }
+            }
+
+            function showEvidenceModal() {
+                if (!evidenceModalEl) return;
+
+                document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove());
+                document.body.classList.add('line-evidence-modal-open');
+                evidenceModalEl.classList.add('show');
+                evidenceModalEl.style.display = 'block';
+                evidenceModalEl.removeAttribute('aria-hidden');
+                evidenceModalEl.setAttribute('aria-modal', 'true');
+                evidenceModalEl.setAttribute('role', 'dialog');
+
+                setTimeout(() => {
+                    evidenceModalEl.querySelector('.modal-evidence-met, .evidence-document-add, .btn-close')?.focus();
+                }, 0);
+            }
+
+            function openEvidenceModal(item, request) {
+                const fieldset = ensureEvidenceFieldset(item);
+                if (!fieldset || !evidenceModalEl || !evidenceModalFields) return;
+
+                returnActiveEvidenceFieldset();
+                activeEvidenceFieldset = fieldset;
+                evidenceModalFields.appendChild(fieldset);
+
+                if (evidenceModalTitle) {
+                    evidenceModalTitle.textContent = item.resource || item.category || 'Requested Line Item';
+                }
+                if (evidenceModalSubtitle) {
+                    evidenceModalSubtitle.textContent = `${item.category || 'N/A'} | ${money(request.currency, item.amount)}`;
+                }
+                if (evidenceModalDeliverable) {
+                    evidenceModalDeliverable.textContent = item.deliverable_title || 'No deliverable linked';
+                }
+
+                showEvidenceModal();
+            }
+
             function renderItems(request) {
                 const body = document.getElementById('requestItemsBody');
+                returnActiveEvidenceFieldset();
+                if (evidenceBank) {
+                    evidenceBank.innerHTML = '';
+                }
                 body.innerHTML = '';
 
                 if (!request.items || request.items.length === 0) {
-                    body.innerHTML = '<tr><td colspan="4" class="text-muted text-center">No line items found.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No line items found.</td></tr>';
                     return;
                 }
 
                 request.items.forEach((item) => {
+                    ensureEvidenceFieldset(item);
+                    const previous = oldItemEvidence[item.id] || {};
+                    const deliverableDate = previous.deliverable_date || '';
                     const row = document.createElement('tr');
+                    row.dataset.itemId = item.id;
                     row.innerHTML = `
-                        <td>${item.category || 'N/A'}</td>
-                        <td>${item.resource || 'N/A'}</td>
+                        <td class="text-center">
+                            <input type="checkbox"
+                                class="line-item-evidence-check"
+                                data-item-id="${item.id}"
+                                aria-label="Confirm deliverable for ${escapeHtml(item.resource || item.category || 'line item')}">
+                        </td>
                         <td>
-                            <div>${item.description || 'N/A'}</div>
-                            <small class="text-muted">${item.budget_code || ''}</small>
+                            <div class="line-item-summary fw-semibold">${escapeHtml(item.resource || 'N/A')}</div>
+                            <small class="text-muted">${escapeHtml(item.category || 'N/A')}</small>
+                            <div class="small text-muted">${escapeHtml(item.description || '')}</div>
+                            <div class="small text-muted">${escapeHtml(item.budget_code || '')}</div>
+                        </td>
+                        <td>${escapeHtml(item.deliverable_title || 'N/A')}</td>
+                        <td>
+                            <input type="date"
+                                name="item_evidence[${item.id}][deliverable_date]"
+                                class="form-control form-control-sm line-item-date-input"
+                                data-item-id="${item.id}"
+                                value="${escapeHtml(deliverableDate)}"
+                                aria-label="Deliverable date for ${escapeHtml(item.resource || item.category || 'line item')}">
                         </td>
                         <td class="text-end fw-semibold">${money(request.currency, item.amount)}</td>
+                        <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-primary evidence-edit-btn" data-item-id="${item.id}">
+                                <i class="feather-upload-cloud me-1"></i> Evidence
+                            </button>
+                            <div class="mt-1">
+                                <span class="badge bg-light text-muted border evidence-status" data-item-id="${item.id}">Pending</span>
+                            </div>
+                        </td>
                     `;
+                    row.querySelector('.line-item-evidence-check').addEventListener('change', (event) => {
+                        const fieldset = ensureEvidenceFieldset(item);
+                        const modalCheck = fieldset?.querySelector('.modal-evidence-met');
+                        if (modalCheck) {
+                            modalCheck.checked = event.target.checked;
+                        }
+                        updateEvidenceRowState(item.id);
+                    });
+                    row.querySelector('.line-item-date-input').addEventListener('change', () => {
+                        updateEvidenceRowState(item.id);
+                    });
+                    row.querySelector('.evidence-edit-btn').addEventListener('click', () => {
+                        openEvidenceModal(item, request);
+                    });
                     body.appendChild(row);
+                    updateEvidenceRowState(item.id);
                 });
             }
 
@@ -910,7 +1426,35 @@
                 updateSelectedBadge();
             }
 
+            function closeEvidenceModal() {
+                if (activeEvidenceFieldset) {
+                    updateEvidenceRowState(activeEvidenceFieldset.dataset.itemId);
+                }
+
+                if (evidenceModalEl) {
+                    evidenceModalEl.classList.remove('show');
+                    evidenceModalEl.style.display = 'none';
+                    evidenceModalEl.setAttribute('aria-hidden', 'true');
+                    evidenceModalEl.removeAttribute('aria-modal');
+                    evidenceModalEl.removeAttribute('role');
+                }
+
+                document.body.classList.remove('line-evidence-modal-open');
+            }
+
             search?.addEventListener('input', renderRequestList);
+            evidenceDoneBtn?.addEventListener('click', closeEvidenceModal);
+            evidenceCloseBtns.forEach((button) => button.addEventListener('click', closeEvidenceModal));
+            evidenceModalEl?.addEventListener('mousedown', (event) => {
+                if (event.target === evidenceModalEl) {
+                    closeEvidenceModal();
+                }
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && evidenceModalEl?.classList.contains('show')) {
+                    closeEvidenceModal();
+                }
+            });
             vendorSelect?.addEventListener('change', () => fillVendorContacts(vendorSelect.value, true));
             procurementSelect?.addEventListener('change', () => {
                 const procurement = procurements.find((item) => item.id === procurementSelect.value);

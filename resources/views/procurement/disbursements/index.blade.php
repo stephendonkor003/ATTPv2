@@ -55,6 +55,7 @@
                         <tr>
                             <th class="ps-4">Receipt Ref</th>
                             <th>Purchase Order</th>
+                            <th>Deliverable</th>
                             <th>Vendor</th>
                             <th class="text-center">Amount</th>
                             <th class="text-center">Paid At</th>
@@ -69,6 +70,12 @@
                                 <td>
                                     <div class="fw-semibold">{{ $disbursement->purchaseOrder?->reference_no ?? 'N/A' }}</div>
                                     <small class="text-muted">{{ $disbursement->procurement?->title ?? 'N/A' }}</small>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">{{ $disbursement->deliverable?->title ?? 'N/A' }}</div>
+                                    <small class="text-muted">
+                                        {{ $disbursement->deliverable?->procurement?->reference_no ?? $disbursement->deliverable?->status ?? '' }}
+                                    </small>
                                 </td>
                                 <td>
                                     <div class="fw-semibold">{{ $disbursement->vendor?->name ?? 'Vendor' }}</div>
