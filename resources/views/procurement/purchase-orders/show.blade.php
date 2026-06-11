@@ -61,6 +61,32 @@
         $lineItems = $sourcePurchaseRequest?->items ?? collect();
         $evidenceByItem = $purchaseOrder->lineItemEvidence->keyBy('purchase_request_item_id');
         $currency = $purchaseOrder->currency ?? $sourcePurchaseRequest?->currency ?? '';
+        $paidDisbursementStatuses = ['completed', 'paid', 'fully_paid'];
+        $paidDeliverableIds = $purchaseOrder->disbursements
+            ->filter(fn ($disbursement) => $disbursement->deliverable_id
+                && (
+                    in_array(strtolower((string) $disbursement->status), $paidDisbursementStatuses, true)
+                    || $disbursement->recipient_confirmation_status === 'confirmed'
+                ))
+            ->pluck('deliverable_id')
+            ->map(fn ($deliverableId) => (string) $deliverableId)
+            ->values()
+            ->all();
+        $isLineItemPaidOrConfirmed = function ($item) use ($evidenceByItem, $paidDeliverableIds): bool {
+            $itemEvidence = $evidenceByItem->get($item->id);
+
+            if ($itemEvidence?->is_met) {
+                return true;
+            }
+
+            return $item->deliverable_id && in_array((string) $item->deliverable_id, $paidDeliverableIds, true);
+        };
+        $lineItemTotalAmount = round($lineItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
+        $lineItemPaidAmount = round($lineItems->sum(fn ($item) => $isLineItemPaidOrConfirmed($item) ? (float) ($item->amount ?? 0) : 0), 2);
+        $lineItemPendingAmount = round(max($lineItemTotalAmount - $lineItemPaidAmount, 0), 2);
+        $summaryPoAmount = $lineItems->isNotEmpty() ? $lineItemTotalAmount : (float) ($purchaseOrder->amount ?? 0);
+        $summaryPaidAmount = $lineItems->isNotEmpty() ? $lineItemPaidAmount : $purchaseOrder->paidAmount();
+        $summaryBalanceAmount = $lineItems->isNotEmpty() ? $lineItemPendingAmount : $purchaseOrder->remainingAmount();
         $vendorContactName = $purchaseOrder->vendor_contact_name ?: ($purchaseOrder->vendor?->name ?? 'N/A');
         $vendorContactEmail = $purchaseOrder->vendor_contact_email ?: ($purchaseOrder->vendor?->email ?? 'N/A');
         $statusClass = match ($purchaseOrder->status) {
@@ -135,19 +161,19 @@
                     <div class="col-md-3">
                         <div class="stat-tile">
                             <div class="stat-label">PO Amount</div>
-                            <div class="stat-value">{{ $currency }} {{ number_format((float) $purchaseOrder->amount, 2) }}</div>
+                            <div class="stat-value">{{ $currency }} {{ number_format($summaryPoAmount, 2) }}</div>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="stat-tile">
-                            <div class="stat-label">Paid</div>
-                            <div class="stat-value">{{ $currency }} {{ number_format($purchaseOrder->paidAmount(), 2) }}</div>
+                            <div class="stat-label">Paid / Confirmed</div>
+                            <div class="stat-value">{{ $currency }} {{ number_format($summaryPaidAmount, 2) }}</div>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="stat-tile">
-                            <div class="stat-label">Balance</div>
-                            <div class="stat-value">{{ $currency }} {{ number_format($purchaseOrder->remainingAmount(), 2) }}</div>
+                            <div class="stat-label">Pending Balance</div>
+                            <div class="stat-value">{{ $currency }} {{ number_format($summaryBalanceAmount, 2) }}</div>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -366,6 +392,7 @@
                                         @php
                                             $itemEvidence = $evidenceByItem->get($item->id);
                                             $itemDocuments = collect($itemEvidence?->documents ?? []);
+                                            $itemHasPaidDisbursement = $item->deliverable_id && in_array((string) $item->deliverable_id, $paidDeliverableIds, true);
                                         @endphp
                                         <tr>
                                             <td>{{ $loop->iteration }}</td>
@@ -375,8 +402,16 @@
                                             <td>{{ $itemEvidence?->deliverable_date?->format('M d, Y') ?? 'N/A' }}</td>
                                             <td>
                                                 @if ($itemEvidence)
-                                                    <span class="badge {{ $itemEvidence->is_met ? 'bg-success' : 'bg-info' }}">
-                                                        {{ $itemEvidence->is_met ? 'Confirmed' : 'Recorded' }}
+                                                    <span class="badge {{ $itemEvidence->is_met || $itemHasPaidDisbursement ? 'bg-success' : 'bg-info' }}">
+                                                        @if ($itemEvidence->is_met && $itemHasPaidDisbursement)
+                                                            Paid / Confirmed
+                                                        @elseif ($itemEvidence->is_met)
+                                                            Confirmed
+                                                        @elseif ($itemHasPaidDisbursement)
+                                                            Paid
+                                                        @else
+                                                            Recorded
+                                                        @endif
                                                     </span>
                                                     @if ($itemEvidence->notes)
                                                         <div class="small text-muted mt-1">{{ $itemEvidence->notes }}</div>
@@ -392,6 +427,8 @@
                                                             @endforeach
                                                         </div>
                                                     @endif
+                                                @elseif ($itemHasPaidDisbursement)
+                                                    <span class="badge bg-success">Paid</span>
                                                 @else
                                                     <span class="badge bg-light text-muted border">Pending</span>
                                                 @endif
