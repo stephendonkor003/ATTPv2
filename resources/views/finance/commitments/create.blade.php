@@ -8,6 +8,50 @@
     $existingAttachments = $purchaseRequest?->attachments ?? collect();
 @endphp
 
+@push('styles')
+    <style>
+        #purchaseRequestAttachmentModal {
+            z-index: 1090 !important;
+        }
+
+        body.pr-attachment-modal-open .modal-backdrop {
+            z-index: 1080 !important;
+            opacity: .34 !important;
+        }
+
+        #purchaseRequestAttachmentModal .modal-dialog {
+            max-width: min(900px, calc(100vw - 28px));
+        }
+
+        #purchaseRequestAttachmentModal .modal-content {
+            border: 0;
+            border-radius: 12px;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, .28);
+            overflow: hidden;
+        }
+
+        #purchaseRequestAttachmentModal .modal-header,
+        #purchaseRequestAttachmentModal .modal-footer {
+            background: #fff;
+        }
+
+        #purchaseRequestAttachmentModal .modal-body {
+            background: #f8fafc;
+        }
+
+        .pr-attachment-input-row {
+            background: #fff;
+            border: 1px solid #d8e2ef;
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .pr-attachment-input-row + .pr-attachment-input-row {
+            margin-top: 10px;
+        }
+    </style>
+@endpush
+
 @section('content')
     <div class="nxl-container">
 
@@ -328,33 +372,6 @@
                 </div>
             </div>
 
-            <div class="modal fade" id="purchaseRequestAttachmentModal" tabindex="-1" aria-labelledby="purchaseRequestAttachmentModalLabel" aria-hidden="true">
-                <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <div>
-                                <h5 class="modal-title" id="purchaseRequestAttachmentModalLabel">Purchase Request Attachments</h5>
-                                <div class="small text-muted">Documents are uploaded when this purchase request is saved.</div>
-                            </div>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="form-label fw-semibold mb-0">Documents</label>
-                                <button type="button" class="btn btn-sm btn-outline-primary" id="addPrAttachmentBtn">
-                                    <i class="feather-plus me-1"></i> Add Document
-                                </button>
-                            </div>
-                            <div id="prAttachmentInputList" class="d-grid gap-2"></div>
-                            <div class="form-text">PDF, Office, CSV, TXT, image, or ZIP files up to 20 MB each.</div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Done</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {{-- ===================== ACTION ===================== --}}
             <div class="text-end">
                 <button class="btn btn-primary px-4" id="saveCommitmentBtn" type="submit">
@@ -364,6 +381,39 @@
             </div>
 
         </form>
+    </div>
+
+    <div class="modal fade" id="purchaseRequestAttachmentModal" tabindex="-1" aria-labelledby="purchaseRequestAttachmentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title" id="purchaseRequestAttachmentModalLabel">Purchase Request Attachments</h5>
+                        <div class="small text-muted">Add supporting documents, then save the purchase request.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info border mb-3">
+                        <i class="feather-info me-1"></i>
+                        These files will be uploaded together with this purchase request when you click
+                        <strong>{{ $isEdit ? 'Update Purchase Request' : 'Save Commitment' }}</strong>.
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label fw-semibold mb-0">Documents</label>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="addPrAttachmentBtn">
+                            <i class="feather-plus me-1"></i> Add Document
+                        </button>
+                    </div>
+                    <div id="prAttachmentInputList"></div>
+                    <div class="form-text mt-2">PDF, Office, CSV, TXT, image, or ZIP files up to 20 MB each.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Done</button>
+                </div>
+            </div>
+        </div>
     </div>
 
 	    {{-- ===================== SCRIPT ===================== --}}
@@ -451,18 +501,18 @@
                     if (!prAttachmentInputList) return;
 
                     const row = document.createElement('div');
-                    row.className = 'border rounded p-2 bg-light';
+                    row.className = 'pr-attachment-input-row';
                     row.innerHTML = `
                         <div class="row g-2 align-items-end">
                             <div class="col-md-5">
                                 <label class="form-label small fw-semibold mb-1">Document Title</label>
-                                <input type="text" name="pr_attachment_titles[]" class="form-control"
+                                <input type="text" name="pr_attachment_titles[]" form="commitmentForm" class="form-control"
                                     maxlength="255" placeholder="Approval memo, TOR, quotation"
                                     value="${escapeHtml(title)}">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold mb-1">File</label>
-                                <input type="file" name="pr_attachments[]" class="form-control"
+                                <input type="file" name="pr_attachments[]" form="commitmentForm" class="form-control"
                                     accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.zip">
                             </div>
                             <div class="col-md-1 text-md-end">
@@ -477,6 +527,14 @@
                 }
 
                 addPrAttachmentBtn?.addEventListener('click', () => addPrAttachmentRow());
+
+                const prAttachmentModal = document.getElementById('purchaseRequestAttachmentModal');
+                prAttachmentModal?.addEventListener('show.bs.modal', () => {
+                    document.body.classList.add('pr-attachment-modal-open');
+                });
+                prAttachmentModal?.addEventListener('hidden.bs.modal', () => {
+                    document.body.classList.remove('pr-attachment-modal-open');
+                });
 
 	            function fillSelect(selectEl, data, { raw = false } = {}) {
 	                selectEl.innerHTML = '<option value="">Select</option>';
