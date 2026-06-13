@@ -5,6 +5,7 @@
     $purchaseRequest = $purchaseRequest ?? ($isEdit ? $commitment->purchaseRequest : null);
     $items = $items ?? [];
     $defaults = $defaults ?? [];
+    $existingAttachments = $purchaseRequest?->attachments ?? collect();
 @endphp
 
 @section('content')
@@ -35,7 +36,8 @@
 
         <form method="POST"
             action="{{ $isEdit ? route('finance.commitments.update', $commitment) : route('finance.commitments.store') }}"
-            id="commitmentForm">
+            id="commitmentForm"
+            enctype="multipart/form-data">
             @csrf
             @if ($isEdit)
                 @method('PUT')
@@ -263,6 +265,96 @@
 	                </div>
 	            </div>
 
+            {{-- ===================== PURCHASE REQUEST ATTACHMENTS ===================== --}}
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                        <div>
+                            <h6 class="fw-bold mb-1">Purchase Request Attachments</h6>
+                            <div class="text-muted small">Attach TORs, approvals, quotations, memos, or other supporting documents.</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#purchaseRequestAttachmentModal">
+                            <i class="feather-paperclip me-1"></i> Add Attachments
+                        </button>
+                    </div>
+
+                    @if ($existingAttachments->isNotEmpty())
+                        <div class="table-responsive mt-3">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Document</th>
+                                        <th>Uploaded By</th>
+                                        <th>Uploaded</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($existingAttachments as $attachment)
+                                        <tr>
+                                            <td>
+                                                <a href="{{ route('finance.purchase-requests.attachments.download', [$purchaseRequest, $attachment]) }}?download=1" class="fw-semibold">
+                                                    <i class="feather-download me-1"></i>{{ $attachment->title ?: $attachment->file_name }}
+                                                </a>
+                                                <div class="small text-muted">{{ $attachment->file_name }}</div>
+                                            </td>
+                                            <td>{{ $attachment->uploader?->name ?? 'N/A' }}</td>
+                                            <td>{{ $attachment->created_at?->format('Y-m-d H:i') ?? 'N/A' }}</td>
+                                            <td class="text-end">
+                                                @if ($isEdit)
+                                                    <label class="form-check form-check-inline mb-0">
+                                                        <input type="checkbox" class="form-check-input" name="remove_attachment_ids[]" value="{{ $attachment->id }}">
+                                                        <span class="form-check-label text-danger">Remove</span>
+                                                    </label>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="alert alert-light border mt-3 mb-0">
+                            <i class="feather-info me-1"></i> No supporting documents have been attached yet.
+                        </div>
+                    @endif
+
+                    @error('pr_attachments')
+                        <div class="invalid-feedback d-block mt-2">{{ $message }}</div>
+                    @enderror
+                    @if ($errors->has('pr_attachments.*'))
+                        <div class="invalid-feedback d-block mt-2">{{ $errors->first('pr_attachments.*') }}</div>
+                    @endif
+                </div>
+            </div>
+
+            <div class="modal fade" id="purchaseRequestAttachmentModal" tabindex="-1" aria-labelledby="purchaseRequestAttachmentModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <div>
+                                <h5 class="modal-title" id="purchaseRequestAttachmentModalLabel">Purchase Request Attachments</h5>
+                                <div class="small text-muted">Documents are uploaded when this purchase request is saved.</div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-semibold mb-0">Documents</label>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="addPrAttachmentBtn">
+                                    <i class="feather-plus me-1"></i> Add Document
+                                </button>
+                            </div>
+                            <div id="prAttachmentInputList" class="d-grid gap-2"></div>
+                            <div class="form-text">PDF, Office, CSV, TXT, image, or ZIP files up to 20 MB each.</div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Done</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- ===================== ACTION ===================== --}}
             <div class="text-end">
                 <button class="btn btn-primary px-4" id="saveCommitmentBtn" type="submit">
@@ -299,6 +391,8 @@
 		            const addItemBtn = document.getElementById('addItemBtn');
 		            const commitmentAmountInput = document.getElementById('commitment_amount');
 		            const saveBtn = document.getElementById('saveCommitmentBtn');
+                    const prAttachmentInputList = document.getElementById('prAttachmentInputList');
+                    const addPrAttachmentBtn = document.getElementById('addPrAttachmentBtn');
 
 		            const formatter = new Intl.NumberFormat(undefined, {
 		                minimumFractionDigits: 2,
@@ -342,6 +436,47 @@
 	            function hide(id) {
 	                document.getElementById(id).classList.add('d-none');
 	            }
+
+                function escapeHtml(value) {
+                    return String(value || '').replace(/[&<>"']/g, (char) => ({
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        '"': '&quot;',
+                        "'": '&#039;',
+                    }[char]));
+                }
+
+                function addPrAttachmentRow(title = '') {
+                    if (!prAttachmentInputList) return;
+
+                    const row = document.createElement('div');
+                    row.className = 'border rounded p-2 bg-light';
+                    row.innerHTML = `
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold mb-1">Document Title</label>
+                                <input type="text" name="pr_attachment_titles[]" class="form-control"
+                                    maxlength="255" placeholder="Approval memo, TOR, quotation"
+                                    value="${escapeHtml(title)}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold mb-1">File</label>
+                                <input type="file" name="pr_attachments[]" class="form-control"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.zip">
+                            </div>
+                            <div class="col-md-1 text-md-end">
+                                <button type="button" class="btn btn-outline-danger w-100 pr-attachment-remove" title="Remove document row">
+                                    <i class="feather-trash-2"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    row.querySelector('.pr-attachment-remove')?.addEventListener('click', () => row.remove());
+                    prAttachmentInputList.appendChild(row);
+                }
+
+                addPrAttachmentBtn?.addEventListener('click', () => addPrAttachmentRow());
 
 	            function fillSelect(selectEl, data, { raw = false } = {}) {
 	                selectEl.innerHTML = '<option value="">Select</option>';
@@ -775,6 +910,13 @@
 	
 		            initItemRows();
 		            setTotalFromItems({ update: false });
+
+                    const oldAttachmentTitles = @json(old('pr_attachment_titles', []));
+                    if (Array.isArray(oldAttachmentTitles) && oldAttachmentTitles.length) {
+                        oldAttachmentTitles.forEach(title => addPrAttachmentRow(title));
+                    } else {
+                        addPrAttachmentRow();
+                    }
 
 		            loadProjects();
 	        });

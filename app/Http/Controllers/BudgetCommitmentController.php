@@ -10,12 +10,14 @@ use App\Models\Project;
 use App\Models\Activity;
 use App\Models\SubActivity;
 use App\Models\PurchaseRequest;
+use App\Models\PurchaseRequestAttachment;
 use App\Models\PurchaseRequestItem;
 use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementPurchaseOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 
@@ -107,6 +109,10 @@ class BudgetCommitmentController extends Controller
         'items.*.amount'               => 'required|numeric|min:0.01',
         'items.*.milestone'            => 'nullable|string|max:255',
         'items.*.milestone_date'       => 'nullable|date',
+        'pr_attachment_titles'         => 'nullable|array|max:25',
+        'pr_attachment_titles.*'       => 'nullable|string|max:255',
+        'pr_attachments'               => 'nullable|array|max:25',
+        'pr_attachments.*'             => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip|max:20480',
     ]);
 
 	    $transactionStarted = false;
@@ -370,6 +376,8 @@ class BudgetCommitmentController extends Controller
             ]);
         }
 
+        $this->storePurchaseRequestAttachments($request, $purchaseRequest);
+
 		        foreach ($splits as $split) {
 		            BudgetCommitment::create([
 		                'purchase_request_id' => $purchaseRequest->id,
@@ -502,7 +510,7 @@ class BudgetCommitmentController extends Controller
             abort(403, 'Only draft commitments can be edited.');
         }
 
-        $commitment->load(['purchaseRequest.items.deliverable.procurement', 'programFunding']);
+        $commitment->load(['purchaseRequest.items.deliverable.procurement', 'purchaseRequest.attachments.uploader', 'programFunding']);
 
         $subActivity = SubActivity::find($commitment->allocation_id);
         $activityId = $subActivity?->activity_id;
@@ -574,6 +582,12 @@ class BudgetCommitmentController extends Controller
             'items.*.amount'               => 'required|numeric|min:0.01',
             'items.*.milestone'            => 'nullable|string|max:255',
             'items.*.milestone_date'       => 'nullable|date',
+            'remove_attachment_ids'        => 'nullable|array|max:25',
+            'remove_attachment_ids.*'      => 'string|exists:myb_purchase_request_attachments,id',
+            'pr_attachment_titles'         => 'nullable|array|max:25',
+            'pr_attachment_titles.*'       => 'nullable|string|max:255',
+            'pr_attachments'               => 'nullable|array|max:25',
+            'pr_attachments.*'             => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip|max:20480',
         ]);
 
         $transactionStarted = false;
@@ -838,6 +852,9 @@ class BudgetCommitmentController extends Controller
                 ]);
             }
 
+            $this->deletePurchaseRequestAttachments($purchaseRequest, $validated['remove_attachment_ids'] ?? []);
+            $this->storePurchaseRequestAttachments($request, $purchaseRequest);
+
             $existingCommitments = $purchaseRequest->commitments()->orderBy('commitment_year')->get();
             if ($existingCommitments->isEmpty() && $commitment->exists) {
                 $existingCommitments = collect([$commitment]);
@@ -1010,6 +1027,7 @@ class BudgetCommitmentController extends Controller
                     $this->deletePurchaseOrderCascade($po);
                 }
 
+                $this->deleteAllPurchaseRequestAttachmentFiles($purchaseRequest);
                 $purchaseRequest->commitments()->delete();
                 $purchaseRequest->items()->delete();
                 $purchaseRequest->delete();
@@ -1048,6 +1066,7 @@ class BudgetCommitmentController extends Controller
                     $this->deletePurchaseOrderCascade($po);
                 }
 
+                $this->deleteAllPurchaseRequestAttachmentFiles($purchaseRequest);
                 $purchaseRequest->commitments()->delete();
                 $purchaseRequest->items()->delete();
                 $purchaseRequest->delete();
@@ -1593,6 +1612,72 @@ protected function aiSummary(array $allocated, array $committed)
             'sub_activity' => DB::table('myb_sub_activity_allocations')
                 ->where('sub_activity_id',$id)->where('year',$year)->sum('amount'),
         };
+    }
+
+    private function storePurchaseRequestAttachments(Request $request, PurchaseRequest $purchaseRequest): void
+    {
+        $files = $request->file('pr_attachments', []);
+        $titles = $request->input('pr_attachment_titles', []);
+
+        foreach ($files as $index => $file) {
+            if (!$file || !$file->isValid()) {
+                continue;
+            }
+
+            $title = trim((string) ($titles[$index] ?? ''));
+            $path = $file->store("purchase-requests/{$purchaseRequest->id}/attachments", 'local');
+
+            $purchaseRequest->attachments()->create([
+                'uploaded_by' => Auth::id(),
+                'title' => $title !== '' ? $title : pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getClientMimeType(),
+                'file_size_bytes' => $file->getSize(),
+            ]);
+        }
+    }
+
+    private function deletePurchaseRequestAttachments(PurchaseRequest $purchaseRequest, array $attachmentIds): void
+    {
+        if ($attachmentIds === []) {
+            return;
+        }
+
+        $attachments = $purchaseRequest->attachments()
+            ->whereIn('id', $attachmentIds)
+            ->get();
+
+        foreach ($attachments as $attachment) {
+            $this->deletePurchaseRequestAttachmentFile($attachment);
+            $attachment->delete();
+        }
+    }
+
+    private function deleteAllPurchaseRequestAttachmentFiles(PurchaseRequest $purchaseRequest): void
+    {
+        $purchaseRequest->loadMissing('attachments');
+
+        foreach ($purchaseRequest->attachments as $attachment) {
+            $this->deletePurchaseRequestAttachmentFile($attachment);
+        }
+    }
+
+    private function deletePurchaseRequestAttachmentFile(PurchaseRequestAttachment $attachment): void
+    {
+        $path = (string) ($attachment->file_path ?? '');
+        if ($path === '') {
+            return;
+        }
+
+        if (Storage::disk('local')->exists($path)) {
+            Storage::disk('local')->delete($path);
+            return;
+        }
+
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
     }
 
     private function generatePurchaseRequestReference(): string

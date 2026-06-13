@@ -145,6 +145,31 @@
         </table>
     </div>
 
+    @if ($purchaseRequest->attachments->isNotEmpty())
+        <div class="section">
+            <h3 style="margin: 0 0 8px 0; color: #0f172a;">Supporting Attachments</h3>
+            <table>
+                <tr>
+                    <th style="width: 40px;">#</th>
+                    <th>Document</th>
+                    <th style="width: 180px;">Uploaded By</th>
+                    <th style="width: 120px;">Uploaded</th>
+                </tr>
+                @foreach ($purchaseRequest->attachments as $attachment)
+                    <tr>
+                        <td>{{ $loop->iteration }}</td>
+                        <td>
+                            <strong>{{ $attachment->title ?: $attachment->file_name }}</strong><br>
+                            <span style="font-size: 10px; color: #555;">{{ $attachment->file_name }}</span>
+                        </td>
+                        <td>{{ $attachment->uploader?->name ?? 'System' }}</td>
+                        <td>{{ $attachment->created_at?->format('Y-m-d') ?? 'N/A' }}</td>
+                    </tr>
+                @endforeach
+            </table>
+        </div>
+    @endif
+
     <div class="footer">
         {{ config('app.name') }} | Purchase Request {{ $purchaseRequest->reference_no }} | Generated: {{ now()->format('Y-m-d H:i') }}
     </div>

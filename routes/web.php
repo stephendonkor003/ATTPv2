@@ -987,6 +987,18 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	            ->middleware('permission:finance.purchase_orders.create')
 	            ->name('purchase-requests.line-item-evidence.store');
 
+	        Route::post('purchase-requests/{purchaseRequest}/attachments', [PurchaseRequestController::class, 'storeAttachments'])
+	            ->middleware('permission:finance.commitments.edit')
+	            ->name('purchase-requests.attachments.store');
+
+	        Route::get('purchase-requests/{purchaseRequest}/attachments/{attachment}', [PurchaseRequestController::class, 'downloadAttachment'])
+	            ->middleware('permission:finance.purchase_requests.view')
+	            ->name('purchase-requests.attachments.download');
+
+	        Route::delete('purchase-requests/{purchaseRequest}/attachments/{attachment}', [PurchaseRequestController::class, 'destroyAttachment'])
+	            ->middleware('permission:finance.commitments.edit')
+	            ->name('purchase-requests.attachments.destroy');
+
 	        Route::post('purchase-requests/{purchaseRequest}/approve', [PurchaseRequestController::class, 'approve'])
 	            ->middleware('permission:finance.purchase_requests.approve')
 	            ->name('purchase-requests.approve');

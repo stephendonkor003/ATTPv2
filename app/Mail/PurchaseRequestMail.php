@@ -25,6 +25,7 @@ class PurchaseRequestMail extends Mailable
             'subActivity',
             'items.resourceCategory',
             'items.resource',
+            'attachments.uploader',
             'commitments',
             'creator',
         ]);
@@ -45,4 +46,3 @@ class PurchaseRequestMail extends Mailable
             );
     }
 }
-

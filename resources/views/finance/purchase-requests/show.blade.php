@@ -46,6 +46,17 @@
             margin-top: 8px;
         }
 
+        .pr-attachment-upload-row {
+            border: 1px solid #e3eaf4;
+            border-radius: 10px;
+            background: #f8fafc;
+            padding: 10px;
+        }
+
+        .pr-attachment-upload-row + .pr-attachment-upload-row {
+            margin-top: 8px;
+        }
+
         .pr-evidence-document-label {
             color: #667085;
             display: block;
@@ -116,6 +127,17 @@
                 ],
             ])
             ->all();
+        $formatBytes = function ($bytes) {
+            $bytes = (float) $bytes;
+            if ($bytes <= 0) {
+                return '0 B';
+            }
+
+            $units = ['B', 'KB', 'MB', 'GB'];
+            $power = min((int) floor(log($bytes, 1024)), count($units) - 1);
+
+            return number_format($bytes / (1024 ** $power), $power === 0 ? 0 : 1) . ' ' . $units[$power];
+        };
     @endphp
 
     <div class="nxl-container">
@@ -388,6 +410,59 @@
                     </div>
                 </div>
 
+                <div class="card shadow-sm mt-4">
+                    <div class="card-body">
+                        <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
+                            <div>
+                                <h6 class="fw-bold mb-1">Attachments</h6>
+                                <div class="small text-muted">Supporting documents linked to this purchase request.</div>
+                            </div>
+                            @if ($canEditPurchaseRequests)
+                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#purchaseRequestAttachmentUploadModal">
+                                    <i class="feather-paperclip me-1"></i> Add
+                                </button>
+                            @endif
+                        </div>
+
+                        @if ($purchaseRequest->attachments->isEmpty())
+                            <div class="text-muted">No attachments have been uploaded.</div>
+                        @else
+                            <div class="list-group list-group-flush">
+                                @foreach ($purchaseRequest->attachments as $attachment)
+                                    <div class="list-group-item px-0">
+                                        <div class="d-flex justify-content-between gap-3">
+                                            <div class="min-w-0">
+                                                <a href="{{ route('finance.purchase-requests.attachments.download', [$purchaseRequest, $attachment]) }}?download=1" class="fw-semibold">
+                                                    <i class="feather-download me-1"></i>{{ $attachment->title ?: $attachment->file_name }}
+                                                </a>
+                                                <div class="small text-muted">
+                                                    {{ $attachment->file_name }} | {{ $formatBytes($attachment->file_size_bytes) }}
+                                                </div>
+                                                <div class="small text-muted">
+                                                    Uploaded by {{ $attachment->uploader?->name ?? 'System' }}
+                                                    @if ($attachment->created_at)
+                                                        on {{ $attachment->created_at->format('Y-m-d H:i') }}
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if ($canEditPurchaseRequests)
+                                                <form method="POST" action="{{ route('finance.purchase-requests.attachments.destroy', [$purchaseRequest, $attachment]) }}"
+                                                    onsubmit="return confirm('Delete this attachment?');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete attachment">
+                                                        <i class="feather-trash-2"></i>
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
                 @if ($canApprovePurchaseRequests || in_array($purchaseRequestStatus, ['approved', 'rejected'], true))
                     <div class="card shadow-sm mt-4">
                         <div class="card-body">
@@ -500,6 +575,39 @@
 
     </div>
 
+@if ($canEditPurchaseRequests)
+    <div class="modal fade" id="purchaseRequestAttachmentUploadModal" tabindex="-1" aria-labelledby="purchaseRequestAttachmentUploadTitle" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <form class="modal-content" method="POST" action="{{ route('finance.purchase-requests.attachments.store', $purchaseRequest) }}" enctype="multipart/form-data" id="purchaseRequestAttachmentUploadForm">
+                @csrf
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title mb-1" id="purchaseRequestAttachmentUploadTitle">Upload Attachments</h5>
+                        <div class="small text-muted">Add one or more supporting documents to this purchase request.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label fw-semibold mb-0">Documents</label>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="prAttachmentUploadAdd">
+                            <i class="feather-plus me-1"></i> Add Document
+                        </button>
+                    </div>
+                    <div id="prAttachmentUploadList"></div>
+                    <div class="form-text">PDF, Office, CSV, TXT, image, or ZIP files up to 20 MB each.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="feather-upload-cloud me-1"></i> Upload
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+@endif
+
 @if ($evidencePurchaseOrder && $canManageLineItemEvidence)
     <div class="modal fade pr-line-evidence-modal" id="prLineItemEvidenceModal" tabindex="-1" aria-labelledby="prLineItemEvidenceTitle" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -568,6 +676,66 @@
             </form>
         </div>
     </div>
+@endif
+
+@if ($canEditPurchaseRequests)
+    @push('scripts')
+        <script>
+            (function () {
+                const list = document.getElementById('prAttachmentUploadList');
+                const addButton = document.getElementById('prAttachmentUploadAdd');
+
+                function escapeHtml(value) {
+                    return String(value || '').replace(/[&<>"']/g, (char) => ({
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        '"': '&quot;',
+                        "'": '&#039;',
+                    }[char]));
+                }
+
+                function addRow(title = '') {
+                    if (!list) return;
+
+                    const row = document.createElement('div');
+                    row.className = 'pr-attachment-upload-row';
+                    row.innerHTML = `
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold mb-1">Document Title</label>
+                                <input type="text" name="pr_attachment_titles[]" class="form-control"
+                                    maxlength="255" placeholder="Approval memo, TOR, quotation"
+                                    value="${escapeHtml(title)}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold mb-1">File</label>
+                                <input type="file" name="pr_attachments[]" class="form-control" required
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.zip">
+                            </div>
+                            <div class="col-md-1 text-md-end">
+                                <button type="button" class="btn btn-outline-danger w-100 pr-attachment-upload-remove" title="Remove document row">
+                                    <i class="feather-trash-2"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    row.querySelector('.pr-attachment-upload-remove')?.addEventListener('click', () => {
+                        if (list.querySelectorAll('.pr-attachment-upload-row').length <= 1) {
+                            row.querySelector('input[type="text"]').value = '';
+                            row.querySelector('input[type="file"]').value = '';
+                            return;
+                        }
+                        row.remove();
+                    });
+                    list.appendChild(row);
+                }
+
+                addButton?.addEventListener('click', () => addRow());
+                addRow();
+            })();
+        </script>
+    @endpush
 @endif
 
 @if ($evidencePurchaseOrder && $canManageLineItemEvidence)

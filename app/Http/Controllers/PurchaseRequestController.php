@@ -7,12 +7,14 @@ use App\Models\BudgetCommitment;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\PurchaseRequest;
+use App\Models\PurchaseRequestAttachment;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseRequestController extends Controller
@@ -62,6 +64,7 @@ class PurchaseRequestController extends Controller
             'items.resourceCategory',
             'items.resource',
             'items.deliverable.procurement',
+            'attachments.uploader',
             'commitments' => fn ($query) => $query->orderBy('commitment_year'),
             'creator',
             'approver',
@@ -106,6 +109,7 @@ class PurchaseRequestController extends Controller
             'items.resourceCategory',
             'items.resource',
             'items.deliverable.procurement',
+            'attachments.uploader',
             'commitments' => fn ($query) => $query->orderBy('commitment_year'),
             'creator',
         ]);
@@ -128,6 +132,7 @@ class PurchaseRequestController extends Controller
             'items.resourceCategory',
             'items.resource',
             'items.deliverable.procurement',
+            'attachments.uploader',
             'commitments' => fn ($query) => $query->orderBy('commitment_year'),
             'creator',
         ]);
@@ -254,6 +259,97 @@ class PurchaseRequestController extends Controller
         $evidence->save();
 
         return back()->with('success', 'Line item deliverable evidence saved.');
+    }
+
+    public function storeAttachments(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+
+        $validated = $request->validate([
+            'pr_attachment_titles' => 'nullable|array|max:25',
+            'pr_attachment_titles.*' => 'nullable|string|max:255',
+            'pr_attachments' => 'required|array|min:1|max:25',
+            'pr_attachments.*' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip|max:20480',
+        ], [
+            'pr_attachments.required' => 'Please add at least one attachment.',
+            'pr_attachments.*.required' => 'Each attachment row must include a file.',
+        ]);
+
+        $files = $request->file('pr_attachments', []);
+        $titles = $validated['pr_attachment_titles'] ?? [];
+        $uploaded = 0;
+
+        foreach ($files as $index => $file) {
+            if (!$file || !$file->isValid()) {
+                continue;
+            }
+
+            $title = trim((string) ($titles[$index] ?? ''));
+            $path = $file->store("purchase-requests/{$purchaseRequest->id}/attachments", 'local');
+
+            $purchaseRequest->attachments()->create([
+                'uploaded_by' => Auth::id(),
+                'title' => $title !== '' ? $title : pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getClientMimeType(),
+                'file_size_bytes' => $file->getSize(),
+            ]);
+
+            $uploaded++;
+        }
+
+        return back()->with('success', $uploaded . ' attachment' . ($uploaded === 1 ? '' : 's') . ' uploaded.');
+    }
+
+    public function downloadAttachment(
+        Request $request,
+        PurchaseRequest $purchaseRequest,
+        PurchaseRequestAttachment $attachment
+    ) {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+        abort_unless($attachment->purchase_request_id === $purchaseRequest->id, 404);
+
+        $path = (string) ($attachment->file_path ?? '');
+        abort_if($path === '', 404, 'Attachment not found.');
+
+        $privateDisk = Storage::disk('local');
+
+        if (! $privateDisk->exists($path) && Storage::disk('public')->exists($path)) {
+            $stream = Storage::disk('public')->readStream($path);
+            if ($stream !== false) {
+                $privateDisk->writeStream($path, $stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+                Storage::disk('public')->delete($path);
+            }
+        }
+
+        abort_unless($privateDisk->exists($path), 404, 'Attachment file missing on disk.');
+
+        $headers = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        if ($request->boolean('download')) {
+            return $privateDisk->download($path, $attachment->file_name ?? basename($path), $headers);
+        }
+
+        return $privateDisk->response($path, null, $headers);
+    }
+
+    public function destroyAttachment(PurchaseRequest $purchaseRequest, PurchaseRequestAttachment $attachment)
+    {
+        $this->assertPurchaseRequestInScope($purchaseRequest);
+        abort_unless($attachment->purchase_request_id === $purchaseRequest->id, 404);
+
+        $this->deletePurchaseRequestAttachmentFile($attachment);
+        $attachment->delete();
+
+        return back()->with('success', 'Attachment deleted.');
     }
 
     public function edit(PurchaseRequest $purchaseRequest)
@@ -386,6 +482,7 @@ class PurchaseRequestController extends Controller
                 $this->deletePurchaseOrderCascade($po);
             }
 
+            $this->deleteAllPurchaseRequestAttachmentFiles($purchaseRequest);
             $purchaseRequest->commitments()->delete();
             $purchaseRequest->items()->delete();
             $purchaseRequest->delete();
@@ -420,6 +517,7 @@ class PurchaseRequestController extends Controller
                 $this->deletePurchaseOrderCascade($po);
             }
 
+            $this->deleteAllPurchaseRequestAttachmentFiles($purchaseRequest);
             $purchaseRequest->commitments()->delete();
             $purchaseRequest->items()->delete();
             $purchaseRequest->delete();
@@ -449,6 +547,32 @@ class PurchaseRequestController extends Controller
         }
         if ($negotiationId) {
             \App\Models\ProcurementContractNegotiation::find($negotiationId)?->delete();
+        }
+    }
+
+    private function deleteAllPurchaseRequestAttachmentFiles(PurchaseRequest $purchaseRequest): void
+    {
+        $purchaseRequest->loadMissing('attachments');
+
+        foreach ($purchaseRequest->attachments as $attachment) {
+            $this->deletePurchaseRequestAttachmentFile($attachment);
+        }
+    }
+
+    private function deletePurchaseRequestAttachmentFile(PurchaseRequestAttachment $attachment): void
+    {
+        $path = (string) ($attachment->file_path ?? '');
+        if ($path === '') {
+            return;
+        }
+
+        if (Storage::disk('local')->exists($path)) {
+            Storage::disk('local')->delete($path);
+            return;
+        }
+
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
         }
     }
 

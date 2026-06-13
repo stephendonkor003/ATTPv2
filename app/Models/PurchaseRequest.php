@@ -68,6 +68,11 @@ class PurchaseRequest extends BaseModel
         return $this->hasMany(BudgetCommitment::class, 'purchase_request_id');
     }
 
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(PurchaseRequestAttachment::class, 'purchase_request_id');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
