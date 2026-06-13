@@ -21,6 +21,11 @@
                     Auto-generated from budget commitments (scoped by governance node)
                 </p>
             </div>
+            @can('finance.commitments.create')
+                <a href="{{ route('finance.commitments.create') }}" class="btn btn-primary">
+                    <i class="feather-plus me-1"></i> Create Purchase Request
+                </a>
+            @endcan
         </div>
 
         @if (session('success'))
