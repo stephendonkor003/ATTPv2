@@ -11,6 +11,7 @@ class PurchaseRequestAttachment extends BaseModel
     protected $fillable = [
         'purchase_request_id',
         'uploaded_by',
+        'document_type',
         'title',
         'file_path',
         'file_name',

@@ -266,6 +266,8 @@ class PurchaseRequestController extends Controller
         $this->assertPurchaseRequestInScope($purchaseRequest);
 
         $validated = $request->validate([
+            'pr_attachment_types' => 'nullable|array|max:25',
+            'pr_attachment_types.*' => 'nullable|string|in:fund_availability,tors,supporting',
             'pr_attachment_titles' => 'nullable|array|max:25',
             'pr_attachment_titles.*' => 'nullable|string|max:255',
             'pr_attachments' => 'required|array|min:1|max:25',
@@ -276,6 +278,7 @@ class PurchaseRequestController extends Controller
         ]);
 
         $files = $request->file('pr_attachments', []);
+        $types = $validated['pr_attachment_types'] ?? [];
         $titles = $validated['pr_attachment_titles'] ?? [];
         $uploaded = 0;
 
@@ -284,11 +287,13 @@ class PurchaseRequestController extends Controller
                 continue;
             }
 
+            $type = (string) ($types[$index] ?? 'supporting');
             $title = trim((string) ($titles[$index] ?? ''));
             $path = $file->store("purchase-requests/{$purchaseRequest->id}/attachments", 'local');
 
             $purchaseRequest->attachments()->create([
                 'uploaded_by' => Auth::id(),
+                'document_type' => in_array($type, ['fund_availability', 'tors'], true) ? $type : 'supporting',
                 'title' => $title !== '' ? $title : pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
                 'file_path' => $path,
                 'file_name' => $file->getClientOriginalName(),

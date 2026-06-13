@@ -6,6 +6,10 @@
     $items = $items ?? [];
     $defaults = $defaults ?? [];
     $existingAttachments = $purchaseRequest?->attachments ?? collect();
+    $isPurchaseRequestCreate = ($creationMode ?? null) === 'purchase_request';
+    $submitButtonText = $isEdit
+        ? 'Update Purchase Request'
+        : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Save Commitment');
 @endphp
 
 @push('styles')
@@ -57,9 +61,9 @@
 
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="page-header">
-            <h4 class="fw-bold">{{ $isEdit ? 'Edit Purchase Request' : 'Create Budget Commitment' }}</h4>
+            <h4 class="fw-bold">{{ $isEdit ? 'Edit Purchase Request' : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Create Budget Commitment') }}</h4>
             <p class="text-muted mb-0">
-                {{ $isEdit ? 'Update draft purchase request details and yearly budget split' : 'Commit approved allocations to specific resources' }}
+                {{ $isEdit ? 'Update draft purchase request details and yearly budget split' : ($isPurchaseRequestCreate ? 'Create a purchase request using approved funding, allocation, line items, and required documents' : 'Commit approved allocations to specific resources') }}
             </p>
         </div>
 
@@ -79,7 +83,7 @@
         @endif
 
         <form method="POST"
-            action="{{ $isEdit ? route('finance.commitments.update', $commitment) : route('finance.commitments.store') }}"
+            action="{{ $isEdit ? route('finance.commitments.update', $commitment) : ($isPurchaseRequestCreate ? route('finance.purchase-requests.store') : route('finance.commitments.store')) }}"
             id="commitmentForm"
             enctype="multipart/form-data">
             @csrf
@@ -113,16 +117,16 @@
                 </div>
             </div>
 
-            {{-- ===================== COMMITMENT REFERENCE ===================== --}}
+            {{-- ===================== REFERENCE ===================== --}}
             <div class="card shadow-sm mb-4">
                 <div class="card-body">
                     <h6 class="fw-bold text-secondary mb-3">
-                        Commitment Reference
+                        {{ $isPurchaseRequestCreate || $isEdit ? 'Purchase Request Reference' : 'Commitment Reference' }}
                     </h6>
 
                     <div class="row">
                         <div class="col-md-4">
-                            <label class="form-label">Commitment Ref</label>
+                            <label class="form-label">{{ $isPurchaseRequestCreate || $isEdit ? 'Purchase Request Ref' : 'Commitment Ref' }}</label>
                             <input type="text" id="commitment_ref" class="form-control" readonly
                                 value="{{ $isEdit ? ($purchaseRequest->reference_no ?? '—') : '' }}">
                             <small class="text-muted">
@@ -242,7 +246,7 @@
 	            <div class="card shadow-sm mb-4 d-none" id="resourceSection">
 	                <div class="card-body">
 	                <h6 class="fw-bold text-success mb-3">
-	                        {{ $isEdit ? 'Purchase Request Details' : 'Purchase Request (Auto-created)' }}
+	                        {{ $isEdit || $isPurchaseRequestCreate ? 'Purchase Request Details' : 'Purchase Request (Auto-created)' }}
 	                    </h6>
 	
 	                    <div class="row g-3">
@@ -315,7 +319,7 @@
                     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
                         <div>
                             <h6 class="fw-bold mb-1">Purchase Request Attachments</h6>
-                            <div class="text-muted small">Attach TORs, approvals, quotations, memos, or other supporting documents.</div>
+                            <div class="text-muted small">Fund Availability and TORs are required. Add other supporting documents as needed.</div>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#purchaseRequestAttachmentModal">
                             <i class="feather-paperclip me-1"></i> Add Attachments
@@ -376,7 +380,7 @@
             <div class="text-end">
                 <button class="btn btn-primary px-4" id="saveCommitmentBtn" type="submit">
                     <i class="feather-save me-1"></i>
-                    {{ $isEdit ? 'Update Purchase Request' : 'Save Commitment' }}
+                    {{ $submitButtonText }}
                 </button>
             </div>
 
@@ -397,11 +401,11 @@
                     <div class="alert alert-info border mb-3">
                         <i class="feather-info me-1"></i>
                         These files will be uploaded together with this purchase request when you click
-                        <strong>{{ $isEdit ? 'Update Purchase Request' : 'Save Commitment' }}</strong>.
+                        <strong>{{ $submitButtonText }}</strong>.
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <label class="form-label fw-semibold mb-0">Documents</label>
+                        <label class="form-label fw-semibold mb-0">Required and Supporting Documents</label>
                         <button type="button" class="btn btn-sm btn-outline-primary" id="addPrAttachmentBtn">
                             <i class="feather-plus me-1"></i> Add Document
                         </button>
@@ -419,9 +423,10 @@
 	    {{-- ===================== SCRIPT ===================== --}}
         <script>
             document.addEventListener('DOMContentLoaded', () => {
+                const referencePrefix = @json($isPurchaseRequestCreate || $isEdit ? 'PR' : 'COM');
                 const refInput = document.getElementById('commitment_ref');
                 if (refInput && !refInput.value) {
-                    refInput.value = 'COM-' + Date.now().toString().slice(-6);
+                    refInput.value = referencePrefix + '-' + Date.now().toString().slice(-6);
                 }
                 const existingCommitmentId = @json($isEdit ? ($commitment->id ?? null) : null);
 
@@ -497,18 +502,27 @@
                     }[char]));
                 }
 
-                function addPrAttachmentRow(title = '') {
+                function addPrAttachmentRow(title = '', type = 'supporting', locked = false) {
                     if (!prAttachmentInputList) return;
+
+                    const displayTitle = title || (type === 'fund_availability' ? 'Fund Availability' : (type === 'tors' ? 'TORs' : ''));
+                    const requiredBadge = locked ? '<span class="badge bg-danger-subtle text-danger ms-2">Required</span>' : '';
+                    const removeButton = locked
+                        ? '<span class="badge bg-light text-muted border d-inline-flex align-items-center justify-content-center w-100" style="height: 38px;">Fixed</span>'
+                        : `<button type="button" class="btn btn-outline-danger w-100 pr-attachment-remove" title="Remove document row">
+                            <i class="feather-trash-2"></i>
+                        </button>`;
 
                     const row = document.createElement('div');
                     row.className = 'pr-attachment-input-row';
                     row.innerHTML = `
                         <div class="row g-2 align-items-end">
                             <div class="col-md-5">
-                                <label class="form-label small fw-semibold mb-1">Document Title</label>
+                                <label class="form-label small fw-semibold mb-1">Document Title ${requiredBadge}</label>
+                                <input type="hidden" name="pr_attachment_types[]" form="commitmentForm" value="${escapeHtml(type)}">
                                 <input type="text" name="pr_attachment_titles[]" form="commitmentForm" class="form-control"
                                     maxlength="255" placeholder="Approval memo, TOR, quotation"
-                                    value="${escapeHtml(title)}">
+                                    value="${escapeHtml(displayTitle)}" ${locked ? 'readonly' : ''}>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold mb-1">File</label>
@@ -516,9 +530,7 @@
                                     accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.zip">
                             </div>
                             <div class="col-md-1 text-md-end">
-                                <button type="button" class="btn btn-outline-danger w-100 pr-attachment-remove" title="Remove document row">
-                                    <i class="feather-trash-2"></i>
-                                </button>
+                                ${removeButton}
                             </div>
                         </div>
                     `;
@@ -970,10 +982,18 @@
 		            setTotalFromItems({ update: false });
 
                     const oldAttachmentTitles = @json(old('pr_attachment_titles', []));
+                    const oldAttachmentTypes = @json(old('pr_attachment_types', []));
+                    addPrAttachmentRow('Fund Availability', 'fund_availability', true);
+                    addPrAttachmentRow('TORs', 'tors', true);
+
                     if (Array.isArray(oldAttachmentTitles) && oldAttachmentTitles.length) {
-                        oldAttachmentTitles.forEach(title => addPrAttachmentRow(title));
-                    } else {
-                        addPrAttachmentRow();
+                        oldAttachmentTitles.forEach((title, index) => {
+                            const type = oldAttachmentTypes[index] || 'supporting';
+                            if (type === 'fund_availability' || type === 'tors') {
+                                return;
+                            }
+                            addPrAttachmentRow(title, type, false);
+                        });
                     }
 
 		            loadProjects();

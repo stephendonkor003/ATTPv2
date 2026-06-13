@@ -14,6 +14,7 @@ return new class extends Migration
                 ->constrained('myb_purchase_requests')
                 ->cascadeOnDelete();
             $table->string('uploaded_by')->nullable();
+            $table->string('document_type', 80)->nullable();
             $table->string('title')->nullable();
             $table->string('file_path');
             $table->string('file_name');

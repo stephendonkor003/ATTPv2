@@ -31,6 +31,11 @@ class BudgetCommitmentController extends Controller
     public const STATUS_APPROVED  = 'approved';
     public const STATUS_CANCELLED = 'cancelled';
 
+    private const REQUIRED_PURCHASE_REQUEST_ATTACHMENTS = [
+        'fund_availability' => 'Fund Availability',
+        'tors' => 'TORs',
+    ];
+
     /* =========================================================
      | ================== BUDGET COMMITMENTS ==================
      ========================================================= */
@@ -68,6 +73,27 @@ class BudgetCommitmentController extends Controller
     public function create()
     {
         return view('finance.commitments.create', [
+            'creationMode' => 'commitment',
+            'fundings' => ProgramFunding::where('status', 'approved')
+                ->when($this->scopedNodeIds() !== null, function ($query) {
+                    $query->whereIn('governance_node_id', $this->scopedNodeIds())
+                        ->whereNotNull('governance_node_id');
+                })
+                ->get(),
+            'resourceCategories' => ResourceCategory::where('status', 'active')
+                ->when($this->scopedNodeIds() !== null, function ($query) {
+                    $query->whereIn('governance_node_id', $this->scopedNodeIds())
+                        ->whereNotNull('governance_node_id');
+                })
+                ->get(),
+            'deliverables' => $this->deliverableOptions(),
+        ]);
+    }
+
+    public function createPurchaseRequest()
+    {
+        return view('finance.commitments.create', [
+            'creationMode' => 'purchase_request',
             'fundings' => ProgramFunding::where('status', 'approved')
                 ->when($this->scopedNodeIds() !== null, function ($query) {
                     $query->whereIn('governance_node_id', $this->scopedNodeIds())
@@ -109,11 +135,22 @@ class BudgetCommitmentController extends Controller
         'items.*.amount'               => 'required|numeric|min:0.01',
         'items.*.milestone'            => 'nullable|string|max:255',
         'items.*.milestone_date'       => 'nullable|date',
+        'pr_attachment_types'          => 'nullable|array|max:25',
+        'pr_attachment_types.*'        => 'nullable|string|in:fund_availability,tors,supporting',
         'pr_attachment_titles'         => 'nullable|array|max:25',
         'pr_attachment_titles.*'       => 'nullable|string|max:255',
         'pr_attachments'               => 'nullable|array|max:25',
         'pr_attachments.*'             => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip|max:20480',
     ]);
+
+        $missingAttachments = $this->missingRequiredPurchaseRequestAttachments($request);
+        if ($missingAttachments !== []) {
+            return back()
+                ->withErrors([
+                    'pr_attachments' => 'Please upload the required purchase request documents: ' . implode(', ', $missingAttachments) . '.',
+                ])
+                ->withInput();
+        }
 
 	    $transactionStarted = false;
 
@@ -584,11 +621,26 @@ class BudgetCommitmentController extends Controller
             'items.*.milestone_date'       => 'nullable|date',
             'remove_attachment_ids'        => 'nullable|array|max:25',
             'remove_attachment_ids.*'      => 'string|exists:myb_purchase_request_attachments,id',
+            'pr_attachment_types'          => 'nullable|array|max:25',
+            'pr_attachment_types.*'        => 'nullable|string|in:fund_availability,tors,supporting',
             'pr_attachment_titles'         => 'nullable|array|max:25',
             'pr_attachment_titles.*'       => 'nullable|string|max:255',
             'pr_attachments'               => 'nullable|array|max:25',
             'pr_attachments.*'             => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip|max:20480',
         ]);
+
+        $missingAttachments = $this->missingRequiredPurchaseRequestAttachments(
+            $request,
+            $commitment->purchaseRequest,
+            $validated['remove_attachment_ids'] ?? []
+        );
+        if ($missingAttachments !== []) {
+            return back()
+                ->withErrors([
+                    'pr_attachments' => 'Please upload the required purchase request documents: ' . implode(', ', $missingAttachments) . '.',
+                ])
+                ->withInput();
+        }
 
         $transactionStarted = false;
 
@@ -1617,6 +1669,7 @@ protected function aiSummary(array $allocated, array $committed)
     private function storePurchaseRequestAttachments(Request $request, PurchaseRequest $purchaseRequest): void
     {
         $files = $request->file('pr_attachments', []);
+        $types = $request->input('pr_attachment_types', []);
         $titles = $request->input('pr_attachment_titles', []);
 
         foreach ($files as $index => $file) {
@@ -1624,18 +1677,58 @@ protected function aiSummary(array $allocated, array $committed)
                 continue;
             }
 
+            $type = (string) ($types[$index] ?? 'supporting');
             $title = trim((string) ($titles[$index] ?? ''));
             $path = $file->store("purchase-requests/{$purchaseRequest->id}/attachments", 'local');
 
             $purchaseRequest->attachments()->create([
                 'uploaded_by' => Auth::id(),
-                'title' => $title !== '' ? $title : pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                'document_type' => array_key_exists($type, self::REQUIRED_PURCHASE_REQUEST_ATTACHMENTS) ? $type : 'supporting',
+                'title' => $title !== '' ? $title : $this->purchaseRequestAttachmentTitle($type, $file->getClientOriginalName()),
                 'file_path' => $path,
                 'file_name' => $file->getClientOriginalName(),
                 'mime_type' => $file->getClientMimeType(),
                 'file_size_bytes' => $file->getSize(),
             ]);
         }
+    }
+
+    private function missingRequiredPurchaseRequestAttachments(
+        Request $request,
+        ?PurchaseRequest $purchaseRequest = null,
+        array $removeAttachmentIds = []
+    ): array {
+        $presentTypes = collect();
+
+        if ($purchaseRequest) {
+            $presentTypes = $purchaseRequest->attachments()
+                ->when($removeAttachmentIds !== [], fn ($query) => $query->whereNotIn('id', $removeAttachmentIds))
+                ->pluck('document_type')
+                ->filter()
+                ->values();
+        }
+
+        $files = $request->file('pr_attachments', []);
+        $types = $request->input('pr_attachment_types', []);
+
+        foreach ($files as $index => $file) {
+            if (!$file || !$file->isValid()) {
+                continue;
+            }
+
+            $presentTypes->push((string) ($types[$index] ?? 'supporting'));
+        }
+
+        return collect(self::REQUIRED_PURCHASE_REQUEST_ATTACHMENTS)
+            ->reject(fn ($label, $type) => $presentTypes->contains($type))
+            ->values()
+            ->all();
+    }
+
+    private function purchaseRequestAttachmentTitle(string $type, string $fallbackFileName): string
+    {
+        return self::REQUIRED_PURCHASE_REQUEST_ATTACHMENTS[$type]
+            ?? pathinfo($fallbackFileName, PATHINFO_FILENAME);
     }
 
     private function deletePurchaseRequestAttachments(PurchaseRequest $purchaseRequest, array $attachmentIds): void

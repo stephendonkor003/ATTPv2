@@ -963,6 +963,14 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
 	            ->middleware('permission:finance.purchase_requests.view')
 	            ->name('purchase-requests.index');
 
+	        Route::get('purchase-requests/create', [BudgetCommitmentController::class, 'createPurchaseRequest'])
+	            ->middleware('permission:finance.commitments.create')
+	            ->name('purchase-requests.create');
+
+	        Route::post('purchase-requests', [BudgetCommitmentController::class, 'store'])
+	            ->middleware('permission:finance.commitments.create')
+	            ->name('purchase-requests.store');
+
 	        Route::get('purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'show'])
 	            ->middleware('permission:finance.purchase_requests.view')
 	            ->name('purchase-requests.show');
