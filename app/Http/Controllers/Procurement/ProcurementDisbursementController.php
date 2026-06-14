@@ -121,11 +121,11 @@ class ProcurementDisbursementController extends Controller
                     'id' => (string) $item->id,
                     'category' => $item->resourceCategory?->name ?: 'N/A',
                     'resource' => $item->resource?->name ?: 'N/A',
-                    'description' => $item->milestone ?: $item->observations ?: $item->object_type ?: 'N/A',
+                    'description' => $item->observations ?: $item->object_type ?: '',
                     'budget_code' => $item->budget_code,
                     'amount' => round((float) $item->amount, 2),
                     'deliverable_id' => $item->deliverable_id ? (string) $item->deliverable_id : null,
-                    'deliverable_title' => $item->deliverable?->title,
+                    'deliverable_title' => $item->milestone ?: $item->deliverable?->title,
                     'evidence' => $evidence ? [
                         'is_met' => (bool) $evidence->is_met,
                         'deliverable_date' => $evidence->deliverable_date?->format('Y-m-d'),

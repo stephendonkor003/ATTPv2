@@ -44,7 +44,7 @@
                             <th>Program</th>
                             <th>Allocation</th>
                             <th>Resource</th>
-                            <th>Milestone Date</th>
+                            <th>Deliverable Date</th>
                             <th class="text-end">Amount</th>
                             <th>Year</th>
                             <th>Status</th>
@@ -107,7 +107,7 @@
                                     @endif
                                 </td>
 
-                                {{-- Milestone Date (earliest) --}}
+                                {{-- Deliverable Date (earliest) --}}
                                 @php
                                     $milestoneDate = $c->purchaseRequest?->items
                                         ? $c->purchaseRequest->items

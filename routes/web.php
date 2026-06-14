@@ -177,7 +177,6 @@ use App\Http\Controllers\Procurement\{
     ProcurementSubmissionController,
     ProcurementPlanController,
     ProcurementInvoiceController,
-    ProcurementDeliverableController,
 };
 
 use App\Http\Controllers\Procurement\Settings\{
@@ -1776,34 +1775,6 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
         Route::post('{invoice}/purchase-order', [ProcurementInvoiceController::class, 'createPurchaseOrder'])
             ->name('purchase-order');
     });
-
-Route::middleware(['auth', 'not.funding.partner', 'permission:procurement.manage_all'])
-    ->prefix('procurement/deliverables')
-    ->name('procurement.deliverables.')
-    ->group(function () {
-        Route::get('/', [ProcurementDeliverableController::class, 'index'])
-            ->name('index');
-        Route::get('/create', [ProcurementDeliverableController::class, 'create'])
-            ->name('create');
-        Route::post('/', [ProcurementDeliverableController::class, 'store'])
-            ->name('store');
-        Route::get('/sheet', [ProcurementDeliverableController::class, 'sheet'])
-            ->name('sheet');
-        Route::get('/{deliverable}/edit', [ProcurementDeliverableController::class, 'edit'])
-            ->name('edit');
-        Route::put('/{deliverable}', [ProcurementDeliverableController::class, 'update'])
-            ->name('update');
-        Route::post('/{deliverable}/approve', [ProcurementDeliverableController::class, 'approve'])
-            ->name('approve');
-        Route::post('/{deliverable}/reject', [ProcurementDeliverableController::class, 'reject'])
-            ->name('reject');
-        Route::post('/{deliverable}/status', [ProcurementDeliverableController::class, 'updateStatus'])
-            ->name('status');
-        Route::delete('/{deliverable}', [ProcurementDeliverableController::class, 'destroy'])
-            ->name('destroy');
-    });
-
-
 
 Route::middleware(['auth', 'not.funding.partner', 'permission:forms.manage'])
     ->prefix('procurement/forms')

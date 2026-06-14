@@ -7,7 +7,7 @@
     $defaults = $defaults ?? [];
     $existingAttachments = $purchaseRequest?->attachments ?? collect();
     $isPurchaseRequestCreate = ($creationMode ?? null) === 'purchase_request';
-    $showDeliverableColumn = $isEdit;
+    $showDeliverableColumn = false;
     $submitButtonText = $isEdit
         ? 'Update Purchase Request'
         : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Save Commitment');
@@ -287,8 +287,8 @@
                                         @if ($showDeliverableColumn)
                                             <th style="width: 22%;">Deliverable</th>
                                         @endif
-                                        <th style="width: 18%;">Milestone / Description</th>
-                                        <th style="width: 12%;">Milestone Date</th>
+                                        <th style="width: 18%;">Deliverables</th>
+                                        <th style="width: 12%;">Deliverable Date</th>
                                         <th style="width: 170px;" class="text-end">Price / Amount</th>
                                         <th style="width: 80px;" class="text-center">Action</th>
                                     </tr>
@@ -869,7 +869,7 @@
                                     <input type="text"
                                         class="form-control item-milestone"
                                         data-field="milestone"
-                                        placeholder="Milestone / description"
+                                        placeholder="Enter deliverable"
                                         maxlength="255">
                                 </td>
                                 <td>

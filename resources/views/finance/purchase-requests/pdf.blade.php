@@ -103,8 +103,8 @@
                 <th style="width: 18%;">Category</th>
                 <th style="width: 18%;">Resource Item</th>
                 <th style="width: 20%;">Deliverable</th>
-                <th style="width: 20%;">Milestone / Description</th>
-                <th style="width: 14%;">Milestone Date</th>
+                <th style="width: 20%;">Notes</th>
+                <th style="width: 14%;">Deliverable Date</th>
                 <th class="right" style="width: 110px;">Amount</th>
             </tr>
             @foreach ($purchaseRequest->items as $item)
@@ -112,8 +112,8 @@
                     <td>{{ $loop->iteration }}</td>
                     <td>{{ $item->resourceCategory?->name ?? 'N/A' }}</td>
                     <td>{{ $item->resource?->name ?? 'N/A' }}</td>
-                    <td>{{ $item->deliverable?->title ?? 'N/A' }}</td>
-                    <td>{{ $item->milestone ?? '—' }}</td>
+                    <td>{{ $item->milestone ?: ($item->deliverable?->title ?? 'N/A') }}</td>
+                    <td>{{ $item->observations ?? $item->object_type ?? '—' }}</td>
                     <td>{{ $item->milestone_date?->format('Y-m-d') ?? '—' }}</td>
                     <td class="right">{{ $currency }} {{ number_format((float) $item->amount, 2) }}</td>
                 </tr>

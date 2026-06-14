@@ -51,14 +51,6 @@
             && collect($procurementSidebarPermissions)->contains(
                 fn($permission) => $sidebarUser->can($permission)
             ));
-    $deliverablesManagementSidebarPermissions = [
-        'procurement.manage_all',
-        'finance.purchase_requests.view',
-    ];
-    $canSeeDeliverablesManagementSidebar = $sidebarUser
-        && collect($deliverablesManagementSidebarPermissions)->contains(
-            fn($permission) => $sidebarUser->can($permission)
-        );
     $newsCommunicationSidebarPermissions = [
         'communications.view',
         'communications.respond',
@@ -629,54 +621,6 @@
                         </ul>
                     </li>
                 @endcanany
-
-                {{-- ================= DELIVERABLES MANAGEMENT ================= --}}
-                @if ($canSeeDeliverablesManagementSidebar)
-                    <li class="nxl-item nxl-caption">
-                        <label>Deliverables Management</label>
-                    </li>
-
-                    <li class="nxl-item nxl-hasmenu">
-                        <a href="javascript:void(0);" class="nxl-link">
-                            <span class="nxl-micon"><i class="feather-check-square"></i></span>
-                            <span class="nxl-mtext">Deliverables Management</span>
-                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
-                        </a>
-
-                        <ul class="nxl-submenu">
-                            @can('procurement.manage_all')
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.deliverables.create') }}" class="nxl-link">
-                                        <i class="feather-plus-circle me-2"></i> Create Deliverable
-                                    </a>
-                                </li>
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.deliverables.index') }}" class="nxl-link">
-                                        <i class="feather-list me-2"></i> View Deliverables
-                                    </a>
-                                </li>
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.deliverables.sheet') }}" class="nxl-link">
-                                        <i class="feather-grid me-2"></i> Deliverables Sheet
-                                    </a>
-                                </li>
-                            @endcan
-
-                            @can('finance.purchase_requests.view')
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.disbursements.create') }}" class="nxl-link">
-                                        <i class="feather-dollar-sign me-2"></i> Create Disbursement
-                                    </a>
-                                </li>
-                                <li class="nxl-item">
-                                    <a href="{{ route('procurement.disbursements.index') }}" class="nxl-link">
-                                        <i class="feather-credit-card me-2"></i> View Disbursements
-                                    </a>
-                                </li>
-                            @endcan
-                        </ul>
-                    </li>
-                @endif
 
                 {{-- ================= WORK PLANS REGISTRY ================= --}}
                 @can('finance.awp.create')

@@ -316,52 +316,6 @@
             background: #f8fafc;
         }
 
-        .po-create .deliverable-card {
-            border: 1.5px solid var(--po-border);
-            border-radius: 10px;
-            padding: 14px 16px;
-            background: #fff;
-            cursor: pointer;
-            transition: border-color .15s, background .15s, box-shadow .15s;
-            user-select: none;
-            height: 100%;
-            display: flex;
-            gap: 12px;
-            align-items: flex-start;
-        }
-        .po-create .deliverable-card:hover {
-            border-color: var(--po-accent);
-            background: var(--po-soft-accent);
-        }
-        .po-create .deliverable-card.checked {
-            border-color: var(--po-accent);
-            background: var(--po-soft-accent);
-            box-shadow: 0 0 0 3px rgba(15, 118, 110, .1);
-        }
-        .po-create .deliverable-card input[type="checkbox"] {
-            accent-color: var(--po-accent);
-            width: 17px;
-            height: 17px;
-            flex-shrink: 0;
-            margin-top: 2px;
-            cursor: pointer;
-        }
-        .po-create .dlv-freq-badge {
-            display: inline-block;
-            font-size: .68rem;
-            font-weight: 700;
-            padding: 2px 7px;
-            border-radius: 20px;
-            text-transform: uppercase;
-            letter-spacing: .03em;
-        }
-        .po-create .dlv-freq-one_time  { background:#f1f5f9; color:#475569; }
-        .po-create .dlv-freq-daily     { background:#dbeafe; color:#1d4ed8; }
-        .po-create .dlv-freq-weekly    { background:#ede9fe; color:#6d28d9; }
-        .po-create .dlv-freq-monthly   { background:#d1fae5; color:#065f46; }
-        .po-create .dlv-freq-quarterly { background:#fef3c7; color:#92400e; }
-        .po-create .dlv-freq-yearly    { background:#fee2e2; color:#991b1b; }
-
         #lineItemEvidenceModal {
             z-index: 1095 !important;
             background: transparent;
@@ -457,7 +411,6 @@
         $selectedVendorId = old('vendor_id', $isEdit ? (string) $purchaseOrder->vendor_id : null);
         $selectedStatus = old('status', $isEdit ? $purchaseOrder->status : 'draft');
         $selectedIncoterm = old('incoterm', $isEdit ? $purchaseOrder->incoterm : null);
-        $selectedDeliverableIds = old('deliverable_ids', $isEdit ? $purchaseOrder->deliverables->pluck('id')->map(fn ($id) => (string) $id)->all() : []);
         $submittedItemEvidence = old('item_evidence');
         $lineItemEvidenceInput = is_array($submittedItemEvidence) ? $submittedItemEvidence : ($itemEvidenceDefaults ?? []);
 
@@ -716,54 +669,6 @@
                             </div>
                         </div>
 
-                        {{-- Deliverables Section --}}
-                        <details class="form-section" id="deliverableSection">
-                            <summary>Additional Procurement Deliverables</summary>
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <div>
-                                    <div class="small text-muted mt-1">
-                                        Optional: link extra procurement deliverables beyond those already attached to the requested line items.
-                                    </div>
-                                </div>
-                                <span id="dlvSelectedBadge" class="badge bg-primary" style="display:none;font-size:.8rem;padding:6px 10px;">
-                                    0 selected
-                                </span>
-                            </div>
-
-                            @error('deliverable_ids')
-                                <div class="alert alert-warning py-2 mb-3">{{ $message }}</div>
-                            @enderror
-
-                            {{-- State: no procurement chosen yet --}}
-                            <div id="dlvStateNone" class="empty-state">
-                                <i class="feather-link" style="font-size:1.4rem;display:block;margin-bottom:8px;opacity:.4"></i>
-                                Select a procurement above to load its deliverables here.
-                            </div>
-
-                            {{-- State: procurement chosen but no deliverables exist --}}
-                            <div id="dlvStateEmpty" class="empty-state d-none">
-                                <i class="feather-inbox" style="font-size:1.4rem;display:block;margin-bottom:8px;opacity:.4"></i>
-                                No deliverables found for this procurement.
-                                <div class="mt-2">
-                                    <a id="dlvCreateLink" href="{{ route('procurement.deliverables.create') }}"
-                                       target="_blank" class="btn btn-sm btn-outline-primary">
-                                        <i class="feather-plus me-1"></i> Create Deliverables
-                                    </a>
-                                    <span class="text-muted small ms-2">(opens in new tab — refresh after saving)</span>
-                                </div>
-                            </div>
-
-                            {{-- State: deliverable cards grid --}}
-                            <div id="dlvPickerList" class="row g-3 d-none"></div>
-
-                            <div id="dlvCreateHint" class="form-text mt-2 d-none">
-                                Missing a deliverable?
-                                <a id="dlvCreateLinkHint" href="{{ route('procurement.deliverables.create') }}"
-                                   target="_blank">Create more deliverables</a>
-                                for this procurement, then refresh the page.
-                            </div>
-                        </details>
-
                         <div class="form-section">
                             <div class="section-title">Parties and Addresses</div>
                             <div class="row g-3">
@@ -903,12 +808,11 @@
             const purchaseRequests = @json($purchaseRequests);
             const procurements = @json($procurementOptions);
             const vendors = @json($vendorOptions);
-            const deliverablesByProcurement = @json($deliverablesByProcurement);
             const oldPurchaseRequestId = @json($oldPurchaseRequestId);
             const oldCommitmentId = @json($oldCommitmentId);
             const oldAmount = @json(old('amount', $isEdit ? $purchaseOrder->amount : null));
-            const oldDeliverableId = @json(old('deliverable_id'));
             const oldItemEvidence = @json($lineItemEvidenceInput);
+            const oldLineItemDeliverables = @json(old('line_item_deliverables', []));
 
             const list = document.getElementById('purchaseRequestList');
             const search = document.getElementById('purchaseRequestSearch');
@@ -1279,7 +1183,7 @@
                     evidenceModalSubtitle.textContent = `${item.category || 'N/A'} | ${money(request.currency, item.amount)}`;
                 }
                 if (evidenceModalDeliverable) {
-                    evidenceModalDeliverable.textContent = item.deliverable_title || 'No deliverable linked';
+                    evidenceModalDeliverable.textContent = item.line_deliverable || item.deliverable_title || 'No deliverable linked';
                 }
 
                 showEvidenceModal();
@@ -1302,6 +1206,8 @@
                     ensureEvidenceFieldset(item);
                     const previous = oldItemEvidence[item.id] || {};
                     const deliverableDate = previous.deliverable_date || '';
+                    const deliverableValue = oldLineItemDeliverables[item.id] ?? item.line_deliverable ?? item.deliverable_title ?? '';
+                    item.line_deliverable = deliverableValue;
                     const row = document.createElement('tr');
                     row.dataset.itemId = item.id;
                     row.innerHTML = `
@@ -1314,10 +1220,17 @@
                         <td>
                             <div class="line-item-summary fw-semibold">${escapeHtml(item.resource || 'N/A')}</div>
                             <small class="text-muted">${escapeHtml(item.category || 'N/A')}</small>
-                            <div class="small text-muted">${escapeHtml(item.description || '')}</div>
                             <div class="small text-muted">${escapeHtml(item.budget_code || '')}</div>
                         </td>
-                        <td>${escapeHtml(item.deliverable_title || 'N/A')}</td>
+                        <td>
+                            <input type="text"
+                                name="line_item_deliverables[${item.id}]"
+                                class="form-control form-control-sm line-item-deliverable-input"
+                                data-item-id="${item.id}"
+                                value="${escapeHtml(deliverableValue)}"
+                                maxlength="255"
+                                placeholder="Enter deliverable">
+                        </td>
                         <td>
                             <input type="date"
                                 name="item_evidence[${item.id}][deliverable_date]"
@@ -1347,6 +1260,12 @@
                     row.querySelector('.line-item-date-input').addEventListener('change', () => {
                         updateEvidenceRowState(item.id);
                     });
+                    row.querySelector('.line-item-deliverable-input').addEventListener('input', (event) => {
+                        item.line_deliverable = event.target.value.trim();
+                        if (evidenceModalDeliverable && activeEvidenceFieldset?.dataset.itemId === String(item.id)) {
+                            evidenceModalDeliverable.textContent = item.line_deliverable || item.deliverable_title || 'No deliverable linked';
+                        }
+                    });
                     row.querySelector('.evidence-edit-btn').addEventListener('click', () => {
                         openEvidenceModal(item, request);
                     });
@@ -1371,116 +1290,6 @@
                         field.value = value || '';
                     }
                 });
-            }
-
-            const dlvStateNone      = document.getElementById('dlvStateNone');
-            const dlvStateEmpty     = document.getElementById('dlvStateEmpty');
-            const dlvPickerList     = document.getElementById('dlvPickerList');
-            const dlvCreateLink     = document.getElementById('dlvCreateLink');
-            const dlvCreateLinkHint = document.getElementById('dlvCreateLinkHint');
-            const dlvCreateHint     = document.getElementById('dlvCreateHint');
-            const dlvSelectedBadge  = document.getElementById('dlvSelectedBadge');
-            const oldDeliverableIds = @json($selectedDeliverableIds);
-
-            const FREQ_LABELS = {
-                one_time: 'One-time', daily: 'Daily', weekly: 'Weekly',
-                monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly',
-            };
-
-            function setDlvCreateHref(procurementId) {
-                [dlvCreateLink, dlvCreateLinkHint].forEach(el => {
-                    if (!el) return;
-                    try {
-                        const url = new URL(el.href, location.origin);
-                        if (procurementId) url.searchParams.set('procurement_id', procurementId);
-                        else url.searchParams.delete('procurement_id');
-                        el.href = url.toString();
-                    } catch (e) {}
-                });
-            }
-
-            function updateSelectedBadge() {
-                const n = dlvPickerList ? dlvPickerList.querySelectorAll('input[type="checkbox"]:checked').length : 0;
-                if (dlvSelectedBadge) {
-                    dlvSelectedBadge.style.display = n > 0 ? '' : 'none';
-                    dlvSelectedBadge.textContent   = n + (n === 1 ? ' selected' : ' selected');
-                }
-            }
-
-            function updateDeliverableSelect(procurementId) {
-                const deliverables = (procurementId && deliverablesByProcurement[procurementId]) || [];
-                setDlvCreateHref(procurementId);
-
-                if (!procurementId) {
-                    dlvStateNone  && dlvStateNone.classList.remove('d-none');
-                    dlvStateEmpty && dlvStateEmpty.classList.add('d-none');
-                    dlvPickerList && dlvPickerList.classList.add('d-none');
-                    dlvCreateHint && dlvCreateHint.classList.add('d-none');
-                    if (dlvPickerList) dlvPickerList.innerHTML = '';
-                    if (dlvSelectedBadge) dlvSelectedBadge.style.display = 'none';
-                    return;
-                }
-
-                dlvStateNone && dlvStateNone.classList.add('d-none');
-
-                if (deliverables.length === 0) {
-                    dlvStateEmpty && dlvStateEmpty.classList.remove('d-none');
-                    dlvPickerList && dlvPickerList.classList.add('d-none');
-                    dlvCreateHint && dlvCreateHint.classList.add('d-none');
-                    if (dlvPickerList) dlvPickerList.innerHTML = '';
-                    if (dlvSelectedBadge) dlvSelectedBadge.style.display = 'none';
-                    return;
-                }
-
-                dlvStateEmpty && dlvStateEmpty.classList.add('d-none');
-                dlvPickerList && dlvPickerList.classList.remove('d-none');
-                dlvCreateHint && dlvCreateHint.classList.remove('d-none');
-                dlvPickerList.innerHTML = '';
-
-                deliverables.forEach((d) => {
-                    const isChecked = oldDeliverableIds.includes(d.id);
-                    const freq      = d.frequency || 'one_time';
-                    const freqLabel = FREQ_LABELS[freq] || freq;
-                    const typeLabel = d.type === 'milestone'
-                        ? '<span class="badge bg-warning text-dark" style="font-size:.68rem">Milestone</span>'
-                        : '<span class="badge bg-light text-dark border" style="font-size:.68rem">Deliverable</span>';
-                    const timeline  = (d.start && d.end)
-                        ? `<div class="text-muted mt-1" style="font-size:.76rem"><i class="feather-calendar" style="font-size:.7rem"></i> ${d.start} &rarr; ${d.end}</div>`
-                        : '';
-                    const amtHtml   = (d.amount > 0)
-                        ? `<div class="text-muted" style="font-size:.76rem">${d.currency || ''} ${Number(d.amount).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`
-                        : '';
-                    const descHtml  = d.description
-                        ? `<div class="text-muted mt-2" style="font-size:.78rem;line-height:1.4;max-height:2.8em;overflow:hidden">${d.description}</div>`
-                        : '';
-
-                    const col  = document.createElement('div');
-                    col.className = 'col-md-4 col-lg-3';
-
-                    const card = document.createElement('label');
-                    card.className = 'deliverable-card' + (isChecked ? ' checked' : '');
-                    card.innerHTML = `
-                        <input type="checkbox" name="deliverable_ids[]" value="${d.id}"${isChecked ? ' checked' : ''}>
-                        <div style="flex:1;min-width:0">
-                            <div class="fw-semibold" style="font-size:.88rem;line-height:1.3">${d.title}</div>
-                            <div class="d-flex flex-wrap gap-1 mt-1 align-items-center">
-                                ${typeLabel}
-                                <span class="dlv-freq-badge dlv-freq-${freq}">${freqLabel}</span>
-                            </div>
-                            ${timeline}${amtHtml}${descHtml}
-                        </div>
-                    `;
-
-                    card.querySelector('input').addEventListener('change', function () {
-                        card.classList.toggle('checked', this.checked);
-                        updateSelectedBadge();
-                    });
-
-                    col.appendChild(card);
-                    dlvPickerList.appendChild(col);
-                });
-
-                updateSelectedBadge();
             }
 
             function closeEvidenceModal() {
@@ -1519,13 +1328,7 @@
                     vendorSelect.value = procurement.awarded_vendor_id;
                     fillVendorContacts(procurement.awarded_vendor_id, true);
                 }
-                updateDeliverableSelect(procurementSelect.value);
             });
-
-            // Restore deliverable dropdown on validation failure
-            if (procurementSelect?.value) {
-                updateDeliverableSelect(procurementSelect.value);
-            }
 
             document.getElementById('purchaseOrderForm')?.addEventListener('submit', function (event) {
                 warning.classList.add('d-none');

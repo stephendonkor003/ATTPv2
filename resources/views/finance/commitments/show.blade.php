@@ -207,8 +207,8 @@
                                             <th>Category</th>
                                             <th>Resource Item</th>
                                             <th>Deliverable</th>
-                                            <th>Milestone / Description</th>
-                                            <th>Milestone Date</th>
+                                            <th>Notes</th>
+                                            <th>Deliverable Date</th>
                                             <th class="text-end" style="width: 160px;">Amount</th>
                                         </tr>
                                     </thead>
@@ -219,12 +219,12 @@
                                                 <td>{{ $item->resourceCategory->name ?? '—' }}</td>
                                                 <td>{{ $item->resource->name ?? '—' }}</td>
                                                 <td>
-                                                    <div class="fw-semibold">{{ $item->deliverable?->title ?? '—' }}</div>
+                                                    <div class="fw-semibold">{{ $item->milestone ?: ($item->deliverable?->title ?? '—') }}</div>
                                                     @if ($item->deliverable?->procurement)
                                                         <div class="small text-muted">{{ $item->deliverable->procurement->reference_no ?? $item->deliverable->procurement->title }}</div>
                                                     @endif
                                                 </td>
-                                                <td>{{ $item->milestone ?? '—' }}</td>
+                                                <td>{{ $item->observations ?? $item->object_type ?? '—' }}</td>
                                                 <td>{{ $item->milestone_date?->format('Y-m-d') ?? '—' }}</td>
                                                 <td class="text-end fw-semibold">
                                                     {{ $commitment->purchaseRequest->currency ?? $commitment->programFunding->program->currency ?? '' }}

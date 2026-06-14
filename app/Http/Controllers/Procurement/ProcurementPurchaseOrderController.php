@@ -214,28 +214,6 @@ class ProcurementPurchaseOrderController extends Controller
             ])
             ->values();
 
-        $procurementIds = $procurements->pluck('id');
-
-        $deliverablesRaw = ProcurementDeliverable::whereIn('procurement_id', $procurementIds)
-            ->orderBy('sequence')
-            ->orderBy('title')
-            ->get();
-
-        $deliverablesByProcurement = $deliverablesRaw
-            ->groupBy(fn (ProcurementDeliverable $d) => (string) $d->procurement_id)
-            ->map(fn ($group) => $group->map(fn (ProcurementDeliverable $d) => [
-                'id'          => (string) $d->id,
-                'title'       => $d->title,
-                'type'        => $d->type,
-                'description' => $d->description,
-                'status'      => $d->status,
-                'amount'      => (float) ($d->amount ?? 0),
-                'currency'    => $d->currency,
-                'start'       => $d->timeline_start?->format('M d, Y'),
-                'end'         => $d->timeline_end?->format('M d, Y'),
-            ])->values())
-            ->toArray();
-
         $buyerDefaults = [
             'name' => auth()->user()?->name,
             'email' => auth()->user()?->email,
@@ -265,7 +243,6 @@ class ProcurementPurchaseOrderController extends Controller
             'purchaseRequests',
             'procurements',
             'procurementOptions',
-            'deliverablesByProcurement',
             'vendors',
             'vendorOptions',
             'buyerDefaults',
@@ -282,6 +259,8 @@ class ProcurementPurchaseOrderController extends Controller
             'procurement_id' => ['nullable', 'exists:procurements,id'],
             'deliverable_ids'   => ['nullable', 'array'],
             'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
+            'line_item_deliverables' => ['nullable', 'array'],
+            'line_item_deliverables.*' => ['nullable', 'string', 'max:255'],
             'vendor_id' => ['nullable', 'exists:users,id'],
             'po_title' => ['nullable', 'string', 'max:255'],
             'supplier_reference' => ['nullable', 'string', 'max:255'],
@@ -408,6 +387,8 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $purchaseOrder = DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseRequest, $request, $vendor) {
+            $this->syncPurchaseRequestLineItemDeliverables($request, $purchaseRequest);
+
             $purchaseOrder = ProcurementPurchaseOrder::create([
                 'budget_commitment_id' => $commitment->id,
                 'purchase_request_id' => $purchaseRequest->id,
@@ -470,6 +451,8 @@ class ProcurementPurchaseOrderController extends Controller
             'procurement_id' => ['nullable', 'exists:procurements,id'],
             'deliverable_ids'   => ['nullable', 'array'],
             'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
+            'line_item_deliverables' => ['nullable', 'array'],
+            'line_item_deliverables.*' => ['nullable', 'string', 'max:255'],
             'vendor_id' => ['nullable', 'exists:users,id'],
             'po_title' => ['nullable', 'string', 'max:255'],
             'supplier_reference' => ['nullable', 'string', 'max:255'],
@@ -595,6 +578,8 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseOrder, $purchaseRequest, $request, $vendor) {
+            $this->syncPurchaseRequestLineItemDeliverables($request, $purchaseRequest);
+
             $purchaseOrder->update([
                 'budget_commitment_id' => $commitment->id,
                 'purchase_request_id' => $purchaseRequest->id,
@@ -1013,7 +998,8 @@ class ProcurementPurchaseOrderController extends Controller
                 'id' => (string) $item->id,
                 'category' => $item->resourceCategory?->name ?: 'N/A',
                 'resource' => $item->resource?->name ?: 'N/A',
-                'description' => $item->milestone ?: $item->observations ?: $item->object_type ?: 'N/A',
+                'description' => $item->observations ?: $item->object_type ?: '',
+                'line_deliverable' => $item->milestone ?: $item->deliverable?->title ?: '',
                 'milestone_date' => $item->milestone_date?->format('Y-m-d'),
                 'amount' => round((float) $item->amount, 2),
                 'budget_code' => $item->budget_code,
@@ -1055,6 +1041,32 @@ class ProcurementPurchaseOrderController extends Controller
             'search_text' => $searchText,
             'label' => trim(($purchaseRequest->reference_no ?? 'Purchase Request') . ' | ' . $program . ' | ' . $currency . ' ' . number_format($remainingAmount, 2)),
         ];
+    }
+
+    private function syncPurchaseRequestLineItemDeliverables(Request $request, PurchaseRequest $purchaseRequest): void
+    {
+        $submitted = $request->input('line_item_deliverables', []);
+        if (!is_array($submitted) || $submitted === []) {
+            return;
+        }
+
+        $purchaseRequest->loadMissing('items');
+        $itemsById = $purchaseRequest->items->keyBy(fn ($item) => (string) $item->id);
+
+        foreach ($submitted as $itemId => $deliverable) {
+            $key = (string) $itemId;
+
+            if (! $itemsById->has($key)) {
+                throw ValidationException::withMessages([
+                    'line_item_deliverables' => 'One or more edited deliverables do not belong to the selected purchase request.',
+                ]);
+            }
+
+            $text = trim((string) $deliverable);
+            $itemsById->get($key)->update([
+                'milestone' => $text !== '' ? $text : null,
+            ]);
+        }
     }
 
     private function attachSupportingDocument(Request $request, ProcurementPurchaseOrder $purchaseOrder): void

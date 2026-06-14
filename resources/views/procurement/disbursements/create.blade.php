@@ -781,7 +781,6 @@
                         <td>
                             <div class="fw-semibold">${escapeHtml(item.resource || 'N/A')}</div>
                             <small class="text-muted">${escapeHtml(item.category || 'N/A')}</small>
-                            <div class="small text-muted">${escapeHtml(item.description || '')}</div>
                             <div class="small text-muted">${escapeHtml(item.budget_code || '')}</div>
                         </td>
                         <td>${escapeHtml(item.deliverable_title || 'N/A')}</td>

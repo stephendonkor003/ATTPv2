@@ -280,8 +280,8 @@
                             <th style="width: 16%;">Category</th>
                             <th style="width: 16%;">Resource</th>
                             <th style="width: 18%;">Deliverable</th>
-                            <th>Description</th>
-                            <th style="width: 14%;">Milestone Date</th>
+                            <th>Notes</th>
+                            <th style="width: 14%;">Deliverable Date</th>
                             <th class="right" style="width: 16%;">Amount</th>
                         </tr>
                     </thead>
@@ -291,9 +291,9 @@
                                 <td>{{ $loop->iteration }}</td>
                                 <td>{{ $item->resourceCategory?->name ?? 'N/A' }}</td>
                                 <td>{{ $item->resource?->name ?? 'N/A' }}</td>
-                                <td>{{ $item->deliverable?->title ?? 'N/A' }}</td>
+                                <td>{{ $item->milestone ?: ($item->deliverable?->title ?? 'N/A') }}</td>
                                 <td>
-                                    {{ $item->milestone ?? $item->object_type ?? 'N/A' }}
+                                    {{ $item->observations ?? $item->object_type ?? 'N/A' }}
                                     @if ($item->budget_code || $item->work_plan_payment_basis)
                                         <br><span class="muted">{{ $item->budget_code ?? $item->work_plan_payment_basis }}</span>
                                     @endif

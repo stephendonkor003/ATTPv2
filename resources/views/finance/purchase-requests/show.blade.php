@@ -121,7 +121,7 @@
                 (string) $item->id => [
                     'title' => $item->resource?->name ?? $item->resourceCategory?->name ?? 'Line item',
                     'category' => $item->resourceCategory?->name ?? 'N/A',
-                    'deliverable' => $item->deliverable?->title ?? 'No deliverable linked',
+                    'deliverable' => $item->milestone ?: ($item->deliverable?->title ?? 'No deliverable linked'),
                     'amount' => number_format((float) $item->amount, 2),
                     'currency' => $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '',
                 ],
@@ -287,8 +287,8 @@
                                         <th>Deliverable</th>
                                         <th>Date</th>
                                         <th>Evidence</th>
-                                        <th>Milestone / Description</th>
-                                        <th>Milestone Date</th>
+                                        <th>Notes</th>
+                                        <th>Deliverable Date</th>
                                         <th class="text-end">Amount</th>
                                     </tr>
                                 </thead>
@@ -324,7 +324,7 @@
                                             <td>{{ $item->resourceCategory?->name ?? '—' }}</td>
                                             <td>{{ $item->resource?->name ?? '—' }}</td>
                                             <td>
-                                                <div class="fw-semibold">{{ $item->deliverable?->title ?? '—' }}</div>
+                                                <div class="fw-semibold">{{ $item->milestone ?: ($item->deliverable?->title ?? '—') }}</div>
                                                 @if ($item->deliverable?->procurement)
                                                     <div class="small text-muted">{{ $item->deliverable->procurement->reference_no ?? $item->deliverable->procurement->title }}</div>
                                                 @endif
@@ -353,7 +353,7 @@
                                                     </div>
                                                 @endif
                                             </td>
-                                            <td>{{ $item->milestone ?? '—' }}</td>
+                                            <td>{{ $item->observations ?? $item->object_type ?? '—' }}</td>
                                             <td>{{ $item->milestone_date?->format('Y-m-d') ?? '—' }}</td>
                                             <td class="text-end fw-semibold">
                                                 {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}

@@ -618,7 +618,7 @@ class BudgetCommitmentController extends Controller
             'items'                => 'nullable|array|min:1',
             'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
             'items.*.resource_id'          => 'required|exists:myb_resources,id',
-            'items.*.deliverable_id'       => 'required|exists:procurement_deliverables,id',
+            'items.*.deliverable_id'       => 'nullable|exists:procurement_deliverables,id',
             'items.*.amount'               => 'required|numeric|min:0.01',
             'items.*.milestone'            => 'nullable|string|max:255',
             'items.*.milestone_date'       => 'nullable|date',
@@ -675,7 +675,6 @@ class BudgetCommitmentController extends Controller
                 if (
                     empty($validated['resource_category_id'])
                     || empty($validated['resource_id'])
-                    || empty($validated['deliverable_id'])
                     || empty($validated['commitment_amount'])
                 ) {
                     return back()
@@ -704,7 +703,7 @@ class BudgetCommitmentController extends Controller
                 return [
                     'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
                     'resource_id' => (string) ($item['resource_id'] ?? ''),
-                    'deliverable_id' => (string) ($item['deliverable_id'] ?? ''),
+                    'deliverable_id' => !empty($item['deliverable_id']) ? (string) $item['deliverable_id'] : null,
                     'amount' => round((float) ($item['amount'] ?? 0), 2),
                     'milestone' => $milestone !== '' ? $milestone : null,
                     'milestone_date' => $milestoneDate ?: null,
@@ -722,7 +721,9 @@ class BudgetCommitmentController extends Controller
 
             foreach ($items as $item) {
                 $this->assertResourceCategoryInScope($item['resource_category_id']);
-                $this->assertDeliverableInScope($item['deliverable_id']);
+                if (! empty($item['deliverable_id'])) {
+                    $this->assertDeliverableInScope($item['deliverable_id']);
+                }
 
                 $resource = Resource::find($item['resource_id']);
                 if (!$resource) {

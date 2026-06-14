@@ -383,7 +383,7 @@
                                         <th>Deliverable</th>
                                         <th>Date</th>
                                         <th>Evidence</th>
-                                        <th>Description</th>
+                                        <th>Notes</th>
                                         <th class="text-end">Amount</th>
                                     </tr>
                                 </thead>
@@ -398,7 +398,7 @@
                                             <td>{{ $loop->iteration }}</td>
                                             <td>{{ $item->resourceCategory?->name ?? 'N/A' }}</td>
                                             <td>{{ $item->resource?->name ?? 'N/A' }}</td>
-                                            <td>{{ $item->deliverable?->title ?? 'N/A' }}</td>
+                                            <td>{{ $item->milestone ?: ($item->deliverable?->title ?? 'N/A') }}</td>
                                             <td>{{ $itemEvidence?->deliverable_date?->format('M d, Y') ?? 'N/A' }}</td>
                                             <td>
                                                 @if ($itemEvidence)
@@ -434,7 +434,7 @@
                                                 @endif
                                             </td>
                                             <td>
-                                                <div>{{ $item->milestone ?? $item->object_type ?? 'N/A' }}</div>
+                                                <div>{{ $item->observations ?? $item->object_type ?? 'N/A' }}</div>
                                                 <div class="small text-muted">{{ $item->budget_code ?? $item->work_plan_payment_basis ?? '' }}</div>
                                             </td>
                                             <td class="text-end fw-semibold">{{ $currency }} {{ number_format((float) $item->amount, 2) }}</td>
