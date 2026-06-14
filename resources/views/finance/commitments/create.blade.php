@@ -281,9 +281,11 @@
                             <table class="table table-sm table-bordered align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th style="width: 22%;">Resource Category</th>
-                                        <th style="width: 18%;">Resource Item</th>
-                                        <th style="width: 22%;">Deliverable</th>
+                                        <th style="width: {{ $isPurchaseRequestCreate ? '27%' : '22%' }};">Resource Category</th>
+                                        <th style="width: {{ $isPurchaseRequestCreate ? '23%' : '18%' }};">Resource Item</th>
+                                        @unless ($isPurchaseRequestCreate)
+                                            <th style="width: 22%;">Deliverable</th>
+                                        @endunless
                                         <th style="width: 18%;">Milestone / Description</th>
                                         <th style="width: 12%;">Milestone Date</th>
                                         <th style="width: 170px;" class="text-end">Price / Amount</th>
@@ -855,11 +857,13 @@
                                         <option value="">Select Resource</option>
                                     </select>
                                 </td>
-                                <td>
-                                    <select class="form-select item-deliverable" data-field="deliverable_id" required>
-                                        ${deliverableOptionsHtml}
-                                    </select>
-                                </td>
+                                @unless ($isPurchaseRequestCreate)
+                                    <td>
+                                        <select class="form-select item-deliverable" data-field="deliverable_id" required>
+                                            ${deliverableOptionsHtml}
+                                        </select>
+                                    </td>
+                                @endunless
                                 <td>
                                     <input type="text"
                                         class="form-control item-milestone"
@@ -897,7 +901,7 @@
                                 loadResourcesForRow(tr, item.resource_category_id, item.resource_id || '');
                             }
 
-                            if (item && item.deliverable_id) {
+                            if (deliverableSelect && item && item.deliverable_id) {
                                 deliverableSelect.value = item.deliverable_id;
                             }
 
@@ -938,7 +942,10 @@
                 if (rows.length <= 1) {
                     row.querySelector('.item-category').value = '';
                     row.querySelector('.item-resource').innerHTML = '<option value="">Select Resource</option>';
-                    row.querySelector('.item-deliverable').value = '';
+                    const deliverableSelect = row.querySelector('.item-deliverable');
+                    if (deliverableSelect) {
+                        deliverableSelect.value = '';
+                    }
                     row.querySelector('.item-amount').value = '';
                     row.querySelector('.item-milestone').value = '';
                     row.querySelector('.item-milestone-date').value = '';
