@@ -24,6 +24,19 @@
             border-radius: 14px;
             background: #ffffff;
             box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+            .po-page .stat-card:hover {
+                transform: translateY(-3px);
+                border-color: #38bdf8;
+                box-shadow: 0 18px 34px rgba(15, 23, 42, 0.14);
+            }
+
+            .po-page .stat-card:hover .stat-value {
+                color: #0369a1;
+            }
         }
 
         .po-page .stat-title {
