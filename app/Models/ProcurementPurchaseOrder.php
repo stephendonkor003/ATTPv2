@@ -12,7 +12,7 @@ class ProcurementPurchaseOrder extends BaseModel
 {
     protected $table = 'procurement_purchase_orders';
 
-    private const NON_PAYING_DISBURSEMENT_STATUSES = ['cancelled', 'void', 'reversed'];
+    public const NON_PAYING_DISBURSEMENT_STATUSES = ['cancelled', 'void', 'reversed'];
 
     protected $fillable = [
         'procurement_id',

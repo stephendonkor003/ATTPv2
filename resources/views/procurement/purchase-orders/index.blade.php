@@ -74,29 +74,37 @@
         </div>
 
         @php
-            $pageAmountTotal = $purchaseOrders->sum('amount');
             $totalOrders = $purchaseOrders->total();
             $latestOrder = $purchaseOrders->first();
         @endphp
 
         <div class="row g-3 mb-4">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Total Orders</div>
                     <div class="stat-value">{{ $totalOrders }}</div>
                     <div class="text-muted small">Across all pages</div>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="stat-card p-3 h-100">
-                    <div class="stat-title">Page Amount</div>
+                    <div class="stat-title">Approved PO Commitment Totals</div>
                     <div class="stat-value">
-                        {{ number_format((float) $pageAmountTotal, 2) }}
+                        {{ number_format((float) $approvedPurchaseOrderCommitmentTotal, 2) }}
                     </div>
-                    <div class="text-muted small">Sum of current page</div>
+                    <div class="text-muted small">Across all purchase orders</div>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">Disbursement Amount</div>
+                    <div class="stat-value">
+                        {{ number_format((float) $totalDisbursedAmount, 2) }}
+                    </div>
+                    <div class="text-muted small">Paid against purchase orders</div>
+                </div>
+            </div>
+            <div class="col-md-3">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Latest PO</div>
                     <div class="stat-value">{{ $latestOrder?->reference_no ?? 'N/A' }}</div>
@@ -124,6 +132,7 @@
                             <th>Purchase Request</th>
                             <th>Vendor</th>
                             <th class="text-center">Amount</th>
+                            <th class="text-center">Disbursed</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">Issued</th>
                             <th class="text-center" width="230">Action</th>
@@ -154,6 +163,9 @@
                                 </td>
                                 <td class="text-center">
                                     {{ $purchaseOrder->amount ? number_format($purchaseOrder->amount, 2) : 'N/A' }}
+                                </td>
+                                <td class="text-center">
+                                    {{ number_format((float) $purchaseOrder->paidAmount(), 2) }}
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-secondary text-capitalize">

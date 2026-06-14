@@ -8,6 +8,7 @@ use App\Models\Activity;
 use App\Models\BudgetCommitment;
 use App\Models\Procurement;
 use App\Models\ProcurementDeliverable;
+use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\ProgramFunding;
@@ -37,22 +38,39 @@ class ProcurementPurchaseOrderController extends Controller
             abort(403, 'You do not have access to purchase orders.');
         }
 
-        $purchaseOrders = ProcurementPurchaseOrder::with([
-            'procurement',
-            'vendor',
-            'subActivity',
-            'invoice',
-            'budgetCommitment.purchaseRequest',
-            'purchaseRequest',
-        ])
+        $purchaseOrderQuery = ProcurementPurchaseOrder::query()
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
+            });
+
+        $approvedPurchaseOrderCommitmentTotal = (float) (clone $purchaseOrderQuery)->sum('amount');
+        $totalDisbursedAmount = (float) ProcurementDisbursement::query()
+            ->whereIn('purchase_order_id', (clone $purchaseOrderQuery)->select('procurement_purchase_orders.id'))
+            ->where(function ($query) {
+                $query->whereNull('status')
+                    ->orWhereNotIn('status', ProcurementPurchaseOrder::NON_PAYING_DISBURSEMENT_STATUSES);
             })
+            ->sum('amount');
+
+        $purchaseOrders = $purchaseOrderQuery
+            ->with([
+                'procurement',
+                'vendor',
+                'subActivity',
+                'invoice',
+                'budgetCommitment.purchaseRequest',
+                'purchaseRequest',
+                'disbursements',
+            ])
             ->orderByDesc('created_at')
             ->paginate(12);
 
-        return view('procurement.purchase-orders.index', compact('purchaseOrders'));
+        return view('procurement.purchase-orders.index', compact(
+            'purchaseOrders',
+            'approvedPurchaseOrderCommitmentTotal',
+            'totalDisbursedAmount'
+        ));
     }
 
     public function create()
