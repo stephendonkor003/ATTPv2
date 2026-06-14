@@ -166,8 +166,9 @@
                             <th>Procurement</th>
                             <th>Purchase Request</th>
                             <th>Vendor</th>
-                            <th class="text-center">Amount</th>
-                            <th class="text-center">Paid Disbursed</th>
+                            <th class="text-center">PO Amount</th>
+                            <th class="text-center">Amount Paid</th>
+                            <th class="text-center">Amount Unpaid</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">Issued</th>
                             <th class="text-center" width="230">Action</th>
@@ -177,7 +178,6 @@
                         @foreach ($purchaseOrders as $purchaseOrder)
                             @php
                                 $lineItemSummary = $purchaseOrder->lineItemSummary();
-                                $actualPaidAmount = $purchaseOrder->actualPaidAmount();
                             @endphp
                             <tr>
                                 <td class="ps-4 fw-semibold">
@@ -207,8 +207,20 @@
                                     @endif
                                 </td>
                                 <td class="text-center">
-                                    {{ number_format((float) $actualPaidAmount, 2) }}
-                                    <div class="small text-muted">Actual paid</div>
+                                    {{ number_format((float) $lineItemSummary['paid_amount'], 2) }}
+                                    @if ($lineItemSummary['has_line_items'])
+                                        <div class="small text-muted">
+                                            {{ $lineItemSummary['paid_items'] }} items paid
+                                        </div>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    {{ number_format((float) $lineItemSummary['pending_amount'], 2) }}
+                                    @if ($lineItemSummary['has_line_items'])
+                                        <div class="small text-muted">
+                                            {{ $lineItemSummary['pending_items'] }} items unpaid
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-secondary text-capitalize">
