@@ -1,6 +1,21 @@
 @extends('layouts.app')
 
-@section('title', 'Create User')
+@php
+    $defaultUserType = $defaultUserType ?? request('user_type', 'staff');
+    $selectedUserType = old('user_type', $defaultUserType);
+    $isMemberStateType = $selectedUserType === 'member_state';
+    $isVendorType = $selectedUserType === 'vendor';
+    $vendorCreateOnly = $vendorCreateOnly ?? false;
+    $vendorCategories = $vendorCategories ?? collect();
+    $formAction = $formAction ?? route('system.users.store');
+    $cancelRoute = $cancelRoute ?? route('system.users.index');
+    $pageTitle = $pageTitle ?? 'Create User';
+    $pageSubtitle = $pageSubtitle ?? 'Create a new system user and assign an access role.';
+    $backButtonText = $backButtonText ?? 'Back to Users';
+    $submitButtonText = $submitButtonText ?? ($isVendorType ? 'Create Vendor' : 'Create User');
+@endphp
+
+@section('title', $pageTitle)
 
 @section('content')
     <main class="nxl-container">
@@ -11,16 +26,16 @@
                 <div>
                     <h4 class="mb-1">
                         <i class="bi bi-person-plus me-1"></i>
-                        Create User
+                        {{ $pageTitle }}
                     </h4>
                     <p class="text-muted mb-0">
-                        Create a new system user and assign an access role.
+                        {{ $pageSubtitle }}
                     </p>
                 </div>
 
-                <a href="{{ route('system.users.index') }}" class="btn btn-light">
+                <a href="{{ $cancelRoute }}" class="btn btn-light">
                     <i class="bi bi-arrow-left me-1"></i>
-                    Back to Users
+                    {{ $backButtonText }}
                 </a>
             </div>
 
@@ -36,13 +51,11 @@
             @endif
 
             {{-- ================= CREATE USER FORM ================= --}}
-            <form method="POST" action="{{ route('system.users.store') }}">
+            <form method="POST" action="{{ $formAction }}">
                 @csrf
 
                 <div class="card shadow-sm border-0">
                     <div class="card-body">
-                        @php($isMemberStateType = old('user_type', 'staff') === 'member_state')
-
                         <div class="row">
 
                             {{-- NAME --}}
@@ -64,11 +77,13 @@
                             </div>
 
                             {{-- ROLE --}}
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-6 mb-3" id="role-group"
+                                style="{{ $isVendorType ? 'display: none;' : '' }}">
                                 <label class="form-label fw-semibold">
                                     Role <span class="text-danger">*</span>
                                 </label>
-                                <select name="role_id" class="form-select" required>
+                                <select name="role_id" id="role_id" class="form-select"
+                                    {{ $isVendorType ? 'disabled' : 'required' }}>
                                     <option value="">-- Select Role --</option>
                                     @foreach ($roles as $role)
                                         <option value="{{ $role->id }}"
@@ -78,7 +93,7 @@
                                     @endforeach
                                 </select>
                                 <small class="text-muted">
-                                    Determines what the user can access in the system.
+                                    Determines what the user can access in the system. Vendor portal accounts do not use roles.
                                 </small>
                             </div>
 
@@ -87,24 +102,49 @@
                                 <label class="form-label fw-semibold">
                                     User Type <span class="text-danger">*</span>
                                 </label>
-                                <select name="user_type" id="user_type" class="form-select" required>
-                                    @foreach ([
-                                        'staff' => 'Staff',
-                                        'member_state' => 'Member State',
-                                        'vendor' => 'Vendor',
-                                        'funding_partner' => 'Funding Partner',
-                                        'think_tank' => 'Think Tank',
-                                        'evaluator' => 'Evaluator',
-                                        'admin' => 'Admin',
-                                    ] as $typeValue => $typeLabel)
-                                        <option value="{{ $typeValue }}"
-                                            {{ old('user_type', 'staff') === $typeValue ? 'selected' : '' }}>
-                                            {{ $typeLabel }}
+                                @if ($vendorCreateOnly)
+                                    <input type="hidden" name="user_type" id="user_type" value="vendor">
+                                    <input type="text" class="form-control" value="Vendor" disabled>
+                                @else
+                                    <select name="user_type" id="user_type" class="form-select" required>
+                                        @foreach ([
+                                            'staff' => 'Staff',
+                                            'member_state' => 'Member State',
+                                            'vendor' => 'Vendor',
+                                            'funding_partner' => 'Funding Partner',
+                                            'think_tank' => 'Think Tank',
+                                            'evaluator' => 'Evaluator',
+                                            'admin' => 'Admin',
+                                        ] as $typeValue => $typeLabel)
+                                            <option value="{{ $typeValue }}"
+                                                {{ $selectedUserType === $typeValue ? 'selected' : '' }}>
+                                                {{ $typeLabel }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                @endif
+                                <small class="text-muted">
+                                    Vendor users access the vendor portal and do not need a system role.
+                                </small>
+                            </div>
+
+                            {{-- VENDOR CATEGORY --}}
+                            <div class="col-md-6 mb-3" id="vendor-category-group"
+                                style="{{ $isVendorType ? '' : 'display: none;' }}">
+                                <label class="form-label fw-semibold">
+                                    Vendor Category
+                                </label>
+                                <select name="vendor_category" id="vendor_category" class="form-select"
+                                    {{ $isVendorType ? '' : 'disabled' }}>
+                                    <option value="">-- Select Vendor Category --</option>
+                                    @foreach ($vendorCategories as $category)
+                                        <option value="{{ $category }}" {{ old('vendor_category') === $category ? 'selected' : '' }}>
+                                            {{ $category }}
                                         </option>
                                     @endforeach
                                 </select>
                                 <small class="text-muted">
-                                    Member-state users can sign and ratify treaties from their login workspace.
+                                    Optional. Used to target vendor-group procurements.
                                 </small>
                             </div>
 
@@ -152,7 +192,7 @@
 
                             {{-- GOVERNANCE NODE --}}
                             <div class="col-md-6 mb-3 order-last" id="governance-node-group"
-                                style="{{ $isMemberStateType ? 'display: none;' : '' }}">
+                                style="{{ $isMemberStateType || $isVendorType ? 'display: none;' : '' }}">
                                 <label class="form-label fw-semibold" id="governance-node-label">
                                     Governance Node
                                 </label>
@@ -176,13 +216,13 @@
 
                     {{-- ================= ACTION BUTTONS ================= --}}
                     <div class="card-footer bg-light d-flex justify-content-end gap-2">
-                        <a href="{{ route('system.users.index') }}" class="btn btn-light">
+                        <a href="{{ $cancelRoute }}" class="btn btn-light">
                             Cancel
                         </a>
 
                         <button type="submit" class="btn btn-success px-4">
                             <i class="bi bi-check-circle me-1"></i>
-                            Create User
+                            {{ $submitButtonText }}
                         </button>
                     </div>
                 </div>
@@ -194,8 +234,12 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const userTypeSelect = document.getElementById('user_type');
+            const roleGroup = document.getElementById('role-group');
+            const roleSelect = document.getElementById('role_id');
             const governanceGroup = document.getElementById('governance-node-group');
             const governanceSelect = document.getElementById('governance_node_id');
+            const vendorCategoryGroup = document.getElementById('vendor-category-group');
+            const vendorCategorySelect = document.getElementById('vendor_category');
             const memberStateGroup = document.getElementById('member-state-group');
             const memberStateSelect = document.getElementById('member_state_id');
             const memberStatePreview = document.getElementById('member-state-preview');
@@ -230,11 +274,29 @@
 
             function toggleUserTypeFields() {
                 const isMemberState = userTypeSelect.value === 'member_state';
+                const isVendor = userTypeSelect.value === 'vendor';
 
-                governanceGroup.style.display = isMemberState ? 'none' : '';
+                if (roleGroup && roleSelect) {
+                    roleGroup.style.display = isVendor ? 'none' : '';
+                    roleSelect.required = !isVendor;
+                    roleSelect.disabled = isVendor;
+                    if (isVendor) {
+                        roleSelect.value = '';
+                    }
+                }
+
+                governanceGroup.style.display = (isMemberState || isVendor) ? 'none' : '';
                 governanceSelect.required = false;
-                if (isMemberState) {
+                if (isMemberState || isVendor) {
                     governanceSelect.value = '';
+                }
+
+                if (vendorCategoryGroup && vendorCategorySelect) {
+                    vendorCategoryGroup.style.display = isVendor ? '' : 'none';
+                    vendorCategorySelect.disabled = !isVendor;
+                    if (!isVendor) {
+                        vendorCategorySelect.value = '';
+                    }
                 }
 
                 memberStateGroup.style.display = isMemberState ? '' : 'none';

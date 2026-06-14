@@ -165,7 +165,7 @@
                                     {{ $purchaseOrder->amount ? number_format($purchaseOrder->amount, 2) : 'N/A' }}
                                 </td>
                                 <td class="text-center">
-                                    {{ number_format((float) $purchaseOrder->paidAmount(), 2) }}
+                                    {{ number_format((float) $purchaseOrder->actualPaidAmount(), 2) }}
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-secondary text-capitalize">

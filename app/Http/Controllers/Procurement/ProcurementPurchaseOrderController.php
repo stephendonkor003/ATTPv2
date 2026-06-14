@@ -47,10 +47,8 @@ class ProcurementPurchaseOrderController extends Controller
         $approvedPurchaseOrderCommitmentTotal = (float) (clone $purchaseOrderQuery)->sum('amount');
         $totalDisbursedAmount = (float) ProcurementDisbursement::query()
             ->whereIn('purchase_order_id', (clone $purchaseOrderQuery)->select('procurement_purchase_orders.id'))
-            ->where(function ($query) {
-                $query->whereNull('status')
-                    ->orWhereNotIn('status', ProcurementPurchaseOrder::NON_PAYING_DISBURSEMENT_STATUSES);
-            })
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
             ->sum('amount');
 
         $purchaseOrders = $purchaseOrderQuery

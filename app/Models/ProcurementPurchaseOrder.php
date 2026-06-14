@@ -13,6 +13,7 @@ class ProcurementPurchaseOrder extends BaseModel
     protected $table = 'procurement_purchase_orders';
 
     public const NON_PAYING_DISBURSEMENT_STATUSES = ['cancelled', 'void', 'reversed'];
+    public const PAID_DISBURSEMENT_STATUSES = ['completed', 'paid'];
 
     protected $fillable = [
         'procurement_id',
@@ -124,6 +125,21 @@ class ProcurementPurchaseOrder extends BaseModel
                 $query->whereNull('status')
                     ->orWhereNotIn('status', self::NON_PAYING_DISBURSEMENT_STATUSES);
             })
+            ->sum('amount');
+    }
+
+    public function actualPaidAmount(): float
+    {
+        if ($this->relationLoaded('disbursements')) {
+            return (float) $this->disbursements
+                ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at
+                    && in_array($disbursement->status, self::PAID_DISBURSEMENT_STATUSES, true))
+                ->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount);
+        }
+
+        return (float) $this->disbursements()
+            ->whereNotNull('paid_at')
+            ->whereIn('status', self::PAID_DISBURSEMENT_STATUSES)
             ->sum('amount');
     }
 

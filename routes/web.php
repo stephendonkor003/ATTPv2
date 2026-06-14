@@ -2680,6 +2680,8 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:vendor.manage'])
     ->name('vendors.')
     ->group(function () {
         Route::get('/', [VendorManagementController::class, 'index'])->name('index');
+        Route::get('/create', [VendorManagementController::class, 'create'])->name('create');
+        Route::post('/', [VendorManagementController::class, 'store'])->name('store');
         Route::get('/template', [VendorManagementController::class, 'template'])->name('template');
         Route::post('/import', [VendorManagementController::class, 'import'])->name('import');
         Route::get('/{vendor}/edit', [VendorManagementController::class, 'edit'])->name('edit');

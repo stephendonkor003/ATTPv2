@@ -46,7 +46,12 @@
 
                 <div class="card shadow-sm border-0">
                     <div class="card-body">
-                        @php($isMemberStateType = old('user_type', $user->user_type) === 'member_state')
+                        @php
+                            $selectedUserType = old('user_type', $user->user_type);
+                            $isMemberStateType = $selectedUserType === 'member_state';
+                            $isVendorType = $selectedUserType === 'vendor';
+                            $vendorCategories = $vendorCategories ?? collect();
+                        @endphp
 
                         <div class="row">
 
@@ -71,7 +76,8 @@
                             </div>
 
                             {{-- ROLE --}}
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-6 mb-3" id="role-group"
+                                style="{{ $isVendorType ? 'display: none;' : '' }}">
                                 <label class="form-label fw-semibold">
                                     Role <span class="text-danger">*</span>
                                 </label>
@@ -82,7 +88,8 @@
                                         Super Admin role is protected and cannot be changed.
                                     </small>
                                 @else
-                                    <select name="role_id" class="form-select" required>
+                                    <select name="role_id" id="role_id" class="form-select"
+                                        {{ $isVendorType ? 'disabled' : 'required' }}>
                                         <option value="">-- Select Role --</option>
                                         @foreach ($roles as $role)
                                             <option value="{{ $role->id }}"
@@ -121,6 +128,28 @@
                                 </select>
                                 <small class="text-muted">
                                     Member-state users can update treaty signing and ratification status from their portal.
+                                </small>
+                            </div>
+
+                            {{-- VENDOR CATEGORY --}}
+                            <div class="col-md-6 mb-3" id="vendor-category-group"
+                                style="{{ $isVendorType ? '' : 'display: none;' }}">
+                                <label class="form-label fw-semibold">
+                                    Vendor Category
+                                </label>
+                                <select name="vendor_category" id="vendor_category" class="form-select"
+                                    {{ $user->role && $user->role->name === 'Super Admin' ? 'disabled' : '' }}
+                                    {{ $isVendorType ? '' : 'disabled' }}>
+                                    <option value="">-- Select Vendor Category --</option>
+                                    @foreach ($vendorCategories as $category)
+                                        <option value="{{ $category }}"
+                                            {{ old('vendor_category', $user->vendor_category) === $category ? 'selected' : '' }}>
+                                            {{ $category }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted">
+                                    Optional. Used to target vendor-group procurements.
                                 </small>
                             </div>
 
@@ -169,7 +198,7 @@
 
                             {{-- GOVERNANCE NODE --}}
                             <div class="col-md-6 mb-3 order-last" id="governance-node-group"
-                                style="{{ $isMemberStateType ? 'display: none;' : '' }}">
+                                style="{{ $isMemberStateType || $isVendorType ? 'display: none;' : '' }}">
                                 <label class="form-label fw-semibold" id="governance-node-label">
                                     Governance Node
                                 </label>
@@ -225,8 +254,12 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const userTypeSelect = document.getElementById('user_type');
+            const roleGroup = document.getElementById('role-group');
+            const roleSelect = document.getElementById('role_id');
             const governanceGroup = document.getElementById('governance-node-group');
             const governanceSelect = document.getElementById('governance_node_id');
+            const vendorCategoryGroup = document.getElementById('vendor-category-group');
+            const vendorCategorySelect = document.getElementById('vendor_category');
             const memberStateGroup = document.getElementById('member-state-group');
             const memberStateSelect = document.getElementById('member_state_id');
             const memberStatePreview = document.getElementById('member-state-preview');
@@ -265,11 +298,29 @@
 
             function toggleUserTypeFields() {
                 const isMemberState = userTypeSelect.value === 'member_state';
+                const isVendor = userTypeSelect.value === 'vendor';
 
-                governanceGroup.style.display = isMemberState ? 'none' : '';
+                if (roleGroup && roleSelect) {
+                    roleGroup.style.display = isVendor ? 'none' : '';
+                    roleSelect.required = !isVendor;
+                    roleSelect.disabled = isVendor;
+                    if (isVendor) {
+                        roleSelect.value = '';
+                    }
+                }
+
+                governanceGroup.style.display = (isMemberState || isVendor) ? 'none' : '';
                 governanceSelect.required = false;
-                if (isMemberState) {
+                if (isMemberState || isVendor) {
                     governanceSelect.value = '';
+                }
+
+                if (vendorCategoryGroup && vendorCategorySelect) {
+                    vendorCategoryGroup.style.display = isVendor ? '' : 'none';
+                    vendorCategorySelect.disabled = !isVendor;
+                    if (!isVendor) {
+                        vendorCategorySelect.value = '';
+                    }
                 }
 
                 memberStateGroup.style.display = isMemberState ? '' : 'none';

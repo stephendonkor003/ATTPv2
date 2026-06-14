@@ -9,13 +9,16 @@ use App\Models\Permission;
 use App\Models\GovernanceNode;
 use App\Models\GovernanceReportingLine;
 use App\Models\AuMemberState;
+use App\Models\VendorCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\UserAccountCreated;
+use App\Mail\VendorAccountCreated;
 use App\Mail\UserPasswordReset;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class UserAccessController extends Controller
@@ -41,27 +44,45 @@ class UserAccessController extends Controller
     /* ======================================================
      | CREATE USER
      ====================================================== */
-    public function create()
+    public function create(Request $request)
     {
         $roles = Role::orderBy('name')->get();
         $nodes = $this->availableNodes();
         $memberStates = AuMemberState::ordered()->get();
+        $vendorCategories = VendorCategory::where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name');
+        $defaultUserType = in_array($request->query('user_type'), $this->allowedUserTypes(), true)
+            ? $request->query('user_type')
+            : 'staff';
 
-        return view('system.users.create', compact('roles', 'nodes', 'memberStates'));
+        return view('system.users.create', compact('roles', 'nodes', 'memberStates', 'vendorCategories', 'defaultUserType'));
     }
 
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'name'    => 'required|string|max:255',
             'email'   => 'required|email|unique:users,email',
-            'role_id' => 'required|exists:roles,id',
-            'user_type' => 'required|in:admin,staff,member_state,vendor,funding_partner,think_tank,evaluator',
+            'role_id' => [
+                Rule::requiredIf(fn () => $request->input('user_type') !== 'vendor'),
+                'nullable',
+                'exists:roles,id',
+            ],
+            'user_type' => ['required', Rule::in($this->allowedUserTypes())],
+            'vendor_category' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::exists('vendor_categories', 'name')->where(fn ($query) => $query->where('is_active', true)),
+            ],
             'governance_node_id' => 'nullable|exists:myb_governance_nodes,id',
             'member_state_id' => 'nullable|required_if:user_type,member_state|exists:myb_au_member_states,id',
         ]);
 
-        if ($request->filled('governance_node_id')) {
+        $isVendor = $validated['user_type'] === 'vendor';
+
+        if (! $isVendor && $request->filled('governance_node_id')) {
             $this->assertNodeInScope((int) $request->governance_node_id);
         }
 
@@ -71,25 +92,34 @@ class UserAccessController extends Controller
             'name'                 => $request->name,
             'email'                => $request->email,
             'password'             => Hash::make($plainPassword),
-            'role_id'              => $request->role_id,
-            'governance_node_id'   => $request->input('governance_node_id'),
-            'member_state_id'      => $request->user_type === 'member_state' ? $request->input('member_state_id') : null,
-            'user_type'            => $request->user_type,
+            'role_id'              => $isVendor ? null : $request->role_id,
+            'governance_node_id'   => $isVendor ? null : $request->input('governance_node_id'),
+            'member_state_id'      => $validated['user_type'] === 'member_state' ? $request->input('member_state_id') : null,
+            'user_type'            => $validated['user_type'],
+            'vendor_category'      => $isVendor ? ($validated['vendor_category'] ?? null) : null,
             'must_change_password' => true,
         ]);
 
         $mailSent = $this->sendUserMailSafely(
             $user,
-            new UserAccountCreated($user, $plainPassword),
-            'User account created email could not be sent.',
+            $isVendor
+                ? new VendorAccountCreated($user, $plainPassword)
+                : new UserAccountCreated($user, $plainPassword),
+            $isVendor
+                ? 'Vendor account created email could not be sent.'
+                : 'User account created email could not be sent.',
             $plainPassword
         );
 
+        $redirectRoute = $isVendor && $request->user()?->can('vendor.manage')
+            ? 'vendors.index'
+            : 'system.users.index';
+
         return redirect()
-            ->route('system.users.index')
+            ->route($redirectRoute)
             ->with('success', $mailSent
-                ? 'User account created successfully.'
-                : "User account created successfully, but email delivery failed. Temporary password: {$plainPassword}");
+                ? ($isVendor ? 'Vendor account created successfully.' : 'User account created successfully.')
+                : (($isVendor ? 'Vendor account created successfully' : 'User account created successfully') . ", but email delivery failed. Temporary password: {$plainPassword}"));
     }
 
     /* ======================================================
@@ -101,8 +131,11 @@ class UserAccessController extends Controller
         $roles = Role::orderBy('name')->get();
         $nodes = $this->availableNodes();
         $memberStates = AuMemberState::ordered()->get();
+        $vendorCategories = VendorCategory::where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name');
 
-        return view('system.users.edit', compact('user', 'roles', 'nodes', 'memberStates'));
+        return view('system.users.edit', compact('user', 'roles', 'nodes', 'memberStates', 'vendorCategories'));
     }
 
     public function update(Request $request, User $user)
@@ -113,26 +146,39 @@ class UserAccessController extends Controller
 
         $this->assertUserInScope($user);
 
-        $request->validate([
+        $validated = $request->validate([
             'name'    => 'required|string|max:255',
             'email'   => 'required|email|unique:users,email,' . $user->id,
-            'role_id' => 'required|exists:roles,id',
-            'user_type' => 'required|in:admin,staff,member_state,vendor,funding_partner,think_tank,evaluator',
+            'role_id' => [
+                Rule::requiredIf(fn () => $request->input('user_type') !== 'vendor'),
+                'nullable',
+                'exists:roles,id',
+            ],
+            'user_type' => ['required', Rule::in($this->allowedUserTypes())],
+            'vendor_category' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::exists('vendor_categories', 'name')->where(fn ($query) => $query->where('is_active', true)),
+            ],
             'governance_node_id' => 'nullable|exists:myb_governance_nodes,id',
             'member_state_id' => 'nullable|required_if:user_type,member_state|exists:myb_au_member_states,id',
         ]);
 
-        if ($request->filled('governance_node_id')) {
+        $isVendor = $validated['user_type'] === 'vendor';
+
+        if (! $isVendor && $request->filled('governance_node_id')) {
             $this->assertNodeInScope((int) $request->governance_node_id);
         }
 
         $user->update([
             'name'    => $request->name,
             'email'   => $request->email,
-            'role_id' => $request->role_id,
-            'user_type' => $request->user_type,
-            'governance_node_id' => $request->input('governance_node_id'),
-            'member_state_id' => $request->user_type === 'member_state' ? $request->input('member_state_id') : null,
+            'role_id' => $isVendor ? null : $request->role_id,
+            'user_type' => $validated['user_type'],
+            'governance_node_id' => $isVendor ? null : $request->input('governance_node_id'),
+            'member_state_id' => $validated['user_type'] === 'member_state' ? $request->input('member_state_id') : null,
+            'vendor_category' => $isVendor ? ($validated['vendor_category'] ?? null) : null,
         ]);
 
         return redirect()
@@ -327,6 +373,9 @@ class UserAccessController extends Controller
         }
 
         $this->assertUserInScope($user);
+        if ($user->user_type === 'vendor') {
+            return back()->with('error', 'Vendor portal accounts do not use system roles.');
+        }
 
         $request->validate([
             'role_id' => 'required|exists:roles,id',
@@ -376,6 +425,11 @@ class UserAccessController extends Controller
         }
 
         return $this->descendantNodeIds($currentUser->governance_node_id);
+    }
+
+    private function allowedUserTypes(): array
+    {
+        return ['admin', 'staff', 'member_state', 'vendor', 'funding_partner', 'think_tank', 'evaluator'];
     }
 
     private function availableNodes()

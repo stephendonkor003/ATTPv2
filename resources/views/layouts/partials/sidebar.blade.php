@@ -1222,6 +1222,12 @@
                                     </a>
                                 </li>
                                 <li class="nxl-item">
+                                    <a href="{{ route('vendors.create') }}" class="nxl-link">
+                                        <i class="feather-user-plus me-2"></i>
+                                        Create Vendor
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
                                     <a href="{{ route('vendors.categories.index') }}" class="nxl-link">
                                         <i class="feather-tag me-2"></i>
                                         Vendor Categories

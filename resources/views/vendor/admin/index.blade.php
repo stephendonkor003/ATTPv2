@@ -13,6 +13,9 @@
                 <p class="text-muted mb-0">Upload, manage, and control vendor access.</p>
             </div>
             <div class="d-flex gap-2">
+                <a href="{{ route('vendors.create') }}" class="btn btn-primary btn-sm">
+                    <i class="feather-user-plus me-1"></i> Create Vendor
+                </a>
                 <a href="{{ route('vendors.categories.index') }}" class="btn btn-outline-secondary btn-sm">
                     <i class="feather-tag me-1"></i> Vendor Categories
                 </a>

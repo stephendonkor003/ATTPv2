@@ -5,10 +5,17 @@ namespace App\Http\Controllers\Vendor;
 use App\Exports\VendorTemplateExport;
 use App\Http\Controllers\Controller;
 use App\Imports\VendorImport;
+use App\Mail\VendorAccountCreated;
 use App\Models\User;
+use App\Models\VendorCategory;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Validators\ValidationException as ExcelValidationException;
+use Throwable;
 
 class VendorManagementController extends Controller
 {
@@ -24,6 +31,62 @@ class VendorManagementController extends Controller
             ->get();
 
         return view('vendor.admin.index', compact('vendors'));
+    }
+
+    public function create()
+    {
+        return view('system.users.create', [
+            'roles' => collect(),
+            'nodes' => collect(),
+            'memberStates' => collect(),
+            'vendorCategories' => VendorCategory::where('is_active', true)
+                ->orderBy('name')
+                ->pluck('name'),
+            'defaultUserType' => 'vendor',
+            'vendorCreateOnly' => true,
+            'formAction' => route('vendors.store'),
+            'cancelRoute' => route('vendors.index'),
+            'pageTitle' => 'Create Vendor',
+            'pageSubtitle' => 'Create a vendor portal account without assigning a system role.',
+            'backButtonText' => 'Back to Vendors',
+            'submitButtonText' => 'Create Vendor',
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'unique:users,email'],
+            'vendor_category' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::exists('vendor_categories', 'name')->where(fn ($query) => $query->where('is_active', true)),
+            ],
+        ]);
+
+        $plainPassword = str()->random(12);
+
+        $vendor = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($plainPassword),
+            'user_type' => 'vendor',
+            'role_id' => null,
+            'governance_node_id' => null,
+            'member_state_id' => null,
+            'vendor_category' => $validated['vendor_category'] ?? null,
+            'must_change_password' => true,
+        ]);
+
+        $mailSent = $this->sendVendorMailSafely($vendor, $plainPassword);
+
+        return redirect()
+            ->route('vendors.index')
+            ->with('success', $mailSent
+                ? 'Vendor account created successfully.'
+                : "Vendor account created successfully, but email delivery failed. Temporary password: {$plainPassword}");
     }
 
     public function template()
@@ -156,6 +219,32 @@ class VendorManagementController extends Controller
     {
         if ($vendor->user_type !== 'vendor') {
             abort(404);
+        }
+    }
+
+    private function sendVendorMailSafely(User $vendor, string $plainPassword): bool
+    {
+        try {
+            Mail::to($vendor->email)->send(new VendorAccountCreated($vendor, $plainPassword));
+
+            return true;
+        } catch (Throwable $exception) {
+            Log::warning('Vendor account created email could not be sent.', [
+                'vendor_id' => $vendor->id,
+                'email' => $vendor->email,
+                'mailer' => config('mail.default'),
+                'error' => $exception->getMessage(),
+            ]);
+
+            if (app()->environment(['local', 'testing'])) {
+                Log::info('Local development temporary vendor password fallback.', [
+                    'vendor_id' => $vendor->id,
+                    'email' => $vendor->email,
+                    'temporary_password' => $plainPassword,
+                ]);
+            }
+
+            return false;
         }
     }
 }

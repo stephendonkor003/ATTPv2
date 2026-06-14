@@ -114,6 +114,11 @@
                                             <i class="feather-shield me-1"></i>
                                             Super Admin
                                         </span>
+                                    @elseif ($user->user_type === 'vendor')
+                                        <span class="badge bg-primary-subtle text-primary px-3 py-1">
+                                            <i class="feather-briefcase me-1"></i>
+                                            Vendor Portal
+                                        </span>
                                     @else
                                         <form method="POST"
                                             action="{{ route('system.users.role.update', $user->id) }}">
