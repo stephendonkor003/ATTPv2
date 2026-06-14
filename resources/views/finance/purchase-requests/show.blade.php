@@ -7,6 +7,27 @@
             border-radius: 999px;
         }
 
+        .pr-line-items-card .table {
+            min-width: 900px;
+        }
+
+        .pr-line-items-card th {
+            color: #475569;
+            font-size: .74rem;
+            letter-spacing: 0;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .pr-line-items-card td {
+            vertical-align: middle;
+        }
+
+        .pr-line-items-card .deliverable-cell {
+            max-width: 340px;
+            white-space: normal;
+        }
+
         .pr-line-evidence-modal.show {
             background: rgba(16, 24, 40, .42);
             display: block;
@@ -194,7 +215,7 @@
         @endif
 
         <div class="row g-4 mt-1">
-            <div class="col-lg-7">
+            <div class="col-lg-7 order-1">
                 <div class="card shadow-sm">
                     <div class="card-body">
                         <h6 class="fw-bold mb-3">Summary</h6>
@@ -265,9 +286,12 @@
                     </div>
                 </div>
 
-                <div class="card shadow-sm mt-4">
+            </div>
+
+            <div class="col-12 order-3">
+                <div class="card shadow-sm pr-line-items-card">
                     <div class="card-body">
-                        <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
                             <div>
                                 <h6 class="fw-bold mb-1">Line Items from Purchase Request</h6>
                                 @if ($evidencePurchaseOrder)
@@ -280,22 +304,23 @@
                                     </div>
                                 @endif
                             </div>
+                            <span class="badge bg-light text-dark border align-self-start align-self-md-center">
+                                {{ $purchaseRequest->items->count() }} line {{ $purchaseRequest->items->count() === 1 ? 'item' : 'items' }}
+                            </span>
                         </div>
 
                         <div class="table-responsive">
-                            <table class="table table-sm align-middle">
+                            <table class="table table-sm align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>#</th>
-                                        <th class="text-center">Deliverable Check</th>
+                                        <th style="width: 52px;">#</th>
+                                        <th class="text-center" style="width: 145px;">Deliverable Check</th>
                                         <th>Category</th>
                                         <th>Resource Item</th>
                                         <th>Deliverable</th>
-                                        <th>Date</th>
-                                        <th>Evidence</th>
-                                        <th>Notes</th>
-                                        <th>Deliverable Date</th>
-                                        <th class="text-end">Amount</th>
+                                        <th style="width: 180px;">Evidence</th>
+                                        <th style="width: 150px;">Deliverable Date</th>
+                                        <th class="text-end" style="width: 160px;">Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -306,7 +331,7 @@
                                             $isConfirmed = (bool) $itemEvidence?->is_met;
                                         @endphp
                                         <tr>
-                                            <td>{{ $loop->iteration }}</td>
+                                            <td class="text-muted">{{ $loop->iteration }}</td>
                                             <td class="text-center">
                                                 @if ($evidencePurchaseOrder && $canManageLineItemEvidence)
                                                     <input type="checkbox"
@@ -329,13 +354,12 @@
                                             </td>
                                             <td>{{ $item->resourceCategory?->name ?? '—' }}</td>
                                             <td>{{ $item->resource?->name ?? '—' }}</td>
-                                            <td>
+                                            <td class="deliverable-cell">
                                                 <div class="fw-semibold">{{ $item->milestone ?: ($item->deliverable?->title ?? '—') }}</div>
                                                 @if ($item->deliverable?->procurement)
                                                     <div class="small text-muted">{{ $item->deliverable->procurement->reference_no ?? $item->deliverable->procurement->title }}</div>
                                                 @endif
                                             </td>
-                                            <td>{{ $itemEvidence?->deliverable_date?->format('Y-m-d') ?? '—' }}</td>
                                             <td>
                                                 @if ($evidencePurchaseOrder && $canManageLineItemEvidence)
                                                     <button type="button"
@@ -359,7 +383,6 @@
                                                     </div>
                                                 @endif
                                             </td>
-                                            <td>{{ $item->observations ?? $item->object_type ?? '—' }}</td>
                                             <td>{{ $item->milestone_date?->format('Y-m-d') ?? '—' }}</td>
                                             <td class="text-end fw-semibold">
                                                 {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
@@ -370,7 +393,7 @@
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <th colspan="9" class="text-end">Total</th>
+                                        <th colspan="7" class="text-end">Total</th>
                                         <th class="text-end">
                                             {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
                                             {{ number_format((float) $purchaseRequest->total_amount, 2) }}
@@ -383,7 +406,7 @@
                 </div>
             </div>
 
-            <div class="col-lg-5">
+            <div class="col-lg-5 order-2">
                 <div class="card shadow-sm">
                     <div class="card-body">
                         <h6 class="fw-bold mb-3">Year Contributions</h6>
