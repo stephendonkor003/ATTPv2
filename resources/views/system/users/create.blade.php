@@ -18,6 +18,112 @@
 
 @section('title', $pageTitle)
 
+@push('styles')
+    <style>
+        .vendor-conversion-modal {
+            z-index: 2050 !important;
+        }
+
+        .vendor-conversion-modal .modal-dialog {
+            max-width: min(680px, calc(100vw - 32px));
+        }
+
+        .vendor-conversion-modal .modal-content {
+            border: 0;
+            border-radius: 10px;
+            background: #ffffff;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.32);
+            overflow: hidden;
+        }
+
+        .vendor-conversion-modal .modal-header {
+            align-items: flex-start;
+            gap: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #fff7ed;
+            padding: 18px 20px;
+        }
+
+        .vendor-conversion-modal .modal-icon {
+            width: 42px;
+            height: 42px;
+            flex: 0 0 42px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #92400e;
+            background: #fed7aa;
+            font-size: 1.2rem;
+        }
+
+        .vendor-conversion-modal .modal-title {
+            color: #0f172a;
+            font-size: 1.08rem;
+            font-weight: 800;
+            line-height: 1.25;
+        }
+
+        .vendor-conversion-modal .modal-subtitle {
+            color: #475569;
+            font-size: 0.86rem;
+            margin-top: 4px;
+        }
+
+        .vendor-conversion-modal .modal-body {
+            padding: 20px;
+            color: #334155;
+            font-size: 0.94rem;
+            line-height: 1.55;
+        }
+
+        .vendor-conversion-modal .account-summary {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 14px 16px;
+        }
+
+        .vendor-conversion-modal .account-summary-label {
+            color: #64748b;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .vendor-conversion-modal .account-summary-value {
+            color: #0f172a;
+            font-weight: 700;
+            margin-top: 3px;
+        }
+
+        .vendor-conversion-modal .conversion-impact {
+            margin: 14px 0 0;
+            padding-left: 18px;
+        }
+
+        .vendor-conversion-modal .conversion-impact li + li {
+            margin-top: 6px;
+        }
+
+        .vendor-conversion-modal .modal-footer {
+            border-top: 1px solid #e2e8f0;
+            background: #f8fafc;
+            padding: 14px 20px;
+        }
+
+        .vendor-conversion-modal + .modal-backdrop,
+        .modal-backdrop.vendor-conversion-backdrop {
+            z-index: 2040 !important;
+            background-color: #0f172a;
+            opacity: 0.52 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+    </style>
+@endpush
+
 @section('content')
     <main class="nxl-container">
         <div class="nxl-content">
@@ -232,15 +338,23 @@
             </form>
 
             @if ($vendorConversionPrompt)
-                <div class="modal fade" id="vendorConversionModal" tabindex="-1"
+                <div class="modal fade vendor-conversion-modal" id="vendorConversionModal" tabindex="-1"
                     aria-labelledby="vendorConversionModalLabel" aria-hidden="true" data-bs-backdrop="static"
                     data-bs-keyboard="false">
                     <div class="modal-dialog modal-dialog-centered">
                         <div class="modal-content">
-                            <div class="modal-header bg-warning-subtle">
-                                <h5 class="modal-title" id="vendorConversionModalLabel">
-                                    Existing Back-Office Account Found
-                                </h5>
+                            <div class="modal-header">
+                                <span class="modal-icon">
+                                    <i class="feather-alert-triangle"></i>
+                                </span>
+                                <div class="flex-grow-1">
+                                    <h5 class="modal-title" id="vendorConversionModalLabel">
+                                        Existing Back-Office Account Found
+                                    </h5>
+                                    <div class="modal-subtitle">
+                                        Confirm before changing this user's access type.
+                                    </div>
+                                </div>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body">
@@ -248,21 +362,24 @@
                                     The email <strong>{{ $vendorConversionPrompt['email'] }}</strong> already belongs to
                                     <strong>{{ $vendorConversionPrompt['name'] }}</strong>.
                                 </p>
-                                <div class="border rounded p-3 bg-light mb-3">
-                                    <div class="small text-muted">Current account</div>
-                                    <div class="fw-semibold">
+                                <div class="account-summary mb-3">
+                                    <div class="account-summary-label">Current account</div>
+                                    <div class="account-summary-value">
                                         {{ $vendorConversionPrompt['user_type'] }}
                                         @if (!empty($vendorConversionPrompt['role']))
-                                            · {{ $vendorConversionPrompt['role'] }}
+                                            - {{ $vendorConversionPrompt['role'] }}
                                         @endif
                                     </div>
                                 </div>
-                                <p class="mb-0">
-                                    Do you want to convert this back-office user into a vendor account? This will remove
-                                    their system role, governance scope, and member-state link, then grant vendor portal
-                                    access. The user will keep their existing password. You can revert this later from
-                                    Edit User by selecting a non-vendor user type and assigning a role.
+                                <p class="mb-2">
+                                    Do you want to convert this back-office user into a vendor account?
                                 </p>
+                                <ul class="conversion-impact">
+                                    <li>System role, governance scope, and member-state link will be removed.</li>
+                                    <li>Vendor portal access will be granted.</li>
+                                    <li>The user will keep their existing password.</li>
+                                    <li>You can revert this later from Edit User by choosing a non-vendor user type and assigning a role.</li>
+                                </ul>
                             </div>
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">
@@ -377,9 +494,21 @@
 
             if (vendorConversionModalEl) {
                 const showConversionPrompt = () => {
+                    if (vendorConversionModalEl.parentElement !== document.body) {
+                        document.body.appendChild(vendorConversionModalEl);
+                    }
+
                     if (window.bootstrap?.Modal) {
-                        const modal = new bootstrap.Modal(vendorConversionModalEl);
+                        const modal = new bootstrap.Modal(vendorConversionModalEl, {
+                            backdrop: 'static',
+                            keyboard: false,
+                        });
                         modal.show();
+
+                        window.requestAnimationFrame(() => {
+                            document.querySelector('.modal-backdrop:last-child')
+                                ?.classList.add('vendor-conversion-backdrop');
+                        });
                         return;
                     }
 
