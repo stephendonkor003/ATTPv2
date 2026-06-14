@@ -49,7 +49,10 @@ class ProcurementPurchaseOrderController extends Controller
             ->with([
                 'lineItemEvidence',
                 'disbursements',
+                'purchaseRequest.programFunding.program',
                 'purchaseRequest.items',
+                'budgetCommitment.programFunding.program',
+                'budgetCommitment.purchaseRequest.programFunding.program',
                 'budgetCommitment.purchaseRequest.items',
             ])
             ->get();
@@ -82,6 +85,7 @@ class ProcurementPurchaseOrderController extends Controller
         $purchaseOrderValueTotals['item_total_amount'] = round($purchaseOrderValueTotals['item_total_amount'], 2);
         $purchaseOrderValueTotals['item_paid_amount'] = round($purchaseOrderValueTotals['item_paid_amount'], 2);
         $purchaseOrderValueTotals['item_pending_amount'] = round($purchaseOrderValueTotals['item_pending_amount'], 2);
+        $purchaseOrderValueTotals['currency'] = $this->summaryCurrencyFor($summaryPurchaseOrders);
 
         $approvedPurchaseOrderCommitmentTotal = $purchaseOrderValueTotals['approved_amount'];
         $totalDisbursedAmount = (float) ProcurementDisbursement::query()
@@ -97,7 +101,10 @@ class ProcurementPurchaseOrderController extends Controller
                 'subActivity',
                 'invoice',
                 'lineItemEvidence',
+                'budgetCommitment.programFunding.program',
+                'budgetCommitment.purchaseRequest.programFunding.program',
                 'budgetCommitment.purchaseRequest.items',
+                'purchaseRequest.programFunding.program',
                 'purchaseRequest.items',
                 'disbursements',
             ])
@@ -993,6 +1000,21 @@ class ProcurementPurchaseOrderController extends Controller
         ]);
 
         return $commitment->resolved_currency;
+    }
+
+    private function summaryCurrencyFor($records): string
+    {
+        $currencies = collect($records)
+            ->map(fn ($record) => $record->resolved_currency ?? null)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($currencies->count() === 1) {
+            return (string) $currencies->first();
+        }
+
+        return $currencies->isEmpty() ? 'USD' : 'Mixed';
     }
 
     private function purchaseRequestCreateOption(PurchaseRequest $purchaseRequest, ?ProcurementPurchaseOrder $purchaseOrder = null): ?array

@@ -93,6 +93,9 @@
             $itemTotalCount = (int) ($purchaseOrderValueTotals['total_items'] ?? 0);
             $itemPaidCount = (int) ($purchaseOrderValueTotals['paid_items'] ?? 0);
             $itemPendingCount = (int) ($purchaseOrderValueTotals['pending_items'] ?? 0);
+            $summaryCurrency = $purchaseOrderValueTotals['currency'] ?? 'USD';
+            $cardMoney = fn ($value) => trim($summaryCurrency . ' ' . number_format((float) $value, 2));
+            $currencyNote = $summaryCurrency === 'Mixed' ? 'Multiple program currencies' : 'Program currency';
         @endphp
 
         <div class="row g-3 mb-4">
@@ -107,16 +110,16 @@
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Approved PO Commitment Totals</div>
                     <div class="stat-value">
-                        {{ number_format((float) $approvedPurchaseOrderCommitmentTotal, 2) }}
+                        {{ $cardMoney($approvedPurchaseOrderCommitmentTotal) }}
                     </div>
-                    <div class="text-muted small">Line items used where available</div>
+                    <div class="text-muted small">Line items used where available | {{ $currencyNote }}</div>
                 </div>
             </div>
             <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Disbursement Amount</div>
                     <div class="stat-value">
-                        {{ number_format((float) $totalDisbursedAmount, 2) }}
+                        {{ $cardMoney($totalDisbursedAmount) }}
                     </div>
                     <div class="text-muted small">Actual cash paid against POs</div>
                 </div>
@@ -125,7 +128,7 @@
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Paid / Confirmed Items</div>
                     <div class="stat-value">
-                        {{ number_format((float) ($purchaseOrderValueTotals['item_paid_amount'] ?? 0), 2) }}
+                        {{ $cardMoney($purchaseOrderValueTotals['item_paid_amount'] ?? 0) }}
                     </div>
                     <div class="text-muted small">{{ $itemPaidCount }} of {{ $itemTotalCount }} line items</div>
                 </div>
@@ -134,7 +137,7 @@
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Unpaid Item Value</div>
                     <div class="stat-value">
-                        {{ number_format((float) ($purchaseOrderValueTotals['item_pending_amount'] ?? 0), 2) }}
+                        {{ $cardMoney($purchaseOrderValueTotals['item_pending_amount'] ?? 0) }}
                     </div>
                     <div class="text-muted small">{{ $itemPendingCount }} line items pending payment</div>
                 </div>

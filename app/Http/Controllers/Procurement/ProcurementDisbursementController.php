@@ -13,6 +13,7 @@ use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\PurchaseRequestItem;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
@@ -42,7 +43,16 @@ class ProcurementDisbursementController extends Controller
             ->whereNotNull('paid_at')
             ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
 
+        $summaryCurrencyDisbursements = (clone $baseQuery)
+            ->with([
+                'purchaseOrder.purchaseRequest.programFunding.program',
+                'purchaseOrder.budgetCommitment.programFunding.program',
+                'purchaseOrder.budgetCommitment.purchaseRequest.programFunding.program',
+            ])
+            ->get(['id', 'purchase_order_id', 'currency']);
+
         $disbursementSummary = [
+            'currency' => $this->summaryCurrencyFor($summaryCurrencyDisbursements),
             'total_receipts' => (clone $baseQuery)->count(),
             'total_paid_amount' => (float) (clone $paidQuery)->sum('amount'),
             'this_month_paid_amount' => (float) (clone $paidQuery)
@@ -243,6 +253,7 @@ class ProcurementDisbursementController extends Controller
             'purchaseOrders'     => $purchaseOrders,
             'purchaseOrdersData' => $purchaseOrdersData,
             'paymentMethods'     => $paymentMethods,
+            'statusOptions'      => $this->disbursementStatusOptions(),
         ]);
     }
 
@@ -250,13 +261,15 @@ class ProcurementDisbursementController extends Controller
     {
         $data = $request->validate([
             'purchase_order_id'  => 'required|exists:procurement_purchase_orders,id',
-            'deliverable_id'     => 'nullable|exists:procurement_deliverables,id',
-            'purchase_request_item_id' => 'required|exists:myb_purchase_request_items,id',
-            'amount'             => 'required|numeric|min:0.01',
-            'payment_method'     => 'required|string|max:100',
-            'transfer_reference' => 'nullable|string|max:255',
-            'paid_at'            => 'required|date',
-            'notes'              => 'nullable|string|max:2000',
+            'payments' => ['required', 'array', 'min:1', 'max:50'],
+            'payments.*.reference_no' => ['nullable', 'string', 'max:100'],
+            'payments.*.purchase_request_item_id' => ['required', 'exists:myb_purchase_request_items,id'],
+            'payments.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'payments.*.payment_method' => ['required', 'string', 'max:100'],
+            'payments.*.transfer_reference' => ['nullable', 'string', 'max:255'],
+            'payments.*.status' => ['nullable', 'string', 'in:' . implode(',', array_keys($this->disbursementStatusOptions()))],
+            'payments.*.paid_at' => ['required', 'date'],
+            'payments.*.notes' => ['nullable', 'string', 'max:2000'],
             'item_evidence' => ['nullable', 'array'],
             'item_evidence.*.is_met' => ['nullable', 'boolean'],
             'item_evidence.*.deliverable_date' => ['nullable', 'date'],
@@ -291,74 +304,43 @@ class ProcurementDisbursementController extends Controller
             ->findOrFail($data['purchase_order_id']);
         $this->assertPurchaseOrderInScope($purchaseOrder);
 
-        $selectedItem = $this->lineItemForPurchaseOrder($purchaseOrder, $data['purchase_request_item_id']);
-        if (! $selectedItem) {
-            throw ValidationException::withMessages([
-                'purchase_request_item_id' => 'Select a purchase order line item that belongs to this purchase order.',
-            ]);
-        }
-
-        $selectedDeliverableId = $selectedItem->deliverable_id ? (string) $selectedItem->deliverable_id : null;
-        $lineRemaining = $this->lineItemRemainingAmount($purchaseOrder, $selectedItem);
-        $poRemaining = $purchaseOrder->remainingAmount();
-        $maxPayableAmount = round(min($lineRemaining, $poRemaining), 2);
-
-        if ($maxPayableAmount <= 0) {
-            throw ValidationException::withMessages([
-                'purchase_request_item_id' => 'The selected line item has already been fully paid.',
-            ]);
-        }
-
-        if ((float) $data['amount'] > $maxPayableAmount) {
-            throw ValidationException::withMessages([
-                'amount' => 'Disbursement amount exceeds the selected line item balance of ' . number_format($maxPayableAmount, 2) . ' ' . $purchaseOrder->resolved_currency . '.',
-            ]);
-        }
+        $paymentRows = $this->validatedPaymentRows($purchaseOrder, $data['payments']);
 
         $this->storeLineItemEvidence($request, $purchaseOrder);
 
-        $disbursement = ProcurementDisbursement::create([
-            'purchase_order_id'  => $purchaseOrder->id,
-            'purchase_request_item_id' => $selectedItem->id,
-            'deliverable_id'     => $selectedDeliverableId,
-            'procurement_id'     => $purchaseOrder->procurement_id,
-            'vendor_id'          => $purchaseOrder->vendor_id,
-            'sub_activity_id'    => $purchaseOrder->sub_activity_id,
-            'governance_node_id' => $purchaseOrder->governance_node_id,
-            'consortium_id'      => $purchaseOrder->consortium_id,
-            'think_tank_member_id' => $purchaseOrder->think_tank_member_id,
-            'reference_no'       => ProcurementDisbursement::generateReference(),
-            'amount'             => $data['amount'],
-            'currency'           => $purchaseOrder->resolved_currency,
-            'payment_method'     => $data['payment_method'],
-            'transfer_reference' => $data['transfer_reference'] ?? null,
-            'status'             => 'completed',
-            'paid_at'            => $data['paid_at'],
-            'created_by'         => auth()->id(),
-            'notes'              => $data['notes'] ?? null,
-        ]);
+        $disbursements = collect();
 
-        $this->syncPurchaseOrderStatus($purchaseOrder);
+        DB::transaction(function () use ($purchaseOrder, $paymentRows, &$disbursements) {
+            foreach ($paymentRows as $paymentRow) {
+                $disbursement = ProcurementDisbursement::create($this->disbursementPayloadForPaymentRow($purchaseOrder, $paymentRow));
+                $disbursements->push($disbursement);
+            }
 
-        ProcurementAuditLog::create([
-            'user_id' => auth()->id(),
-            'action' => 'Created disbursement',
-            'procurement_id' => $purchaseOrder->procurement_id,
-            'metadata' => [
-                'purchase_order_id' => $purchaseOrder->id,
-                'disbursement_id' => $disbursement->id,
-                'purchase_request_item_id' => $disbursement->purchase_request_item_id,
-                'deliverable_id' => $disbursement->deliverable_id,
-                'amount' => $disbursement->amount,
-            ],
-            'created_at' => now(),
-        ]);
+            $this->syncPurchaseOrderStatus($purchaseOrder);
 
-        $this->sendReceipt($disbursement);
+            ProcurementAuditLog::create([
+                'user_id' => auth()->id(),
+                'action' => $disbursements->count() === 1 ? 'Created disbursement' : 'Created disbursement batch',
+                'procurement_id' => $purchaseOrder->procurement_id,
+                'metadata' => [
+                    'purchase_order_id' => $purchaseOrder->id,
+                    'disbursement_ids' => $disbursements->pluck('id')->all(),
+                    'line_item_ids' => $disbursements->pluck('purchase_request_item_id')->all(),
+                    'amount' => round($disbursements->sum(fn (ProcurementDisbursement $row) => (float) $row->amount), 2),
+                ],
+                'created_at' => now(),
+            ]);
+        });
+
+        $disbursements->each(fn (ProcurementDisbursement $row) => $this->sendReceipt($row));
+
+        $message = $disbursements->count() === 1
+            ? 'Disbursement recorded and receipt sent.'
+            : $disbursements->count() . ' disbursements recorded and receipts sent.';
 
         return redirect()
-            ->route('procurement.disbursements.show', $disbursement)
-            ->with('success', 'Disbursement recorded and receipt sent.');
+            ->route('procurement.disbursements.index')
+            ->with('success', $message);
     }
 
     public function show(ProcurementDisbursement $disbursement)
@@ -410,7 +392,10 @@ class ProcurementDisbursementController extends Controller
         $disbursement->load([
             'purchaseOrder.procurement',
             'purchaseOrder.vendor',
-            'purchaseOrder.disbursements.purchaseRequestItem',
+            'purchaseOrder.disbursements.purchaseRequestItem.resourceCategory',
+            'purchaseOrder.disbursements.purchaseRequestItem.resource',
+            'purchaseOrder.disbursements.purchaseRequestItem.deliverable.procurement',
+            'purchaseOrder.disbursements.deliverable',
             'purchaseOrder.deliverables.procurement',
             'purchaseOrder.purchaseRequest.items.resourceCategory',
             'purchaseOrder.purchaseRequest.items.resource',
@@ -434,27 +419,33 @@ class ProcurementDisbursementController extends Controller
         $this->assertPurchaseOrderInScope($purchaseOrder);
 
         $lineItems = $this->sourceLineItemsForPurchaseOrder($purchaseOrder);
-        $selectedLineItem = $disbursement->purchaseRequestItem
-            ?: $this->legacyLineItemForDisbursement($purchaseOrder, $disbursement);
-        $lineItemPaymentSummaries = $this->lineItemPaymentSummariesForPurchaseOrder($purchaseOrder, $disbursement);
+        $editableDisbursements = $purchaseOrder->disbursements
+            ->sortBy(fn (ProcurementDisbursement $row) => $row->paid_at?->timestamp ?? $row->created_at?->timestamp ?? 0)
+            ->values();
+        $excludedDisbursementIds = $editableDisbursements
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+        $lineItemPaymentSummaries = $this->lineItemPaymentSummariesForPurchaseOrderExcludingIds($purchaseOrder, $excludedDisbursementIds);
+        $lineItemsData = $this->lineItemsDataForEditor($purchaseOrder, $lineItemPaymentSummaries);
+        $paymentRows = $this->paymentRowsForEditView($editableDisbursements);
         $paymentMethods = $this->paymentMethods();
         $statusOptions = $this->disbursementStatusOptions();
-        $maxPayingAmount = $selectedLineItem
-            ? $this->editableDisbursementMaxAmount($purchaseOrder, $disbursement, $selectedLineItem, $disbursement->status ?? 'completed')
-            : 0.0;
-        $currentStatusCountsAsPaid = $this->statusCountsAgainstPurchaseOrder($disbursement->status ?? 'completed');
-        $paidExcludingCurrent = $this->purchaseOrderPaidAmountExcluding($purchaseOrder, $currentStatusCountsAsPaid ? $disbursement : null);
+        $paidExcludingEditable = $this->purchaseOrderPaidAmountExcludingIds($purchaseOrder, $excludedDisbursementIds);
+        $editablePoBalance = round(max((float) ($purchaseOrder->amount ?? 0) - $paidExcludingEditable, 0), 2);
 
         return view('procurement.disbursements.edit', compact(
             'disbursement',
             'purchaseOrder',
             'lineItems',
-            'selectedLineItem',
+            'editableDisbursements',
             'lineItemPaymentSummaries',
+            'lineItemsData',
+            'paymentRows',
             'paymentMethods',
             'statusOptions',
-            'maxPayingAmount',
-            'paidExcludingCurrent'
+            'paidExcludingEditable',
+            'editablePoBalance'
         ));
     }
 
@@ -484,65 +475,112 @@ class ProcurementDisbursementController extends Controller
 
         $this->assertPurchaseOrderInScope($purchaseOrder);
 
-        $statusOptions = array_keys($this->disbursementStatusOptions());
-
         $data = $request->validate([
-            'purchase_request_item_id' => 'required|exists:myb_purchase_request_items,id',
-            'amount'             => 'required|numeric|min:0.01',
-            'payment_method'     => 'required|string|max:100',
-            'transfer_reference' => 'nullable|string|max:255',
-            'status'             => 'required|string|in:' . implode(',', $statusOptions),
-            'paid_at'            => 'required|date',
-            'notes'              => 'nullable|string|max:2000',
+            'payments' => ['nullable', 'array', 'max:50'],
+            'payments.*.id' => ['nullable', 'exists:procurement_disbursements,id'],
+            'payments.*.reference_no' => ['nullable', 'string', 'max:100'],
+            'payments.*.purchase_request_item_id' => ['required', 'exists:myb_purchase_request_items,id'],
+            'payments.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'payments.*.payment_method' => ['required', 'string', 'max:100'],
+            'payments.*.transfer_reference' => ['nullable', 'string', 'max:255'],
+            'payments.*.status' => ['required', 'string', 'in:' . implode(',', array_keys($this->disbursementStatusOptions()))],
+            'payments.*.paid_at' => ['required', 'date'],
+            'payments.*.notes' => ['nullable', 'string', 'max:2000'],
+            'delete_payment_ids' => ['nullable', 'array'],
+            'delete_payment_ids.*' => ['nullable', 'exists:procurement_disbursements,id'],
         ]);
 
-        $selectedItem = $this->lineItemForPurchaseOrder($purchaseOrder, $data['purchase_request_item_id']);
-        if (! $selectedItem) {
+        $editableDisbursements = $purchaseOrder->disbursements->values();
+        $editableIds = $editableDisbursements
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+        $deleteIds = collect($data['delete_payment_ids'] ?? [])
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        if ($deleteIds->diff($editableIds)->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'purchase_request_item_id' => 'Select a purchase order line item that belongs to this purchase order.',
+                'delete_payment_ids' => 'One or more payment rows cannot be removed from this purchase order.',
             ]);
         }
 
-        $maxAmount = $this->editableDisbursementMaxAmount($purchaseOrder, $disbursement, $selectedItem, $data['status']);
-        if ((float) $data['amount'] > $maxAmount) {
+        $paymentInput = array_values($data['payments'] ?? []);
+        if (empty($paymentInput) && $deleteIds->isEmpty()) {
             throw ValidationException::withMessages([
-                'amount' => 'Disbursement amount exceeds the selected line item balance of ' . number_format($maxAmount, 2) . ' ' . $purchaseOrder->resolved_currency . '.',
+                'payments' => 'Add at least one payment line or remove an existing payment.',
             ]);
         }
 
-        $before = $disbursement->only([
-            'purchase_request_item_id',
-            'deliverable_id',
-            'amount',
-            'payment_method',
-            'transfer_reference',
-            'status',
-            'paid_at',
-            'notes',
-        ]);
+        $paymentRows = $this->validatedPaymentRows($purchaseOrder, $paymentInput, $editableIds, $editableIds);
+        $activePaymentIds = collect($paymentRows)
+            ->pluck('id')
+            ->filter()
+            ->map(fn ($id) => (string) $id);
 
-        $disbursement->update([
-            'purchase_request_item_id' => $selectedItem->id,
-            'deliverable_id'     => $selectedItem->deliverable_id,
-            'amount'             => $data['amount'],
-            'payment_method'     => $data['payment_method'],
-            'transfer_reference' => $data['transfer_reference'] ?? null,
-            'status'             => $data['status'],
-            'paid_at'            => $data['paid_at'],
-            'notes'              => $data['notes'] ?? null,
-        ]);
+        if ($activePaymentIds->intersect($deleteIds)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'payments' => 'A payment row cannot be removed and updated at the same time.',
+            ]);
+        }
 
-        $this->syncPurchaseOrderStatus($purchaseOrder);
+        $before = $editableDisbursements
+            ->map(fn (ProcurementDisbursement $row) => $row->only([
+                'id',
+                'reference_no',
+                'purchase_request_item_id',
+                'deliverable_id',
+                'amount',
+                'payment_method',
+                'transfer_reference',
+                'status',
+                'paid_at',
+                'notes',
+            ]))
+            ->values()
+            ->all();
 
-        ProcurementAuditLog::create([
-            'user_id' => auth()->id(),
-            'action' => 'Updated disbursement',
-            'procurement_id' => $purchaseOrder->procurement_id,
-            'metadata' => [
-                'purchase_order_id' => $purchaseOrder->id,
-                'disbursement_id' => $disbursement->id,
-                'before' => $before,
-                'after' => $disbursement->fresh()->only([
+        $updatedDisbursements = collect();
+        $createdDisbursements = collect();
+
+        DB::transaction(function () use (
+            $purchaseOrder,
+            $editableDisbursements,
+            $deleteIds,
+            $paymentRows,
+            $before,
+            &$updatedDisbursements,
+            &$createdDisbursements
+        ) {
+            $editableById = $editableDisbursements->keyBy(fn (ProcurementDisbursement $row) => (string) $row->id);
+
+            foreach ($deleteIds as $deleteId) {
+                $editableById->get((string) $deleteId)?->delete();
+            }
+
+            foreach ($paymentRows as $paymentRow) {
+                $existing = filled($paymentRow['id'] ?? null)
+                    ? $editableById->get((string) $paymentRow['id'])
+                    : null;
+
+                $payload = $this->disbursementPayloadForPaymentRow($purchaseOrder, $paymentRow, $existing);
+
+                if ($existing) {
+                    $existing->update($payload);
+                    $updatedDisbursements->push($existing->fresh());
+                } else {
+                    $createdDisbursements->push(ProcurementDisbursement::create($payload));
+                }
+            }
+
+            $this->syncPurchaseOrderStatus($purchaseOrder);
+
+            $after = $purchaseOrder->disbursements()
+                ->get([
+                    'id',
+                    'reference_no',
                     'purchase_request_item_id',
                     'deliverable_id',
                     'amount',
@@ -551,14 +589,83 @@ class ProcurementDisbursementController extends Controller
                     'status',
                     'paid_at',
                     'notes',
-                ]),
-            ],
-            'created_at' => now(),
-        ]);
+                ])
+                ->map(fn (ProcurementDisbursement $row) => $row->toArray())
+                ->values()
+                ->all();
+
+            ProcurementAuditLog::create([
+                'user_id' => auth()->id(),
+                'action' => 'Updated disbursement batch',
+                'procurement_id' => $purchaseOrder->procurement_id,
+                'metadata' => [
+                    'purchase_order_id' => $purchaseOrder->id,
+                    'deleted_disbursement_ids' => $deleteIds->all(),
+                    'updated_disbursement_ids' => $updatedDisbursements->pluck('id')->all(),
+                    'created_disbursement_ids' => $createdDisbursements->pluck('id')->all(),
+                    'before' => $before,
+                    'after' => $after,
+                ],
+                'created_at' => now(),
+            ]);
+        });
+
+        $createdDisbursements->each(fn (ProcurementDisbursement $row) => $this->sendReceipt($row));
+
+        $freshDisbursement = ProcurementDisbursement::find($disbursement->id);
+        $redirectRoute = $freshDisbursement
+            ? route('procurement.disbursements.show', $freshDisbursement)
+            : route('procurement.disbursements.index');
+
+        return redirect($redirectRoute)
+            ->with('success', 'Disbursement payment lines updated.');
+    }
+
+    public function destroy(ProcurementDisbursement $disbursement)
+    {
+        $this->authorizeDisbursementDelete();
+        $this->assertDisbursementInScope($disbursement);
+
+        $disbursement->load('purchaseOrder');
+
+        $purchaseOrder = $disbursement->purchaseOrder;
+        if ($purchaseOrder) {
+            $this->assertPurchaseOrderInScope($purchaseOrder);
+        }
+
+        DB::transaction(function () use ($disbursement, $purchaseOrder) {
+            $metadata = [
+                'purchase_order_id' => $purchaseOrder?->id ?: $disbursement->purchase_order_id,
+                'disbursement_id' => $disbursement->id,
+                'reference_no' => $disbursement->reference_no,
+                'purchase_request_item_id' => $disbursement->purchase_request_item_id,
+                'deliverable_id' => $disbursement->deliverable_id,
+                'amount' => $disbursement->amount,
+                'currency' => $disbursement->resolved_currency,
+                'status' => $disbursement->status,
+                'paid_at' => $disbursement->paid_at?->toDateTimeString(),
+            ];
+
+            $procurementId = $disbursement->procurement_id ?: $purchaseOrder?->procurement_id;
+
+            $disbursement->delete();
+
+            if ($purchaseOrder) {
+                $this->syncPurchaseOrderStatus($purchaseOrder);
+            }
+
+            ProcurementAuditLog::create([
+                'user_id' => auth()->id(),
+                'action' => 'Deleted disbursement',
+                'procurement_id' => $procurementId,
+                'metadata' => $metadata,
+                'created_at' => now(),
+            ]);
+        });
 
         return redirect()
-            ->route('procurement.disbursements.show', $disbursement)
-            ->with('success', 'Disbursement updated.');
+            ->route('procurement.disbursements.index')
+            ->with('success', 'Disbursement deleted.');
     }
 
     public function pdf(ProcurementDisbursement $disbursement)
@@ -770,7 +877,16 @@ class ProcurementDisbursementController extends Controller
         ProcurementPurchaseOrder $purchaseOrder,
         ?ProcurementDisbursement $excludeDisbursement = null
     ) {
-        $paidAmountsByItem = $this->paidAmountsByLineItemForPurchaseOrder($purchaseOrder, $excludeDisbursement);
+        $excludeIds = $excludeDisbursement ? [(string) $excludeDisbursement->id] : [];
+
+        return $this->lineItemPaymentSummariesForPurchaseOrderExcludingIds($purchaseOrder, $excludeIds);
+    }
+
+    private function lineItemPaymentSummariesForPurchaseOrderExcludingIds(
+        ProcurementPurchaseOrder $purchaseOrder,
+        array $excludeDisbursementIds = []
+    ) {
+        $paidAmountsByItem = $this->paidAmountsByLineItemForPurchaseOrderExcludingIds($purchaseOrder, $excludeDisbursementIds);
 
         return $this->sourceLineItemsForPurchaseOrder($purchaseOrder)
             ->mapWithKeys(function (PurchaseRequestItem $item) use ($paidAmountsByItem) {
@@ -790,11 +906,22 @@ class ProcurementDisbursementController extends Controller
         ProcurementPurchaseOrder $purchaseOrder,
         ?ProcurementDisbursement $excludeDisbursement = null
     ) {
+        $excludeIds = $excludeDisbursement ? [(string) $excludeDisbursement->id] : [];
+
+        return $this->paidAmountsByLineItemForPurchaseOrderExcludingIds($purchaseOrder, $excludeIds);
+    }
+
+    private function paidAmountsByLineItemForPurchaseOrderExcludingIds(
+        ProcurementPurchaseOrder $purchaseOrder,
+        array $excludeDisbursementIds = []
+    ) {
         $purchaseOrder->loadMissing('disbursements');
+        $excludeDisbursementIds = collect($excludeDisbursementIds)
+            ->map(fn ($id) => (string) $id)
+            ->all();
 
         return $purchaseOrder->disbursements
-            ->reject(fn (ProcurementDisbursement $disbursement) => $excludeDisbursement
-                && (string) $disbursement->id === (string) $excludeDisbursement->id)
+            ->reject(fn (ProcurementDisbursement $disbursement) => in_array((string) $disbursement->id, $excludeDisbursementIds, true))
             ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->purchase_request_item_id
                 && $this->disbursementCountsAsPaid($disbursement))
             ->groupBy(fn (ProcurementDisbursement $disbursement) => (string) $disbursement->purchase_request_item_id)
@@ -817,11 +944,22 @@ class ProcurementDisbursementController extends Controller
         ProcurementPurchaseOrder $purchaseOrder,
         ?ProcurementDisbursement $excludeDisbursement = null
     ): float {
+        $excludeIds = $excludeDisbursement ? [(string) $excludeDisbursement->id] : [];
+
+        return $this->purchaseOrderPaidAmountExcludingIds($purchaseOrder, $excludeIds);
+    }
+
+    private function purchaseOrderPaidAmountExcludingIds(
+        ProcurementPurchaseOrder $purchaseOrder,
+        array $excludeDisbursementIds = []
+    ): float {
         $purchaseOrder->loadMissing('disbursements');
+        $excludeDisbursementIds = collect($excludeDisbursementIds)
+            ->map(fn ($id) => (string) $id)
+            ->all();
 
         return round($purchaseOrder->disbursements
-            ->reject(fn (ProcurementDisbursement $disbursement) => $excludeDisbursement
-                && (string) $disbursement->id === (string) $excludeDisbursement->id)
+            ->reject(fn (ProcurementDisbursement $disbursement) => in_array((string) $disbursement->id, $excludeDisbursementIds, true))
             ->filter(fn (ProcurementDisbursement $disbursement) => $this->disbursementCountsAsPaid($disbursement))
             ->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount), 2);
     }
@@ -844,10 +982,258 @@ class ProcurementDisbursementController extends Controller
         return round(max(min($lineEditableBalance, $poEditableBalance), 0), 2);
     }
 
+    private function lineItemsDataForEditor(ProcurementPurchaseOrder $purchaseOrder, $lineItemPaymentSummaries): array
+    {
+        return $this->sourceLineItemsForPurchaseOrder($purchaseOrder)
+            ->map(function (PurchaseRequestItem $item) use ($lineItemPaymentSummaries, $purchaseOrder) {
+                $summary = $lineItemPaymentSummaries->get((string) $item->id, [
+                    'paid_amount' => 0,
+                    'remaining_amount' => (float) ($item->amount ?? 0),
+                ]);
+
+                return [
+                    'id' => (string) $item->id,
+                    'label' => trim(($item->resource?->name ?? $item->resourceCategory?->name ?? 'Line item')
+                        . ($item->milestone ? ' | ' . $item->milestone : '')),
+                    'category' => $item->resourceCategory?->name ?: 'N/A',
+                    'resource' => $item->resource?->name ?: 'N/A',
+                    'deliverable_title' => $item->milestone ?: $item->deliverable?->title,
+                    'budget_code' => $item->budget_code,
+                    'amount' => round((float) ($item->amount ?? 0), 2),
+                    'base_paid_amount' => round((float) ($summary['paid_amount'] ?? 0), 2),
+                    'base_remaining_amount' => round((float) ($summary['remaining_amount'] ?? 0), 2),
+                    'currency' => $purchaseOrder->resolved_currency,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function paymentRowsForEditView($editableDisbursements): array
+    {
+        return collect($editableDisbursements)
+            ->map(fn (ProcurementDisbursement $row) => [
+                'id' => (string) $row->id,
+                'reference_no' => $row->reference_no,
+                'purchase_request_item_id' => $row->purchase_request_item_id ? (string) $row->purchase_request_item_id : null,
+                'amount' => number_format((float) $row->amount, 2, '.', ''),
+                'payment_method' => $row->payment_method,
+                'transfer_reference' => $row->transfer_reference,
+                'status' => $row->status ?: 'completed',
+                'paid_at' => $row->paid_at?->format('Y-m-d') ?? now()->format('Y-m-d'),
+                'notes' => $row->notes,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function validatedPaymentRows(
+        ProcurementPurchaseOrder $purchaseOrder,
+        array $payments,
+        array $excludeDisbursementIds = [],
+        array $allowedExistingIds = []
+    ): array {
+        if (empty($payments)) {
+            return [];
+        }
+
+        $lineItems = $this->sourceLineItemsForPurchaseOrder($purchaseOrder)
+            ->mapWithKeys(fn (PurchaseRequestItem $item) => [(string) $item->id => $item]);
+
+        if ($lineItems->isEmpty()) {
+            throw ValidationException::withMessages([
+                'payments' => 'This purchase order does not have purchase request item lines to pay.',
+            ]);
+        }
+
+        $statusOptions = array_keys($this->disbursementStatusOptions());
+        $allowedExistingIds = collect($allowedExistingIds)->map(fn ($id) => (string) $id)->all();
+        $activeExistingIds = [];
+        $referenceLookup = [];
+        $normalized = [];
+
+        foreach ($payments as $index => $payment) {
+            $existingId = trim((string) ($payment['id'] ?? ''));
+            if ($existingId !== '') {
+                if (! empty($allowedExistingIds) && ! in_array($existingId, $allowedExistingIds, true)) {
+                    throw ValidationException::withMessages([
+                        "payments.{$index}.id" => 'This payment row does not belong to the purchase order being edited.',
+                    ]);
+                }
+
+                if (in_array($existingId, $activeExistingIds, true)) {
+                    throw ValidationException::withMessages([
+                        "payments.{$index}.id" => 'The same disbursement row was submitted more than once.',
+                    ]);
+                }
+
+                $activeExistingIds[] = $existingId;
+            }
+
+            $lineItemId = (string) ($payment['purchase_request_item_id'] ?? '');
+            $lineItem = $lineItems->get($lineItemId);
+            if (! $lineItem) {
+                throw ValidationException::withMessages([
+                    "payments.{$index}.purchase_request_item_id" => 'Select a purchase order line item that belongs to this purchase order.',
+                ]);
+            }
+
+            $status = strtolower(trim((string) ($payment['status'] ?? 'completed')));
+            if (! in_array($status, $statusOptions, true)) {
+                throw ValidationException::withMessages([
+                    "payments.{$index}.status" => 'Select a valid payment status.',
+                ]);
+            }
+
+            $amount = round((float) ($payment['amount'] ?? 0), 2);
+            $lineAmount = round((float) ($lineItem->amount ?? 0), 2);
+            if ($amount > $lineAmount) {
+                throw ValidationException::withMessages([
+                    "payments.{$index}.amount" => 'Payment amount cannot exceed the selected item line amount of ' . number_format($lineAmount, 2) . ' ' . $purchaseOrder->resolved_currency . '.',
+                ]);
+            }
+
+            $referenceNo = trim((string) ($payment['reference_no'] ?? ''));
+            if ($referenceNo !== '') {
+                $referenceKey = strtolower($referenceNo);
+                if (isset($referenceLookup[$referenceKey])) {
+                    throw ValidationException::withMessages([
+                        "payments.{$index}.reference_no" => 'Each payment row must have a unique receipt reference.',
+                    ]);
+                }
+                $referenceLookup[$referenceKey] = $index;
+            }
+
+            $normalized[] = [
+                'index' => $index,
+                'id' => $existingId !== '' ? $existingId : null,
+                'reference_no' => $referenceNo !== '' ? $referenceNo : null,
+                'purchase_request_item_id' => $lineItemId,
+                'deliverable_id' => $lineItem->deliverable_id ? (string) $lineItem->deliverable_id : null,
+                'amount' => $amount,
+                'payment_method' => trim((string) ($payment['payment_method'] ?? '')),
+                'transfer_reference' => trim((string) ($payment['transfer_reference'] ?? '')) ?: null,
+                'status' => $status,
+                'paid_at' => $payment['paid_at'] ?? now()->toDateString(),
+                'notes' => trim((string) ($payment['notes'] ?? '')) ?: null,
+            ];
+        }
+
+        $references = collect($normalized)
+            ->pluck('reference_no')
+            ->filter()
+            ->values()
+            ->all();
+
+        if (! empty($references)) {
+            $usedReference = ProcurementDisbursement::query()
+                ->whereIn('reference_no', $references)
+                ->when(! empty($activeExistingIds), fn ($query) => $query->whereNotIn('id', $activeExistingIds))
+                ->value('reference_no');
+
+            if ($usedReference) {
+                $rowIndex = $referenceLookup[strtolower($usedReference)] ?? 0;
+                throw ValidationException::withMessages([
+                    "payments.{$rowIndex}.reference_no" => 'Receipt reference ' . $usedReference . ' is already in use.',
+                ]);
+            }
+        }
+
+        $baseLinePaid = $this->paidAmountsByLineItemForPurchaseOrderExcludingIds($purchaseOrder, $excludeDisbursementIds);
+        $basePoPaid = $this->purchaseOrderPaidAmountExcludingIds($purchaseOrder, $excludeDisbursementIds);
+        $submittedPaidByLine = [];
+        $submittedRowByLine = [];
+        $submittedPaidTotal = 0.0;
+
+        foreach ($normalized as $paymentRow) {
+            if (! $this->statusCountsAgainstPurchaseOrder($paymentRow['status'])) {
+                continue;
+            }
+
+            $lineId = (string) $paymentRow['purchase_request_item_id'];
+            $submittedPaidByLine[$lineId] = round(($submittedPaidByLine[$lineId] ?? 0) + $paymentRow['amount'], 2);
+            $submittedRowByLine[$lineId] ??= $paymentRow['index'];
+            $submittedPaidTotal = round($submittedPaidTotal + $paymentRow['amount'], 2);
+        }
+
+        foreach ($submittedPaidByLine as $lineId => $submittedAmount) {
+            $lineItem = $lineItems->get((string) $lineId);
+            $lineAmount = round((float) ($lineItem?->amount ?? 0), 2);
+            $allowed = round(max($lineAmount - (float) $baseLinePaid->get((string) $lineId, 0), 0), 2);
+
+            if ($submittedAmount > $allowed + 0.004) {
+                $rowIndex = $submittedRowByLine[$lineId] ?? 0;
+                throw ValidationException::withMessages([
+                    "payments.{$rowIndex}.amount" => 'Payment amount exceeds the selected item line balance of ' . number_format($allowed, 2) . ' ' . $purchaseOrder->resolved_currency . '.',
+                ]);
+            }
+        }
+
+        $poAmount = round((float) ($purchaseOrder->amount ?? 0), 2);
+        $poAllowed = round(max($poAmount - $basePoPaid, 0), 2);
+        if ($submittedPaidTotal > $poAllowed + 0.004) {
+            throw ValidationException::withMessages([
+                'payments' => 'Total paid amount exceeds the purchase order balance of ' . number_format($poAllowed, 2) . ' ' . $purchaseOrder->resolved_currency . '.',
+            ]);
+        }
+
+        return $normalized;
+    }
+
+    private function disbursementPayloadForPaymentRow(
+        ProcurementPurchaseOrder $purchaseOrder,
+        array $paymentRow,
+        ?ProcurementDisbursement $existing = null
+    ): array {
+        $referenceNo = $paymentRow['reference_no']
+            ?: ($existing?->reference_no ?: ProcurementDisbursement::generateReference());
+
+        $payload = [
+            'purchase_order_id'  => $purchaseOrder->id,
+            'purchase_request_item_id' => $paymentRow['purchase_request_item_id'],
+            'deliverable_id'     => $paymentRow['deliverable_id'],
+            'procurement_id'     => $purchaseOrder->procurement_id,
+            'vendor_id'          => $purchaseOrder->vendor_id,
+            'sub_activity_id'    => $purchaseOrder->sub_activity_id,
+            'governance_node_id' => $purchaseOrder->governance_node_id,
+            'consortium_id'      => $purchaseOrder->consortium_id,
+            'think_tank_member_id' => $purchaseOrder->think_tank_member_id,
+            'reference_no'       => $referenceNo,
+            'amount'             => $paymentRow['amount'],
+            'currency'           => $purchaseOrder->resolved_currency,
+            'payment_method'     => $paymentRow['payment_method'],
+            'transfer_reference' => $paymentRow['transfer_reference'],
+            'status'             => $paymentRow['status'],
+            'paid_at'            => $paymentRow['paid_at'],
+            'notes'              => $paymentRow['notes'],
+        ];
+
+        if (! $existing) {
+            $payload['created_by'] = auth()->id();
+        }
+
+        return $payload;
+    }
+
     private function disbursementCountsAsPaid(ProcurementDisbursement $disbursement): bool
     {
         return (bool) $disbursement->paid_at
             && $this->statusCountsAgainstPurchaseOrder($disbursement->status ?? 'completed');
+    }
+
+    private function summaryCurrencyFor($records): string
+    {
+        $currencies = collect($records)
+            ->map(fn ($record) => $record->resolved_currency ?? null)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($currencies->count() === 1) {
+            return (string) $currencies->first();
+        }
+
+        return $currencies->isEmpty() ? 'USD' : 'Mixed';
     }
 
     private function statusCountsAgainstPurchaseOrder(?string $status): bool
@@ -868,6 +1254,13 @@ class ProcurementDisbursementController extends Controller
     {
         if (! $this->canEditDisbursements()) {
             abort(403, 'Only administrators can edit disbursements.');
+        }
+    }
+
+    private function authorizeDisbursementDelete(): void
+    {
+        if (! $this->canEditDisbursements()) {
+            abort(403, 'Only administrators can delete disbursements.');
         }
     }
 

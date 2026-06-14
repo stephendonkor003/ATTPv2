@@ -1756,6 +1756,8 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
             ->name('edit');
         Route::put('{disbursement}', [ProcurementDisbursementController::class, 'update'])
             ->name('update');
+        Route::delete('{disbursement}', [ProcurementDisbursementController::class, 'destroy'])
+            ->name('destroy');
         Route::get('{disbursement}', [ProcurementDisbursementController::class, 'show'])
             ->name('show');
         Route::get('{disbursement}/pdf', [ProcurementDisbursementController::class, 'pdf'])

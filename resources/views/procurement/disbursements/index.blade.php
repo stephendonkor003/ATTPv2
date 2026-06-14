@@ -87,6 +87,12 @@
             </div>
         </div>
 
+        @php
+            $summaryCurrency = $disbursementSummary['currency'] ?? 'USD';
+            $cardMoney = fn ($value) => trim($summaryCurrency . ' ' . number_format((float) $value, 2));
+            $currencyNote = $summaryCurrency === 'Mixed' ? 'Multiple program currencies' : 'Program currency';
+        @endphp
+
         <div class="row g-3 mb-4">
             <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
@@ -98,21 +104,21 @@
             <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Actual Paid Amount</div>
-                    <div class="stat-value">{{ number_format((float) ($disbursementSummary['total_paid_amount'] ?? 0), 2) }}</div>
-                    <div class="text-muted small">Completed/paid receipts only</div>
+                    <div class="stat-value">{{ $cardMoney($disbursementSummary['total_paid_amount'] ?? 0) }}</div>
+                    <div class="text-muted small">Completed/paid receipts only | {{ $currencyNote }}</div>
                 </div>
             </div>
             <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">This Month Paid</div>
-                    <div class="stat-value">{{ number_format((float) ($disbursementSummary['this_month_paid_amount'] ?? 0), 2) }}</div>
+                    <div class="stat-value">{{ $cardMoney($disbursementSummary['this_month_paid_amount'] ?? 0) }}</div>
                     <div class="text-muted small">{{ now()->format('F Y') }}</div>
                 </div>
             </div>
             <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Pending / Other Amount</div>
-                    <div class="stat-value">{{ number_format((float) ($disbursementSummary['pending_amount'] ?? 0), 2) }}</div>
+                    <div class="stat-value">{{ $cardMoney($disbursementSummary['pending_amount'] ?? 0) }}</div>
                     <div class="text-muted small">Not counted as actual paid</div>
                 </div>
             </div>
@@ -153,7 +159,7 @@
                             <th class="text-center">Amount</th>
                             <th class="text-center">Paid At</th>
                             <th class="text-center">Status</th>
-                            <th class="text-center" width="170">Action</th>
+                            <th class="text-center" width="230">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -201,6 +207,15 @@
                                                 class="btn btn-sm btn-outline-warning">
                                                 Edit
                                             </a>
+                                            <form method="POST"
+                                                action="{{ route('procurement.disbursements.destroy', $disbursement) }}"
+                                                onsubmit="return confirm('Delete this disbursement? The linked purchase order payment totals will be recalculated.');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    Delete
+                                                </button>
+                                            </form>
                                         @endif
                                     </div>
                                 </td>

@@ -38,6 +38,13 @@
             border-radius: 10px;
             height: 100%;
             padding: 13px;
+            transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+        }
+
+        .disb-edit .stat-tile:hover {
+            border-color: #c8d7e8;
+            box-shadow: 0 12px 26px rgba(15, 23, 42, .08);
+            transform: translateY(-1px);
         }
 
         .disb-edit .stat-label {
@@ -63,6 +70,67 @@
             text-transform: uppercase;
         }
 
+        .disb-edit .payment-toolbar {
+            background: #eefaf7;
+            border: 1px solid #c9efe5;
+            border-radius: 12px;
+            color: #115e59;
+            padding: 12px 14px;
+        }
+
+        .disb-edit .payment-lines {
+            display: grid;
+            gap: 12px;
+        }
+
+        .disb-edit .payment-line-card {
+            background: #fff;
+            border: 1px solid #dbe6f2;
+            border-radius: 12px;
+            padding: 14px;
+            transition: border-color .18s ease, box-shadow .18s ease;
+        }
+
+        .disb-edit .payment-line-card:hover {
+            border-color: #b8cadf;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, .08);
+        }
+
+        .disb-edit .payment-line-number {
+            align-items: center;
+            background: #0f766e;
+            border-radius: 999px;
+            color: #fff;
+            display: inline-flex;
+            font-size: .75rem;
+            font-weight: 800;
+            height: 28px;
+            justify-content: center;
+            width: 28px;
+        }
+
+        .disb-edit .line-balance-table {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            max-height: 420px;
+            overflow: auto;
+        }
+
+        .disb-edit .line-balance-table table {
+            margin-bottom: 0;
+        }
+
+        .disb-edit .line-balance-table thead th {
+            background: #f8fafc;
+            color: #475569;
+            font-size: .72rem;
+            letter-spacing: 0;
+            position: sticky;
+            text-transform: uppercase;
+            top: 0;
+            z-index: 2;
+        }
+
         @media (max-width: 991.98px) {
             .disb-edit .stat-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -79,11 +147,11 @@
 
 @section('content')
     @php
-        $currency = $purchaseOrder->resolved_currency ?? $disbursement->resolved_currency ?? '';
+        $currency = $purchaseOrder->resolved_currency ?? $disbursement->resolved_currency ?? 'USD';
         $money = fn ($value) => trim($currency . ' ' . number_format((float) $value, 2));
-        $selectedPaymentMethod = old('payment_method', $disbursement->payment_method);
-        $selectedStatus = old('status', $disbursement->status ?? 'completed');
-        $selectedLineItemId = old('purchase_request_item_id', $selectedLineItem?->id);
+        $submittedPaymentRows = array_values(old('payments', $paymentRows ?? []));
+        $submittedDeletePaymentIds = array_values(old('delete_payment_ids', []));
+        $paidStatuses = \App\Models\ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES;
         $statusBadgeClasses = [
             'completed' => 'bg-success',
             'paid' => 'bg-success',
@@ -99,8 +167,10 @@
         <div class="card hero-card mb-4">
             <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-start gap-3">
                 <div>
-                    <h4 class="fw-bold mb-1">Edit Disbursement</h4>
-                    <p class="mb-0">{{ $disbursement->reference_no ?? 'N/A' }}</p>
+                    <h4 class="fw-bold mb-1">Edit Disbursement Payments</h4>
+                    <p class="mb-0">
+                        {{ $purchaseOrder->reference_no ?? 'N/A' }} | Seeded from {{ $disbursement->reference_no ?? 'this receipt' }}
+                    </p>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
                     <span class="badge {{ $statusBadgeClasses[$disbursement->status ?? 'completed'] ?? 'bg-secondary' }} px-3 py-2 text-capitalize">
@@ -144,152 +214,99 @@
                         <div class="stat-value">{{ $money($purchaseOrder->amount) }}</div>
                     </div>
                     <div class="stat-tile">
-                        <div class="stat-label">Paid Excluding This</div>
-                        <div class="stat-value">{{ $money($paidExcludingCurrent) }}</div>
+                        <div class="stat-label">Paid Outside This Edit</div>
+                        <div class="stat-value">{{ $money($paidExcludingEditable) }}</div>
                     </div>
                     <div class="stat-tile">
-                        <div class="stat-label">Line Editable Limit</div>
-                        <div class="stat-value">{{ $money($maxPayingAmount) }}</div>
+                        <div class="stat-label">Editable PO Balance</div>
+                        <div class="stat-value">{{ $money($editablePoBalance) }}</div>
                     </div>
                     <div class="stat-tile">
-                        <div class="stat-label">Current Amount</div>
-                        <div class="stat-value">{{ $money($disbursement->amount) }}</div>
+                        <div class="stat-label">Payment Rows</div>
+                        <div class="stat-value">{{ $editableDisbursements->count() }}</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <form method="POST" action="{{ route('procurement.disbursements.update', $disbursement) }}">
+        <form method="POST" action="{{ route('procurement.disbursements.update', $disbursement) }}" id="disbursementEditForm">
             @csrf
             @method('PUT')
 
-            <div class="card panel-card">
-                <div class="card-body">
-                    <div class="section-title mb-3">Editable Payment Details</div>
-
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Paid PO Line Item <span class="text-danger">*</span></label>
-                            @if ($lineItems->isEmpty())
-                                <input type="text" class="form-control is-invalid" value="No purchase request line items found" disabled>
-                                <div class="invalid-feedback d-block">This disbursement cannot be edited until the PO has source line items.</div>
-                            @else
-                                <select name="purchase_request_item_id" class="form-select @error('purchase_request_item_id') is-invalid @enderror" required>
-                                    <option value="">Select paid line item</option>
-                                    @foreach ($lineItems as $lineItem)
-                                        @php
-                                            $lineSummary = $lineItemPaymentSummaries->get((string) $lineItem->id, [
-                                                'paid_amount' => 0,
-                                                'remaining_amount' => (float) ($lineItem->amount ?? 0),
-                                            ]);
-                                        @endphp
-                                        <option value="{{ $lineItem->id }}" @selected((string) $selectedLineItemId === (string) $lineItem->id)>
-                                            {{ $lineItem->resource?->name ?? $lineItem->resourceCategory?->name ?? 'Line item' }}
-                                            @if ($lineItem->milestone)
-                                                | {{ $lineItem->milestone }}
-                                            @endif
-                                            | Balance {{ $currency ?: 'USD' }} {{ number_format((float) $lineSummary['remaining_amount'], 2) }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('purchase_request_item_id')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                @enderror
-                            @endif
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Amount <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <span class="input-group-text">{{ $currency ?: 'USD' }}</span>
-                                <input type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    name="amount"
-                                    value="{{ old('amount', number_format((float) $disbursement->amount, 2, '.', '')) }}"
-                                    class="form-control @error('amount') is-invalid @enderror"
-                                    required>
+            <div class="row g-4">
+                <div class="col-xl-4">
+                    <div class="card panel-card h-100">
+                        <div class="card-body">
+                            <div class="section-title mb-3">Line Item Balances</div>
+                            <div class="line-balance-table table-responsive">
+                                <table class="table table-sm align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Item</th>
+                                            <th class="text-end">Amount</th>
+                                            <th class="text-end">Available</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse ($lineItemsData as $item)
+                                            <tr>
+                                                <td>
+                                                    <div class="fw-semibold">{{ $item['resource'] ?? 'Line item' }}</div>
+                                                    <small class="text-muted">{{ $item['deliverable_title'] ?? $item['category'] ?? 'N/A' }}</small>
+                                                </td>
+                                                <td class="text-end">{{ $currency }} {{ number_format((float) $item['amount'], 2) }}</td>
+                                                <td class="text-end text-success">{{ $currency }} {{ number_format((float) $item['base_remaining_amount'], 2) }}</td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="3" class="text-center text-muted">No item lines found for this PO.</td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
                             </div>
-                            <div class="form-text">For paying statuses, maximum is {{ $money($maxPayingAmount) }}.</div>
-                            @error('amount')
-                                <div class="invalid-feedback d-block">{{ $message }}</div>
-                            @enderror
                         </div>
+                    </div>
+                </div>
 
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Status <span class="text-danger">*</span></label>
-                            <select name="status" class="form-select @error('status') is-invalid @enderror" required>
-                                @if ($selectedStatus && ! array_key_exists($selectedStatus, $statusOptions))
-                                    <option value="{{ $selectedStatus }}" selected>{{ ucfirst(str_replace('_', ' ', $selectedStatus)) }}</option>
-                                @endif
-                                @foreach ($statusOptions as $value => $label)
-                                    <option value="{{ $value }}" @selected($selectedStatus === $value)>{{ $label }}</option>
-                                @endforeach
-                            </select>
-                            <div class="form-text">Cancelled, void, and reversed do not count against the PO balance.</div>
-                            @error('status')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+                <div class="col-xl-8">
+                    <div class="card panel-card">
+                        <div class="card-body">
+                            <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
+                                <div>
+                                    <div class="section-title mb-1">Editable Payment Details</div>
+                                    <div class="text-muted small">Add, remove, or update each paid PO item line. Every row keeps a unique receipt reference.</div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary" id="addPaymentLineBtn">
+                                    <i class="feather-plus me-1"></i> Add Payment Item Line
+                                </button>
+                            </div>
 
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Payment Method <span class="text-danger">*</span></label>
-                            <select name="payment_method" class="form-select @error('payment_method') is-invalid @enderror" required>
-                                <option value="">Select method</option>
-                                @if ($selectedPaymentMethod && ! in_array($selectedPaymentMethod, $paymentMethods, true))
-                                    <option value="{{ $selectedPaymentMethod }}" selected>{{ $selectedPaymentMethod }}</option>
-                                @endif
-                                @foreach ($paymentMethods as $method)
-                                    <option value="{{ $method }}" @selected($selectedPaymentMethod === $method)>{{ $method }}</option>
-                                @endforeach
-                            </select>
-                            @error('payment_method')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+                            <div class="payment-toolbar d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
+                                <div>
+                                    Paid total in this edit:
+                                    <strong>{{ $currency }} <span id="paymentBatchTotal">0.00</span></strong>
+                                </div>
+                                <div>
+                                    Remaining after edit:
+                                    <strong>{{ $currency }} <span id="paymentBatchRemaining">0.00</span></strong>
+                                </div>
+                            </div>
 
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Paid At <span class="text-danger">*</span></label>
-                            <input type="date"
-                                name="paid_at"
-                                value="{{ old('paid_at', $disbursement->paid_at?->format('Y-m-d') ?? now()->format('Y-m-d')) }}"
-                                class="form-control @error('paid_at') is-invalid @enderror"
-                                required>
-                            @error('paid_at')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
+                            <div id="paymentLines" class="payment-lines"></div>
+                            <div id="paymentLinesEmpty" class="alert alert-light border mb-0">
+                                No payment rows are currently selected. Add a payment item line to continue.
+                            </div>
+                            <div id="deletedPaymentRows"></div>
 
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Transfer Reference</label>
-                            <input type="text"
-                                name="transfer_reference"
-                                value="{{ old('transfer_reference', $disbursement->transfer_reference) }}"
-                                class="form-control @error('transfer_reference') is-invalid @enderror"
-                                maxlength="255">
-                            @error('transfer_reference')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">Notes</label>
-                            <textarea name="notes"
-                                class="form-control @error('notes') is-invalid @enderror"
-                                rows="4"
-                                maxlength="2000">{{ old('notes', $disbursement->notes) }}</textarea>
-                            @error('notes')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                        <div class="col-12 d-flex flex-wrap justify-content-end gap-2">
-                            <a href="{{ route('procurement.disbursements.show', $disbursement) }}" class="btn btn-light">
-                                Cancel
-                            </a>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="feather-save me-1"></i> Save Changes
-                            </button>
+                            <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
+                                <a href="{{ route('procurement.disbursements.show', $disbursement) }}" class="btn btn-light">
+                                    Cancel
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="feather-save me-1"></i> Save Payment Lines
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -297,3 +314,231 @@
         </form>
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        (function () {
+            const lineItems = @json($lineItemsData);
+            const initialPayments = @json($submittedPaymentRows);
+            const initialDeletePaymentIds = @json($submittedDeletePaymentIds);
+            const paymentMethods = @json($paymentMethods);
+            const statusOptions = @json($statusOptions);
+            const paidStatuses = @json($paidStatuses);
+            const currency = @json($currency);
+            const editablePoBalance = Number(@json($editablePoBalance));
+            const paymentLines = document.getElementById('paymentLines');
+            const paymentLinesEmpty = document.getElementById('paymentLinesEmpty');
+            const deletedPaymentRows = document.getElementById('deletedPaymentRows');
+            const addPaymentLineBtn = document.getElementById('addPaymentLineBtn');
+            const batchTotal = document.getElementById('paymentBatchTotal');
+            const batchRemaining = document.getElementById('paymentBatchRemaining');
+
+            if (!paymentLines) return;
+
+            const fmt = (value) =>
+                Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;',
+            }[char]));
+
+            const isPaidStatus = (value) => paidStatuses.includes(String(value || '').toLowerCase());
+
+            function methodOptions(selected = '') {
+                const methods = paymentMethods.includes(selected) || selected === ''
+                    ? paymentMethods
+                    : [selected].concat(paymentMethods);
+
+                return [''].concat(methods).map((method) => {
+                    const label = method || 'Select method';
+                    return `<option value="${escapeHtml(method)}" ${selected === method ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+                }).join('');
+            }
+
+            function statusOptionsHtml(selected = 'completed') {
+                return Object.entries(statusOptions).map(([value, label]) =>
+                    `<option value="${escapeHtml(value)}" ${selected === value ? ' selected' : ''}>${escapeHtml(label)}</option>`
+                ).join('');
+            }
+
+            function itemOptions(selected = '') {
+                return [''].concat(lineItems).map((item) => {
+                    if (item === '') {
+                        return '<option value="">Select paid item line</option>';
+                    }
+                    const label = `${item.resource || item.category || 'Line item'} | Available ${currency} ${fmt(item.base_remaining_amount)}`;
+                    return `<option value="${escapeHtml(item.id)}" ${String(selected) === String(item.id) ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+                }).join('');
+            }
+
+            function selectedPaymentTotalForItem(itemId, excludingCard = null) {
+                return Array.from(paymentLines.querySelectorAll('.payment-line-card'))
+                    .filter((card) => card !== excludingCard
+                        && card.querySelector('.payment-item-select')?.value === String(itemId)
+                        && isPaidStatus(card.querySelector('.payment-status-select')?.value))
+                    .reduce((total, card) => total + Number(card.querySelector('.payment-amount-input')?.value || 0), 0);
+            }
+
+            function updatePaymentCardLimit(card) {
+                if (!card) return;
+
+                const itemId = card.querySelector('.payment-item-select')?.value || '';
+                const amountInput = card.querySelector('.payment-amount-input');
+                const status = card.querySelector('.payment-status-select')?.value || 'completed';
+                const hint = card.querySelector('.payment-line-limit');
+                const item = lineItems.find((candidate) => String(candidate.id) === String(itemId));
+
+                if (!item || !amountInput || !hint) {
+                    if (amountInput) amountInput.removeAttribute('max');
+                    if (hint) hint.textContent = `Select a line item (${currency})`;
+                    return;
+                }
+
+                const lineBalance = Number(item.base_remaining_amount || 0);
+                const usedElsewhere = selectedPaymentTotalForItem(item.id, card);
+                const max = isPaidStatus(status)
+                    ? Math.max(lineBalance - usedElsewhere, 0)
+                    : Number(item.amount || lineBalance || 0);
+
+                amountInput.max = max.toFixed(2);
+                hint.textContent = `Available for this row: ${currency} ${fmt(max)}`;
+
+                if (Number(amountInput.value || 0) > max) {
+                    amountInput.value = max > 0 ? max.toFixed(2) : '';
+                }
+            }
+
+            function updatePaymentRows() {
+                const cards = Array.from(paymentLines.querySelectorAll('.payment-line-card'));
+                let total = 0;
+
+                cards.forEach((card, index) => {
+                    const number = card.querySelector('.payment-line-number');
+                    if (number) number.textContent = index + 1;
+                    if (isPaidStatus(card.querySelector('.payment-status-select')?.value)) {
+                        total += Number(card.querySelector('.payment-amount-input')?.value || 0);
+                    }
+                });
+
+                paymentLinesEmpty?.classList.toggle('d-none', cards.length > 0);
+                if (batchTotal) batchTotal.textContent = fmt(total);
+                if (batchRemaining) batchRemaining.textContent = fmt(Math.max(editablePoBalance - total, 0));
+            }
+
+            function addDeletedPaymentId(id) {
+                if (!id || !deletedPaymentRows) return;
+                if (Array.from(deletedPaymentRows.querySelectorAll('input')).some((input) => input.value === String(id))) return;
+
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'delete_payment_ids[]';
+                input.value = id;
+                deletedPaymentRows.appendChild(input);
+            }
+
+            function addPaymentRow(defaults = {}) {
+                const index = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+                const selectedItemId = defaults.purchase_request_item_id || '';
+                const selectedItem = lineItems.find((item) => String(item.id) === String(selectedItemId));
+                const suggestedAmount = defaults.amount || (selectedItem ? Number(selectedItem.base_remaining_amount || selectedItem.amount || 0).toFixed(2) : '');
+                const paidAt = defaults.paid_at || new Date().toISOString().slice(0, 10);
+
+                const card = document.createElement('div');
+                card.className = 'payment-line-card';
+                card.innerHTML = `
+                    <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="payment-line-number">1</span>
+                            <div>
+                                <div class="fw-semibold">Payment Item Line</div>
+                                <div class="small text-muted payment-line-limit">Select a line item</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger payment-line-remove">
+                            <i class="feather-trash-2 me-1"></i> Remove
+                        </button>
+                    </div>
+                    ${defaults.id ? `<input type="hidden" name="payments[${index}][id]" value="${escapeHtml(defaults.id)}">` : ''}
+                    <div class="row g-3">
+                        <div class="col-lg-5">
+                            <label class="form-label fw-semibold">Paid PO Line Item <span class="text-danger">*</span></label>
+                            <select name="payments[${index}][purchase_request_item_id]" class="form-select payment-item-select" required>
+                                ${itemOptions(selectedItemId)}
+                            </select>
+                        </div>
+                        <div class="col-lg-3">
+                            <label class="form-label fw-semibold">Receipt Reference</label>
+                            <input type="text" name="payments[${index}][reference_no]" class="form-control" maxlength="100"
+                                value="${escapeHtml(defaults.reference_no || '')}" placeholder="Auto if blank">
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label fw-semibold">Amount <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text">${escapeHtml(currency)}</span>
+                                <input type="number" step="0.01" min="0.01" name="payments[${index}][amount]"
+                                    class="form-control payment-amount-input" value="${escapeHtml(suggestedAmount)}" required>
+                            </div>
+                        </div>
+                        <div class="col-lg-3">
+                            <label class="form-label fw-semibold">Payment Method <span class="text-danger">*</span></label>
+                            <select name="payments[${index}][payment_method]" class="form-select" required>
+                                ${methodOptions(defaults.payment_method || '')}
+                            </select>
+                        </div>
+                        <div class="col-lg-3">
+                            <label class="form-label fw-semibold">Paid At <span class="text-danger">*</span></label>
+                            <input type="date" name="payments[${index}][paid_at]" class="form-control" value="${escapeHtml(paidAt)}" required>
+                        </div>
+                        <div class="col-lg-3">
+                            <label class="form-label fw-semibold">Status <span class="text-danger">*</span></label>
+                            <select name="payments[${index}][status]" class="form-select payment-status-select" required>
+                                ${statusOptionsHtml(defaults.status || 'completed')}
+                            </select>
+                        </div>
+                        <div class="col-lg-3">
+                            <label class="form-label fw-semibold">Transfer Reference</label>
+                            <input type="text" name="payments[${index}][transfer_reference]" class="form-control" maxlength="255"
+                                value="${escapeHtml(defaults.transfer_reference || '')}" placeholder="Bank or cheque reference">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Notes</label>
+                            <textarea name="payments[${index}][notes]" rows="2" class="form-control" maxlength="2000">${escapeHtml(defaults.notes || '')}</textarea>
+                        </div>
+                    </div>
+                `;
+
+                card.querySelector('.payment-line-remove')?.addEventListener('click', () => {
+                    addDeletedPaymentId(defaults.id);
+                    card.remove();
+                    Array.from(paymentLines.querySelectorAll('.payment-line-card')).forEach(updatePaymentCardLimit);
+                    updatePaymentRows();
+                });
+                card.querySelector('.payment-item-select')?.addEventListener('change', () => {
+                    updatePaymentCardLimit(card);
+                    updatePaymentRows();
+                });
+                card.querySelector('.payment-status-select')?.addEventListener('change', () => {
+                    Array.from(paymentLines.querySelectorAll('.payment-line-card')).forEach(updatePaymentCardLimit);
+                    updatePaymentRows();
+                });
+                card.querySelector('.payment-amount-input')?.addEventListener('input', () => {
+                    Array.from(paymentLines.querySelectorAll('.payment-line-card')).forEach(updatePaymentCardLimit);
+                    updatePaymentRows();
+                });
+
+                paymentLines.appendChild(card);
+                updatePaymentCardLimit(card);
+                updatePaymentRows();
+            }
+
+            initialDeletePaymentIds.forEach((id) => addDeletedPaymentId(id));
+            initialPayments.forEach((row) => addPaymentRow(row));
+            if (initialPayments.length === 0) addPaymentRow();
+            addPaymentLineBtn?.addEventListener('click', () => addPaymentRow());
+        })();
+    </script>
+@endpush
