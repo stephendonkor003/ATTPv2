@@ -9,6 +9,38 @@
             box-shadow: 0 14px 30px rgba(15, 23, 42, 0.07);
         }
 
+        .disb-create .page-header {
+            background: linear-gradient(120deg, #0f172a 0%, #1e293b 42%, #0f766e 100%);
+            border-radius: 16px;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .disb-create .page-header h1,
+        .disb-create .page-header h2,
+        .disb-create .page-header h3,
+        .disb-create .page-header h4,
+        .disb-create .page-header h5,
+        .disb-create .page-header h6,
+        .disb-create .page-header p {
+            color: #fff !important;
+        }
+
+        .disb-create .page-header .text-muted {
+            color: rgba(255, 255, 255, .78) !important;
+        }
+
+        .disb-create .page-header .btn-outline-secondary {
+            border-color: rgba(255, 255, 255, .65);
+            color: #fff;
+        }
+
+        .disb-create .page-header .btn-outline-secondary:hover {
+            background: rgba(255, 255, 255, .16);
+            border-color: #fff;
+            color: #fff;
+        }
+
         .disb-create .po-document-header {
             border-bottom: 1px solid #e2e8f0;
             padding: 20px;

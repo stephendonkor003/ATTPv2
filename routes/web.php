@@ -1752,6 +1752,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
             ->name('create');
         Route::post('/', [ProcurementDisbursementController::class, 'store'])
             ->name('store');
+        Route::get('{disbursement}/edit', [ProcurementDisbursementController::class, 'edit'])
+            ->name('edit');
+        Route::put('{disbursement}', [ProcurementDisbursementController::class, 'update'])
+            ->name('update');
         Route::get('{disbursement}', [ProcurementDisbursementController::class, 'show'])
             ->name('show');
         Route::get('{disbursement}/pdf', [ProcurementDisbursementController::class, 'pdf'])

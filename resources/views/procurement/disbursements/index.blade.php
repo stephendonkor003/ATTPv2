@@ -10,6 +10,17 @@
             overflow: hidden;
         }
 
+        .disb-page .hero-card h1,
+        .disb-page .hero-card h2,
+        .disb-page .hero-card h3,
+        .disb-page .hero-card h4,
+        .disb-page .hero-card h5,
+        .disb-page .hero-card h6,
+        .disb-page .hero-card p,
+        .disb-page .hero-card .text-muted {
+            color: #fff !important;
+        }
+
         .disb-page .table-card {
             border: 1px solid #e2e8f0;
             border-radius: 16px;
@@ -60,7 +71,7 @@
                             <th class="text-center">Amount</th>
                             <th class="text-center">Paid At</th>
                             <th class="text-center">Status</th>
-                            <th class="text-center" width="120">Action</th>
+                            <th class="text-center" width="170">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -94,10 +105,18 @@
                                     </span>
                                 </td>
                                 <td class="text-center">
-                                    <a href="{{ route('procurement.disbursements.show', $disbursement) }}"
-                                        class="btn btn-sm btn-outline-primary">
-                                        View
-                                    </a>
+                                    <div class="d-flex flex-wrap justify-content-center gap-1">
+                                        <a href="{{ route('procurement.disbursements.show', $disbursement) }}"
+                                            class="btn btn-sm btn-outline-primary">
+                                            View
+                                        </a>
+                                        @if ($canEditDisbursements)
+                                            <a href="{{ route('procurement.disbursements.edit', $disbursement) }}"
+                                                class="btn btn-sm btn-outline-warning">
+                                                Edit
+                                            </a>
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach

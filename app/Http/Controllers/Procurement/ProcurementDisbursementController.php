@@ -39,24 +39,15 @@ class ProcurementDisbursementController extends Controller
             ->orderByDesc('paid_at')
             ->paginate(12);
 
-        return view('procurement.disbursements.index', compact('disbursements'));
+        $canEditDisbursements = $this->canEditDisbursements();
+
+        return view('procurement.disbursements.index', compact('disbursements', 'canEditDisbursements'));
     }
 
     public function create(Request $request)
     {
         $purchaseOrderId = $request->get('purchase_order_id');
-        $paymentMethods = [
-            'Bank Transfer',
-            'Cheque',
-            'Cash',
-            'Mobile Money',
-            'Card Payment',
-            'Wire Transfer',
-            'ACH',
-            'RTGS',
-            'SWIFT',
-            'Other',
-        ];
+        $paymentMethods = $this->paymentMethods();
 
         $scopedNodeIds = $this->scopedNodeIds();
 
@@ -310,8 +301,157 @@ class ProcurementDisbursementController extends Controller
     {
         $this->assertDisbursementInScope($disbursement);
         $disbursement->load(['purchaseOrder', 'deliverable.procurement', 'vendor', 'procurement', 'subActivity']);
+        $canEditDisbursements = $this->canEditDisbursements();
 
-        return view('procurement.disbursements.show', compact('disbursement'));
+        return view('procurement.disbursements.show', compact('disbursement', 'canEditDisbursements'));
+    }
+
+    public function edit(ProcurementDisbursement $disbursement)
+    {
+        $this->authorizeDisbursementEdit();
+        $this->assertDisbursementInScope($disbursement);
+
+        $disbursement->load([
+            'purchaseOrder.procurement',
+            'purchaseOrder.vendor',
+            'purchaseOrder.disbursements',
+            'purchaseOrder.deliverables.procurement',
+            'purchaseOrder.purchaseRequest.items.deliverable.procurement',
+            'purchaseOrder.budgetCommitment.purchaseRequest.items.deliverable.procurement',
+            'deliverable.procurement',
+            'vendor',
+            'procurement',
+            'subActivity',
+        ]);
+
+        $purchaseOrder = $disbursement->purchaseOrder;
+        if (! $purchaseOrder) {
+            abort(404, 'The purchase order for this disbursement could not be found.');
+        }
+
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        $deliverables = $this->deliverablesForDisbursement($disbursement);
+        $paymentMethods = $this->paymentMethods();
+        $statusOptions = $this->disbursementStatusOptions();
+        $maxPayingAmount = $this->editableDisbursementMaxAmount($purchaseOrder, $disbursement, $disbursement->status ?? 'completed');
+        $currentStatusCountsAsPaid = $this->statusCountsAgainstPurchaseOrder($disbursement->status ?? 'completed');
+        $paidExcludingCurrent = max($purchaseOrder->paidAmount() - ($currentStatusCountsAsPaid ? (float) $disbursement->amount : 0), 0);
+
+        return view('procurement.disbursements.edit', compact(
+            'disbursement',
+            'purchaseOrder',
+            'deliverables',
+            'paymentMethods',
+            'statusOptions',
+            'maxPayingAmount',
+            'paidExcludingCurrent'
+        ));
+    }
+
+    public function update(Request $request, ProcurementDisbursement $disbursement)
+    {
+        $this->authorizeDisbursementEdit();
+        $this->assertDisbursementInScope($disbursement);
+
+        $disbursement->load([
+            'purchaseOrder.disbursements',
+            'purchaseOrder.deliverables.procurement',
+            'purchaseOrder.purchaseRequest.items.deliverable.procurement',
+            'purchaseOrder.budgetCommitment.purchaseRequest.items.deliverable.procurement',
+            'deliverable.procurement',
+        ]);
+
+        $purchaseOrder = $disbursement->purchaseOrder;
+        if (! $purchaseOrder) {
+            abort(404, 'The purchase order for this disbursement could not be found.');
+        }
+
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        $statusOptions = array_keys($this->disbursementStatusOptions());
+
+        $data = $request->validate([
+            'deliverable_id'     => 'nullable|exists:procurement_deliverables,id',
+            'amount'             => 'required|numeric|min:0.01',
+            'payment_method'     => 'required|string|max:100',
+            'transfer_reference' => 'nullable|string|max:255',
+            'status'             => 'required|string|in:' . implode(',', $statusOptions),
+            'paid_at'            => 'required|date',
+            'notes'              => 'nullable|string|max:2000',
+        ]);
+
+        $eligibleDeliverables = $this->deliverablesForDisbursement($disbursement);
+        $eligibleDeliverableIds = $eligibleDeliverables
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->values();
+
+        if ($eligibleDeliverables->isNotEmpty() && empty($data['deliverable_id'])) {
+            throw ValidationException::withMessages([
+                'deliverable_id' => 'Select the deliverable this disbursement is paying for.',
+            ]);
+        }
+
+        if (!empty($data['deliverable_id']) && !$eligibleDeliverableIds->contains((string) $data['deliverable_id'])) {
+            throw ValidationException::withMessages([
+                'deliverable_id' => 'The selected deliverable is not linked to this purchase order.',
+            ]);
+        }
+
+        $maxAmount = $this->editableDisbursementMaxAmount($purchaseOrder, $disbursement, $data['status']);
+        if ((float) $data['amount'] > $maxAmount) {
+            throw ValidationException::withMessages([
+                'amount' => 'Disbursement amount exceeds the editable balance of ' . number_format($maxAmount, 2) . ' ' . ($purchaseOrder->currency ?? '') . '.',
+            ]);
+        }
+
+        $before = $disbursement->only([
+            'deliverable_id',
+            'amount',
+            'payment_method',
+            'transfer_reference',
+            'status',
+            'paid_at',
+            'notes',
+        ]);
+
+        $disbursement->update([
+            'deliverable_id'     => $data['deliverable_id'] ?? null,
+            'amount'             => $data['amount'],
+            'payment_method'     => $data['payment_method'],
+            'transfer_reference' => $data['transfer_reference'] ?? null,
+            'status'             => $data['status'],
+            'paid_at'            => $data['paid_at'],
+            'notes'              => $data['notes'] ?? null,
+        ]);
+
+        $this->syncPurchaseOrderStatus($purchaseOrder);
+
+        ProcurementAuditLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'Updated disbursement',
+            'procurement_id' => $purchaseOrder->procurement_id,
+            'metadata' => [
+                'purchase_order_id' => $purchaseOrder->id,
+                'disbursement_id' => $disbursement->id,
+                'before' => $before,
+                'after' => $disbursement->fresh()->only([
+                    'deliverable_id',
+                    'amount',
+                    'payment_method',
+                    'transfer_reference',
+                    'status',
+                    'paid_at',
+                    'notes',
+                ]),
+            ],
+            'created_at' => now(),
+        ]);
+
+        return redirect()
+            ->route('procurement.disbursements.show', $disbursement)
+            ->with('success', 'Disbursement updated.');
     }
 
     public function pdf(ProcurementDisbursement $disbursement)
@@ -341,6 +481,7 @@ class ProcurementDisbursementController extends Controller
     private function syncPurchaseOrderStatus(ProcurementPurchaseOrder $purchaseOrder): void
     {
         $purchaseOrder->refresh();
+        $purchaseOrder->loadMissing('invoice');
         $remaining = $purchaseOrder->remainingAmount();
         $totalPaid = $purchaseOrder->paidAmount();
 
@@ -352,6 +493,10 @@ class ProcurementDisbursementController extends Controller
 
         if ($remaining <= 0 && $totalPaid > 0) {
             $this->ensureInvoiceForPaidPurchaseOrder($purchaseOrder);
+        } elseif ($purchaseOrder->invoice && $purchaseOrder->invoice->status === 'paid') {
+            $purchaseOrder->invoice->update([
+                'status' => 'approved',
+            ]);
         }
     }
 
@@ -441,6 +586,88 @@ class ProcurementDisbursementController extends Controller
             ->filter()
             ->unique('id')
             ->values();
+    }
+
+    private function deliverablesForDisbursement(ProcurementDisbursement $disbursement)
+    {
+        $purchaseOrder = $disbursement->purchaseOrder;
+        $deliverables = $purchaseOrder
+            ? $this->eligibleDeliverablesForPurchaseOrder($purchaseOrder)
+            : collect();
+
+        if ($disbursement->deliverable && ! $deliverables->contains('id', $disbursement->deliverable->id)) {
+            $deliverables->push($disbursement->deliverable);
+        }
+
+        return $deliverables->filter()->unique('id')->values();
+    }
+
+    private function editableDisbursementMaxAmount(
+        ProcurementPurchaseOrder $purchaseOrder,
+        ProcurementDisbursement $disbursement,
+        ?string $newStatus
+    ): float {
+        $purchaseOrder->loadMissing('disbursements');
+
+        if (! $this->statusCountsAgainstPurchaseOrder($newStatus)) {
+            return round((float) ($purchaseOrder->amount ?? 0), 2);
+        }
+
+        $currentCountsAsPaid = $this->statusCountsAgainstPurchaseOrder($disbursement->status ?? 'completed');
+        $editableBalance = $purchaseOrder->remainingAmount()
+            + ($currentCountsAsPaid ? (float) $disbursement->amount : 0);
+
+        return round(max($editableBalance, 0), 2);
+    }
+
+    private function statusCountsAgainstPurchaseOrder(?string $status): bool
+    {
+        $status = strtolower((string) ($status ?: 'completed'));
+
+        return ! in_array($status, ProcurementPurchaseOrder::NON_PAYING_DISBURSEMENT_STATUSES, true);
+    }
+
+    private function canEditDisbursements(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && ($user->isAdmin() || $user->isSuperAdmin()));
+    }
+
+    private function authorizeDisbursementEdit(): void
+    {
+        if (! $this->canEditDisbursements()) {
+            abort(403, 'Only administrators can edit disbursements.');
+        }
+    }
+
+    private function paymentMethods(): array
+    {
+        return [
+            'Bank Transfer',
+            'Cheque',
+            'Cash',
+            'Mobile Money',
+            'Card Payment',
+            'Wire Transfer',
+            'ACH',
+            'RTGS',
+            'SWIFT',
+            'Other',
+        ];
+    }
+
+    private function disbursementStatusOptions(): array
+    {
+        return [
+            'completed' => 'Completed',
+            'paid' => 'Paid',
+            'fully_paid' => 'Fully Paid',
+            'pending' => 'Pending',
+            'cancelled' => 'Cancelled',
+            'void' => 'Void',
+            'reversed' => 'Reversed',
+        ];
     }
 
     private function storeLineItemEvidence(Request $request, ProcurementPurchaseOrder $purchaseOrder): void

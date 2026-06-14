@@ -9,6 +9,17 @@
             border-radius: 16px;
         }
 
+        .disb-show .hero-card h1,
+        .disb-show .hero-card h2,
+        .disb-show .hero-card h3,
+        .disb-show .hero-card h4,
+        .disb-show .hero-card h5,
+        .disb-show .hero-card h6,
+        .disb-show .hero-card p,
+        .disb-show .hero-card .text-muted {
+            color: #fff !important;
+        }
+
         .disb-show .detail-card {
             border: 1px solid #e2e8f0;
             border-radius: 16px;
@@ -26,6 +37,11 @@
                     <p class="mb-0">{{ $disbursement->reference_no ?? 'N/A' }}</p>
                 </div>
                 <div class="d-flex flex-wrap gap-2 mt-3 mt-lg-0">
+                    @if ($canEditDisbursements)
+                        <a href="{{ route('procurement.disbursements.edit', $disbursement) }}" class="btn btn-warning">
+                            <i class="feather-edit-2 me-1"></i> Edit
+                        </a>
+                    @endif
                     <a href="{{ route('procurement.disbursements.pdf', $disbursement) }}" class="btn btn-light">
                         <i class="feather-eye me-1"></i> View PDF
                     </a>
@@ -38,6 +54,10 @@
                 </div>
             </div>
         </div>
+
+        @if (session('success'))
+            <div class="alert alert-success">{{ session('success') }}</div>
+        @endif
 
         <div class="card detail-card">
             <div class="card-body">
