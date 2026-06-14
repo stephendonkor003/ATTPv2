@@ -7,6 +7,7 @@
     $defaults = $defaults ?? [];
     $existingAttachments = $purchaseRequest?->attachments ?? collect();
     $isPurchaseRequestCreate = ($creationMode ?? null) === 'purchase_request';
+    $showDeliverableColumn = $isEdit;
     $submitButtonText = $isEdit
         ? 'Update Purchase Request'
         : ($isPurchaseRequestCreate ? 'Create Purchase Request' : 'Save Commitment');
@@ -281,11 +282,11 @@
                             <table class="table table-sm table-bordered align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th style="width: {{ $isPurchaseRequestCreate ? '27%' : '22%' }};">Resource Category</th>
-                                        <th style="width: {{ $isPurchaseRequestCreate ? '23%' : '18%' }};">Resource Item</th>
-                                        @unless ($isPurchaseRequestCreate)
+                                        <th style="width: {{ $showDeliverableColumn ? '22%' : '27%' }};">Resource Category</th>
+                                        <th style="width: {{ $showDeliverableColumn ? '18%' : '23%' }};">Resource Item</th>
+                                        @if ($showDeliverableColumn)
                                             <th style="width: 22%;">Deliverable</th>
-                                        @endunless
+                                        @endif
                                         <th style="width: 18%;">Milestone / Description</th>
                                         <th style="width: 12%;">Milestone Date</th>
                                         <th style="width: 170px;" class="text-end">Price / Amount</th>
@@ -857,13 +858,13 @@
                                         <option value="">Select Resource</option>
                                     </select>
                                 </td>
-                                @unless ($isPurchaseRequestCreate)
+                                @if ($showDeliverableColumn)
                                     <td>
                                         <select class="form-select item-deliverable" data-field="deliverable_id" required>
                                             ${deliverableOptionsHtml}
                                         </select>
                                     </td>
-                                @endunless
+                                @endif
                                 <td>
                                     <input type="text"
                                         class="form-control item-milestone"

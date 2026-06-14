@@ -115,11 +115,6 @@ class BudgetCommitmentController extends Controller
 	    /* =====================================================
 	     * 1. VALIDATION
 	     * ===================================================== */
-        $isDirectPurchaseRequest = $request->routeIs('finance.purchase-requests.store');
-        $itemDeliverableRule = $isDirectPurchaseRequest
-            ? 'nullable|exists:procurement_deliverables,id'
-            : 'required|exists:procurement_deliverables,id';
-
         $validated = $request->validate([
             'program_funding_id'   => 'required|exists:myb_program_fundings,id',
             'allocation_level'     => 'required|in:sub_activity',
@@ -136,7 +131,7 @@ class BudgetCommitmentController extends Controller
         'items'                => 'nullable|array|min:1',
         'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
         'items.*.resource_id'          => 'required|exists:myb_resources,id',
-        'items.*.deliverable_id'       => $itemDeliverableRule,
+        'items.*.deliverable_id'       => 'nullable|exists:procurement_deliverables,id',
         'items.*.amount'               => 'required|numeric|min:0.01',
         'items.*.milestone'            => 'nullable|string|max:255',
         'items.*.milestone_date'       => 'nullable|date',
@@ -196,7 +191,6 @@ class BudgetCommitmentController extends Controller
 		            if (
 		                empty($validated['resource_category_id'])
 		                || empty($validated['resource_id'])
-		                || (! $isDirectPurchaseRequest && empty($validated['deliverable_id']))
 		                || empty($validated['commitment_amount'])
 		            ) {
 		                return back()
