@@ -2,6 +2,172 @@
 
 @push('styles')
     <style>
+        .pr-show-page {
+            padding-bottom: 2rem;
+        }
+
+        .pr-page-header {
+            background: linear-gradient(135deg, #123047 0%, #0f766e 100%);
+            border-radius: 12px;
+            box-shadow: 0 16px 36px rgba(15, 23, 42, .14);
+            color: #fff;
+            padding: 20px;
+        }
+
+        .pr-page-header .text-muted {
+            color: rgba(255, 255, 255, .74) !important;
+        }
+
+        .pr-page-header .btn-outline-secondary,
+        .pr-page-header .btn-outline-warning,
+        .pr-page-header .btn-outline-danger,
+        .pr-page-header .btn-outline-primary {
+            background: rgba(255, 255, 255, .12);
+            border-color: rgba(255, 255, 255, .38);
+            color: #fff;
+        }
+
+        .pr-page-header .btn-outline-secondary:hover,
+        .pr-page-header .btn-outline-warning:hover,
+        .pr-page-header .btn-outline-danger:hover,
+        .pr-page-header .btn-outline-primary:hover {
+            background: rgba(255, 255, 255, .22);
+            border-color: rgba(255, 255, 255, .62);
+            color: #fff;
+        }
+
+        .pr-page-header .btn-primary {
+            background: #fff;
+            border-color: #fff;
+            color: #0f766e;
+            font-weight: 700;
+        }
+
+        .pr-reference-pill {
+            align-items: center;
+            background: rgba(255, 255, 255, .14);
+            border: 1px solid rgba(255, 255, 255, .22);
+            border-radius: 999px;
+            display: inline-flex;
+            font-size: .72rem;
+            font-weight: 800;
+            letter-spacing: 0;
+            margin-bottom: 8px;
+            padding: 4px 10px;
+            text-transform: uppercase;
+        }
+
+        .pr-header-meta {
+            color: rgba(255, 255, 255, .76);
+            font-size: .88rem;
+        }
+
+        .pr-card-hover {
+            border: 1px solid #e4ebf5;
+            transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+        }
+
+        .pr-card-hover:hover {
+            border-color: #c8d7e8;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, .11) !important;
+            transform: translateY(-1px);
+        }
+
+        .pr-overview-card .card-body,
+        .pr-line-items-card .card-body,
+        .pr-side-card .card-body {
+            padding: 20px;
+        }
+
+        .pr-kpi-grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .pr-kpi-item {
+            background: #f8fafc;
+            border: 1px solid #e3eaf4;
+            border-radius: 10px;
+            min-height: 92px;
+            padding: 12px;
+        }
+
+        .pr-kpi-label {
+            color: #64748b;
+            display: block;
+            font-size: .72rem;
+            font-weight: 800;
+            letter-spacing: 0;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .pr-kpi-value {
+            color: #0f172a;
+            display: block;
+            font-size: 1.05rem;
+            font-weight: 800;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+
+        .pr-kpi-note {
+            color: #64748b;
+            display: block;
+            font-size: .78rem;
+            margin-top: 4px;
+        }
+
+        .pr-summary-table {
+            border-collapse: separate;
+            border-spacing: 0 8px;
+        }
+
+        .pr-summary-table th,
+        .pr-summary-table td {
+            background: #fff;
+            border: 1px solid #e8eef6;
+            padding: 10px 12px;
+            vertical-align: middle;
+        }
+
+        .pr-summary-table th {
+            border-right: 0;
+            border-radius: 10px 0 0 10px;
+            color: #64748b;
+            font-size: .78rem;
+            text-transform: uppercase;
+            width: 190px;
+        }
+
+        .pr-summary-table td {
+            border-left: 0;
+            border-radius: 0 10px 10px 0;
+            color: #1f2937;
+        }
+
+        .pr-side-stack {
+            display: grid;
+            gap: 18px;
+        }
+
+        .pr-side-stack .card {
+            margin-top: 0 !important;
+        }
+
+        .pr-side-card .table {
+            margin-bottom: 0;
+        }
+
+        .pr-section-kicker {
+            color: #64748b;
+            font-size: .72rem;
+            font-weight: 800;
+            letter-spacing: 0;
+            text-transform: uppercase;
+        }
+
         .pr-line-evidence-status {
             min-width: 104px;
             border-radius: 999px;
@@ -95,6 +261,42 @@
             .pr-evidence-document-row {
                 grid-template-columns: 1fr;
             }
+
+            .pr-page-header {
+                border-radius: 10px;
+                padding: 16px;
+            }
+        }
+
+        @media (max-width: 1199.98px) {
+            .pr-kpi-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .pr-kpi-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .pr-summary-table th,
+            .pr-summary-table td {
+                display: block;
+                width: 100%;
+            }
+
+            .pr-summary-table th {
+                border-radius: 10px 10px 0 0;
+                border-right: 1px solid #e8eef6;
+                padding-bottom: 4px;
+            }
+
+            .pr-summary-table td {
+                border-left: 1px solid #e8eef6;
+                border-radius: 0 0 10px 10px;
+                border-top: 0;
+                padding-top: 4px;
+            }
         }
     </style>
 @endpush
@@ -165,16 +367,29 @@
 
             return number_format($bytes / (1024 ** $power), $power === 0 ? 0 : 1) . ' ' . $units[$power];
         };
+        $purchaseRequestCurrency = $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '';
+        $programName = $purchaseRequest->programFunding?->program?->name ?? $purchaseRequest->programFunding?->program_name ?? 'N/A';
+        $governanceNodeName = $purchaseRequest->governanceNode?->name ?? 'N/A';
+        $subActivityName = $purchaseRequest->subActivity?->name ?? 'N/A';
+        $lineItemsCount = $purchaseRequest->items->count();
+        $confirmedLineItemsCount = $lineItemEvidenceByItem->filter(fn ($evidence) => (bool) $evidence->is_met)->count();
+        $pendingLineItemsCount = max($lineItemsCount - $confirmedLineItemsCount, 0);
+        $attachmentCount = $purchaseRequest->attachments->count();
     @endphp
 
-    <div class="nxl-container">
+    <div class="nxl-container pr-show-page">
 
-        <div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-            <div>
-                <h4 class="fw-bold mb-1">Purchase Request: {{ $purchaseRequest->reference_no }}</h4>
-                <p class="text-muted mb-0">
-                    Generated from a budget commitment (multi-year supported)
-                </p>
+        <div class="page-header pr-page-header d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
+            <div class="min-w-0">
+                <span class="pr-reference-pill">Purchase Request</span>
+                <h4 class="fw-bold mb-1">{{ $purchaseRequest->reference_no }}</h4>
+                <div class="pr-header-meta d-flex flex-wrap align-items-center gap-2">
+                    <span>{{ $programName }}</span>
+                    <span class="text-muted">Generated from a budget commitment</span>
+                    <span class="badge {{ $statusClasses[$purchaseRequestStatus] ?? 'bg-secondary' }}">
+                        {{ ucfirst(str_replace('_', ' ', $purchaseRequestStatus)) }}
+                    </span>
+                </div>
             </div>
 
             <div class="d-flex flex-wrap gap-2">
@@ -214,13 +429,47 @@
             </div>
         @endif
 
-        <div class="row g-4 mt-1">
-            <div class="col-lg-7 order-1">
-                <div class="card shadow-sm">
+        <div class="row g-4 mt-1 align-items-start">
+            <div class="col-xl-8 order-1">
+                <div class="card shadow-sm pr-overview-card pr-card-hover">
                     <div class="card-body">
-                        <h6 class="fw-bold mb-3">Summary</h6>
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-2 mb-3">
+                            <div>
+                                <div class="pr-section-kicker mb-1">Overview</div>
+                                <h5 class="fw-bold mb-1">Purchase Request Details</h5>
+                                <div class="text-muted small">Budget commitment, delivery timing, and approval status in one place.</div>
+                            </div>
+                            <span class="badge {{ $statusClasses[$purchaseRequestStatus] ?? 'bg-secondary' }} align-self-start">
+                                {{ ucfirst(str_replace('_', ' ', $purchaseRequestStatus)) }}
+                            </span>
+                        </div>
 
-                        <table class="table table-sm mb-0">
+                        <div class="pr-kpi-grid mb-3">
+                            <div class="pr-kpi-item">
+                                <span class="pr-kpi-label">Total Amount</span>
+                                <span class="pr-kpi-value">
+                                    {{ $purchaseRequestCurrency }} {{ number_format((float) $purchaseRequest->total_amount, 2) }}
+                                </span>
+                                <span class="pr-kpi-note">Approved request value</span>
+                            </div>
+                            <div class="pr-kpi-item">
+                                <span class="pr-kpi-label">Line Items</span>
+                                <span class="pr-kpi-value">{{ $lineItemsCount }}</span>
+                                <span class="pr-kpi-note">{{ $confirmedLineItemsCount }} confirmed, {{ $pendingLineItemsCount }} pending</span>
+                            </div>
+                            <div class="pr-kpi-item">
+                                <span class="pr-kpi-label">Delivery Date</span>
+                                <span class="pr-kpi-value">{{ $purchaseRequest->delivery_date?->format('M j, Y') ?? 'N/A' }}</span>
+                                <span class="pr-kpi-note">Target completion</span>
+                            </div>
+                            <div class="pr-kpi-item">
+                                <span class="pr-kpi-label">Attachments</span>
+                                <span class="pr-kpi-value">{{ $attachmentCount }}</span>
+                                <span class="pr-kpi-note">Supporting documents</span>
+                            </div>
+                        </div>
+
+                        <table class="table table-sm mb-0 pr-summary-table">
                             <tr>
                                 <th style="width: 200px;">Program</th>
                                 <td>{{ $purchaseRequest->programFunding?->program?->name ?? $purchaseRequest->programFunding?->program_name ?? '—' }}</td>
@@ -289,7 +538,7 @@
             </div>
 
             <div class="col-12 order-3">
-                <div class="card shadow-sm pr-line-items-card">
+                <div class="card shadow-sm pr-line-items-card pr-card-hover">
                     <div class="card-body">
                         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
                             <div>
@@ -406,8 +655,9 @@
                 </div>
             </div>
 
-            <div class="col-lg-5 order-2">
-                <div class="card shadow-sm">
+            <div class="col-xl-4 order-2">
+                <div class="pr-side-stack">
+                <div class="card shadow-sm pr-side-card pr-card-hover">
                     <div class="card-body">
                         <h6 class="fw-bold mb-3">Year Contributions</h6>
 
@@ -439,7 +689,7 @@
                     </div>
                 </div>
 
-                <div class="card shadow-sm mt-4">
+                <div class="card shadow-sm pr-side-card pr-card-hover mt-4">
                     <div class="card-body">
                         <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
                             <div>
@@ -493,7 +743,7 @@
                 </div>
 
                 @if ($canApprovePurchaseRequests || in_array($purchaseRequestStatus, ['approved', 'rejected'], true))
-                    <div class="card shadow-sm mt-4">
+                    <div class="card shadow-sm pr-side-card pr-card-hover mt-4">
                         <div class="card-body">
                             <h6 class="fw-bold mb-3">Approval Decision</h6>
 
@@ -557,7 +807,7 @@
                 @endif
 
                 @can('finance.purchase_requests.send')
-                    <div class="card shadow-sm mt-4">
+                    <div class="card shadow-sm pr-side-card pr-card-hover mt-4">
                         <div class="card-body">
                             <h6 class="fw-bold mb-3">Send Purchase Request</h6>
 
@@ -599,6 +849,7 @@
                         </div>
                     </div>
                 @endcan
+                </div>
             </div>
         </div>
 
