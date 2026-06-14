@@ -546,7 +546,7 @@ class BudgetCommitmentController extends Controller
     public function edit(BudgetCommitment $commitment)
     {
         $this->assertCommitmentInScope($commitment);
-        if ($commitment->status !== self::STATUS_DRAFT) {
+        if ($commitment->status !== self::STATUS_DRAFT && !$this->currentUserCanEditLockedPurchaseRequests()) {
             abort(403, 'Only draft commitments can be edited.');
         }
 
@@ -598,7 +598,7 @@ class BudgetCommitmentController extends Controller
     public function update(Request $request, BudgetCommitment $commitment)
     {
         $this->assertCommitmentInScope($commitment);
-        if ($commitment->status !== self::STATUS_DRAFT) {
+        if ($commitment->status !== self::STATUS_DRAFT && !$this->currentUserCanEditLockedPurchaseRequests()) {
             abort(403, 'Only draft commitments can be updated.');
         }
 
@@ -880,6 +880,8 @@ class BudgetCommitmentController extends Controller
                     'created_by' => Auth::id(),
                 ]);
             }
+            $purchaseRequestStatus = $purchaseRequest->status ?: BudgetCommitment::STATUS_DRAFT;
+            $commitmentStatusForNewRows = $commitment->status ?: BudgetCommitment::STATUS_DRAFT;
 
             $purchaseRequest->update([
                 'program_funding_id' => $validated['program_funding_id'],
@@ -892,7 +894,7 @@ class BudgetCommitmentController extends Controller
                 'currency' => $funding->currency ?? $funding->program?->currency,
                 'total_amount' => $requestedAmount,
                 'description' => $validated['description'] ?? null,
-                'status' => BudgetCommitment::STATUS_DRAFT,
+                'status' => $purchaseRequestStatus,
             ]);
 
             $purchaseRequest->items()->delete();
@@ -917,6 +919,10 @@ class BudgetCommitmentController extends Controller
             }
 
             foreach ($splits as $index => $split) {
+                $rowStatus = isset($existingCommitments[$index])
+                    ? ($existingCommitments[$index]->status ?: $commitmentStatusForNewRows)
+                    : $commitmentStatusForNewRows;
+
                 $payload = [
                     'purchase_request_id' => $purchaseRequest->id,
                     'program_funding_id'   => $validated['program_funding_id'],
@@ -927,10 +933,15 @@ class BudgetCommitmentController extends Controller
                     'resource_id'          => null,
                     'commitment_amount'    => $split['amount'],
                     'commitment_year'      => $split['year'],
-                    'status'               => BudgetCommitment::STATUS_DRAFT,
+                    'status'               => $rowStatus,
                     'description'          => $validated['description'] ?? null,
                     'created_by'           => $commitment->created_by ?? Auth::id(),
                 ];
+
+                if (!isset($existingCommitments[$index]) && $rowStatus === BudgetCommitment::STATUS_APPROVED) {
+                    $payload['approved_by'] = Auth::id();
+                    $payload['approved_at'] = now();
+                }
 
                 if (isset($existingCommitments[$index])) {
                     $existingCommitments[$index]->update($payload);
@@ -1857,7 +1868,7 @@ protected function aiSummary(array $allocated, array $committed)
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin()) {
+        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
             return null;
         }
 
@@ -1990,5 +2001,12 @@ protected function aiSummary(array $allocated, array $committed)
         if (!$resource->governance_node_id || !in_array($resource->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this resource.');
         }
+    }
+
+    private function currentUserCanEditLockedPurchaseRequests(): bool
+    {
+        $user = Auth::user();
+
+        return $user && ($user->isAdmin() || $user->isSuperAdmin());
     }
 }

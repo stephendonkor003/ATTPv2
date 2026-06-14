@@ -808,11 +808,17 @@
             const purchaseRequests = @json($purchaseRequests);
             const procurements = @json($procurementOptions);
             const vendors = @json($vendorOptions);
+            const resourceCategories = @json($resourceCategories);
+            const resourcesByCategory = @json($resourcesByCategory);
             const oldPurchaseRequestId = @json($oldPurchaseRequestId);
             const oldCommitmentId = @json($oldCommitmentId);
             const oldAmount = @json(old('amount', $isEdit ? $purchaseOrder->amount : null));
             const oldItemEvidence = @json($lineItemEvidenceInput);
+            const oldLineItemCategories = @json(old('line_item_resource_categories', []));
+            const oldLineItemResources = @json(old('line_item_resources', []));
             const oldLineItemDeliverables = @json(old('line_item_deliverables', []));
+            const oldLineItemDates = @json(old('line_item_dates', []));
+            const oldLineItemAmounts = @json(old('line_item_amounts', []));
 
             const list = document.getElementById('purchaseRequestList');
             const search = document.getElementById('purchaseRequestSearch');
@@ -851,6 +857,30 @@
                 '"': '&quot;',
                 "'": '&#039;',
             }[char]));
+
+            function categoryOptionsHtml(selectedCategoryId = '') {
+                const selected = String(selectedCategoryId || '');
+                return [
+                    '<option value="">Select Category</option>',
+                    ...resourceCategories.map((category) => {
+                        const value = String(category.id || '');
+                        return `<option value="${escapeHtml(value)}"${value === selected ? ' selected' : ''}>${escapeHtml(category.name || 'Category')}</option>`;
+                    }),
+                ].join('');
+            }
+
+            function resourceOptionsHtml(categoryId = '', selectedResourceId = '') {
+                const selected = String(selectedResourceId || '');
+                const resources = resourcesByCategory[String(categoryId || '')] || [];
+
+                return [
+                    '<option value="">Select Resource</option>',
+                    ...resources.map((resource) => {
+                        const value = String(resource.id || '');
+                        return `<option value="${escapeHtml(value)}"${value === selected ? ' selected' : ''}>${escapeHtml(resource.name || 'Resource')}</option>`;
+                    }),
+                ].join('');
+            }
 
             function filteredRequests() {
                 const term = (search?.value || '').trim().toLowerCase();
@@ -1205,9 +1235,15 @@
                 request.items.forEach((item) => {
                     ensureEvidenceFieldset(item);
                     const previous = oldItemEvidence[item.id] || {};
-                    const deliverableDate = previous.deliverable_date || '';
+                    const categoryValue = oldLineItemCategories[item.id] ?? item.resource_category_id ?? '';
+                    const resourceValue = oldLineItemResources[item.id] ?? item.resource_id ?? '';
                     const deliverableValue = oldLineItemDeliverables[item.id] ?? item.line_deliverable ?? item.deliverable_title ?? '';
+                    const deliverableDate = oldLineItemDates[item.id] ?? item.milestone_date ?? previous.deliverable_date ?? '';
+                    const amountValue = oldLineItemAmounts[item.id] ?? item.amount ?? '';
+                    item.resource_category_id = categoryValue;
+                    item.resource_id = resourceValue;
                     item.line_deliverable = deliverableValue;
+                    item.amount = Number(amountValue || 0);
                     const row = document.createElement('tr');
                     row.dataset.itemId = item.id;
                     row.innerHTML = `
@@ -1218,8 +1254,20 @@
                                 aria-label="Confirm deliverable for ${escapeHtml(item.resource || item.category || 'line item')}">
                         </td>
                         <td>
-                            <div class="line-item-summary fw-semibold">${escapeHtml(item.resource || 'N/A')}</div>
-                            <small class="text-muted">${escapeHtml(item.category || 'N/A')}</small>
+                            <select
+                                name="line_item_resource_categories[${item.id}]"
+                                class="form-select form-select-sm mb-2 line-item-category-select"
+                                data-item-id="${item.id}"
+                                aria-label="Resource category for ${escapeHtml(item.resource || item.category || 'line item')}">
+                                ${categoryOptionsHtml(categoryValue)}
+                            </select>
+                            <select
+                                name="line_item_resources[${item.id}]"
+                                class="form-select form-select-sm line-item-resource-select"
+                                data-item-id="${item.id}"
+                                aria-label="Resource item for ${escapeHtml(item.resource || item.category || 'line item')}">
+                                ${resourceOptionsHtml(categoryValue, resourceValue)}
+                            </select>
                             <div class="small text-muted">${escapeHtml(item.budget_code || '')}</div>
                         </td>
                         <td>
@@ -1233,13 +1281,27 @@
                         </td>
                         <td>
                             <input type="date"
-                                name="item_evidence[${item.id}][deliverable_date]"
+                                name="line_item_dates[${item.id}]"
                                 class="form-control form-control-sm line-item-date-input"
                                 data-item-id="${item.id}"
                                 value="${escapeHtml(deliverableDate)}"
                                 aria-label="Deliverable date for ${escapeHtml(item.resource || item.category || 'line item')}">
+                            <input type="hidden"
+                                name="item_evidence[${item.id}][deliverable_date]"
+                                class="line-item-evidence-date-hidden"
+                                data-item-id="${item.id}"
+                                value="${escapeHtml(deliverableDate)}">
                         </td>
-                        <td class="text-end fw-semibold">${money(request.currency, item.amount)}</td>
+                        <td>
+                            <input type="number"
+                                name="line_item_amounts[${item.id}]"
+                                class="form-control form-control-sm text-end line-item-amount-input"
+                                data-item-id="${item.id}"
+                                min="0.01"
+                                step="0.01"
+                                value="${escapeHtml(amountValue)}"
+                                aria-label="Amount for ${escapeHtml(item.resource || item.category || 'line item')}">
+                        </td>
                         <td class="text-center">
                             <button type="button" class="btn btn-sm btn-outline-primary evidence-edit-btn" data-item-id="${item.id}">
                                 <i class="feather-upload-cloud me-1"></i> Evidence
@@ -1257,13 +1319,41 @@
                         }
                         updateEvidenceRowState(item.id);
                     });
+                    row.querySelector('.line-item-category-select').addEventListener('change', (event) => {
+                        item.resource_category_id = event.target.value;
+                        item.category = event.target.options[event.target.selectedIndex]?.text || '';
+                        item.resource_id = '';
+                        item.resource = '';
+                        const resourceSelect = row.querySelector('.line-item-resource-select');
+                        resourceSelect.innerHTML = resourceOptionsHtml(event.target.value, '');
+                        if (evidenceModalSubtitle && activeEvidenceFieldset?.dataset.itemId === String(item.id)) {
+                            evidenceModalSubtitle.textContent = `${item.category || 'N/A'} | ${money(request.currency, item.amount)}`;
+                        }
+                    });
+                    row.querySelector('.line-item-resource-select').addEventListener('change', (event) => {
+                        item.resource_id = event.target.value;
+                        item.resource = event.target.options[event.target.selectedIndex]?.text || '';
+                        if (evidenceModalTitle && activeEvidenceFieldset?.dataset.itemId === String(item.id)) {
+                            evidenceModalTitle.textContent = item.resource || item.category || 'Requested Line Item';
+                        }
+                    });
                     row.querySelector('.line-item-date-input').addEventListener('change', () => {
+                        const hidden = row.querySelector('.line-item-evidence-date-hidden');
+                        if (hidden) {
+                            hidden.value = row.querySelector('.line-item-date-input').value;
+                        }
                         updateEvidenceRowState(item.id);
                     });
                     row.querySelector('.line-item-deliverable-input').addEventListener('input', (event) => {
                         item.line_deliverable = event.target.value.trim();
                         if (evidenceModalDeliverable && activeEvidenceFieldset?.dataset.itemId === String(item.id)) {
                             evidenceModalDeliverable.textContent = item.line_deliverable || item.deliverable_title || 'No deliverable linked';
+                        }
+                    });
+                    row.querySelector('.line-item-amount-input').addEventListener('input', (event) => {
+                        item.amount = Number(event.target.value || 0);
+                        if (evidenceModalSubtitle && activeEvidenceFieldset?.dataset.itemId === String(item.id)) {
+                            evidenceModalSubtitle.textContent = `${item.category || 'N/A'} | ${money(request.currency, item.amount)}`;
                         }
                     });
                     row.querySelector('.evidence-edit-btn').addEventListener('click', () => {

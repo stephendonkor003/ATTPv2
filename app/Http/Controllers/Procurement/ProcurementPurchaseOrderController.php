@@ -14,6 +14,8 @@ use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\ProgramFunding;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
+use App\Models\Resource;
+use App\Models\ResourceCategory;
 use App\Models\SubActivity;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -214,6 +216,28 @@ class ProcurementPurchaseOrderController extends Controller
             ])
             ->values();
 
+        $resourceCategories = ResourceCategory::where('status', 'active')
+            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('governance_node_id');
+            })
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $resourcesByCategory = Resource::where('status', 'active')
+            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('governance_node_id');
+            })
+            ->orderBy('name')
+            ->get(['id', 'resource_category_id', 'name'])
+            ->groupBy(fn (Resource $resource) => (string) $resource->resource_category_id)
+            ->map(fn ($resources) => $resources->map(fn (Resource $resource) => [
+                'id' => (string) $resource->id,
+                'name' => $resource->name,
+            ])->values())
+            ->toArray();
+
         $buyerDefaults = [
             'name' => auth()->user()?->name,
             'email' => auth()->user()?->email,
@@ -245,6 +269,8 @@ class ProcurementPurchaseOrderController extends Controller
             'procurementOptions',
             'vendors',
             'vendorOptions',
+            'resourceCategories',
+            'resourcesByCategory',
             'buyerDefaults',
             'purchaseOrder',
             'itemEvidenceDefaults'
@@ -259,8 +285,16 @@ class ProcurementPurchaseOrderController extends Controller
             'procurement_id' => ['nullable', 'exists:procurements,id'],
             'deliverable_ids'   => ['nullable', 'array'],
             'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
+            'line_item_resource_categories' => ['nullable', 'array'],
+            'line_item_resource_categories.*' => ['nullable', 'exists:myb_resource_categories,id'],
+            'line_item_resources' => ['nullable', 'array'],
+            'line_item_resources.*' => ['nullable', 'exists:myb_resources,id'],
             'line_item_deliverables' => ['nullable', 'array'],
             'line_item_deliverables.*' => ['nullable', 'string', 'max:255'],
+            'line_item_dates' => ['nullable', 'array'],
+            'line_item_dates.*' => ['nullable', 'date'],
+            'line_item_amounts' => ['nullable', 'array'],
+            'line_item_amounts.*' => ['nullable', 'numeric', 'min:0.01'],
             'vendor_id' => ['nullable', 'exists:users,id'],
             'po_title' => ['nullable', 'string', 'max:255'],
             'supplier_reference' => ['nullable', 'string', 'max:255'],
@@ -387,7 +421,7 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $purchaseOrder = DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseRequest, $request, $vendor) {
-            $this->syncPurchaseRequestLineItemDeliverables($request, $purchaseRequest);
+            $this->syncPurchaseRequestLineItems($request, $purchaseRequest);
 
             $purchaseOrder = ProcurementPurchaseOrder::create([
                 'budget_commitment_id' => $commitment->id,
@@ -451,8 +485,16 @@ class ProcurementPurchaseOrderController extends Controller
             'procurement_id' => ['nullable', 'exists:procurements,id'],
             'deliverable_ids'   => ['nullable', 'array'],
             'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
+            'line_item_resource_categories' => ['nullable', 'array'],
+            'line_item_resource_categories.*' => ['nullable', 'exists:myb_resource_categories,id'],
+            'line_item_resources' => ['nullable', 'array'],
+            'line_item_resources.*' => ['nullable', 'exists:myb_resources,id'],
             'line_item_deliverables' => ['nullable', 'array'],
             'line_item_deliverables.*' => ['nullable', 'string', 'max:255'],
+            'line_item_dates' => ['nullable', 'array'],
+            'line_item_dates.*' => ['nullable', 'date'],
+            'line_item_amounts' => ['nullable', 'array'],
+            'line_item_amounts.*' => ['nullable', 'numeric', 'min:0.01'],
             'vendor_id' => ['nullable', 'exists:users,id'],
             'po_title' => ['nullable', 'string', 'max:255'],
             'supplier_reference' => ['nullable', 'string', 'max:255'],
@@ -578,7 +620,7 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseOrder, $purchaseRequest, $request, $vendor) {
-            $this->syncPurchaseRequestLineItemDeliverables($request, $purchaseRequest);
+            $this->syncPurchaseRequestLineItems($request, $purchaseRequest);
 
             $purchaseOrder->update([
                 'budget_commitment_id' => $commitment->id,
@@ -843,6 +885,18 @@ class ProcurementPurchaseOrderController extends Controller
         }
     }
 
+    private function assertResourceCategoryInScope(ResourceCategory $category): void
+    {
+        $scopedNodeIds = $this->scopedNodeIds();
+        if ($scopedNodeIds === null) {
+            return;
+        }
+
+        if (!$category->governance_node_id || !in_array($category->governance_node_id, $scopedNodeIds, true)) {
+            abort(403, 'You do not have access to this resource category.');
+        }
+    }
+
     private function remainingCommitmentAmount(BudgetCommitment $commitment, ?ProcurementPurchaseOrder $ignorePurchaseOrder = null): float
     {
         $committed = (float) ($commitment->commitment_amount ?? 0);
@@ -996,6 +1050,8 @@ class ProcurementPurchaseOrderController extends Controller
         $items = $purchaseRequest->items
             ->map(fn ($item) => [
                 'id' => (string) $item->id,
+                'resource_category_id' => (string) $item->resource_category_id,
+                'resource_id' => (string) $item->resource_id,
                 'category' => $item->resourceCategory?->name ?: 'N/A',
                 'resource' => $item->resource?->name ?: 'N/A',
                 'description' => $item->observations ?: $item->object_type ?: '',
@@ -1043,30 +1099,86 @@ class ProcurementPurchaseOrderController extends Controller
         ];
     }
 
-    private function syncPurchaseRequestLineItemDeliverables(Request $request, PurchaseRequest $purchaseRequest): void
+    private function syncPurchaseRequestLineItems(Request $request, PurchaseRequest $purchaseRequest): void
     {
-        $submitted = $request->input('line_item_deliverables', []);
-        if (!is_array($submitted) || $submitted === []) {
+        $categories = $request->input('line_item_resource_categories', []);
+        $resources = $request->input('line_item_resources', []);
+        $deliverables = $request->input('line_item_deliverables', []);
+        $dates = $request->input('line_item_dates', []);
+        $amounts = $request->input('line_item_amounts', []);
+
+        $submittedIds = collect([$categories, $resources, $deliverables, $dates, $amounts])
+            ->filter(fn ($values) => is_array($values))
+            ->flatMap(fn ($values) => array_keys($values))
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        if ($submittedIds->isEmpty()) {
             return;
         }
 
         $purchaseRequest->loadMissing('items');
         $itemsById = $purchaseRequest->items->keyBy(fn ($item) => (string) $item->id);
 
-        foreach ($submitted as $itemId => $deliverable) {
-            $key = (string) $itemId;
-
+        foreach ($submittedIds as $key) {
             if (! $itemsById->has($key)) {
                 throw ValidationException::withMessages([
-                    'line_item_deliverables' => 'One or more edited deliverables do not belong to the selected purchase request.',
+                    'line_item_resources' => 'One or more edited line items do not belong to the selected purchase request.',
                 ]);
             }
 
-            $text = trim((string) $deliverable);
-            $itemsById->get($key)->update([
+            $item = $itemsById->get($key);
+            $categoryId = (string) ($categories[$key] ?? $item->resource_category_id ?? '');
+            $resourceId = (string) ($resources[$key] ?? $item->resource_id ?? '');
+            $amount = array_key_exists($key, $amounts)
+                ? round((float) $amounts[$key], 2)
+                : round((float) $item->amount, 2);
+            $text = array_key_exists($key, $deliverables)
+                ? trim((string) $deliverables[$key])
+                : (string) ($item->milestone ?? '');
+            $date = array_key_exists($key, $dates)
+                ? trim((string) $dates[$key])
+                : $item->milestone_date?->format('Y-m-d');
+
+            if ($categoryId === '' || $resourceId === '' || $amount <= 0) {
+                throw ValidationException::withMessages([
+                    'line_item_resources' => 'Each purchase request line item must have a category, resource item, and amount.',
+                ]);
+            }
+
+            $category = ResourceCategory::find($categoryId);
+            $resource = Resource::find($resourceId);
+
+            if (!$category || !$resource) {
+                throw ValidationException::withMessages([
+                    'line_item_resources' => 'One or more selected resource values were not found.',
+                ]);
+            }
+
+            $this->assertResourceCategoryInScope($category);
+            $this->assertResourceInScope($resource);
+
+            if ((string) $resource->resource_category_id !== $categoryId) {
+                throw ValidationException::withMessages([
+                    'line_item_resources' => 'One or more resource items do not match the selected category.',
+                ]);
+            }
+
+            $item->update([
+                'resource_category_id' => $categoryId,
+                'resource_id' => $resourceId,
                 'milestone' => $text !== '' ? $text : null,
+                'milestone_date' => $date !== '' ? $date : null,
+                'amount' => $amount,
             ]);
         }
+
+        $purchaseRequest->unsetRelation('items');
+        $purchaseRequest->load('items.deliverable');
+        $purchaseRequest->update([
+            'total_amount' => round((float) $purchaseRequest->items->sum('amount'), 2),
+        ]);
     }
 
     private function attachSupportingDocument(Request $request, ProcurementPurchaseOrder $purchaseOrder): void

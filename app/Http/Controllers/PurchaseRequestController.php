@@ -361,20 +361,24 @@ class PurchaseRequestController extends Controller
     {
         $this->assertPurchaseRequestInScope($purchaseRequest);
 
-        if (!$this->purchaseRequestIsFullyDraft($purchaseRequest)) {
+        $canEditLockedRequest = $this->currentUserCanEditLockedPurchaseRequests();
+
+        if (!$canEditLockedRequest && !$this->purchaseRequestIsFullyDraft($purchaseRequest)) {
             return back()->withErrors([
                 'status' => 'Only purchase requests with draft commitments can be edited.',
             ]);
         }
 
         $commitment = $purchaseRequest->commitments()
-            ->where('status', BudgetCommitment::STATUS_DRAFT)
+            ->when(!$canEditLockedRequest, fn ($query) => $query->where('status', BudgetCommitment::STATUS_DRAFT))
             ->orderBy('commitment_year')
             ->first();
 
         if (!$commitment) {
             return back()->withErrors([
-                'status' => 'This purchase request has no editable draft commitment.',
+                'status' => $canEditLockedRequest
+                    ? 'This purchase request has no commitment to edit.'
+                    : 'This purchase request has no editable draft commitment.',
             ]);
         }
 
@@ -719,7 +723,7 @@ class PurchaseRequestController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser || $currentUser->isAdmin()) {
+        if (!$currentUser || $currentUser->isAdmin() || $currentUser->isSuperAdmin()) {
             return null;
         }
 
@@ -756,5 +760,12 @@ class PurchaseRequestController extends Controller
 
         return $statuses->isNotEmpty()
             && $statuses->every(fn ($status) => $status === BudgetCommitment::STATUS_DRAFT);
+    }
+
+    private function currentUserCanEditLockedPurchaseRequests(): bool
+    {
+        $user = Auth::user();
+
+        return $user && ($user->isAdmin() || $user->isSuperAdmin());
     }
 }
