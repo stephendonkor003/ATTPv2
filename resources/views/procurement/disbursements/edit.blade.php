@@ -83,7 +83,7 @@
         $money = fn ($value) => trim($currency . ' ' . number_format((float) $value, 2));
         $selectedPaymentMethod = old('payment_method', $disbursement->payment_method);
         $selectedStatus = old('status', $disbursement->status ?? 'completed');
-        $selectedDeliverable = old('deliverable_id', $disbursement->deliverable_id);
+        $selectedLineItemId = old('purchase_request_item_id', $selectedLineItem?->id);
         $statusBadgeClasses = [
             'completed' => 'bg-success',
             'paid' => 'bg-success',
@@ -148,7 +148,7 @@
                         <div class="stat-value">{{ $money($paidExcludingCurrent) }}</div>
                     </div>
                     <div class="stat-tile">
-                        <div class="stat-label">Editable Paid Limit</div>
+                        <div class="stat-label">Line Editable Limit</div>
                         <div class="stat-value">{{ $money($maxPayingAmount) }}</div>
                     </div>
                     <div class="stat-tile">
@@ -169,23 +169,30 @@
 
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Deliverable</label>
-                            @if ($deliverables->isEmpty())
-                                <input type="hidden" name="deliverable_id" value="">
-                                <input type="text" class="form-control" value="No deliverables linked to this purchase order" disabled>
+                            <label class="form-label fw-semibold">Paid PO Line Item <span class="text-danger">*</span></label>
+                            @if ($lineItems->isEmpty())
+                                <input type="text" class="form-control is-invalid" value="No purchase request line items found" disabled>
+                                <div class="invalid-feedback d-block">This disbursement cannot be edited until the PO has source line items.</div>
                             @else
-                                <select name="deliverable_id" class="form-select @error('deliverable_id') is-invalid @enderror" required>
-                                    <option value="">Select deliverable</option>
-                                    @foreach ($deliverables as $deliverable)
-                                        <option value="{{ $deliverable->id }}" @selected((string) $selectedDeliverable === (string) $deliverable->id)>
-                                            {{ $deliverable->title ?? 'Untitled deliverable' }}
-                                            @if ($deliverable->procurement?->reference_no)
-                                                | {{ $deliverable->procurement->reference_no }}
+                                <select name="purchase_request_item_id" class="form-select @error('purchase_request_item_id') is-invalid @enderror" required>
+                                    <option value="">Select paid line item</option>
+                                    @foreach ($lineItems as $lineItem)
+                                        @php
+                                            $lineSummary = $lineItemPaymentSummaries->get((string) $lineItem->id, [
+                                                'paid_amount' => 0,
+                                                'remaining_amount' => (float) ($lineItem->amount ?? 0),
+                                            ]);
+                                        @endphp
+                                        <option value="{{ $lineItem->id }}" @selected((string) $selectedLineItemId === (string) $lineItem->id)>
+                                            {{ $lineItem->resource?->name ?? $lineItem->resourceCategory?->name ?? 'Line item' }}
+                                            @if ($lineItem->milestone)
+                                                | {{ $lineItem->milestone }}
                                             @endif
+                                            | Balance {{ $currency ?: 'USD' }} {{ number_format((float) $lineSummary['remaining_amount'], 2) }}
                                         </option>
                                     @endforeach
                                 </select>
-                                @error('deliverable_id')
+                                @error('purchase_request_item_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
                             @endif

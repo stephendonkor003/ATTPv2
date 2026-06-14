@@ -12,6 +12,7 @@ class ProcurementDisbursement extends BaseModel
 
     protected $fillable = [
         'purchase_order_id',
+        'purchase_request_item_id',
         'deliverable_id',
         'procurement_id',
         'vendor_id',
@@ -45,6 +46,11 @@ class ProcurementDisbursement extends BaseModel
     public function purchaseOrder(): BelongsTo
     {
         return $this->belongsTo(ProcurementPurchaseOrder::class, 'purchase_order_id');
+    }
+
+    public function purchaseRequestItem(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequestItem::class, 'purchase_request_item_id');
     }
 
     public function deliverable(): BelongsTo

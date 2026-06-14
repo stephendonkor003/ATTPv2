@@ -121,8 +121,16 @@
                     <td class="value">{{ $disbursement->purchaseOrder?->reference_no ?? 'N/A' }}</td>
                 </tr>
                 <tr>
+                    <td class="label">Paid PO Line</td>
+                    <td class="value">
+                        {{ $disbursement->purchaseRequestItem?->resource?->name
+                            ?? $disbursement->purchaseRequestItem?->resourceCategory?->name
+                            ?? 'N/A' }}
+                    </td>
+                </tr>
+                <tr>
                     <td class="label">Deliverable</td>
-                    <td class="value">{{ $disbursement->deliverable?->title ?? 'N/A' }}</td>
+                    <td class="value">{{ $disbursement->purchaseRequestItem?->milestone ?: ($disbursement->deliverable?->title ?? 'N/A') }}</td>
                 </tr>
                 <tr>
                     <td class="label">Procurement</td>

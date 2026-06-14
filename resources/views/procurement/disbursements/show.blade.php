@@ -191,25 +191,43 @@
         $money = fn ($value) => trim(($currency ? $currency . ' ' : '') . number_format((float) $value, 2));
         $statusValue = strtolower((string) ($disbursement->status ?? 'completed'));
         $paidDisbursementStatuses = ['completed', 'paid', 'fully_paid'];
-        $paidDisbursements = $purchaseOrder?->disbursements?->filter(fn ($receipt) => $receipt->deliverable_id
-            && (
-                in_array(strtolower((string) $receipt->status), $paidDisbursementStatuses, true)
-                || strtolower((string) $receipt->recipient_confirmation_status) === 'confirmed'
-            )
+        $paidDisbursements = $purchaseOrder?->disbursements?->filter(fn ($receipt) => $receipt->paid_at
+            && in_array(strtolower((string) $receipt->status), $paidDisbursementStatuses, true)
         ) ?? collect();
-        $paidDisbursementsByDeliverable = $paidDisbursements->groupBy(fn ($receipt) => (string) $receipt->deliverable_id);
-        $paidLineItems = $lineItems->filter(function ($item) use ($evidenceByItem, $paidDisbursementsByDeliverable) {
-            $itemEvidence = $evidenceByItem->get((string) $item->id);
-            $hasPaidReceipt = $item->deliverable_id
-                && $paidDisbursementsByDeliverable->has((string) $item->deliverable_id);
+        $paidDisbursementsByItem = $paidDisbursements
+            ->filter(fn ($receipt) => filled($receipt->purchase_request_item_id))
+            ->groupBy(fn ($receipt) => (string) $receipt->purchase_request_item_id);
+        $legacyPaidDisbursementsByDeliverable = $paidDisbursements
+            ->filter(fn ($receipt) => blank($receipt->purchase_request_item_id) && $receipt->deliverable_id)
+            ->groupBy(fn ($receipt) => (string) $receipt->deliverable_id);
+        $paidLineItems = $lineItems->filter(function ($item) use ($paidDisbursementsByItem, $legacyPaidDisbursementsByDeliverable) {
+            if ($paidDisbursementsByItem->has((string) $item->id)) {
+                return true;
+            }
 
-            return (bool) $itemEvidence?->is_met || $hasPaidReceipt;
+            return $item->deliverable_id
+                && $legacyPaidDisbursementsByDeliverable->has((string) $item->deliverable_id);
         })->values();
+        $currentReceiptItemId = (string) ($disbursement->purchase_request_item_id ?? '');
         $currentReceiptDeliverableId = (string) ($disbursement->deliverable_id ?? '');
-        $currentReceiptLineItems = $lineItems->filter(fn ($item) => $currentReceiptDeliverableId !== ''
-            && (string) ($item->deliverable_id ?? '') === $currentReceiptDeliverableId
+        $currentReceiptLineItems = $lineItems->filter(fn ($item) => $currentReceiptItemId !== ''
+            ? (string) $item->id === $currentReceiptItemId
+            : ($currentReceiptDeliverableId !== '' && (string) ($item->deliverable_id ?? '') === $currentReceiptDeliverableId)
         )->values();
-        $paidLineItemsTotal = $paidLineItems->sum(fn ($item) => (float) ($item->amount ?? 0));
+        $paidAmountForLineItem = function ($item) use ($paidDisbursementsByItem, $legacyPaidDisbursementsByDeliverable) {
+            $lineAmount = (float) ($item->amount ?? 0);
+            $itemReceipts = $paidDisbursementsByItem->get((string) $item->id, collect());
+            if ($itemReceipts->isNotEmpty()) {
+                return min($lineAmount, (float) $itemReceipts->sum(fn ($receipt) => (float) $receipt->amount));
+            }
+
+            if ($item->deliverable_id && $legacyPaidDisbursementsByDeliverable->has((string) $item->deliverable_id)) {
+                return $lineAmount;
+            }
+
+            return 0.0;
+        };
+        $paidLineItemsTotal = $paidLineItems->sum($paidAmountForLineItem);
         $poAmount = (float) ($purchaseOrder?->amount ?? 0);
         $poPaidAmount = $purchaseOrder ? (float) $purchaseOrder->paidAmount() : 0;
         $poBalanceAmount = $purchaseOrder ? (float) $purchaseOrder->remainingAmount() : 0;
@@ -345,8 +363,21 @@
                                 </td>
                             </tr>
                             <tr>
+                                <th>Paid PO Line</th>
+                                <td>
+                                    <div class="fw-semibold">
+                                        {{ $disbursement->purchaseRequestItem?->resource?->name
+                                            ?? $disbursement->purchaseRequestItem?->resourceCategory?->name
+                                            ?? 'N/A' }}
+                                    </div>
+                                    @if ($disbursement->purchaseRequestItem?->budget_code)
+                                        <div class="small text-muted">{{ $disbursement->purchaseRequestItem->budget_code }}</div>
+                                    @endif
+                                </td>
+                            </tr>
+                            <tr>
                                 <th>Deliverable</th>
-                                <td>{{ $disbursement->deliverable?->title ?? 'N/A' }}</td>
+                                <td>{{ $disbursement->purchaseRequestItem?->milestone ?: ($disbursement->deliverable?->title ?? 'N/A') }}</td>
                             </tr>
                         </table>
                     </div>
@@ -471,7 +502,7 @@
                         <div class="section-label mb-1">Paid PO Item Lines</div>
                         <h5 class="fw-bold mb-1">Line Items Paid or Confirmed Against This PO</h5>
                         <div class="text-muted small">
-                            Items tagged "This receipt" are linked to the deliverable paid by {{ $disbursement->reference_no ?? 'this receipt' }}.
+                            Items tagged "This receipt" are linked to the PO line paid by {{ $disbursement->reference_no ?? 'this receipt' }}.
                         </div>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
@@ -498,6 +529,7 @@
                                     <th style="width: 190px;">Payment Receipt</th>
                                     <th style="width: 160px;">Evidence</th>
                                     <th style="width: 150px;">Deliverable Date</th>
+                                    <th class="text-end" style="width: 150px;">Amount Paid</th>
                                     <th class="text-end" style="width: 150px;">Line Amount</th>
                                 </tr>
                             </thead>
@@ -506,10 +538,12 @@
                                     @php
                                         $itemEvidence = $evidenceByItem->get((string) $item->id);
                                         $itemDocuments = collect($itemEvidence?->documents ?? []);
-                                        $itemReceipts = $item->deliverable_id
-                                            ? $paidDisbursementsByDeliverable->get((string) $item->deliverable_id, collect())
-                                            : collect();
+                                        $itemReceipts = $paidDisbursementsByItem->get((string) $item->id, collect());
+                                        if ($itemReceipts->isEmpty() && $item->deliverable_id) {
+                                            $itemReceipts = $legacyPaidDisbursementsByDeliverable->get((string) $item->deliverable_id, collect());
+                                        }
                                         $isCurrentReceiptLine = $currentReceiptLineItems->contains(fn ($currentItem) => (string) $currentItem->id === (string) $item->id);
+                                        $itemPaidAmount = $paidAmountForLineItem($item);
                                     @endphp
                                     <tr>
                                         <td class="text-muted">{{ $loop->iteration }}</td>
@@ -567,6 +601,7 @@
                                             @endif
                                         </td>
                                         <td>{{ $itemEvidence?->deliverable_date?->format('d M Y') ?? $item->milestone_date?->format('d M Y') ?? 'N/A' }}</td>
+                                        <td class="text-end fw-semibold">{{ $money($itemPaidAmount) }}</td>
                                         <td class="text-end fw-semibold">{{ $money($item->amount) }}</td>
                                     </tr>
                                 @endforeach
@@ -575,6 +610,7 @@
                                 <tr>
                                     <th colspan="7" class="text-end">Paid Line Total</th>
                                     <th class="text-end">{{ $money($paidLineItemsTotal) }}</th>
+                                    <th></th>
                                 </tr>
                             </tfoot>
                         </table>

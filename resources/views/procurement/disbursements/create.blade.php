@@ -141,6 +141,18 @@
             width: 20px;
         }
 
+        .disb-create .line-item-payment-radio {
+            accent-color: #0f766e;
+            cursor: pointer;
+            height: 20px;
+            width: 20px;
+        }
+
+        .disb-create .line-item-payment-radio:disabled {
+            cursor: not-allowed;
+            opacity: .45;
+        }
+
         .disb-create .line-item-date-input {
             min-width: 145px;
         }
@@ -382,7 +394,7 @@
                                     <table class="table table-sm align-middle">
                                         <thead>
                                             <tr>
-                                                <th class="text-center" style="width: 112px;">Deliverable Check</th>
+                                                <th class="text-center" style="width: 112px;">Pay Line</th>
                                                 <th>Requested Item</th>
                                                 <th>Linked Deliverable</th>
                                                 <th style="width: 170px;">Date</th>
@@ -393,6 +405,9 @@
                                         <tbody id="poLineItemsBody"></tbody>
                                     </table>
                                 </div>
+                                @error('purchase_request_item_id')
+                                    <div class="text-danger small mt-2">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
 
@@ -401,10 +416,10 @@
                                 <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
                                     <div>
                                         <div class="section-title mb-1">Disbursement Details</div>
-                                        <div class="text-muted small">Record the payment amount and receipt details for the selected purchase order.</div>
+                                        <div class="text-muted small">Choose the PO item line being paid, then record the receipt details.</div>
                                     </div>
                                     <div class="payment-note small">
-                                        Deliverables are confirmed from the line items and evidence below.
+                                        Payment is posted to one PO line item. Evidence can still be attached to each line.
                                     </div>
                                 </div>
 
@@ -535,6 +550,7 @@
         (function () {
             const poData = @json($purchaseOrdersData);
             const oldDeliverableId = @json(old('deliverable_id'));
+            const oldPurchaseRequestItemId = @json(old('purchase_request_item_id'));
             const oldItemEvidence = @json(old('item_evidence', []));
 
             const select = document.getElementById('purchaseOrderSelect');
@@ -803,6 +819,41 @@
                 showEvidenceModal();
             }
 
+            function lineRemainingForPayment(item, po) {
+                const lineRemaining = Number(item.remaining_amount ?? Math.max(Number(item.amount || 0) - Number(item.paid_amount || 0), 0));
+                const poRemaining = Number(po.balance_amount ?? po.remaining ?? lineRemaining);
+
+                return Math.max(Math.min(lineRemaining, poRemaining), 0);
+            }
+
+            function resetPaymentLine(po) {
+                if (deliverableSelect) deliverableSelect.value = '';
+
+                const currency = po?.currency || 'USD';
+                if (amountHint) amountHint.textContent = `Select a payable line item (${currency})`;
+                if (amountInput) {
+                    amountInput.removeAttribute('max');
+                    if (!amountInput.dataset.userSet) {
+                        amountInput.value = '';
+                    }
+                }
+            }
+
+            function selectPaymentLine(item, po, forceAmount = false) {
+                const currency = po.currency || 'USD';
+                const maxAmount = lineRemainingForPayment(item, po);
+
+                if (deliverableSelect) deliverableSelect.value = item.deliverable_id || '';
+                if (amountHint) amountHint.textContent = `${fmt(maxAmount)} ${currency} for selected line`;
+                if (amountInput) {
+                    amountInput.max = maxAmount;
+                    const currentAmount = parseFloat(amountInput.value || 0);
+                    if (forceAmount || !amountInput.dataset.userSet || currentAmount > maxAmount) {
+                        amountInput.value = maxAmount > 0 ? maxAmount.toFixed(2) : '';
+                    }
+                }
+            }
+
             function renderLineItems(po) {
                 const body = document.getElementById('poLineItemsBody');
                 returnActiveEvidenceFieldset();
@@ -814,26 +865,43 @@
 
                 if (items.length === 0) {
                     body.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No line items found for this purchase order.</td></tr>';
+                    resetPaymentLine(po);
                     return;
                 }
+
+                const payableItems = items.filter((item) => lineRemainingForPayment(item, po) > 0);
+                const selectedItemId = oldPurchaseRequestItemId && items.some((item) => String(item.id) === String(oldPurchaseRequestItemId))
+                    ? String(oldPurchaseRequestItemId)
+                    : (payableItems.length === 1 ? String(payableItems[0].id) : null);
+                let selectedItem = null;
 
                 items.forEach((item) => {
                     const previous = evidenceDefaults(item);
                     const confirmed = evidenceIsConfirmed(previous.is_met);
                     const deliverableDate = previous.deliverable_date || '';
+                    const lineAmount = Number(item.amount || 0);
+                    const linePaid = Number(item.paid_amount || 0);
+                    const lineRemaining = lineRemainingForPayment(item, po);
+                    const isPayable = lineRemaining > 0;
+                    const isSelected = isPayable && selectedItemId && String(item.id) === selectedItemId;
                     ensureEvidenceFieldset(item);
 
                     const row = document.createElement('tr');
                     row.dataset.itemId = item.id;
                     row.innerHTML = `
                         <td class="text-center">
-                            <input type="checkbox"
-                                name="item_evidence[${item.id}][is_met]"
-                                value="1"
-                                class="line-item-evidence-check"
+                            <input type="radio"
+                                name="purchase_request_item_id"
+                                value="${escapeHtml(item.id)}"
+                                class="line-item-payment-radio"
                                 data-item-id="${item.id}"
-                                ${confirmed ? ' checked' : ''}
-                                aria-label="Confirm deliverable for ${escapeHtml(item.resource || item.category || 'line item')}">
+                                ${isSelected ? ' checked' : ''}
+                                ${isPayable ? '' : ' disabled'}
+                                required
+                                aria-label="Pay ${escapeHtml(item.resource || item.category || 'line item')}">
+                            <div class="small ${isPayable ? 'text-success' : 'text-muted'} mt-1">
+                                ${isPayable ? 'Pay' : 'Paid'}
+                            </div>
                         </td>
                         <td>
                             <div class="fw-semibold">${escapeHtml(item.resource || 'N/A')}</div>
@@ -848,8 +916,18 @@
                                 data-item-id="${item.id}"
                                 value="${escapeHtml(deliverableDate)}">
                         </td>
-                        <td class="text-end fw-semibold">${escapeHtml(po.currency || '')} ${fmt(item.amount)}</td>
+                        <td class="text-end">
+                            <div class="fw-semibold">${escapeHtml(po.currency || '')} ${fmt(lineAmount)}</div>
+                            <div class="small text-muted">Paid ${fmt(linePaid)}</div>
+                            <div class="small ${lineRemaining > 0 ? 'text-success' : 'text-muted'}">Balance ${fmt(lineRemaining)}</div>
+                        </td>
                         <td class="text-center">
+                            <input type="checkbox"
+                                name="item_evidence[${item.id}][is_met]"
+                                value="1"
+                                class="line-item-evidence-check d-none"
+                                data-item-id="${item.id}"
+                                ${confirmed ? ' checked' : ''}>
                             <button type="button" class="btn btn-sm btn-outline-primary evidence-edit-btn" data-item-id="${item.id}">
                                 <i class="feather-upload-cloud me-1"></i> Evidence
                             </button>
@@ -862,6 +940,12 @@
                     row.querySelector('.line-item-evidence-check')?.addEventListener('change', () => {
                         updateEvidenceRowState(item.id);
                     });
+                    row.querySelector('.line-item-payment-radio')?.addEventListener('change', (event) => {
+                        if (event.target.checked) {
+                            if (amountInput) delete amountInput.dataset.userSet;
+                            selectPaymentLine(item, po, true);
+                        }
+                    });
                     row.querySelector('.line-item-date-input')?.addEventListener('change', () => {
                         updateEvidenceRowState(item.id);
                     });
@@ -870,8 +954,17 @@
                     });
 
                     body.appendChild(row);
+                    if (isSelected) {
+                        selectedItem = item;
+                    }
                     updateEvidenceRowState(item.id);
                 });
+
+                if (selectedItem) {
+                    selectPaymentLine(selectedItem, po, false);
+                } else {
+                    resetPaymentLine(po);
+                }
             }
 
             function renderDeliverables(po) {
@@ -922,9 +1015,7 @@
                 if (!po) {
                     poPanel?.classList.add('d-none');
                     disbPanel?.classList.add('d-none');
-                    if (deliverableSelect) {
-                        deliverableSelect.value = '';
-                    }
+                    resetPaymentLine(null);
                     return;
                 }
 
@@ -948,12 +1039,10 @@
                 setText('po-expected-delivery', po.expected_delivery);
                 setText('po-valid-until', po.valid_until);
 
-                renderDeliverables(po);
-                renderLineItems(po);
-
                 const totalAmount = Number(po.amount || 0);
                 const paidAmount = Number(po.paid_amount ?? po.paid ?? 0);
                 const balanceAmount = Number(po.balance_amount ?? po.remaining ?? Math.max(totalAmount - paidAmount, 0));
+                const currency = po.currency || 'USD';
 
                 setText('po-amount', fmt(totalAmount));
                 setText('po-paid', fmt(paidAmount));
@@ -962,17 +1051,10 @@
                     element.textContent = po.currency || '';
                 });
 
-                const currency = po.currency || 'USD';
                 if (currPrefix) currPrefix.textContent = currency;
-                if (amountHint) amountHint.textContent = `${fmt(balanceAmount)} ${currency}`;
-                if (amountInput) {
-                    amountInput.max = balanceAmount;
-                    if (!amountInput.dataset.userSet) {
-                        amountInput.value = balanceAmount;
-                    } else if (parseFloat(amountInput.value || 0) > balanceAmount) {
-                        amountInput.value = balanceAmount;
-                    }
-                }
+
+                renderDeliverables(po);
+                renderLineItems(po);
 
                 poPanel?.classList.remove('d-none');
                 disbPanel?.classList.remove('d-none');

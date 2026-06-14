@@ -62,27 +62,31 @@
         $evidenceByItem = $purchaseOrder->lineItemEvidence->keyBy('purchase_request_item_id');
         $currency = $purchaseOrder->currency ?? $sourcePurchaseRequest?->currency ?? '';
         $paidDisbursementStatuses = ['completed', 'paid', 'fully_paid'];
-        $paidDeliverableIds = $purchaseOrder->disbursements
-            ->filter(fn ($disbursement) => $disbursement->deliverable_id
-                && (
-                    in_array(strtolower((string) $disbursement->status), $paidDisbursementStatuses, true)
-                    || $disbursement->recipient_confirmation_status === 'confirmed'
-                ))
+        $paidDisbursements = $purchaseOrder->disbursements
+            ->filter(fn ($disbursement) => $disbursement->paid_at
+                && in_array(strtolower((string) $disbursement->status), $paidDisbursementStatuses, true));
+        $paidAmountsByItem = $paidDisbursements
+            ->filter(fn ($disbursement) => filled($disbursement->purchase_request_item_id))
+            ->groupBy(fn ($disbursement) => (string) $disbursement->purchase_request_item_id)
+            ->map(fn ($receipts) => round($receipts->sum(fn ($receipt) => (float) $receipt->amount), 2));
+        $legacyPaidDeliverableIds = $paidDisbursements
+            ->filter(fn ($disbursement) => blank($disbursement->purchase_request_item_id) && $disbursement->deliverable_id)
             ->pluck('deliverable_id')
             ->map(fn ($deliverableId) => (string) $deliverableId)
             ->values()
             ->all();
-        $isLineItemPaidOrConfirmed = function ($item) use ($evidenceByItem, $paidDeliverableIds): bool {
-            $itemEvidence = $evidenceByItem->get($item->id);
+        $linePaidAmountForItem = function ($item) use ($paidAmountsByItem, $legacyPaidDeliverableIds): float {
+            $lineAmount = (float) ($item->amount ?? 0);
+            $paidAmount = (float) $paidAmountsByItem->get((string) $item->id, 0);
 
-            if ($itemEvidence?->is_met) {
-                return true;
+            if ($paidAmount <= 0 && $item->deliverable_id && in_array((string) $item->deliverable_id, $legacyPaidDeliverableIds, true)) {
+                $paidAmount = $lineAmount;
             }
 
-            return $item->deliverable_id && in_array((string) $item->deliverable_id, $paidDeliverableIds, true);
+            return round(min($lineAmount, $paidAmount), 2);
         };
         $lineItemTotalAmount = round($lineItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
-        $lineItemPaidAmount = round($lineItems->sum(fn ($item) => $isLineItemPaidOrConfirmed($item) ? (float) ($item->amount ?? 0) : 0), 2);
+        $lineItemPaidAmount = round($lineItems->sum($linePaidAmountForItem), 2);
         $lineItemPendingAmount = round(max($lineItemTotalAmount - $lineItemPaidAmount, 0), 2);
         $summaryPoAmount = $lineItems->isNotEmpty() ? $lineItemTotalAmount : (float) ($purchaseOrder->amount ?? 0);
         $summaryPaidAmount = $lineItems->isNotEmpty() ? $lineItemPaidAmount : $purchaseOrder->paidAmount();
@@ -392,7 +396,9 @@
                                         @php
                                             $itemEvidence = $evidenceByItem->get($item->id);
                                             $itemDocuments = collect($itemEvidence?->documents ?? []);
-                                            $itemHasPaidDisbursement = $item->deliverable_id && in_array((string) $item->deliverable_id, $paidDeliverableIds, true);
+                                            $itemPaidAmount = $linePaidAmountForItem($item);
+                                            $itemHasPaidDisbursement = $itemPaidAmount > 0;
+                                            $itemFullyPaid = $itemPaidAmount >= (float) ($item->amount ?? 0) && (float) ($item->amount ?? 0) > 0;
                                         @endphp
                                         <tr>
                                             <td>{{ $loop->iteration }}</td>
@@ -403,12 +409,16 @@
                                             <td>
                                                 @if ($itemEvidence)
                                                     <span class="badge {{ $itemEvidence->is_met || $itemHasPaidDisbursement ? 'bg-success' : 'bg-info' }}">
-                                                        @if ($itemEvidence->is_met && $itemHasPaidDisbursement)
+                                                        @if ($itemEvidence->is_met && $itemFullyPaid)
                                                             Paid / Confirmed
+                                                        @elseif ($itemEvidence->is_met && $itemHasPaidDisbursement)
+                                                            Part Paid / Confirmed
                                                         @elseif ($itemEvidence->is_met)
                                                             Confirmed
-                                                        @elseif ($itemHasPaidDisbursement)
+                                                        @elseif ($itemFullyPaid)
                                                             Paid
+                                                        @elseif ($itemHasPaidDisbursement)
+                                                            Part Paid
                                                         @else
                                                             Recorded
                                                         @endif
@@ -427,8 +437,10 @@
                                                             @endforeach
                                                         </div>
                                                     @endif
-                                                @elseif ($itemHasPaidDisbursement)
+                                                @elseif ($itemFullyPaid)
                                                     <span class="badge bg-success">Paid</span>
+                                                @elseif ($itemHasPaidDisbursement)
+                                                    <span class="badge bg-success">Part Paid</span>
                                                 @else
                                                     <span class="badge bg-light text-muted border">Pending</span>
                                                 @endif
@@ -437,7 +449,12 @@
                                                 <div>{{ $item->observations ?? $item->object_type ?? 'N/A' }}</div>
                                                 <div class="small text-muted">{{ $item->budget_code ?? $item->work_plan_payment_basis ?? '' }}</div>
                                             </td>
-                                            <td class="text-end fw-semibold">{{ $currency }} {{ number_format((float) $item->amount, 2) }}</td>
+                                            <td class="text-end fw-semibold">
+                                                {{ $currency }} {{ number_format((float) $item->amount, 2) }}
+                                                @if ($itemHasPaidDisbursement)
+                                                    <div class="small text-muted">Paid {{ number_format($itemPaidAmount, 2) }}</div>
+                                                @endif
+                                            </td>
                                         </tr>
                                     @endforeach
                                 </tbody>

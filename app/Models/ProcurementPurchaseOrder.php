@@ -114,18 +114,7 @@ class ProcurementPurchaseOrder extends BaseModel
 
     public function paidAmount(): float
     {
-        if ($this->relationLoaded('disbursements')) {
-            return (float) $this->disbursements
-                ->reject(fn (ProcurementDisbursement $disbursement) => in_array($disbursement->status, self::NON_PAYING_DISBURSEMENT_STATUSES, true))
-                ->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount);
-        }
-
-        return (float) $this->disbursements()
-            ->where(function ($query) {
-                $query->whereNull('status')
-                    ->orWhereNotIn('status', self::NON_PAYING_DISBURSEMENT_STATUSES);
-            })
-            ->sum('amount');
+        return $this->actualPaidAmount();
     }
 
     public function actualPaidAmount(): float
@@ -182,37 +171,41 @@ class ProcurementPurchaseOrder extends BaseModel
             ];
         }
 
-        $evidenceByItem = $this->lineItemEvidence->keyBy('purchase_request_item_id');
-        $paidDeliverableIds = $this->disbursements
-            ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->deliverable_id
-                && (
-                    ($disbursement->paid_at && in_array(strtolower((string) $disbursement->status), self::PAID_DISBURSEMENT_STATUSES, true))
-                    || strtolower((string) $disbursement->recipient_confirmation_status) === 'confirmed'
-                ))
+        $totalAmount = round($lineItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
+        $paidDisbursements = $this->disbursements
+            ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at
+                && in_array(strtolower((string) $disbursement->status), self::PAID_DISBURSEMENT_STATUSES, true));
+        $paidAmountsByItem = $paidDisbursements
+            ->filter(fn (ProcurementDisbursement $disbursement) => filled($disbursement->purchase_request_item_id))
+            ->groupBy(fn (ProcurementDisbursement $disbursement) => (string) $disbursement->purchase_request_item_id)
+            ->map(fn ($receipts) => round($receipts->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount), 2));
+        $legacyPaidDeliverableIds = $paidDisbursements
+            ->filter(fn (ProcurementDisbursement $disbursement) => blank($disbursement->purchase_request_item_id) && $disbursement->deliverable_id)
             ->pluck('deliverable_id')
             ->map(fn ($deliverableId) => (string) $deliverableId)
             ->values()
             ->all();
+        $linePaidAmounts = $lineItems->mapWithKeys(function ($item) use ($paidAmountsByItem, $legacyPaidDeliverableIds) {
+            $lineAmount = round((float) ($item->amount ?? 0), 2);
+            $paidAmount = round((float) ($paidAmountsByItem->get((string) $item->id, 0)), 2);
 
-        $isItemPaidOrConfirmed = function ($item) use ($evidenceByItem, $paidDeliverableIds): bool {
-            $itemEvidence = $evidenceByItem->get($item->id);
-
-            if ($itemEvidence?->is_met) {
-                return true;
+            if ($paidAmount <= 0 && $item->deliverable_id && in_array((string) $item->deliverable_id, $legacyPaidDeliverableIds, true)) {
+                $paidAmount = $lineAmount;
             }
 
-            return $item->deliverable_id && in_array((string) $item->deliverable_id, $paidDeliverableIds, true);
-        };
-
-        $paidItems = $lineItems->filter($isItemPaidOrConfirmed);
-        $totalAmount = round($lineItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
-        $paidAmount = round($paidItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
+            return [(string) $item->id => round(min($lineAmount, $paidAmount), 2)];
+        });
+        $paidAmount = round($linePaidAmounts->sum(), 2);
+        $paidItemsCount = $lineItems
+            ->filter(fn ($item) => (float) $linePaidAmounts->get((string) $item->id, 0) >= (float) ($item->amount ?? 0)
+                && (float) ($item->amount ?? 0) > 0)
+            ->count();
 
         return [
             'has_line_items' => true,
             'total_items' => $lineItems->count(),
-            'paid_items' => $paidItems->count(),
-            'pending_items' => max($lineItems->count() - $paidItems->count(), 0),
+            'paid_items' => $paidItemsCount,
+            'pending_items' => max($lineItems->count() - $paidItemsCount, 0),
             'total_amount' => $totalAmount,
             'paid_amount' => $paidAmount,
             'pending_amount' => round(max($totalAmount - $paidAmount, 0), 2),
