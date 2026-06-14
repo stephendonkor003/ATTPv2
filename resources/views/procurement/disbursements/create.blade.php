@@ -5,8 +5,9 @@
         .disb-create .po-document {
             background: #fff;
             border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.07);
+            border-radius: 14px;
+            box-shadow: 0 18px 38px rgba(15, 23, 42, 0.09);
+            overflow: hidden;
         }
 
         .disb-create .page-header {
@@ -43,6 +44,7 @@
 
         .disb-create .po-document-header {
             border-bottom: 1px solid #e2e8f0;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
             padding: 20px;
         }
 
@@ -62,9 +64,16 @@
         .disb-create .stat-tile {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
-            border-radius: 8px;
+            border-radius: 10px;
             height: 100%;
             padding: 14px;
+            transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+        }
+
+        .disb-create .stat-tile:hover {
+            border-color: #c8d7e8;
+            box-shadow: 0 12px 26px rgba(15, 23, 42, .08);
+            transform: translateY(-1px);
         }
 
         .disb-create .stat-label {
@@ -83,9 +92,31 @@
 
         .disb-create .line-table {
             border: 1px solid #e2e8f0;
-            border-radius: 8px;
+            border-radius: 10px;
             max-height: 340px;
             overflow: auto;
+        }
+
+        .disb-create .payment-panel {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .disb-create .payment-panel .form-control,
+        .disb-create .payment-panel .form-select,
+        .disb-create .payment-panel .input-group-text {
+            border-color: #d9e2ef;
+        }
+
+        .disb-create .payment-note {
+            background: #ecfeff;
+            border: 1px solid #bae6fd;
+            border-left: 3px solid #0f766e;
+            border-radius: 10px;
+            color: #164e63;
+            padding: 10px 12px;
         }
 
         .disb-create .line-table table {
@@ -366,104 +397,100 @@
                         </div>
 
                         <div id="disbursementPanel" class="d-none mt-4">
-                            <div class="section-title">Disbursement Details</div>
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">
-                                        Amount <span class="text-danger">*</span>
-                                    </label>
-                                    <div class="input-group">
-                                        <span class="input-group-text" id="currency-prefix">USD</span>
-                                        <input type="number" step="0.01" min="0.01"
-                                            name="amount" id="amountInput"
-                                            class="form-control @error('amount') is-invalid @enderror"
-                                            value="{{ old('amount') }}" required>
+                            <div class="payment-panel">
+                                <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
+                                    <div>
+                                        <div class="section-title mb-1">Disbursement Details</div>
+                                        <div class="text-muted small">Record the payment amount and receipt details for the selected purchase order.</div>
                                     </div>
-                                    <div class="small text-muted mt-1">
-                                        Maximum: <strong id="amount-max-hint">N/A</strong>
+                                    <div class="payment-note small">
+                                        Deliverables are confirmed from the line items and evidence below.
                                     </div>
-                                    @error('amount')
-                                        <div class="invalid-feedback d-block">{{ $message }}</div>
-                                    @enderror
                                 </div>
 
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">
-                                        Deliverable <span class="text-danger" id="deliverableRequiredMark">*</span>
-                                    </label>
-                                    <select name="deliverable_id"
-                                        id="deliverableSelect"
-                                        class="form-select @error('deliverable_id') is-invalid @enderror">
-                                        <option value="">Select deliverable</option>
-                                    </select>
-                                    <div class="small text-muted mt-1" id="deliverableHelp">
-                                        Select the deliverable this payment is for.
+                                <input type="hidden" name="deliverable_id" id="deliverableSelect" value="{{ old('deliverable_id') }}">
+
+                                <div class="row g-3">
+                                    <div class="col-lg-4">
+                                        <label class="form-label fw-semibold">
+                                            Amount <span class="text-danger">*</span>
+                                        </label>
+                                        <div class="input-group">
+                                            <span class="input-group-text" id="currency-prefix">USD</span>
+                                            <input type="number" step="0.01" min="0.01"
+                                                name="amount" id="amountInput"
+                                                class="form-control @error('amount') is-invalid @enderror"
+                                                value="{{ old('amount') }}" required>
+                                        </div>
+                                        <div class="small text-muted mt-1">
+                                            Maximum: <strong id="amount-max-hint">N/A</strong>
+                                        </div>
+                                        @error('amount')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                        @enderror
                                     </div>
-                                    @error('deliverable_id')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
 
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">
-                                        Payment Method <span class="text-danger">*</span>
-                                    </label>
-                                    <select name="payment_method"
-                                        class="form-select @error('payment_method') is-invalid @enderror"
-                                        required>
-                                        <option value="">Select method</option>
-                                        @foreach ($paymentMethods as $method)
-                                            <option value="{{ $method }}" @selected(old('payment_method') === $method)>
-                                                {{ $method }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                    @error('payment_method')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
+                                    <div class="col-lg-4">
+                                        <label class="form-label fw-semibold">
+                                            Payment Method <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="payment_method"
+                                            class="form-select @error('payment_method') is-invalid @enderror"
+                                            required>
+                                            <option value="">Select method</option>
+                                            @foreach ($paymentMethods as $method)
+                                                <option value="{{ $method }}" @selected(old('payment_method') === $method)>
+                                                    {{ $method }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        @error('payment_method')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
 
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">
-                                        Paid At <span class="text-danger">*</span>
-                                    </label>
-                                    <input type="date" name="paid_at"
-                                        class="form-control @error('paid_at') is-invalid @enderror"
-                                        value="{{ old('paid_at', date('Y-m-d')) }}" required>
-                                    @error('paid_at')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
+                                    <div class="col-lg-4">
+                                        <label class="form-label fw-semibold">
+                                            Paid At <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="date" name="paid_at"
+                                            class="form-control @error('paid_at') is-invalid @enderror"
+                                            value="{{ old('paid_at', date('Y-m-d')) }}" required>
+                                        @error('paid_at')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
 
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">
-                                        Transfer Reference <span class="text-muted fw-normal">(Optional)</span>
-                                    </label>
-                                    <input type="text" name="transfer_reference"
-                                        class="form-control @error('transfer_reference') is-invalid @enderror"
-                                        placeholder="e.g. TRF-2026-001234"
-                                        value="{{ old('transfer_reference') }}" maxlength="255">
-                                    @error('transfer_reference')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
+                                    <div class="col-lg-6">
+                                        <label class="form-label fw-semibold">
+                                            Transfer Reference <span class="text-muted fw-normal">(Optional)</span>
+                                        </label>
+                                        <input type="text" name="transfer_reference"
+                                            class="form-control @error('transfer_reference') is-invalid @enderror"
+                                            placeholder="e.g. TRF-2026-001234"
+                                            value="{{ old('transfer_reference') }}" maxlength="255">
+                                        @error('transfer_reference')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
 
-                                <div class="col-12">
-                                    <label class="form-label fw-semibold">
-                                        Notes <span class="text-muted fw-normal">(Optional)</span>
-                                    </label>
-                                    <textarea name="notes" rows="3"
-                                        class="form-control @error('notes') is-invalid @enderror"
-                                        maxlength="2000">{{ old('notes') }}</textarea>
-                                    @error('notes')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-semibold">
+                                            Notes <span class="text-muted fw-normal">(Optional)</span>
+                                        </label>
+                                        <textarea name="notes" rows="3"
+                                            class="form-control @error('notes') is-invalid @enderror"
+                                            maxlength="2000">{{ old('notes') }}</textarea>
+                                        @error('notes')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
 
-                                <div class="col-12 text-end">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="feather-check-circle me-1"></i> Record Disbursement
-                                    </button>
+                                    <div class="col-12 text-end">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="feather-check-circle me-1"></i> Record Disbursement
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -517,8 +544,6 @@
             const deliverableSelect = document.getElementById('deliverableSelect');
             const currPrefix = document.getElementById('currency-prefix');
             const amountHint = document.getElementById('amount-max-hint');
-            const deliverableHelp = document.getElementById('deliverableHelp');
-            const deliverableRequiredMark = document.getElementById('deliverableRequiredMark');
             const evidenceBank = document.getElementById('lineItemEvidenceBank');
             const evidenceModalEl = document.getElementById('lineItemEvidenceModal');
             const evidenceModalFields = document.getElementById('lineItemEvidenceModalFields');
@@ -874,42 +899,18 @@
                 }
 
                 if (!deliverableSelect) return;
-                deliverableSelect.innerHTML = '';
 
                 if (deliverables.length === 0) {
-                    deliverableSelect.required = false;
-                    deliverableSelect.disabled = true;
-                    deliverableSelect.innerHTML = '<option value="">No deliverables linked to this PO</option>';
-                    if (deliverableHelp) deliverableHelp.textContent = 'This purchase order has no deliverables linked yet.';
-                    if (deliverableRequiredMark) deliverableRequiredMark.classList.add('d-none');
+                    deliverableSelect.value = '';
                     return;
                 }
-
-                deliverableSelect.required = true;
-                deliverableSelect.disabled = false;
-                if (deliverableHelp) deliverableHelp.textContent = 'Select the deliverable this payment is for.';
-                if (deliverableRequiredMark) deliverableRequiredMark.classList.remove('d-none');
-
-                const placeholder = document.createElement('option');
-                placeholder.value = '';
-                placeholder.textContent = 'Select deliverable';
-                deliverableSelect.appendChild(placeholder);
-
-                deliverables.forEach((deliverable) => {
-                    const option = document.createElement('option');
-                    option.value = deliverable.id;
-                    option.textContent = [
-                        deliverable.title || 'Untitled deliverable',
-                        deliverable.procurement_ref || null,
-                        deliverable.amount > 0 ? `${deliverable.currency || po.currency || ''} ${fmt(deliverable.amount)}` : null,
-                    ].filter(Boolean).join(' | ');
-                    deliverableSelect.appendChild(option);
-                });
 
                 if (oldDeliverableId && deliverables.some((deliverable) => deliverable.id === oldDeliverableId)) {
                     deliverableSelect.value = oldDeliverableId;
                 } else if (deliverables.length === 1) {
                     deliverableSelect.value = deliverables[0].id;
+                } else {
+                    deliverableSelect.value = '';
                 }
             }
 
@@ -922,9 +923,7 @@
                     poPanel?.classList.add('d-none');
                     disbPanel?.classList.add('d-none');
                     if (deliverableSelect) {
-                        deliverableSelect.innerHTML = '<option value="">Select deliverable</option>';
-                        deliverableSelect.required = false;
-                        deliverableSelect.disabled = true;
+                        deliverableSelect.value = '';
                     }
                     return;
                 }

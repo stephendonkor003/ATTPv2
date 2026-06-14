@@ -228,13 +228,12 @@ class ProcurementDisbursementController extends Controller
             ->map(fn ($id) => (string) $id)
             ->values();
 
-        if ($eligibleDeliverables->isNotEmpty() && empty($data['deliverable_id'])) {
-            throw ValidationException::withMessages([
-                'deliverable_id' => 'Select the deliverable this disbursement is paying for.',
-            ]);
+        $selectedDeliverableId = $data['deliverable_id'] ?? null;
+        if (empty($selectedDeliverableId)) {
+            $selectedDeliverableId = $this->inferDisbursementDeliverableId($request, $purchaseOrder, $eligibleDeliverableIds);
         }
 
-        if (!empty($data['deliverable_id']) && !$eligibleDeliverableIds->contains((string) $data['deliverable_id'])) {
+        if (!empty($selectedDeliverableId) && !$eligibleDeliverableIds->contains((string) $selectedDeliverableId)) {
             throw ValidationException::withMessages([
                 'deliverable_id' => 'The selected deliverable is not linked to this purchase order.',
             ]);
@@ -257,7 +256,7 @@ class ProcurementDisbursementController extends Controller
 
         $disbursement = ProcurementDisbursement::create([
             'purchase_order_id'  => $purchaseOrder->id,
-            'deliverable_id'     => $data['deliverable_id'] ?? null,
+            'deliverable_id'     => $selectedDeliverableId,
             'procurement_id'     => $purchaseOrder->procurement_id,
             'vendor_id'          => $purchaseOrder->vendor_id,
             'sub_activity_id'    => $purchaseOrder->sub_activity_id,
@@ -300,7 +299,35 @@ class ProcurementDisbursementController extends Controller
     public function show(ProcurementDisbursement $disbursement)
     {
         $this->assertDisbursementInScope($disbursement);
-        $disbursement->load(['purchaseOrder', 'deliverable.procurement', 'vendor', 'procurement', 'subActivity']);
+        $disbursement->load([
+            'purchaseOrder.procurement',
+            'purchaseOrder.vendor',
+            'purchaseOrder.subActivity',
+            'purchaseOrder.governanceNode',
+            'purchaseOrder.disbursements.deliverable',
+            'purchaseOrder.deliverables.procurement',
+            'purchaseOrder.lineItemEvidence',
+            'purchaseOrder.purchaseRequest.programFunding.program',
+            'purchaseOrder.purchaseRequest.governanceNode',
+            'purchaseOrder.purchaseRequest.subActivity',
+            'purchaseOrder.purchaseRequest.creator',
+            'purchaseOrder.purchaseRequest.items.resourceCategory',
+            'purchaseOrder.purchaseRequest.items.resource',
+            'purchaseOrder.purchaseRequest.items.deliverable.procurement',
+            'purchaseOrder.budgetCommitment.purchaseRequest.programFunding.program',
+            'purchaseOrder.budgetCommitment.purchaseRequest.governanceNode',
+            'purchaseOrder.budgetCommitment.purchaseRequest.subActivity',
+            'purchaseOrder.budgetCommitment.purchaseRequest.creator',
+            'purchaseOrder.budgetCommitment.purchaseRequest.items.resourceCategory',
+            'purchaseOrder.budgetCommitment.purchaseRequest.items.resource',
+            'purchaseOrder.budgetCommitment.purchaseRequest.items.deliverable.procurement',
+            'purchaseOrder.budgetCommitment',
+            'deliverable.procurement',
+            'vendor',
+            'procurement',
+            'subActivity',
+            'governanceNode',
+        ]);
         $canEditDisbursements = $this->canEditDisbursements();
 
         return view('procurement.disbursements.show', compact('disbursement', 'canEditDisbursements'));
@@ -600,6 +627,35 @@ class ProcurementDisbursementController extends Controller
         }
 
         return $deliverables->filter()->unique('id')->values();
+    }
+
+    private function inferDisbursementDeliverableId(Request $request, ProcurementPurchaseOrder $purchaseOrder, $eligibleDeliverableIds): ?string
+    {
+        $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+        $items = $sourcePurchaseRequest?->items?->keyBy(fn ($item) => (string) $item->id) ?? collect();
+        $evidenceInput = $request->input('item_evidence', []);
+
+        foreach ($evidenceInput as $itemId => $input) {
+            $hasLineEvidence = (bool) ($input['is_met'] ?? false)
+                || filled($input['deliverable_date'] ?? null)
+                || filled($input['notes'] ?? null)
+                || ! empty($request->file("item_evidence.{$itemId}.documents", []));
+
+            if (! $hasLineEvidence) {
+                continue;
+            }
+
+            $deliverableId = $items->get((string) $itemId)?->deliverable_id;
+            if ($deliverableId && $eligibleDeliverableIds->contains((string) $deliverableId)) {
+                return (string) $deliverableId;
+            }
+        }
+
+        if ($eligibleDeliverableIds->count() === 1) {
+            return (string) $eligibleDeliverableIds->first();
+        }
+
+        return null;
     }
 
     private function editableDisbursementMaxAmount(
