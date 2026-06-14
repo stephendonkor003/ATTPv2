@@ -167,7 +167,7 @@
                             <th>Purchase Request</th>
                             <th>Vendor</th>
                             <th class="text-center">Amount</th>
-                            <th class="text-center">Disbursed</th>
+                            <th class="text-center">Paid Disbursed</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">Issued</th>
                             <th class="text-center" width="230">Action</th>
@@ -177,6 +177,7 @@
                         @foreach ($purchaseOrders as $purchaseOrder)
                             @php
                                 $lineItemSummary = $purchaseOrder->lineItemSummary();
+                                $actualPaidAmount = $purchaseOrder->actualPaidAmount();
                             @endphp
                             <tr>
                                 <td class="ps-4 fw-semibold">
@@ -206,12 +207,8 @@
                                     @endif
                                 </td>
                                 <td class="text-center">
-                                    {{ number_format((float) $purchaseOrder->actualPaidAmount(), 2) }}
-                                    @if ($lineItemSummary['has_line_items'])
-                                        <div class="small text-muted">
-                                            {{ $lineItemSummary['paid_items'] }} / {{ $lineItemSummary['total_items'] }} items
-                                        </div>
-                                    @endif
+                                    {{ number_format((float) $actualPaidAmount, 2) }}
+                                    <div class="small text-muted">Actual paid</div>
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-secondary text-capitalize">
