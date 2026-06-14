@@ -102,6 +102,20 @@ class ProcurementPurchaseOrder extends BaseModel
         return $this->belongsTo(PurchaseRequest::class, 'purchase_request_id');
     }
 
+    public function getResolvedCurrencyAttribute(): string
+    {
+        $this->loadMissing([
+            'purchaseRequest.programFunding.program',
+            'budgetCommitment.programFunding.program',
+            'budgetCommitment.purchaseRequest.programFunding.program',
+        ]);
+
+        return $this->sourcePurchaseRequest()?->resolved_currency
+            ?: $this->budgetCommitment?->resolved_currency
+            ?: $this->currency
+            ?: 'USD';
+    }
+
     public function disbursements()
     {
         return $this->hasMany(ProcurementDisbursement::class, 'purchase_order_id');

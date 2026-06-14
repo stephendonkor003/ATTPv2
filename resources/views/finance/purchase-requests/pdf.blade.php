@@ -44,7 +44,7 @@
     </div>
 
     @php
-        $currency = $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '';
+        $currency = $purchaseRequest->resolved_currency;
         $yearSplits = $purchaseRequest->commitments
             ->groupBy('commitment_year')
             ->map(fn ($rows) => round((float) $rows->sum('commitment_amount'), 2))

@@ -32,8 +32,47 @@ class ProcurementDisbursementController extends Controller
             abort(403, 'You do not have access to disbursements.');
         }
 
-        $disbursements = ProcurementDisbursement::with([
-            'purchaseOrder',
+        $baseQuery = ProcurementDisbursement::query()
+            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('governance_node_id');
+            });
+
+        $paidQuery = (clone $baseQuery)
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+
+        $disbursementSummary = [
+            'total_receipts' => (clone $baseQuery)->count(),
+            'total_paid_amount' => (float) (clone $paidQuery)->sum('amount'),
+            'this_month_paid_amount' => (float) (clone $paidQuery)
+                ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
+                ->sum('amount'),
+            'pending_amount' => (float) (clone $baseQuery)
+                ->where(function ($query) {
+                    $query->whereNull('paid_at')
+                        ->orWhereNotIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+                })
+                ->sum('amount'),
+            'paid_purchase_orders' => (clone $paidQuery)
+                ->whereNotNull('purchase_order_id')
+                ->distinct()
+                ->count('purchase_order_id'),
+            'paid_line_items' => (clone $paidQuery)
+                ->whereNotNull('purchase_request_item_id')
+                ->distinct()
+                ->count('purchase_request_item_id'),
+        ];
+
+        $latestDisbursement = (clone $baseQuery)
+            ->orderByDesc('paid_at')
+            ->orderByDesc('created_at')
+            ->first();
+
+        $disbursements = (clone $baseQuery)->with([
+            'purchaseOrder.purchaseRequest.programFunding.program',
+            'purchaseOrder.budgetCommitment.programFunding.program',
+            'purchaseOrder.budgetCommitment.purchaseRequest.programFunding.program',
             'purchaseRequestItem.resourceCategory',
             'purchaseRequestItem.resource',
             'purchaseRequestItem.deliverable.procurement',
@@ -43,16 +82,17 @@ class ProcurementDisbursementController extends Controller
             'thinkTankMember',
             'consortium',
         ])
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
-                $query->whereIn('governance_node_id', $scopedNodeIds)
-                    ->whereNotNull('governance_node_id');
-            })
             ->orderByDesc('paid_at')
             ->paginate(12);
 
         $canEditDisbursements = $this->canEditDisbursements();
 
-        return view('procurement.disbursements.index', compact('disbursements', 'canEditDisbursements'));
+        return view('procurement.disbursements.index', compact(
+            'disbursements',
+            'canEditDisbursements',
+            'disbursementSummary',
+            'latestDisbursement'
+        ));
     }
 
     public function create(Request $request)
@@ -67,11 +107,14 @@ class ProcurementDisbursementController extends Controller
             'consortium', 'subActivity', 'governanceNode',
             'deliverables.procurement',
             'lineItemEvidence',
+            'budgetCommitment.programFunding.program',
             'purchaseRequest.items.resourceCategory',
             'purchaseRequest.items.resource',
+            'purchaseRequest.programFunding.program',
             'purchaseRequest.items.deliverable.procurement',
             'budgetCommitment.purchaseRequest.items.resourceCategory',
             'budgetCommitment.purchaseRequest.items.resource',
+            'budgetCommitment.purchaseRequest.programFunding.program',
             'budgetCommitment.purchaseRequest.items.deliverable.procurement',
         ])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
@@ -94,11 +137,14 @@ class ProcurementDisbursementController extends Controller
                 'consortium', 'subActivity', 'governanceNode',
                 'deliverables.procurement',
                 'lineItemEvidence',
+                'budgetCommitment.programFunding.program',
                 'purchaseRequest.items.resourceCategory',
                 'purchaseRequest.items.resource',
+                'purchaseRequest.programFunding.program',
                 'purchaseRequest.items.deliverable.procurement',
                 'budgetCommitment.purchaseRequest.items.resourceCategory',
                 'budgetCommitment.purchaseRequest.items.resource',
+                'budgetCommitment.purchaseRequest.programFunding.program',
                 'budgetCommitment.purchaseRequest.items.deliverable.procurement',
             ])->find($purchaseOrderId);
 
@@ -112,6 +158,7 @@ class ProcurementDisbursementController extends Controller
         $purchaseOrdersData = $purchaseOrders->mapWithKeys(function (ProcurementPurchaseOrder $order) {
             $deliverables = $this->eligibleDeliverablesForPurchaseOrder($order);
             $sourcePurchaseRequest = $order->purchaseRequest ?: $order->budgetCommitment?->purchaseRequest;
+            $orderCurrency = $order->resolved_currency;
             $evidenceByItem = $order->lineItemEvidence->keyBy(fn (ProcurementPurchaseOrderItemEvidence $evidence) => (string) $evidence->purchase_request_item_id);
             $lineItemPaymentSummaries = $this->lineItemPaymentSummariesForPurchaseOrder($order);
             $poAmount = round((float) ($order->amount ?? 0), 2);
@@ -161,7 +208,7 @@ class ProcurementDisbursementController extends Controller
                     'vendor_contact_name'  => $order->vendor_contact_name,
                     'vendor_contact_phone' => $order->vendor_contact_phone,
                     'amount'               => $poAmount,
-                    'currency'             => $order->currency ?? 'USD',
+                    'currency'             => $orderCurrency,
                     'paid_amount'          => $paidAmount,
                     'balance_amount'       => $balanceAmount,
                     'remaining'            => $balanceAmount,
@@ -183,7 +230,7 @@ class ProcurementDisbursementController extends Controller
                         'type'            => $deliverable->type,
                         'status'          => $deliverable->status,
                         'amount'          => (float) ($deliverable->amount ?? 0),
-                        'currency'        => $deliverable->currency,
+                        'currency'        => $orderCurrency,
                         'procurement_ref' => $deliverable->procurement?->reference_no,
                     ])->values()->all(),
                     'line_items'           => $lineItems->all(),
@@ -231,11 +278,14 @@ class ProcurementDisbursementController extends Controller
             'consortium',
             'deliverables.procurement',
             'lineItemEvidence',
+            'budgetCommitment.programFunding.program',
             'purchaseRequest.items.resourceCategory',
             'purchaseRequest.items.resource',
+            'purchaseRequest.programFunding.program',
             'purchaseRequest.items.deliverable.procurement',
             'budgetCommitment.purchaseRequest.items.resourceCategory',
             'budgetCommitment.purchaseRequest.items.resource',
+            'budgetCommitment.purchaseRequest.programFunding.program',
             'budgetCommitment.purchaseRequest.items.deliverable.procurement',
         ])
             ->findOrFail($data['purchase_order_id']);
@@ -261,7 +311,7 @@ class ProcurementDisbursementController extends Controller
 
         if ((float) $data['amount'] > $maxPayableAmount) {
             throw ValidationException::withMessages([
-                'amount' => 'Disbursement amount exceeds the selected line item balance of ' . number_format($maxPayableAmount, 2) . ' ' . ($purchaseOrder->currency ?? '') . '.',
+                'amount' => 'Disbursement amount exceeds the selected line item balance of ' . number_format($maxPayableAmount, 2) . ' ' . $purchaseOrder->resolved_currency . '.',
             ]);
         }
 
@@ -279,7 +329,7 @@ class ProcurementDisbursementController extends Controller
             'think_tank_member_id' => $purchaseOrder->think_tank_member_id,
             'reference_no'       => ProcurementDisbursement::generateReference(),
             'amount'             => $data['amount'],
-            'currency'           => $purchaseOrder->currency,
+            'currency'           => $purchaseOrder->resolved_currency,
             'payment_method'     => $data['payment_method'],
             'transfer_reference' => $data['transfer_reference'] ?? null,
             'status'             => 'completed',
@@ -456,7 +506,7 @@ class ProcurementDisbursementController extends Controller
         $maxAmount = $this->editableDisbursementMaxAmount($purchaseOrder, $disbursement, $selectedItem, $data['status']);
         if ((float) $data['amount'] > $maxAmount) {
             throw ValidationException::withMessages([
-                'amount' => 'Disbursement amount exceeds the selected line item balance of ' . number_format($maxAmount, 2) . ' ' . ($purchaseOrder->currency ?? '') . '.',
+                'amount' => 'Disbursement amount exceeds the selected line item balance of ' . number_format($maxAmount, 2) . ' ' . $purchaseOrder->resolved_currency . '.',
             ]);
         }
 
@@ -611,7 +661,7 @@ class ProcurementDisbursementController extends Controller
             'invoice_month' => $paidAt->copy()->startOfMonth()->toDateString(),
             'reference_no' => ProcurementInvoice::generateReference(),
             'amount' => $purchaseOrder->amount,
-            'currency' => $purchaseOrder->currency,
+            'currency' => $purchaseOrder->resolved_currency,
             'status' => 'paid',
             'created_by' => $purchaseOrder->created_by ?: auth()->id(),
             'approved_by' => auth()->id(),

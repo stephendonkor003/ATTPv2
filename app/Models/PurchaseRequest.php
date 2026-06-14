@@ -48,6 +48,17 @@ class PurchaseRequest extends BaseModel
         return $this->belongsTo(ProgramFunding::class, 'program_funding_id');
     }
 
+    public function getResolvedCurrencyAttribute(): string
+    {
+        $this->loadMissing('programFunding.program');
+
+        return $this->programFunding?->resolved_currency
+            ?: $this->programFunding?->program?->currency
+            ?: $this->programFunding?->currency
+            ?: $this->currency
+            ?: 'USD';
+    }
+
     public function governanceNode(): BelongsTo
     {
         return $this->belongsTo(GovernanceNode::class, 'governance_node_id');

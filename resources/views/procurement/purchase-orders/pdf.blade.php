@@ -151,7 +151,7 @@
         @php
             $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
             $lineItems = $sourcePurchaseRequest?->items ?? collect();
-            $currency = $purchaseOrder->currency ?? $sourcePurchaseRequest?->currency ?? '';
+            $currency = $purchaseOrder->resolved_currency;
             $poAmount = (float) ($purchaseOrder->amount ?? 0);
             $commitmentAmount = (float) ($purchaseOrder->budgetCommitment?->commitment_amount ?? 0);
             $vendorContactName = $purchaseOrder->vendor_contact_name ?: ($purchaseOrder->vendor?->name ?? 'N/A');

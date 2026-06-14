@@ -91,7 +91,7 @@
                                 <td>{{ $pr->delivery_date?->format('F j, Y') ?? '—' }}</td>
                                 <td class="text-end fw-bold">
                                     <span class="text-muted me-1">
-                                        {{ $pr->currency ?? $pr->programFunding?->program?->currency ?? '' }}
+                                        {{ $pr->resolved_currency }}
                                     </span>
                                     {{ number_format((float) $pr->total_amount, 2) }}
                                 </td>

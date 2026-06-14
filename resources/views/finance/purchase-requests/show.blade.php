@@ -352,7 +352,7 @@
                     'category' => $item->resourceCategory?->name ?? 'N/A',
                     'deliverable' => $item->milestone ?: ($item->deliverable?->title ?? 'No deliverable linked'),
                     'amount' => number_format((float) $item->amount, 2),
-                    'currency' => $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '',
+                    'currency' => $purchaseRequest->resolved_currency,
                 ],
             ])
             ->all();
@@ -367,7 +367,7 @@
 
             return number_format($bytes / (1024 ** $power), $power === 0 ? 0 : 1) . ' ' . $units[$power];
         };
-        $purchaseRequestCurrency = $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '';
+        $purchaseRequestCurrency = $purchaseRequest->resolved_currency;
         $programName = $purchaseRequest->programFunding?->program?->name ?? $purchaseRequest->programFunding?->program_name ?? 'N/A';
         $governanceNodeName = $purchaseRequest->governanceNode?->name ?? 'N/A';
         $subActivityName = $purchaseRequest->subActivity?->name ?? 'N/A';
@@ -497,7 +497,7 @@
                             <tr>
                                 <th>Total Amount</th>
                                 <td class="fw-bold">
-                                    {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
+                                    {{ $purchaseRequestCurrency }}
                                     {{ number_format((float) $purchaseRequest->total_amount, 2) }}
                                 </td>
                             </tr>
@@ -634,7 +634,7 @@
                                             </td>
                                             <td>{{ $item->milestone_date?->format('Y-m-d') ?? '—' }}</td>
                                             <td class="text-end fw-semibold">
-                                                {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
+                                                {{ $purchaseRequestCurrency }}
                                                 {{ number_format((float) $item->amount, 2) }}
                                             </td>
                                         </tr>
@@ -644,7 +644,7 @@
                                     <tr>
                                         <th colspan="7" class="text-end">Total</th>
                                         <th class="text-end">
-                                            {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
+                                            {{ $purchaseRequestCurrency }}
                                             {{ number_format((float) $purchaseRequest->total_amount, 2) }}
                                         </th>
                                     </tr>
@@ -677,7 +677,7 @@
                                             <tr>
                                                 <td>{{ $year }}</td>
                                                 <td class="text-end fw-semibold">
-                                                    {{ $purchaseRequest->currency ?? $purchaseRequest->programFunding?->program?->currency ?? '' }}
+                                                    {{ $purchaseRequestCurrency }}
                                                     {{ number_format((float) $amount, 2) }}
                                                 </td>
                                             </tr>

@@ -60,7 +60,7 @@
         $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
         $lineItems = $sourcePurchaseRequest?->items ?? collect();
         $evidenceByItem = $purchaseOrder->lineItemEvidence->keyBy('purchase_request_item_id');
-        $currency = $purchaseOrder->currency ?? $sourcePurchaseRequest?->currency ?? '';
+        $currency = $purchaseOrder->resolved_currency;
         $paidDisbursementStatuses = ['completed', 'paid', 'fully_paid'];
         $paidDisbursements = $purchaseOrder->disbursements
             ->filter(fn ($disbursement) => $disbursement->paid_at
@@ -304,7 +304,7 @@
                                     @endif
                                     @if ($dlv->amount)
                                         <div class="small text-muted mt-1">
-                                            {{ $dlv->currency ?? '' }} {{ number_format((float) $dlv->amount, 2) }}
+                                            {{ $currency }} {{ number_format((float) $dlv->amount, 2) }}
                                         </div>
                                     @endif
                                     @if ($isRemoved)
@@ -532,7 +532,7 @@
                                         <tr>
                                             <td>{{ $disbursement->reference_no ?? 'N/A' }}</td>
                                             <td>{{ $disbursement->deliverable?->title ?? 'N/A' }}</td>
-                                            <td>{{ $disbursement->amount ? number_format($disbursement->amount, 2) : 'N/A' }} {{ $disbursement->currency ?? '' }}</td>
+                                            <td>{{ $disbursement->amount ? $disbursement->resolved_currency . ' ' . number_format($disbursement->amount, 2) : 'N/A' }}</td>
                                             <td>{{ $disbursement->paid_at?->format('d M Y') ?? 'N/A' }}</td>
                                             <td>{{ $disbursement->payment_method ?? 'N/A' }}</td>
                                             <td>

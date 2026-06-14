@@ -178,6 +178,7 @@
                         @foreach ($purchaseOrders as $purchaseOrder)
                             @php
                                 $lineItemSummary = $purchaseOrder->lineItemSummary();
+                                $poCurrency = $purchaseOrder->resolved_currency;
                             @endphp
                             <tr>
                                 <td class="ps-4 fw-semibold">
@@ -193,7 +194,7 @@
                                     </div>
                                     <small class="text-muted">
                                         {{ $purchaseOrder->budgetCommitment?->commitment_year ?? 'N/A' }}
-                                        - {{ $purchaseOrder->budgetCommitment?->commitment_amount ? number_format($purchaseOrder->budgetCommitment->commitment_amount, 2) : 'N/A' }}
+                                        - {{ $purchaseOrder->budgetCommitment?->commitment_amount ? $poCurrency . ' ' . number_format($purchaseOrder->budgetCommitment->commitment_amount, 2) : 'N/A' }}
                                     </small>
                                 </td>
                                 <td>
@@ -201,13 +202,13 @@
                                     <small class="text-muted">{{ $purchaseOrder->vendor?->email ?? 'N/A' }}</small>
                                 </td>
                                 <td class="text-center">
-                                    {{ number_format((float) $lineItemSummary['total_amount'], 2) }}
+                                    {{ $poCurrency }} {{ number_format((float) $lineItemSummary['total_amount'], 2) }}
                                     @if ($lineItemSummary['has_line_items'])
                                         <div class="small text-muted">{{ $lineItemSummary['total_items'] }} items</div>
                                     @endif
                                 </td>
                                 <td class="text-center">
-                                    {{ number_format((float) $lineItemSummary['paid_amount'], 2) }}
+                                    {{ $poCurrency }} {{ number_format((float) $lineItemSummary['paid_amount'], 2) }}
                                     @if ($lineItemSummary['has_line_items'])
                                         <div class="small text-muted">
                                             {{ $lineItemSummary['paid_items'] }} items paid
@@ -215,7 +216,7 @@
                                     @endif
                                 </td>
                                 <td class="text-center">
-                                    {{ number_format((float) $lineItemSummary['pending_amount'], 2) }}
+                                    {{ $poCurrency }} {{ number_format((float) $lineItemSummary['pending_amount'], 2) }}
                                     @if ($lineItemSummary['has_line_items'])
                                         <div class="small text-muted">
                                             {{ $lineItemSummary['pending_items'] }} items unpaid

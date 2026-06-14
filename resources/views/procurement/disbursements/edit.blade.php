@@ -79,7 +79,7 @@
 
 @section('content')
     @php
-        $currency = $purchaseOrder->currency ?? $disbursement->currency ?? '';
+        $currency = $purchaseOrder->resolved_currency ?? $disbursement->resolved_currency ?? '';
         $money = fn ($value) => trim($currency . ' ' . number_format((float) $value, 2));
         $selectedPaymentMethod = old('payment_method', $disbursement->payment_method);
         $selectedStatus = old('status', $disbursement->status ?? 'completed');

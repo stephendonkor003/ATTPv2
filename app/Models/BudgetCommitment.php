@@ -51,6 +51,18 @@ class BudgetCommitment extends BaseModel
         return $this->belongsTo(ProgramFunding::class, 'program_funding_id');
     }
 
+    public function getResolvedCurrencyAttribute(): string
+    {
+        $this->loadMissing([
+            'programFunding.program',
+            'purchaseRequest.programFunding.program',
+        ]);
+
+        return $this->programFunding?->resolved_currency
+            ?: $this->purchaseRequest?->resolved_currency
+            ?: 'USD';
+    }
+
     public function purchaseRequest()
     {
         return $this->belongsTo(PurchaseRequest::class, 'purchase_request_id');

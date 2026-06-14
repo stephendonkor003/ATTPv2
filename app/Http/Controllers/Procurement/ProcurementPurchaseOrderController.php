@@ -11,7 +11,6 @@ use App\Models\ProcurementDeliverable;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
-use App\Models\ProgramFunding;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
 use App\Models\Resource;
@@ -342,7 +341,7 @@ class ProcurementPurchaseOrderController extends Controller
             'item_evidence.*.documents.*.mimes' => 'Line item evidence must be a PDF, Office document, image, or ZIP file.',
         ]);
 
-        $purchaseRequest = PurchaseRequest::with(['commitments', 'items.deliverable'])->findOrFail($data['purchase_request_id']);
+        $purchaseRequest = PurchaseRequest::with(['programFunding.program', 'commitments', 'items.deliverable'])->findOrFail($data['purchase_request_id']);
         $this->assertPurchaseRequestInScope($purchaseRequest);
 
         if ($purchaseRequest->status !== 'approved') {
@@ -351,7 +350,7 @@ class ProcurementPurchaseOrderController extends Controller
             ]);
         }
 
-        $commitment = BudgetCommitment::findOrFail($data['budget_commitment_id']);
+        $commitment = BudgetCommitment::with(['programFunding.program', 'purchaseRequest.programFunding.program'])->findOrFail($data['budget_commitment_id']);
         $this->assertCommitmentInScope($commitment);
 
         if ((string) $commitment->purchase_request_id !== (string) $purchaseRequest->id) {
@@ -451,7 +450,7 @@ class ProcurementPurchaseOrderController extends Controller
                 'special_instructions' => $data['special_instructions'] ?? null,
                 'terms_conditions' => $data['terms_conditions'] ?? null,
                 'amount' => $data['amount'],
-                'currency' => $data['currency'] ?: $this->commitmentCurrency($commitment),
+                'currency' => $this->commitmentCurrency($commitment),
                 'status' => $data['status'],
                 'created_by' => auth()->id(),
                 'issued_at' => $data['issued_at'] ?? now(),
@@ -541,7 +540,7 @@ class ProcurementPurchaseOrderController extends Controller
             'item_evidence.*.documents.*.mimes' => 'Line item evidence must be a PDF, Office document, image, or ZIP file.',
         ]);
 
-        $purchaseRequest = PurchaseRequest::with(['commitments', 'items.deliverable'])->findOrFail($data['purchase_request_id']);
+        $purchaseRequest = PurchaseRequest::with(['programFunding.program', 'commitments', 'items.deliverable'])->findOrFail($data['purchase_request_id']);
         $this->assertPurchaseRequestInScope($purchaseRequest);
 
         if ($purchaseRequest->status !== 'approved') {
@@ -550,7 +549,7 @@ class ProcurementPurchaseOrderController extends Controller
             ]);
         }
 
-        $commitment = BudgetCommitment::findOrFail($data['budget_commitment_id']);
+        $commitment = BudgetCommitment::with(['programFunding.program', 'purchaseRequest.programFunding.program'])->findOrFail($data['budget_commitment_id']);
         $this->assertCommitmentInScope($commitment);
 
         if ((string) $commitment->purchase_request_id !== (string) $purchaseRequest->id) {
@@ -649,7 +648,7 @@ class ProcurementPurchaseOrderController extends Controller
                 'special_instructions' => $data['special_instructions'] ?? null,
                 'terms_conditions' => $data['terms_conditions'] ?? null,
                 'amount' => $data['amount'],
-                'currency' => $data['currency'] ?: $this->commitmentCurrency($commitment),
+                'currency' => $this->commitmentCurrency($commitment),
                 'status' => $data['status'],
                 'issued_at' => $data['issued_at'] ?? $purchaseOrder->issued_at ?? now(),
                 'expected_delivery_date' => $data['expected_delivery_date'] ?? $purchaseRequest->delivery_date?->toDateString(),
@@ -988,21 +987,12 @@ class ProcurementPurchaseOrderController extends Controller
 
     private function commitmentCurrency(BudgetCommitment $commitment): string
     {
-        if ($commitment->program_funding_id) {
-            $currency = ProgramFunding::query()->whereKey($commitment->program_funding_id)->value('currency');
-            if ($currency) {
-                return $currency;
-            }
-        }
+        $commitment->loadMissing([
+            'programFunding.program',
+            'purchaseRequest.programFunding.program',
+        ]);
 
-        if ($commitment->purchase_request_id) {
-            $currency = PurchaseRequest::query()->whereKey($commitment->purchase_request_id)->value('currency');
-            if ($currency) {
-                return $currency;
-            }
-        }
-
-        return 'USD';
+        return $commitment->resolved_currency;
     }
 
     private function purchaseRequestCreateOption(PurchaseRequest $purchaseRequest, ?ProcurementPurchaseOrder $purchaseOrder = null): ?array
@@ -1037,7 +1027,7 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $firstCommitment = $commitments->first();
-        $currency = $purchaseRequest->currency ?: ($firstCommitment['currency'] ?? 'USD');
+        $currency = $purchaseRequest->resolved_currency ?: ($firstCommitment['currency'] ?? 'USD');
         $program = $purchaseRequest->programFunding?->program?->name
             ?? $purchaseRequest->programFunding?->program_name
             ?? 'Program not set';

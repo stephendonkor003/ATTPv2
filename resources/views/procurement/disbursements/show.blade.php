@@ -187,7 +187,7 @@
         $sourcePurchaseRequest = $purchaseOrder?->purchaseRequest ?: $purchaseOrder?->budgetCommitment?->purchaseRequest;
         $lineItems = $sourcePurchaseRequest?->items ?? collect();
         $evidenceByItem = $purchaseOrder?->lineItemEvidence?->keyBy(fn ($evidence) => (string) $evidence->purchase_request_item_id) ?? collect();
-        $currency = $disbursement->currency ?? $purchaseOrder?->currency ?? $sourcePurchaseRequest?->currency ?? '';
+        $currency = $disbursement->resolved_currency;
         $money = fn ($value) => trim(($currency ? $currency . ' ' : '') . number_format((float) $value, 2));
         $statusValue = strtolower((string) ($disbursement->status ?? 'completed'));
         $paidDisbursementStatuses = ['completed', 'paid', 'fully_paid'];

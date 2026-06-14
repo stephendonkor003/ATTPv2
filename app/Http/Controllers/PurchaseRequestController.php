@@ -390,9 +390,7 @@ class PurchaseRequestController extends Controller
         $this->assertPurchaseRequestInScope($purchaseRequest);
 
         $purchaseRequest->load('commitments');
-        $currency = $purchaseRequest->currency
-            ?? $purchaseRequest->programFunding?->program?->currency
-            ?? '';
+        $currency = $purchaseRequest->resolved_currency;
 
         $canDelete   = true;
         $blockReason = null;
@@ -424,6 +422,11 @@ class PurchaseRequestController extends Controller
                     $q->orWhereIn('budget_commitment_id', $commitmentIds);
                 }
             })
+            ->with([
+                'purchaseRequest.programFunding.program',
+                'budgetCommitment.programFunding.program',
+                'budgetCommitment.purchaseRequest.programFunding.program',
+            ])
             ->withCount('disbursements')
             ->get();
 
@@ -440,7 +443,7 @@ class PurchaseRequestController extends Controller
                 'status'             => $po->status,
                 'vendor'             => $po->vendor?->name ?? '—',
                 'amount'             => number_format((float) $po->amount, 2),
-                'currency'           => $po->currency ?? $currency,
+                'currency'           => $po->resolved_currency ?: $currency,
                 'disbursement_count' => $po->disbursements_count,
                 'has_invoice'        => (bool) $po->invoice_id,
                 'has_negotiation'    => (bool) $po->negotiation_id,

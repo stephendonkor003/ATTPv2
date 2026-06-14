@@ -609,7 +609,8 @@
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Currency</label>
                                 <input type="text" name="currency" id="currencyInput" class="form-control"
-                                    value="{{ old('currency', $isEdit ? $purchaseOrder->currency : 'USD') }}" maxlength="10">
+                                    value="{{ $isEdit ? $purchaseOrder->resolved_currency : old('currency', 'USD') }}" maxlength="10" readonly>
+                                <div class="form-text">Pulled from the selected program currency.</div>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Issue Date</label>

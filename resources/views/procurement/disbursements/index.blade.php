@@ -21,6 +21,41 @@
             color: #fff !important;
         }
 
+        .disb-page .stat-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+            .disb-page .stat-card:hover {
+                border-color: #14b8a6;
+                box-shadow: 0 18px 34px rgba(15, 23, 42, 0.14);
+                transform: translateY(-3px);
+            }
+
+            .disb-page .stat-card:hover .stat-value {
+                color: #0f766e;
+            }
+        }
+
+        .disb-page .stat-title {
+            color: #64748b;
+            font-size: .78rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .disb-page .stat-value {
+            color: #0f172a;
+            font-size: 1.4rem;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
         .disb-page .table-card {
             border: 1px solid #e2e8f0;
             border-radius: 16px;
@@ -48,6 +83,53 @@
                     <a href="{{ route('procurement.disbursements.create') }}" class="btn btn-light btn-sm">
                         <i class="feather-plus-circle me-1"></i> New Planned Disbursement
                     </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-sm-6 col-xl-4">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">Total Receipts</div>
+                    <div class="stat-value">{{ number_format((int) ($disbursementSummary['total_receipts'] ?? 0)) }}</div>
+                    <div class="text-muted small">Across all pages</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-xl-4">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">Actual Paid Amount</div>
+                    <div class="stat-value">{{ number_format((float) ($disbursementSummary['total_paid_amount'] ?? 0), 2) }}</div>
+                    <div class="text-muted small">Completed/paid receipts only</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-xl-4">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">This Month Paid</div>
+                    <div class="stat-value">{{ number_format((float) ($disbursementSummary['this_month_paid_amount'] ?? 0), 2) }}</div>
+                    <div class="text-muted small">{{ now()->format('F Y') }}</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-xl-4">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">Pending / Other Amount</div>
+                    <div class="stat-value">{{ number_format((float) ($disbursementSummary['pending_amount'] ?? 0), 2) }}</div>
+                    <div class="text-muted small">Not counted as actual paid</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-xl-4">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">Paid PO Lines</div>
+                    <div class="stat-value">{{ number_format((int) ($disbursementSummary['paid_line_items'] ?? 0)) }}</div>
+                    <div class="text-muted small">
+                        {{ number_format((int) ($disbursementSummary['paid_purchase_orders'] ?? 0)) }} purchase orders covered
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-xl-4">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">Latest Receipt</div>
+                    <div class="stat-value">{{ $latestDisbursement?->reference_no ?? 'N/A' }}</div>
+                    <div class="text-muted small">{{ $latestDisbursement?->paid_at?->format('d M Y') ?? 'N/A' }}</div>
                 </div>
             </div>
         </div>
@@ -98,8 +180,7 @@
                                     <small class="text-muted">{{ $disbursement->vendor?->email ?? 'N/A' }}</small>
                                 </td>
                                 <td class="text-center">
-                                    {{ $disbursement->amount ? number_format($disbursement->amount, 2) : 'N/A' }}
-                                    {{ $disbursement->currency ?? '' }}
+                                    {{ $disbursement->amount ? $disbursement->resolved_currency . ' ' . number_format($disbursement->amount, 2) : 'N/A' }}
                                 </td>
                                 <td class="text-center">
                                     {{ $disbursement->paid_at?->format('d M Y') ?? 'N/A' }}

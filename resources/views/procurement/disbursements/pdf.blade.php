@@ -167,8 +167,7 @@
                 <tr>
                     <td class="label">Amount</td>
                     <td class="value">
-                        {{ $disbursement->amount ? number_format((float) $disbursement->amount, 2) : 'N/A' }}
-                        {{ $disbursement->currency ?? '' }}
+                        {{ $disbursement->amount ? $disbursement->resolved_currency . ' ' . number_format((float) $disbursement->amount, 2) : 'N/A' }}
                     </td>
                 </tr>
                 <tr>

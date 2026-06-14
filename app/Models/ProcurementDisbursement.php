@@ -48,6 +48,19 @@ class ProcurementDisbursement extends BaseModel
         return $this->belongsTo(ProcurementPurchaseOrder::class, 'purchase_order_id');
     }
 
+    public function getResolvedCurrencyAttribute(): string
+    {
+        $this->loadMissing([
+            'purchaseOrder.purchaseRequest.programFunding.program',
+            'purchaseOrder.budgetCommitment.programFunding.program',
+            'purchaseOrder.budgetCommitment.purchaseRequest.programFunding.program',
+        ]);
+
+        return $this->purchaseOrder?->resolved_currency
+            ?: $this->currency
+            ?: 'USD';
+    }
+
     public function purchaseRequestItem(): BelongsTo
     {
         return $this->belongsTo(PurchaseRequestItem::class, 'purchase_request_item_id');

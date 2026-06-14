@@ -54,6 +54,15 @@ class ProgramFunding extends BaseModel
         return $this->belongsTo(Program::class, 'program_id');
     }
 
+    public function getResolvedCurrencyAttribute(): string
+    {
+        $this->loadMissing('program');
+
+        return $this->program?->currency
+            ?: $this->currency
+            ?: 'USD';
+    }
+
     public function funder()
     {
         return $this->belongsTo(Funder::class, 'funder_id');
