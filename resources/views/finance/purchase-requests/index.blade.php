@@ -64,10 +64,16 @@
                         @foreach ($purchaseRequests as $pr)
                             @php
                                 $commitmentStatuses = $pr->commitments->pluck('status');
+                                $canEditLockedPurchaseRequest = auth()->user()?->isAdmin() || auth()->user()?->isSuperAdmin();
                                 $canEditThisPurchaseRequest = $canEditPurchaseRequests
-                                    && ($pr->status ?? 'draft') === 'draft'
-                                    && $commitmentStatuses->isNotEmpty()
-                                    && $commitmentStatuses->every(fn ($status) => $status === 'draft');
+                                    && (
+                                        $canEditLockedPurchaseRequest
+                                        || (
+                                            ($pr->status ?? 'draft') === 'draft'
+                                            && $commitmentStatuses->isNotEmpty()
+                                            && $commitmentStatuses->every(fn ($status) => $status === 'draft')
+                                        )
+                                    );
                                 $canDeleteThisPurchaseRequest = $canDeletePurchaseRequests
                                     && ($pr->status ?? 'draft') !== 'approved'
                                     && ! $commitmentStatuses->contains('approved');
@@ -110,7 +116,7 @@
                                     @if ($canEditThisPurchaseRequest)
                                         <a href="{{ route('finance.purchase-requests.edit', $pr) }}"
                                             class="btn btn-sm btn-outline-warning"
-                                            title="Edit Draft Purchase Request">
+                                            title="Edit Purchase Request">
                                             <i class="feather-edit-2"></i>
                                         </a>
                                     @endif

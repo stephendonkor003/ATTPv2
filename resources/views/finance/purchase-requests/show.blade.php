@@ -91,10 +91,16 @@
         $purchaseRequestStatus = $purchaseRequest->status ?? 'draft';
         $canDecidePurchaseRequest = $canApprovePurchaseRequests && in_array($purchaseRequestStatus, $decidableStatuses, true);
         $commitmentStatuses = $purchaseRequest->commitments->pluck('status');
+        $canEditLockedPurchaseRequest = auth()->user()?->isAdmin() || auth()->user()?->isSuperAdmin();
         $canEditThisPurchaseRequest = $canEditPurchaseRequests
-            && $purchaseRequestStatus === 'draft'
-            && $commitmentStatuses->isNotEmpty()
-            && $commitmentStatuses->every(fn ($status) => $status === 'draft');
+            && (
+                $canEditLockedPurchaseRequest
+                || (
+                    $purchaseRequestStatus === 'draft'
+                    && $commitmentStatuses->isNotEmpty()
+                    && $commitmentStatuses->every(fn ($status) => $status === 'draft')
+                )
+            );
         $canDeleteThisPurchaseRequest = $canDeletePurchaseRequests
             && $purchaseRequestStatus !== 'approved'
             && ! $commitmentStatuses->contains('approved');
@@ -156,7 +162,7 @@
                 </a>
                 @if ($canEditThisPurchaseRequest)
                     <a href="{{ route('finance.purchase-requests.edit', $purchaseRequest) }}" class="btn btn-outline-warning">
-                        <i class="feather-edit-2 me-1"></i> Edit Draft
+                        <i class="feather-edit-2 me-1"></i> Edit
                     </a>
                 @endif
                 @if ($canDeletePurchaseRequests)
