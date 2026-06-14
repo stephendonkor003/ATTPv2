@@ -44,7 +44,45 @@ class ProcurementPurchaseOrderController extends Controller
                     ->whereNotNull('governance_node_id');
             });
 
-        $approvedPurchaseOrderCommitmentTotal = (float) (clone $purchaseOrderQuery)->sum('amount');
+        $summaryPurchaseOrders = (clone $purchaseOrderQuery)
+            ->with([
+                'lineItemEvidence',
+                'disbursements',
+                'purchaseRequest.items',
+                'budgetCommitment.purchaseRequest.items',
+            ])
+            ->get();
+
+        $purchaseOrderValueTotals = [
+            'approved_amount' => 0.0,
+            'item_total_amount' => 0.0,
+            'item_paid_amount' => 0.0,
+            'item_pending_amount' => 0.0,
+            'total_items' => 0,
+            'paid_items' => 0,
+            'pending_items' => 0,
+        ];
+
+        foreach ($summaryPurchaseOrders as $summaryPurchaseOrder) {
+            $lineItemSummary = $summaryPurchaseOrder->lineItemSummary();
+            $purchaseOrderValueTotals['approved_amount'] += $lineItemSummary['total_amount'];
+
+            if ($lineItemSummary['has_line_items']) {
+                $purchaseOrderValueTotals['item_total_amount'] += $lineItemSummary['total_amount'];
+                $purchaseOrderValueTotals['item_paid_amount'] += $lineItemSummary['paid_amount'];
+                $purchaseOrderValueTotals['item_pending_amount'] += $lineItemSummary['pending_amount'];
+                $purchaseOrderValueTotals['total_items'] += $lineItemSummary['total_items'];
+                $purchaseOrderValueTotals['paid_items'] += $lineItemSummary['paid_items'];
+                $purchaseOrderValueTotals['pending_items'] += $lineItemSummary['pending_items'];
+            }
+        }
+
+        $purchaseOrderValueTotals['approved_amount'] = round($purchaseOrderValueTotals['approved_amount'], 2);
+        $purchaseOrderValueTotals['item_total_amount'] = round($purchaseOrderValueTotals['item_total_amount'], 2);
+        $purchaseOrderValueTotals['item_paid_amount'] = round($purchaseOrderValueTotals['item_paid_amount'], 2);
+        $purchaseOrderValueTotals['item_pending_amount'] = round($purchaseOrderValueTotals['item_pending_amount'], 2);
+
+        $approvedPurchaseOrderCommitmentTotal = $purchaseOrderValueTotals['approved_amount'];
         $totalDisbursedAmount = (float) ProcurementDisbursement::query()
             ->whereIn('purchase_order_id', (clone $purchaseOrderQuery)->select('procurement_purchase_orders.id'))
             ->whereNotNull('paid_at')
@@ -57,8 +95,9 @@ class ProcurementPurchaseOrderController extends Controller
                 'vendor',
                 'subActivity',
                 'invoice',
-                'budgetCommitment.purchaseRequest',
-                'purchaseRequest',
+                'lineItemEvidence',
+                'budgetCommitment.purchaseRequest.items',
+                'purchaseRequest.items',
                 'disbursements',
             ])
             ->orderByDesc('created_at')
@@ -67,7 +106,8 @@ class ProcurementPurchaseOrderController extends Controller
         return view('procurement.purchase-orders.index', compact(
             'purchaseOrders',
             'approvedPurchaseOrderCommitmentTotal',
-            'totalDisbursedAmount'
+            'totalDisbursedAmount',
+            'purchaseOrderValueTotals'
         ));
     }
 

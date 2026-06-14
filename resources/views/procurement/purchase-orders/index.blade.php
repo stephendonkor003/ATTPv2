@@ -50,6 +50,7 @@
             font-size: 1.4rem;
             font-weight: 700;
             color: #0f172a;
+            overflow-wrap: anywhere;
         }
 
         .po-page .table-card {
@@ -89,35 +90,56 @@
         @php
             $totalOrders = $purchaseOrders->total();
             $latestOrder = $purchaseOrders->first();
+            $itemTotalCount = (int) ($purchaseOrderValueTotals['total_items'] ?? 0);
+            $itemPaidCount = (int) ($purchaseOrderValueTotals['paid_items'] ?? 0);
+            $itemPendingCount = (int) ($purchaseOrderValueTotals['pending_items'] ?? 0);
         @endphp
 
         <div class="row g-3 mb-4">
-            <div class="col-md-3">
+            <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Total Orders</div>
                     <div class="stat-value">{{ $totalOrders }}</div>
                     <div class="text-muted small">Across all pages</div>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Approved PO Commitment Totals</div>
                     <div class="stat-value">
                         {{ number_format((float) $approvedPurchaseOrderCommitmentTotal, 2) }}
                     </div>
-                    <div class="text-muted small">Across all purchase orders</div>
+                    <div class="text-muted small">Line items used where available</div>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Disbursement Amount</div>
                     <div class="stat-value">
                         {{ number_format((float) $totalDisbursedAmount, 2) }}
                     </div>
-                    <div class="text-muted small">Paid against purchase orders</div>
+                    <div class="text-muted small">Actual cash paid against POs</div>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-sm-6 col-xl-4">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">Paid / Confirmed Items</div>
+                    <div class="stat-value">
+                        {{ number_format((float) ($purchaseOrderValueTotals['item_paid_amount'] ?? 0), 2) }}
+                    </div>
+                    <div class="text-muted small">{{ $itemPaidCount }} of {{ $itemTotalCount }} line items</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-xl-4">
+                <div class="stat-card p-3 h-100">
+                    <div class="stat-title">Unpaid Item Value</div>
+                    <div class="stat-value">
+                        {{ number_format((float) ($purchaseOrderValueTotals['item_pending_amount'] ?? 0), 2) }}
+                    </div>
+                    <div class="text-muted small">{{ $itemPendingCount }} line items pending payment</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Latest PO</div>
                     <div class="stat-value">{{ $latestOrder?->reference_no ?? 'N/A' }}</div>
@@ -153,6 +175,9 @@
                     </thead>
                     <tbody>
                         @foreach ($purchaseOrders as $purchaseOrder)
+                            @php
+                                $lineItemSummary = $purchaseOrder->lineItemSummary();
+                            @endphp
                             <tr>
                                 <td class="ps-4 fw-semibold">
                                     {{ $purchaseOrder->reference_no ?? 'N/A' }}
@@ -175,10 +200,18 @@
                                     <small class="text-muted">{{ $purchaseOrder->vendor?->email ?? 'N/A' }}</small>
                                 </td>
                                 <td class="text-center">
-                                    {{ $purchaseOrder->amount ? number_format($purchaseOrder->amount, 2) : 'N/A' }}
+                                    {{ number_format((float) $lineItemSummary['total_amount'], 2) }}
+                                    @if ($lineItemSummary['has_line_items'])
+                                        <div class="small text-muted">{{ $lineItemSummary['total_items'] }} items</div>
+                                    @endif
                                 </td>
                                 <td class="text-center">
                                     {{ number_format((float) $purchaseOrder->actualPaidAmount(), 2) }}
+                                    @if ($lineItemSummary['has_line_items'])
+                                        <div class="small text-muted">
+                                            {{ $lineItemSummary['paid_items'] }} / {{ $lineItemSummary['total_items'] }} items
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-secondary text-capitalize">

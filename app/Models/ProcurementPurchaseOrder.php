@@ -13,7 +13,7 @@ class ProcurementPurchaseOrder extends BaseModel
     protected $table = 'procurement_purchase_orders';
 
     public const NON_PAYING_DISBURSEMENT_STATUSES = ['cancelled', 'void', 'reversed'];
-    public const PAID_DISBURSEMENT_STATUSES = ['completed', 'paid'];
+    public const PAID_DISBURSEMENT_STATUSES = ['completed', 'paid', 'fully_paid'];
 
     protected $fillable = [
         'procurement_id',
@@ -133,7 +133,7 @@ class ProcurementPurchaseOrder extends BaseModel
         if ($this->relationLoaded('disbursements')) {
             return (float) $this->disbursements
                 ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at
-                    && in_array($disbursement->status, self::PAID_DISBURSEMENT_STATUSES, true))
+                    && in_array(strtolower((string) $disbursement->status), self::PAID_DISBURSEMENT_STATUSES, true))
                 ->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount);
         }
 
@@ -147,6 +147,76 @@ class ProcurementPurchaseOrder extends BaseModel
     {
         $amount = (float) ($this->amount ?? 0);
         return max($amount - $this->paidAmount(), 0);
+    }
+
+    public function sourcePurchaseRequest(): ?PurchaseRequest
+    {
+        $this->loadMissing('purchaseRequest', 'budgetCommitment.purchaseRequest');
+
+        return $this->purchaseRequest ?: $this->budgetCommitment?->purchaseRequest;
+    }
+
+    public function lineItemSummary(): array
+    {
+        $this->loadMissing([
+            'lineItemEvidence',
+            'disbursements',
+            'purchaseRequest.items',
+            'budgetCommitment.purchaseRequest.items',
+        ]);
+
+        $lineItems = $this->sourcePurchaseRequest()?->items ?? collect();
+
+        if ($lineItems->isEmpty()) {
+            $totalAmount = round((float) ($this->amount ?? 0), 2);
+            $paidAmount = round($this->actualPaidAmount(), 2);
+
+            return [
+                'has_line_items' => false,
+                'total_items' => 0,
+                'paid_items' => 0,
+                'pending_items' => 0,
+                'total_amount' => $totalAmount,
+                'paid_amount' => $paidAmount,
+                'pending_amount' => round(max($totalAmount - $paidAmount, 0), 2),
+            ];
+        }
+
+        $evidenceByItem = $this->lineItemEvidence->keyBy('purchase_request_item_id');
+        $paidDeliverableIds = $this->disbursements
+            ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->deliverable_id
+                && (
+                    ($disbursement->paid_at && in_array(strtolower((string) $disbursement->status), self::PAID_DISBURSEMENT_STATUSES, true))
+                    || strtolower((string) $disbursement->recipient_confirmation_status) === 'confirmed'
+                ))
+            ->pluck('deliverable_id')
+            ->map(fn ($deliverableId) => (string) $deliverableId)
+            ->values()
+            ->all();
+
+        $isItemPaidOrConfirmed = function ($item) use ($evidenceByItem, $paidDeliverableIds): bool {
+            $itemEvidence = $evidenceByItem->get($item->id);
+
+            if ($itemEvidence?->is_met) {
+                return true;
+            }
+
+            return $item->deliverable_id && in_array((string) $item->deliverable_id, $paidDeliverableIds, true);
+        };
+
+        $paidItems = $lineItems->filter($isItemPaidOrConfirmed);
+        $totalAmount = round($lineItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
+        $paidAmount = round($paidItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
+
+        return [
+            'has_line_items' => true,
+            'total_items' => $lineItems->count(),
+            'paid_items' => $paidItems->count(),
+            'pending_items' => max($lineItems->count() - $paidItems->count(), 0),
+            'total_amount' => $totalAmount,
+            'paid_amount' => $paidAmount,
+            'pending_amount' => round(max($totalAmount - $paidAmount, 0), 2),
+        ];
     }
 
     public function vendor(): BelongsTo
