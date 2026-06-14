@@ -39,6 +39,13 @@
                 </div>
             @endif
 
+            @if ($user->user_type === 'vendor')
+                <div class="alert alert-info">
+                    This user currently has vendor portal access. To revert them to a back-office user, change
+                    <strong>User Type</strong> from Vendor, assign a system role, and save.
+                </div>
+            @endif
+
             {{-- ================= EDIT FORM ================= --}}
             <form method="POST" action="{{ route('system.users.update', $user->id) }}">
                 @csrf

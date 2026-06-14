@@ -12,10 +12,18 @@
                 </h4>
                 <p class="text-muted mb-0">Update vendor profile details and category.</p>
             </div>
-            <a href="{{ route('vendors.index') }}" class="btn btn-light">
-                <i class="feather-arrow-left me-1"></i>
-                Back to Vendors
-            </a>
+            <div class="d-flex gap-2">
+                @can('users.manage')
+                    <a href="{{ route('system.users.edit', $vendor) }}" class="btn btn-outline-secondary">
+                        <i class="feather-repeat me-1"></i>
+                        Revert to Back Office
+                    </a>
+                @endcan
+                <a href="{{ route('vendors.index') }}" class="btn btn-light">
+                    <i class="feather-arrow-left me-1"></i>
+                    Back to Vendors
+                </a>
+            </div>
         </div>
 
         @if (session('error'))

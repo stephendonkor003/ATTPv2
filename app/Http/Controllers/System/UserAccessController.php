@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use App\Mail\UserAccountCreated;
 use App\Mail\VendorAccountCreated;
 use App\Mail\UserPasswordReset;
@@ -63,7 +64,7 @@ class UserAccessController extends Controller
     {
         $validated = $request->validate([
             'name'    => 'required|string|max:255',
-            'email'   => 'required|email|unique:users,email',
+            'email'   => 'required|email',
             'role_id' => [
                 Rule::requiredIf(fn () => $request->input('user_type') !== 'vendor'),
                 'nullable',
@@ -78,9 +79,62 @@ class UserAccessController extends Controller
             ],
             'governance_node_id' => 'nullable|exists:myb_governance_nodes,id',
             'member_state_id' => 'nullable|required_if:user_type,member_state|exists:myb_au_member_states,id',
+            'convert_existing_vendor' => 'nullable|boolean',
         ]);
 
         $isVendor = $validated['user_type'] === 'vendor';
+        $existingUser = $this->findUserByEmail($validated['email']);
+
+        if ($existingUser) {
+            if (! $isVendor) {
+                return back()
+                    ->withErrors(['email' => 'This email address is already in use.'])
+                    ->withInput();
+            }
+
+            if ($existingUser->user_type === 'vendor') {
+                return back()
+                    ->withErrors(['email' => 'This email address already belongs to a vendor account.'])
+                    ->withInput();
+            }
+
+            if ((string) $existingUser->id === (string) $request->user()?->id) {
+                return back()
+                    ->withErrors(['email' => 'You cannot convert your own back-office account into a vendor account.'])
+                    ->withInput();
+            }
+
+            if ($existingUser->role && $existingUser->role->name === 'Super Admin') {
+                return back()
+                    ->withErrors(['email' => 'Super Admin accounts cannot be converted into vendor accounts.'])
+                    ->withInput();
+            }
+
+            $this->assertUserInScope($existingUser);
+
+            if (! $request->boolean('convert_existing_vendor')) {
+                return back()
+                    ->withInput()
+                    ->with('vendor_conversion_prompt', $this->vendorConversionPromptData($existingUser));
+            }
+
+            $existingUser->update([
+                'name' => $validated['name'],
+                'user_type' => 'vendor',
+                'role_id' => null,
+                'governance_node_id' => null,
+                'member_state_id' => null,
+                'vendor_category' => $validated['vendor_category'] ?? null,
+            ]);
+
+            $redirectRoute = $request->user()?->can('vendor.manage')
+                ? 'vendors.index'
+                : 'system.users.index';
+
+            return redirect()
+                ->route($redirectRoute)
+                ->with('success', 'Existing back-office user converted to a vendor account successfully. The user can sign in with their existing password.');
+        }
 
         if (! $isVendor && $request->filled('governance_node_id')) {
             $this->assertNodeInScope((int) $request->governance_node_id);
@@ -465,6 +519,23 @@ class UserAccessController extends Controller
         if (!in_array($nodeId, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to assign this governance node.');
         }
+    }
+
+    private function findUserByEmail(string $email): ?User
+    {
+        return User::with('role')
+            ->whereRaw('LOWER(email) = ?', [Str::lower($email)])
+            ->first();
+    }
+
+    private function vendorConversionPromptData(User $user): array
+    {
+        return [
+            'name' => $user->name,
+            'email' => $user->email,
+            'user_type' => ucfirst(str_replace('_', ' ', (string) $user->user_type)),
+            'role' => $user->role?->name,
+        ];
     }
 
     private function descendantNodeIds(int $rootNodeId): array

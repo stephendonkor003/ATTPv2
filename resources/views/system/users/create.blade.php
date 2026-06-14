@@ -13,6 +13,7 @@
     $pageSubtitle = $pageSubtitle ?? 'Create a new system user and assign an access role.';
     $backButtonText = $backButtonText ?? 'Back to Users';
     $submitButtonText = $submitButtonText ?? ($isVendorType ? 'Create Vendor' : 'Create User');
+    $vendorConversionPrompt = session('vendor_conversion_prompt');
 @endphp
 
 @section('title', $pageTitle)
@@ -51,8 +52,10 @@
             @endif
 
             {{-- ================= CREATE USER FORM ================= --}}
-            <form method="POST" action="{{ $formAction }}">
+            <form method="POST" action="{{ $formAction }}" id="userCreateForm">
                 @csrf
+                <input type="hidden" name="convert_existing_vendor" id="convert_existing_vendor"
+                    value="{{ old('convert_existing_vendor', '0') }}">
 
                 <div class="card shadow-sm border-0">
                     <div class="card-body">
@@ -72,7 +75,7 @@
                                 <label class="form-label fw-semibold">
                                     Email Address <span class="text-danger">*</span>
                                 </label>
-                                <input type="email" name="email" class="form-control" value="{{ old('email') }}"
+                                <input type="email" name="email" id="email" class="form-control" value="{{ old('email') }}"
                                     placeholder="Enter email address" required>
                             </div>
 
@@ -228,6 +231,52 @@
                 </div>
             </form>
 
+            @if ($vendorConversionPrompt)
+                <div class="modal fade" id="vendorConversionModal" tabindex="-1"
+                    aria-labelledby="vendorConversionModalLabel" aria-hidden="true" data-bs-backdrop="static"
+                    data-bs-keyboard="false">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header bg-warning-subtle">
+                                <h5 class="modal-title" id="vendorConversionModalLabel">
+                                    Existing Back-Office Account Found
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-3">
+                                    The email <strong>{{ $vendorConversionPrompt['email'] }}</strong> already belongs to
+                                    <strong>{{ $vendorConversionPrompt['name'] }}</strong>.
+                                </p>
+                                <div class="border rounded p-3 bg-light mb-3">
+                                    <div class="small text-muted">Current account</div>
+                                    <div class="fw-semibold">
+                                        {{ $vendorConversionPrompt['user_type'] }}
+                                        @if (!empty($vendorConversionPrompt['role']))
+                                            · {{ $vendorConversionPrompt['role'] }}
+                                        @endif
+                                    </div>
+                                </div>
+                                <p class="mb-0">
+                                    Do you want to convert this back-office user into a vendor account? This will remove
+                                    their system role, governance scope, and member-state link, then grant vendor portal
+                                    access. The user will keep their existing password. You can revert this later from
+                                    Edit User by selecting a non-vendor user type and assigning a role.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                                    No, Keep Back Office
+                                </button>
+                                <button type="button" class="btn btn-warning" id="confirmVendorConversionBtn">
+                                    Yes, Convert to Vendor
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
         </div>
     </main>
 
@@ -245,6 +294,11 @@
             const memberStatePreview = document.getElementById('member-state-preview');
             const memberStatePreviewImage = document.getElementById('member-state-preview-image');
             const memberStatePreviewName = document.getElementById('member-state-preview-name');
+            const userCreateForm = document.getElementById('userCreateForm');
+            const emailInput = document.getElementById('email');
+            const convertExistingVendorInput = document.getElementById('convert_existing_vendor');
+            const vendorConversionModalEl = document.getElementById('vendorConversionModal');
+            const confirmVendorConversionBtn = document.getElementById('confirmVendorConversionBtn');
 
             function updateMemberStatePreview() {
                 if (!memberStateSelect || !memberStatePreview || !memberStatePreviewImage || !memberStatePreviewName) {
@@ -308,8 +362,44 @@
             }
 
             userTypeSelect.addEventListener('change', toggleUserTypeFields);
+            userTypeSelect.addEventListener('change', () => {
+                if (convertExistingVendorInput) {
+                    convertExistingVendorInput.value = '0';
+                }
+            });
+            emailInput?.addEventListener('input', () => {
+                if (convertExistingVendorInput) {
+                    convertExistingVendorInput.value = '0';
+                }
+            });
             memberStateSelect.addEventListener('change', updateMemberStatePreview);
             toggleUserTypeFields();
+
+            if (vendorConversionModalEl) {
+                const showConversionPrompt = () => {
+                    if (window.bootstrap?.Modal) {
+                        const modal = new bootstrap.Modal(vendorConversionModalEl);
+                        modal.show();
+                        return;
+                    }
+
+                    if (confirm('This email already belongs to a back-office account. Convert it to a vendor account?')) {
+                        if (convertExistingVendorInput) {
+                            convertExistingVendorInput.value = '1';
+                        }
+                        userCreateForm?.submit();
+                    }
+                };
+
+                confirmVendorConversionBtn?.addEventListener('click', () => {
+                    if (convertExistingVendorInput) {
+                        convertExistingVendorInput.value = '1';
+                    }
+                    userCreateForm?.submit();
+                });
+
+                showConversionPrompt();
+            }
         });
     </script>
 @endsection

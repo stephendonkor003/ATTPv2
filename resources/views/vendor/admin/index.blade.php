@@ -136,6 +136,13 @@
                                             title="Edit Vendor">
                                             <i class="feather-edit"></i>
                                         </a>
+                                        @can('users.manage')
+                                            <a href="{{ route('system.users.edit', $vendor) }}"
+                                                class="btn btn-sm btn-outline-secondary"
+                                                title="Revert to back-office user">
+                                                <i class="feather-repeat"></i>
+                                            </a>
+                                        @endcan
                                         @if ($vendor->is_disabled)
                                             <form action="{{ route('vendors.enable', $vendor) }}" method="POST">
                                                 @csrf

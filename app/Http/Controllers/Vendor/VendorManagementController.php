@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Validators\ValidationException as ExcelValidationException;
@@ -57,14 +58,56 @@ class VendorManagementController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email'],
+            'email' => ['required', 'email'],
             'vendor_category' => [
                 'nullable',
                 'string',
                 'max:255',
                 Rule::exists('vendor_categories', 'name')->where(fn ($query) => $query->where('is_active', true)),
             ],
+            'convert_existing_vendor' => ['nullable', 'boolean'],
         ]);
+
+        $existingUser = $this->findUserByEmail($validated['email']);
+
+        if ($existingUser) {
+            if ($existingUser->user_type === 'vendor') {
+                return back()
+                    ->withErrors(['email' => 'This email address already belongs to a vendor account.'])
+                    ->withInput();
+            }
+
+            if ((string) $existingUser->id === (string) $request->user()?->id) {
+                return back()
+                    ->withErrors(['email' => 'You cannot convert your own back-office account into a vendor account.'])
+                    ->withInput();
+            }
+
+            if ($existingUser->role && $existingUser->role->name === 'Super Admin') {
+                return back()
+                    ->withErrors(['email' => 'Super Admin accounts cannot be converted into vendor accounts.'])
+                    ->withInput();
+            }
+
+            if (! $request->boolean('convert_existing_vendor')) {
+                return back()
+                    ->withInput()
+                    ->with('vendor_conversion_prompt', $this->vendorConversionPromptData($existingUser));
+            }
+
+            $existingUser->update([
+                'name' => $validated['name'],
+                'user_type' => 'vendor',
+                'role_id' => null,
+                'governance_node_id' => null,
+                'member_state_id' => null,
+                'vendor_category' => $validated['vendor_category'] ?? null,
+            ]);
+
+            return redirect()
+                ->route('vendors.index')
+                ->with('success', 'Existing back-office user converted to a vendor account successfully. The user can sign in with their existing password.');
+        }
 
         $plainPassword = str()->random(12);
 
@@ -220,6 +263,23 @@ class VendorManagementController extends Controller
         if ($vendor->user_type !== 'vendor') {
             abort(404);
         }
+    }
+
+    private function findUserByEmail(string $email): ?User
+    {
+        return User::with('role')
+            ->whereRaw('LOWER(email) = ?', [Str::lower($email)])
+            ->first();
+    }
+
+    private function vendorConversionPromptData(User $user): array
+    {
+        return [
+            'name' => $user->name,
+            'email' => $user->email,
+            'user_type' => ucfirst(str_replace('_', ' ', (string) $user->user_type)),
+            'role' => $user->role?->name,
+        ];
     }
 
     private function sendVendorMailSafely(User $vendor, string $plainPassword): bool
