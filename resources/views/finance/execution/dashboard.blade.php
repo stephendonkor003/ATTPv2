@@ -1,18 +1,39 @@
 @extends('layouts.app')
 
 @section('content')
+    <style>
+        .execution-pdf-btn {
+            background: linear-gradient(135deg, #fbbf24, #f97316);
+            border: 0;
+            color: #111827;
+            font-weight: 800;
+            box-shadow: 0 12px 22px rgba(15, 23, 42, .16);
+            transition: transform .16s ease, box-shadow .16s ease;
+        }
+
+        .execution-pdf-btn:hover,
+        .execution-pdf-btn:focus {
+            color: #111827;
+            box-shadow: 0 16px 28px rgba(15, 23, 42, .24);
+            transform: translateY(-2px);
+        }
+    </style>
+
     <div class="nxl-container">
 
         {{-- ================================
      * PAGE HEADER
      * ================================ --}}
-        <div class="page-header mb-4">
+        <div class="page-header mb-4 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
                 <h4 class="fw-bold mb-1">Execution Dashboard</h4>
                 <p class="text-muted mb-0">
                     Financial execution performance — planned vs actual, variance, momentum, and risk
                 </p>
             </div>
+            <a href="{{ route('finance.execution.dashboard.export.pdf', request()->query()) }}" class="btn execution-pdf-btn">
+                <i class="feather-download me-1"></i> Download PDF
+            </a>
         </div>
 
         {{-- ================================

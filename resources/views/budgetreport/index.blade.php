@@ -123,6 +123,22 @@
             font-weight: 600;
         }
 
+        .br-pdf-btn {
+            background: linear-gradient(135deg, #fbbf24, #f97316);
+            border: 0;
+            color: #111827;
+            font-weight: 800;
+            box-shadow: 0 12px 22px rgba(15, 23, 42, .2);
+            transition: transform .16s ease, box-shadow .16s ease;
+        }
+
+        .br-pdf-btn:hover,
+        .br-pdf-btn:focus {
+            color: #111827;
+            box-shadow: 0 16px 28px rgba(15, 23, 42, .28);
+            transform: translateY(-2px);
+        }
+
         .br-insight {
             border: 1px solid #e5e7eb;
             border-radius: 8px;
@@ -179,6 +195,9 @@
                     </p>
                 </div>
                 <div class="d-flex flex-wrap gap-2 align-items-start">
+                    <a href="{{ route('budget.reports.portfolio.export.pdf') }}" class="btn br-pdf-btn">
+                        <i class="feather-download me-1"></i> Download PDF
+                    </a>
                     <a href="{{ route('budget.reports.commitments') }}" class="btn btn-light">
                         <i class="feather-file-text me-1"></i> Commitment Report
                     </a>

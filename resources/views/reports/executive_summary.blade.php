@@ -1,741 +1,554 @@
 @extends('layouts.app')
 
-@section('title', 'Executive Reports')
+@section('title', 'Executive Budget Summary')
 
 @section('content')
+    @php
+        $money = fn ($value) => number_format((float) $value, 2);
+    @endphp
 
     <style>
-        .kpi-card {
-            border-radius: 12px;
-            transition: .3s;
+        .exec-summary-page {
+            color: #111827;
         }
 
-        .kpi-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
+        .es-hero {
+            background: linear-gradient(120deg, #0f172a 0%, #0f766e 48%, #2563eb 100%);
+            border-radius: 8px;
+            color: #fff;
+            overflow: hidden;
+            position: relative;
         }
 
-        .rank-badge {
-            font-size: 12px;
-            padding: 5px 10px;
-            border-radius: 50px;
+        .es-hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, rgba(255,255,255,.14), transparent 48%);
+            pointer-events: none;
         }
 
-        .leader-card {
-            border-left: 4px solid #0d6efd;
-            transition: .3s;
+        .es-hero-body {
+            padding: 28px;
+            position: relative;
+            z-index: 1;
         }
 
-        .leader-card:hover {
-            background: #f8faff;
+        .es-pdf-btn {
+            background: linear-gradient(135deg, #fbbf24, #f97316);
+            border: 0;
+            color: #111827;
+            font-weight: 800;
+            box-shadow: 0 12px 22px rgba(15, 23, 42, .22);
+            transition: transform .16s ease, box-shadow .16s ease;
+        }
+
+        .es-pdf-btn:hover,
+        .es-pdf-btn:focus {
+            color: #111827;
+            box-shadow: 0 16px 28px rgba(15, 23, 42, .3);
             transform: translateY(-2px);
         }
+
+        .es-card,
+        .es-panel,
+        .es-insight {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        .es-card,
+        .es-insight {
+            height: 100%;
+            padding: 18px;
+            transition: transform .16s ease, box-shadow .16s ease;
+        }
+
+        .es-card:hover,
+        .es-insight:hover {
+            box-shadow: 0 14px 30px rgba(15, 23, 42, .11);
+            transform: translateY(-2px);
+        }
+
+        .es-card-icon {
+            align-items: center;
+            background: #eff6ff;
+            border-radius: 8px;
+            color: #1d4ed8;
+            display: inline-flex;
+            font-size: 1.1rem;
+            height: 40px;
+            justify-content: center;
+            width: 40px;
+        }
+
+        .es-panel-header {
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 18px 20px;
+        }
+
+        .es-panel-body {
+            padding: 20px;
+        }
+
+        .es-chart-box {
+            min-height: 305px;
+            position: relative;
+        }
+
+        .es-chart-box.sm {
+            min-height: 260px;
+        }
+
+        .es-chart-box canvas {
+            height: 100% !important;
+            width: 100% !important;
+        }
+
+        .es-rank {
+            align-items: center;
+            background: #eff6ff;
+            border-radius: 999px;
+            color: #1e40af;
+            display: inline-flex;
+            font-size: .78rem;
+            font-weight: 800;
+            height: 30px;
+            justify-content: center;
+            width: 30px;
+        }
+
+        .es-chip {
+            align-items: center;
+            background: #eff6ff;
+            border: 1px solid #dbeafe;
+            border-radius: 999px;
+            color: #1e40af;
+            display: inline-flex;
+            font-size: .78rem;
+            font-weight: 700;
+            gap: 6px;
+            padding: 5px 10px;
+        }
+
+        .es-progress {
+            background: #e5e7eb;
+            border-radius: 999px;
+            height: 8px;
+            overflow: hidden;
+        }
+
+        .es-progress span {
+            background: linear-gradient(90deg, #0f766e, #2563eb);
+            border-radius: 999px;
+            display: block;
+            height: 100%;
+        }
+
+        .es-table-wrap {
+            max-height: 560px;
+            overflow: auto;
+        }
+
+        @media (max-width: 767.98px) {
+            .es-hero-body,
+            .es-panel-body {
+                padding: 18px;
+            }
+
+            .es-chart-box {
+                min-height: 250px;
+            }
+        }
     </style>
 
-    <style>
-        .excel-program-row {
-            background: #d9ead3 !important;
-            font-size: 15px;
-        }
-
-        .excel-project-row {
-            background: #cfe2f3 !important;
-            font-weight: bold;
-        }
-
-        .excel-activity-row {
-            background: #f9f9f9 !important;
-            font-weight: 600;
-        }
-
-        .excel-sub-row {
-            background: #ffffff !important;
-        }
-
-        .excel-table td,
-        .excel-table th {
-            padding: 6px 10px !important;
-        }
-    </style>
-
-    <main class="nxl-container fade-in">
-        <div class="nxl-content">
-
-            <!-- HEADER -->
-            <div class="page-header mb-4">
-                <h4 class="fw-bold">📊 Executive Summary Report</h4>
-                <p class="text-muted">High-level financial insights to support strategic decisions.</p>
+    <main class="nxl-container exec-summary-page">
+        <div class="es-hero mb-4">
+            <div class="es-hero-body d-flex flex-column flex-xl-row justify-content-between gap-3">
+                <div>
+                    <div class="text-uppercase small fw-semibold text-white-50 mb-2">Budget Summary</div>
+                    <h3 class="fw-bold mb-2 text-white">Executive Summary Report</h3>
+                    <p class="mb-0 text-white-50">
+                        Ranked financial insights across projects, activities, sub-activities, and program portfolios.
+                    </p>
+                </div>
+                <div class="d-flex flex-wrap gap-2 align-items-start">
+                    <a href="{{ route('budget.summary.executive.export.pdf') }}" class="btn es-pdf-btn">
+                        <i class="feather-download me-1"></i> Download PDF
+                    </a>
+                    <a href="{{ route('budget.summary.dashboard') }}" class="btn btn-outline-light">
+                        <i class="feather-grid me-1"></i> Budget Dashboard
+                    </a>
+                </div>
             </div>
+        </div>
 
-
-            <!-- KPI CARDS -->
-            <div class="row g-3 mb-4">
-
-                <div class="col-md-4">
-                    <div class="card shadow-sm kpi-card p-3">
-                        <h6 class="text-muted">Total Programs</h6>
-                        <h3 class="fw-bold">{{ $programs->count() }}</h3>
+        <div class="row g-3 mb-4">
+            <div class="col-md-6 col-xl-3">
+                <div class="es-card">
+                    <div class="d-flex justify-content-between gap-3">
+                        <div>
+                            <div class="text-muted small">Ranked Allocation</div>
+                            <div class="h4 fw-bold mb-0">{{ $money($executiveStats['total_allocated']) }}</div>
+                        </div>
+                        <span class="es-card-icon"><i class="feather-award"></i></span>
                     </div>
+                    <div class="small text-muted mt-3">{{ number_format($executiveStats['projects']) }} projects ranked</div>
                 </div>
-
-                <div class="col-md-4">
-                    <div class="card shadow-sm kpi-card p-3">
-                        <h6 class="text-muted">Total Projects Ranked</h6>
-                        <h3 class="fw-bold">{{ $projectRankings->count() }}</h3>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="card shadow-sm kpi-card p-3">
-                        <h6 class="text-muted">Total Activities Ranked</h6>
-                        <h3 class="fw-bold">{{ $activityRankings->count() }}</h3>
-                    </div>
-                </div>
-
             </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="es-card">
+                    <div class="d-flex justify-content-between gap-3">
+                        <div>
+                            <div class="text-muted small">Project Budget</div>
+                            <div class="h4 fw-bold mb-0">{{ $money($executiveStats['total_budget']) }}</div>
+                        </div>
+                        <span class="es-card-icon"><i class="feather-dollar-sign"></i></span>
+                    </div>
+                    <div class="small text-muted mt-3">Remaining: {{ $money($executiveStats['remaining']) }}</div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="es-card">
+                    <div class="d-flex justify-content-between gap-3">
+                        <div>
+                            <div class="text-muted small">Activities Ranked</div>
+                            <div class="h4 fw-bold mb-0">{{ number_format($executiveStats['activities']) }}</div>
+                        </div>
+                        <span class="es-card-icon"><i class="feather-list"></i></span>
+                    </div>
+                    <div class="small text-muted mt-3">{{ number_format($executiveStats['sub_activities']) }} sub-activities ranked</div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="es-card">
+                    <div class="d-flex justify-content-between gap-3">
+                        <div>
+                            <div class="text-muted small">Avg. Project Allocation</div>
+                            <div class="h4 fw-bold mb-0">{{ $money($executiveStats['average_project_allocation']) }}</div>
+                        </div>
+                        <span class="es-card-icon"><i class="feather-trending-up"></i></span>
+                    </div>
+                    <div class="small text-muted mt-3">{{ number_format($executiveStats['programs']) }} programs in portfolio</div>
+                </div>
+            </div>
+        </div>
 
+        <div class="row g-3 mb-4">
+            <div class="col-lg-4">
+                <div class="es-insight">
+                    <div class="text-muted small text-uppercase fw-bold mb-1">Top Project</div>
+                    <div class="h5 fw-bold mb-0">{{ $executiveStats['top_project'] ?? 'N/A' }}</div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="es-insight">
+                    <div class="text-muted small text-uppercase fw-bold mb-1">Top Activity</div>
+                    <div class="h5 fw-bold mb-0">{{ $executiveStats['top_activity'] ?? 'N/A' }}</div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="es-insight">
+                    <div class="text-muted small text-uppercase fw-bold mb-1">Top Sub-Activity</div>
+                    <div class="h5 fw-bold mb-0">{{ $executiveStats['top_sub_activity'] ?? 'N/A' }}</div>
+                </div>
+            </div>
+        </div>
 
+        <div class="row g-3 mb-4">
+            <div class="col-xl-8">
+                <div class="es-panel h-100">
+                    <div class="es-panel-header">
+                        <h5 class="fw-bold mb-1">Top Funded Projects</h5>
+                        <div class="text-muted small">Budget and allocation comparison for the highest-ranked projects.</div>
+                    </div>
+                    <div class="es-panel-body">
+                        <div class="es-chart-box">
+                            <canvas id="projectRankingChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-4">
+                <div class="es-panel h-100">
+                    <div class="es-panel-header">
+                        <h5 class="fw-bold mb-1">Program Concentration</h5>
+                        <div class="text-muted small">Top program allocation envelopes.</div>
+                    </div>
+                    <div class="es-panel-body">
+                        <div class="es-chart-box sm">
+                            <canvas id="programConcentrationChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-            <!-- FUNDING LEADERBOARD -->
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-body">
+        <div class="row g-3 mb-4">
+            <div class="col-xl-6">
+                <div class="es-panel h-100">
+                    <div class="es-panel-header">
+                        <h5 class="fw-bold mb-1">Top Activities</h5>
+                        <div class="text-muted small">Most financially significant activities.</div>
+                    </div>
+                    <div class="es-panel-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Activity</th>
+                                        <th>Project</th>
+                                        <th class="text-end">Allocated</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse ($activityRankings->take(10) as $item)
+                                        <tr>
+                                            <td><span class="es-rank">{{ $loop->iteration }}</span></td>
+                                            <td class="fw-semibold">{{ $item['activity']->name }}</td>
+                                            <td>{{ $item['project']?->name ?? 'N/A' }}</td>
+                                            <td class="text-end fw-semibold">{{ $money($item['allocated']) }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="4" class="text-center text-muted py-4">No activities found.</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-6">
+                <div class="es-panel h-100">
+                    <div class="es-panel-header">
+                        <h5 class="fw-bold mb-1">Top Sub-Activities</h5>
+                        <div class="text-muted small">Granular implementation items with the highest allocation.</div>
+                    </div>
+                    <div class="es-panel-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Sub-Activity</th>
+                                        <th>Activity</th>
+                                        <th class="text-end">Allocated</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse ($subActivityRankings->take(10) as $item)
+                                        <tr>
+                                            <td><span class="es-rank">{{ $loop->iteration }}</span></td>
+                                            <td class="fw-semibold">{{ $item['sub']->name }}</td>
+                                            <td>{{ $item['activity']?->name ?? 'N/A' }}</td>
+                                            <td class="text-end fw-semibold">{{ $money($item['allocated']) }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="4" class="text-center text-muted py-4">No sub-activities found.</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                    <h5 class="fw-bold">🏆 Top Funded Projects</h5>
-                    <p class="text-muted small">Projects ranked based on total allocation received.</p>
-
+        <div class="es-panel mb-4">
+            <div class="es-panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+                <div>
+                    <h5 class="fw-bold mb-1">Project Funding Leaderboard</h5>
+                    <div class="text-muted small">Projects ranked by total allocation across project, activity, and sub-activity levels.</div>
+                </div>
+                <span class="es-chip">{{ number_format($projectRankings->count()) }} projects</span>
+            </div>
+            <div class="es-panel-body">
+                <div class="table-responsive es-table-wrap">
                     <table class="table table-hover align-middle">
                         <thead class="table-light">
                             <tr>
                                 <th>#</th>
                                 <th>Project</th>
                                 <th>Program</th>
-                                <th>Total Allocation</th>
+                                <th class="text-end">Budget</th>
+                                <th class="text-end">Allocated</th>
+                                <th class="text-end">Remaining</th>
+                                <th style="min-width: 170px;">Utilization</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($projectRankings as $index => $item)
+                            @forelse ($projectRankings as $item)
                                 <tr>
+                                    <td><span class="es-rank">{{ $loop->iteration }}</span></td>
                                     <td>
-                                        <span class="rank-badge bg-primary text-white fw-bold">
-                                            {{ $index + 1 }}
-                                        </span>
+                                        <div class="fw-semibold">{{ $item['project']->name }}</div>
+                                        <div class="small text-muted">{{ $item['project']->project_id }}</div>
                                     </td>
+                                    <td>{{ $item['project']->program?->name ?? 'N/A' }}</td>
+                                    <td class="text-end">{{ $money($item['budget']) }}</td>
+                                    <td class="text-end fw-semibold">{{ $money($item['allocated']) }}</td>
+                                    <td class="text-end {{ $item['remaining'] < 0 ? 'text-danger' : 'text-success' }}">{{ $money($item['remaining']) }}</td>
                                     <td>
-                                        <strong>{{ $item['project']->name }}</strong><br>
-                                        <small class="text-muted">{{ $item['project']->project_id }}</small>
-                                    </td>
-                                    <td>{{ $item['project']->program->name ?? 'N/A' }}</td>
-                                    <td class="fw-bold">
-                                        {{ number_format($item['allocated'], 2) }}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="es-progress flex-grow-1">
+                                                <span style="width: {{ min(100, max(0, $item['utilization'])) }}%;"></span>
+                                            </div>
+                                            <span class="small fw-semibold">{{ number_format($item['utilization'], 1) }}%</span>
+                                        </div>
                                     </td>
                                 </tr>
-                            @endforeach
+                            @empty
+                                <tr><td colspan="7" class="text-center text-muted py-4">No projects found.</td></tr>
+                            @endforelse
                         </tbody>
                     </table>
-
                 </div>
             </div>
+        </div>
 
-
-
-
-            <!-- TOP ACTIVITIES -->
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-body">
-                    <h5 class="fw-bold">🔥 Top Activities by Funding</h5>
-                    <p class="text-muted small">Most financially significant activities across all projects.</p>
-
+        <div class="es-panel mb-5">
+            <div class="es-panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+                <div>
+                    <h5 class="fw-bold mb-1">Program Portfolio Sheet</h5>
+                    <div class="text-muted small">Program-level budget, allocation, remaining balance, and portfolio structure.</div>
+                </div>
+                <span class="es-chip">{{ number_format($programSheets->count()) }} programs</span>
+            </div>
+            <div class="es-panel-body">
+                <div class="table-responsive es-table-wrap">
                     <table class="table table-hover align-middle">
                         <thead class="table-light">
                             <tr>
-                                <th>#</th>
-                                <th>Activity</th>
-                                <th>Project</th>
-                                <th>Total Allocation</th>
+                                <th>Program</th>
+                                <th>Sector</th>
+                                <th class="text-center">Projects</th>
+                                <th class="text-center">Activities</th>
+                                <th class="text-end">Budget</th>
+                                <th class="text-end">Allocated</th>
+                                <th class="text-end">Remaining</th>
+                                <th style="min-width: 170px;">Utilization</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($activityRankings as $index => $item)
+                            @forelse ($programSheets as $row)
                                 <tr>
                                     <td>
-                                        <span class="rank-badge bg-success text-white fw-bold">
-                                            {{ $index + 1 }}
-                                        </span>
+                                        <div class="fw-semibold">{{ $row['name'] }}</div>
+                                        <div class="small text-muted">{{ $row['sub_activities'] }} sub-activities</div>
                                     </td>
-                                    <td>{{ $item['activity']->name }}</td>
-                                    <td>{{ $item['project']->name ?? 'N/A' }}</td>
-                                    <td class="fw-bold">
-                                        {{ number_format($item['allocated'], 2) }}
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-
-                </div>
-            </div>
-
-
-
-            <!-- TOP SUB-ACTIVITIES -->
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-body">
-
-                    <h5 class="fw-bold">📍 Top Sub-Activities</h5>
-                    <p class="text-muted small">Sub-activities ranked by their financial weight.</p>
-
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>#</th>
-                                <th>Sub-Activity</th>
-                                <th>Activity</th>
-                                <th>Project</th>
-                                <th>Allocated</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($subActivityRankings as $index => $item)
-                                <tr>
+                                    <td>{{ $row['sector'] }}</td>
+                                    <td class="text-center">{{ number_format($row['projects']) }}</td>
+                                    <td class="text-center">{{ number_format($row['activities']) }}</td>
+                                    <td class="text-end">{{ $money($row['budget']) }}</td>
+                                    <td class="text-end fw-semibold">{{ $money($row['allocated']) }}</td>
+                                    <td class="text-end {{ $row['remaining'] < 0 ? 'text-danger' : 'text-success' }}">{{ $money($row['remaining']) }}</td>
                                     <td>
-                                        <span class="rank-badge bg-info text-white fw-bold">
-                                            {{ $index + 1 }}
-                                        </span>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="es-progress flex-grow-1">
+                                                <span style="width: {{ min(100, max(0, $row['utilization'])) }}%;"></span>
+                                            </div>
+                                            <span class="small fw-semibold">{{ number_format($row['utilization'], 1) }}%</span>
+                                        </div>
                                     </td>
-                                    <td>{{ $item['sub']->name }}</td>
-                                    <td>{{ $item['activity']->name }}</td>
-                                    <td>{{ $item['project']->name }}</td>
-                                    <td class="fw-bold">{{ number_format($item['allocated'], 2) }}</td>
                                 </tr>
-                            @endforeach
+                            @empty
+                                <tr><td colspan="8" class="text-center text-muted py-4">No programs found.</td></tr>
+                            @endforelse
                         </tbody>
                     </table>
-
                 </div>
-            </div>
-
-
-
-            <!-- CHARTS -->
-            <div class="card shadow-sm border-0">
-                <div class="card-body">
-                    <h5 class="fw-bold mb-3">📈 Project Allocation Distribution</h5>
-                    <div id="projectAllocChart" style="height: 350px;"></div>
-                </div>
-            </div>
-
-        </div>
-
-
-        <!-- PROJECT & ACTIVITY LINE GRAPHS -->
-        <div class="card shadow-sm border-0 mt-5 mb-4">
-            <div class="card-body">
-                <h4 class="fw-bold mb-3">📉 Allocation Line Trends</h4>
-                <p class="text-muted">
-                    Activity trends within each project, plus sub-activity trends within any selected activity.
-                    Use the dropdowns to drill into sub-activities.
-                </p>
-
-                @foreach ($projectRankings as $index => $item)
-                    @php
-                        $project = $item['project'];
-                        $projectChartId = 'projectLineChart_' . $project->id;
-                        $activitySelectId = 'activitySelect_' . $project->id;
-                        $subChartId = 'subLineChart_' . $project->id;
-                        $years = range($project->start_year, $project->end_year);
-                    @endphp
-
-                    <div class="card mb-4 leader-card p-3">
-                        <h5 class="fw-bold mb-1">
-                            📌 {{ $project->name }}
-                        </h5>
-                        <small class="text-muted">Project Code: {{ $project->project_id }}</small>
-
-                        <!-- Activity-level line chart -->
-                        <div class="d-flex justify-content-between align-items-center mt-3">
-                            <div id="{{ $projectChartId }}" style="height: 320px; width: 100%;"></div>
-                            <div class="ms-3" style="min-width:150px;">
-                                <button class="btn btn-outline-primary btn-sm w-100 mb-2"
-                                    onclick="downloadChartPNG('{{ $projectChartId }}')">
-                                    <i class="bi bi-file-earmark-image"></i> PNG
-                                </button>
-                                <button class="btn btn-outline-secondary btn-sm w-100"
-                                    onclick="downloadChartSVG('{{ $projectChartId }}')">
-                                    <i class="bi bi-filetype-svg"></i> SVG
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Sub-activity line chart (filter by activity) -->
-                        <div class="mt-4">
-                            <div class="d-flex align-items-center mb-2">
-                                <label class="fw-semibold me-2">Sub-activity trends for activity:</label>
-                                <select id="{{ $activitySelectId }}" class="form-select form-select-sm" style="max-width: 320px;">
-                                    @foreach ($project->activities as $activity)
-                                        <option value="{{ $activity->id }}">{{ $activity->name }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div id="{{ $subChartId }}" style="height: 260px; width: 100%;"></div>
-                                <div class="ms-3" style="min-width:150px;">
-                                    <button class="btn btn-outline-primary btn-sm w-100 mb-2"
-                                        onclick="downloadChartPNG('{{ $subChartId }}')">
-                                        <i class="bi bi-file-earmark-image"></i> PNG
-                                    </button>
-                                    <button class="btn btn-outline-secondary btn-sm w-100"
-                                        onclick="downloadChartSVG('{{ $subChartId }}')">
-                                        <i class="bi bi-filetype-svg"></i> SVG
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Interpretation Summary -->
-                        <div class="alert alert-info mt-3">
-                            <strong>Interpretation:</strong>
-                            Activity chart: compares all activities within this project across years. <br>
-                            Sub-activity chart: pick an activity to see its sub-activities over time.
-                        </div>
-                    </div>
-                @endforeach
             </div>
         </div>
-        <!-- ============================================
-                                         EXCEL-STYLE HIERARCHICAL BUDGET TABLE
-                                    =============================================== -->
-        <!-- ============================================
-                                 PROGRAM-BY-PROGRAM EXCEL-STYLE BUDGET SHEETS
-                            =============================================== -->
-
-        @foreach ($programs as $program)
-            <div class="card shadow-sm mt-5 mb-4">
-                <div class="card-body">
-
-                    @php
-                        $maxYears = 5;
-                        $programCurrency = $program->currency ?? ($program->projects->first()->currency ?? '—');
-
-                        $programTotalsBudget = 0;
-                        $programTotalsCff = 0;
-                        $programTotalsOverall = 0;
-                        $programYearTotals = [];
-                        for ($i = 2; $i <= $maxYears; $i++) {
-                            $programYearTotals[$i] = 0;
-                        }
-                        // Pre-compute program totals before rendering table rows
-                        foreach ($program->projects as $projectTotalsHelper) {
-                            $startYearHelper = $projectTotalsHelper->start_year;
-                            $budgetHelper = $projectTotalsHelper->total_budget;
-                            $cffHelper = $projectTotalsHelper->activities->sum(
-                                fn($a) => $a->allocations->where('year', $startYearHelper)->sum('amount'),
-                            );
-                            $totalHelper = $projectTotalsHelper->activities->sum(fn($a) => $a->allocations->sum('amount'));
-
-                            $programTotalsBudget += $budgetHelper;
-                            $programTotalsCff += $cffHelper;
-                            $programTotalsOverall += $totalHelper;
-
-                            for ($i = 2; $i <= $maxYears; $i++) {
-                                $yr = $startYearHelper + ($i - 1);
-                                $v = $projectTotalsHelper->activities->sum(
-                                    fn($a) => $a->allocations->where('year', $yr)->sum('amount'),
-                                );
-                                $programYearTotals[$i] += $v;
-                            }
-                        }
-                    @endphp
-
-                    <h4 class="fw-bold mb-2">📘 Budget Sheet — {{ $program->name }}</h4>
-                    <p class="text-muted small mb-3">
-                        Program Code: <strong>{{ $program->program_id }}</strong>
-                        <span class="ms-3">Currency: <strong>{{ $programCurrency }}</strong></span>
-                    </p>
-
-                    <!-- SCROLL CONTAINER WITH STICKY HEADER -->
-                    <div class="table-responsive" style="max-height: 650px; overflow-y: auto;">
-                        <table class="table table-bordered excel-table align-middle">
-
-                            <!-- =================== HEADER =================== -->
-                            <thead class="table-warning fw-bold text-center sticky-header">
-                                <tr>
-                                    <th style="width: 120px;">ID</th>
-                                    <th>Project / Activity / Sub-Activity</th>
-                                    <th class="text-end">Budget</th>
-                                    <th class="text-end">CFF (Yr 1)</th>
-
-                                    @php $maxYears = 5; @endphp
-                                    @for ($i = 2; $i <= $maxYears; $i++)
-                                        <th class="text-end">Year {{ $i }}</th>
-                                    @endfor
-
-                                    <th class="text-end">Total</th>
-                                    <th style="width: 50px;">⇅</th>
-                                </tr>
-                            </thead>
-
-
-                            <!-- =================== BODY =================== -->
-                            <tbody>
-
-                                <!-- PROGRAM ROW -->
-                                <tr class="excel-program-row expand-toggle" data-target="program-{{ $program->id }}">
-                                    <td class="fw-bold text-center">{{ $program->program_id }}</td>
-                                    <td class="fw-bold">📘 {{ $program->name }}</td>
-                                    <td colspan="{{ 2 + ($maxYears - 1) + 1 }}"></td>
-                                    <td class="toggle-icon text-center">+</td>
-                                </tr>
-
-                                <!-- PROGRAM TOTAL SUMMARY -->
-                                <tr class="table-info fw-bold">
-                                    <td class="text-center">{{ $program->program_id }} TOTAL</td>
-                                    <td>Program Total ({{ $programCurrency }})</td>
-                                    <td class="text-end">{{ number_format($programTotalsBudget, 2) }}</td>
-                                    <td class="text-end">{{ number_format($programTotalsCff, 2) }}</td>
-
-                                    @for ($i = 2; $i <= $maxYears; $i++)
-                                        <td class="text-end">{{ number_format($programYearTotals[$i] ?? 0, 2) }}</td>
-                                    @endfor
-
-                                    <td class="text-end">{{ number_format($programTotalsOverall, 2) }}</td>
-                                    <td class="text-center">—</td>
-                                </tr>
-
-                                <!-- PROJECTS LOOP -->
-                                @foreach ($program->projects as $project)
-                                    @php
-                                        $start = $project->start_year;
-                                        $budget = $project->total_budget;
-                                        $cff = $project->activities->sum(
-                                            fn($a) => $a->allocations->where('year', $start)->sum('amount'),
-                                        );
-                                        $total = $project->activities->sum(fn($a) => $a->allocations->sum('amount'));
-                                    @endphp
-
-                                    <tr class="excel-project-row child-row program-{{ $program->id }} expand-toggle"
-                                        data-target="project-{{ $project->id }}" style="display: none;">
-                                        <td class="fw-bold text-center">{{ $project->project_id }}</td>
-                                        <td class="fw-bold">📂 {{ $project->name }}</td>
-                                    <td class="fw-bold text-end">{{ number_format($budget, 2) }}</td>
-                                        <td class="fw-bold text-end">{{ number_format($cff, 2) }}</td>
-
-                                        @for ($i = 2; $i <= $maxYears; $i++)
-                                            @php
-                                                $yr = $start + ($i - 1);
-                                                $v = $project->activities->sum(
-                                                    fn($a) => $a->allocations->where('year', $yr)->sum('amount'),
-                                                );
-                                                $programYearTotals[$i] += $v;
-                                            @endphp
-                                            <td class="text-end">{{ number_format($v, 2) }}</td>
-                                        @endfor
-
-                                        <td class="fw-bold text-end">{{ number_format($total, 2) }}</td>
-                                        <td class="toggle-icon text-center">+</td>
-                                    </tr>
-
-                                <!-- ===== ACTIVITIES LOOP ===== -->
-                                @php $activityIndex = 1; @endphp
-                                @foreach ($project->activities as $activity)
-                                    @php
-                                        $aBudget = $activity->totalAllocation();
-                                        $aCFF = $activity->allocations->where('year', $start)->sum('amount');
-                                        $activityDisplayId = $project->project_id . '-' . str_pad($activityIndex, 2, '0', STR_PAD_LEFT);
-                                    @endphp
-
-                                    <tr class="excel-activity-row child-row project-{{ $project->id }} expand-toggle"
-                                        data-target="activity-{{ $activity->id }}" style="display: none;">
-                                        <td class="text-center fw-bold">{{ $activityDisplayId }}</td>
-                                        <td class="fw-semibold ps-4">🎯 {{ $activity->name }}</td>
-                                        <td class="text-end fw-bold">{{ number_format($aBudget, 2) }}</td>
-                                        <td class="text-end">{{ number_format($aCFF, 2) }}</td>
-
-                                            @for ($i = 2; $i <= $maxYears; $i++)
-                                                @php $yr = $start + ($i - 1); @endphp
-                                                <td class="text-end">
-                                                    {{ number_format($activity->allocations->where('year', $yr)->sum('amount'), 2) }}
-                                                </td>
-                                            @endfor
-
-                                        <td class="fw-bold text-end">{{ number_format($aBudget, 2) }}</td>
-                                        <td class="toggle-icon text-center">+</td>
-                                    </tr>
-
-
-                                    <!-- ===== SUB-ACTIVITIES LOOP ===== -->
-                                    @php $subIndex = 1; @endphp
-                                    @foreach ($activity->subActivities as $sub)
-                                        @php
-                                            $sTotal = $sub->allocations->sum('amount');
-                                            $sCFF = $sub->allocations->where('year', $start)->sum('amount');
-                                            $subDisplayId = $activityDisplayId . '-' . str_pad($subIndex, 2, '0', STR_PAD_LEFT);
-                                        @endphp
-
-                                        <tr class="excel-sub-row child-row activity-{{ $activity->id }}"
-                                            style="display: none;">
-                                            <td class="text-center">{{ $subDisplayId }}</td>
-                                            <td class="ps-5">• {{ $sub->name }}</td>
-                                            <td class="text-end fw-bold">{{ number_format($sTotal, 2) }}</td>
-                                            <td class="text-end">{{ number_format($sCFF, 2) }}</td>
-
-                                                @for ($i = 2; $i <= $maxYears; $i++)
-                                                    @php $yr = $start + ($i - 1); @endphp
-                                                    <td class="text-end">
-                                                        {{ number_format($sub->allocations->where('year', $yr)->sum('amount'), 2) }}
-                                                    </td>
-                                                @endfor
-
-                                            <td class="fw-bold text-end">{{ number_format($sTotal, 2) }}</td>
-                                            <td></td>
-                                        </tr>
-                                        @php $subIndex++; @endphp
-                                    @endforeach
-                                    @php $activityIndex++; @endphp
-                                @endforeach
-                            @endforeach
-
-                        </tbody>
-
-                        </table>
-                    </div>
-
-                </div>
-            </div>
-        @endforeach
-        <style>
-            .sticky-header {
-                position: sticky;
-                top: 0;
-                z-index: 20;
-            }
-
-            /* Zebra striping */
-            .excel-table tbody tr:nth-child(odd) {
-                background: #fafafa !important;
-            }
-
-            .excel-program-row {
-                background: #d9ead3 !important;
-                font-size: 15px;
-            }
-
-            .excel-project-row {
-                background: #cfe2f3 !important;
-                font-weight: bold;
-            }
-
-            .excel-activity-row {
-                background: #f6f6f6 !important;
-                font-weight: 600;
-            }
-
-            .excel-sub-row {
-                background: #ffffff !important;
-            }
-
-            .expand-toggle {
-                cursor: pointer;
-            }
-
-            .toggle-icon {
-                font-size: 18px;
-                font-weight: bold;
-                cursor: pointer;
-                user-select: none;
-            }
-        </style>
-
-
-        <style>
-            .excel-program-row {
-                background: #d9ead3 !important;
-                font-size: 15px;
-            }
-
-            .excel-project-row {
-                background: #cfe2f3 !important;
-                font-weight: bold;
-            }
-
-            .excel-activity-row {
-                background: #f9f9f9 !important;
-                font-weight: 600;
-            }
-
-            .excel-sub-row {
-                background: #ffffff !important;
-            }
-
-            .excel-table td,
-            .excel-table th {
-                padding: 6px 10px !important;
-                font-size: 13px;
-            }
-        </style>
-
-
-
-
     </main>
 
-    <!-- CHART LIBRARY -->
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            // Expand / collapse rows
-            document.querySelectorAll(".expand-toggle").forEach(row => {
-                row.addEventListener("click", function() {
-                    const target = this.getAttribute("data-target");
-                    const icon = this.querySelector(".toggle-icon");
-                    if (!target || !icon) return;
-                    const children = document.querySelectorAll("." + target);
-                    const isOpen = icon.textContent === "-";
-                    children.forEach(child => child.style.display = isOpen ? "none" : "table-row");
-                    icon.textContent = isOpen ? "+" : "-";
-                });
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!window.Chart) return;
+
+            const charts = @json($chartData);
+            const money = (value) => Number(value || 0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
             });
-
-            @php
-                $projectChartData = $projectRankings->map(function ($item) {
-                    $p = $item['project'];
-                    $years = range($p->start_year, $p->end_year);
-
-                    return [
-                        'id' => $p->id,
-                        'chartId' => 'projectLineChart_' . $p->id,
-                        'subChartId' => 'subLineChart_' . $p->id,
-                        'activitySelectId' => 'activitySelect_' . $p->id,
-                        'years' => $years,
-                        'activities' => $p->activities->map(function ($a) use ($years) {
-                            $activitySeries = array_map(function ($y) use ($a) {
-                                return (float) $a->allocations->where('year', $y)->sum('amount');
-                            }, $years);
-
-                            $subSeries = $a->subActivities->map(function ($s) use ($years) {
-                                $series = array_map(function ($y) use ($s) {
-                                    return (float) $s->allocations->where('year', $y)->sum('amount');
-                                }, $years);
-
-                                return [
-                                    'id' => $s->id,
-                                    'name' => $s->name,
-                                    'series' => $series,
-                                ];
-                            })->values()->all();
-
-                            return [
-                                'id' => $a->id,
-                                'name' => $a->name,
-                                'series' => $activitySeries,
-                                'subs' => $subSeries,
-                            ];
-                        })->values()->all(),
-                    ];
-                })->values()->toJson();
-            @endphp
-            const projectChartData = {!! $projectChartData !!};
-
-            // Chart registry + exporters
-            const lineCharts = {};
-            window.registerLineChart = (id, chart) => lineCharts[id] = chart;
-            window.downloadChartPNG = (id) => {
-                const c = lineCharts[id];
-                if (!c) return;
-                c.dataURI().then(({ imgURI }) => {
-                    const link = document.createElement("a");
-                    link.href = imgURI;
-                    link.download = id + ".png";
-                    link.click();
-                });
-            };
-            window.downloadChartSVG = (id) => {
-                const c = lineCharts[id];
-                if (!c) return;
-                c.dataURI().then(({ svgURI }) => {
-                    const link = document.createElement("a");
-                    link.href = svgURI;
-                    link.download = id + ".svg";
-                    link.click();
-                });
+            const axisMoney = (value) => {
+                const number = Number(value || 0);
+                if (number >= 1000000) return `${(number / 1000000).toFixed(1)}M`;
+                if (number >= 1000) return `${(number / 1000).toFixed(1)}K`;
+                return number.toLocaleString();
             };
 
-            // Build charts
-            projectChartData.forEach(p => {
-                const years = p.years;
+            Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
+            Chart.defaults.color = '#475569';
+            Chart.defaults.plugins.tooltip.backgroundColor = '#0f172a';
+            Chart.defaults.plugins.tooltip.cornerRadius = 8;
+            Chart.defaults.plugins.tooltip.padding = 12;
 
-                // Activity chart
-                const activitySeries = p.activities.map(a => ({
-                    name: a.name,
-                    data: a.series
-                }));
-
-                const activityChart = new ApexCharts(
-                    document.querySelector(`#${p.chartId}`),
-                    {
-                        chart: { type: 'line', height: 320, toolbar: { show: false } },
-                        stroke: { width: 3, curve: 'smooth' },
-                        series: activitySeries,
-                        xaxis: { categories: years, title: { text: 'Year' } },
-                        yaxis: { title: { text: 'Allocated Amount' }, labels: { formatter: v => v.toLocaleString() } },
-                        colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1', '#ffc107'],
-                        markers: { size: 4 },
-                        legend: { position: 'top' },
-                        noData: { text: 'No activity data' }
+            const projectCanvas = document.getElementById('projectRankingChart');
+            if (projectCanvas && Array.isArray(charts.projectLabels) && charts.projectLabels.length) {
+                new Chart(projectCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: charts.projectLabels,
+                        datasets: [
+                            {
+                                label: 'Budget',
+                                data: charts.projectBudgets,
+                                backgroundColor: '#dbeafe',
+                                borderRadius: 6,
+                                maxBarThickness: 28
+                            },
+                            {
+                                label: 'Allocated',
+                                data: charts.projectAllocated,
+                                backgroundColor: '#0f766e',
+                                borderRadius: 6,
+                                maxBarThickness: 28
+                            }
+                        ]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+                            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${money(ctx.raw)}` } }
+                        },
+                        scales: {
+                            x: { beginAtZero: true, ticks: { callback: axisMoney }, grid: { color: '#e5e7eb' } },
+                            y: { grid: { display: false } }
+                        }
                     }
-                );
-                activityChart.render();
-                registerLineChart(p.chartId, activityChart);
-
-                // Sub-activity chart, default first activity
-                const select = document.querySelector(`#${p.activitySelectId}`);
-                const firstActivityId = select?.value || (p.activities[0]?.id ?? null);
-                const subSeriesMap = {};
-                p.activities.forEach(a => {
-                    subSeriesMap[a.id] = a.subs.map(sub => ({
-                        name: sub.name,
-                        data: sub.series
-                    }));
                 });
+            }
 
-                const subChart = new ApexCharts(
-                    document.querySelector(`#${p.subChartId}`),
-                    {
-                        chart: { type: 'line', height: 260, toolbar: { show: false } },
-                        stroke: { width: 3, curve: 'smooth' },
-                        series: subSeriesMap[firstActivityId] || [],
-                        xaxis: { categories: years, title: { text: 'Year' } },
-                        yaxis: { title: { text: 'Allocated Amount' }, labels: { formatter: v => v.toLocaleString() } },
-                        colors: ['#0d6efd', '#6610f2', '#198754', '#dc3545', '#fd7e14', '#20c997', '#6f42c1', '#ffc107'],
-                        markers: { size: 4 },
-                        legend: { position: 'top' },
-                        noData: { text: 'No sub-activity data for this activity' }
+            const programCanvas = document.getElementById('programConcentrationChart');
+            if (programCanvas && Array.isArray(charts.programAllocated) && charts.programAllocated.some(value => Number(value || 0) > 0)) {
+                new Chart(programCanvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels: charts.programLabels,
+                        datasets: [{
+                            data: charts.programAllocated,
+                            backgroundColor: ['#0f766e', '#2563eb', '#7c3aed', '#f97316', '#db2777', '#0891b2', '#65a30d', '#334155', '#dc2626', '#4f46e5'],
+                            borderColor: '#ffffff',
+                            borderWidth: 3,
+                            hoverOffset: 8
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        cutout: '66%',
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+                            tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${money(ctx.raw)}` } }
+                        }
                     }
-                );
-                subChart.render();
-                registerLineChart(p.subChartId, subChart);
-
-                if (select) {
-                    select.addEventListener('change', (e) => {
-                        const actId = e.target.value;
-                        subChart.updateSeries(subSeriesMap[actId] || []);
-                    });
-                }
-            });
-
-            // Project allocation bar chart (overall)
-            const allocContainer = document.querySelector("#projectAllocChart");
-            if (allocContainer) {
-                const projectNames = @json($projectRankings->pluck('project.name'));
-                const projectValues = @json($projectRankings->pluck('allocated'));
-                new ApexCharts(allocContainer, {
-                    chart: { type: 'bar', height: 350 },
-                    series: [{ name: 'Allocated', data: projectValues }],
-                    xaxis: { categories: projectNames },
-                    colors: ['#0d6efd']
-                }).render();
+                });
             }
         });
     </script>
-
 @endsection

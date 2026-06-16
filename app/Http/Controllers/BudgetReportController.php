@@ -32,6 +32,21 @@ class BudgetReportController extends Controller
     ================================== */
     public function index()
     {
+        return view('budgetreport.index', $this->buildPortfolioBudgetOverviewData());
+    }
+
+    public function exportPortfolioPdf()
+    {
+        $data = $this->buildPortfolioBudgetOverviewData();
+        $filename = 'portfolio-budget-overview-' . now()->format('Ymd-His') . '.pdf';
+
+        return PDF::loadView('budgetreport.portfolio_pdf', $data)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    private function buildPortfolioBudgetOverviewData(): array
+    {
         $sectors = Sector::with([
             'programs.projects.allocations',
             'programs.projects.activities.subActivities'
@@ -150,14 +165,14 @@ class BudgetReportController extends Controller
             ])->values(),
         ];
 
-        return view('budgetreport.index', compact(
+        return compact(
             'sectors',
             'sectorSummaries',
             'programSummaries',
             'projectSummaries',
             'portfolioStats',
             'chartData'
-        ));
+        );
     }
 
     /* ================================

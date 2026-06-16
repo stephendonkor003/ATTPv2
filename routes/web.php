@@ -623,6 +623,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.executions.view')
             ->name('execution.dashboard');
 
+          Route::get('execution/dashboard/export/pdf', [MasterDashboard::class, 'exportExecutionDashboardPdf'])
+            ->middleware('permission:finance.executions.view')
+            ->name('execution.dashboard.export.pdf');
+
 
 
 
@@ -1414,6 +1418,10 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:budget.reports.view')
             ->name('reports.index');
 
+        Route::get('reports/export/portfolio/pdf', [BudgetReportController::class, 'exportPortfolioPdf'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.portfolio.export.pdf');
+
         Route::get('reports/program/{program}', [BudgetReportController::class, 'programReport'])
             ->middleware('permission:program.report')
             ->name('reports.program');
@@ -1467,9 +1475,17 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:budget.summary.view')
             ->name('summary.dashboard');
 
+        Route::get('budget-summary/dashboard/export/pdf', [AllocationSummaryController::class, 'exportDashboardPdf'])
+            ->middleware('permission:budget.summary.view')
+            ->name('summary.dashboard.export.pdf');
+
         Route::get('budget-summary/executive', [AllocationSummaryController::class, 'executiveReports'])
             ->middleware('permission:budget.summary.view')
             ->name('summary.executive');
+
+        Route::get('budget-summary/executive/export/pdf', [AllocationSummaryController::class, 'exportExecutivePdf'])
+            ->middleware('permission:budget.summary.view')
+            ->name('summary.executive.export.pdf');
 
 
         Route::get('reports/export/pdf/{program}',

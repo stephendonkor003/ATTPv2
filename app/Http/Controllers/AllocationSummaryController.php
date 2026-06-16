@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\Activity;
@@ -18,11 +19,28 @@ class AllocationSummaryController extends Controller
      */
     public function dashboard()
     {
+        return view('reports.budget_dashboard', $this->budgetSummaryPayload());
+    }
+
+    public function exportDashboardPdf()
+    {
+        $data = $this->budgetSummaryPayload();
+        $filename = 'budget-summary-dashboard-' . now()->format('Ymd-His') . '.pdf';
+
+        return Pdf::loadView('reports.budget_dashboard_pdf', $data)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    private function budgetSummaryPayload(): array
+    {
         // Load entire budget hierarchy
         $programs = Program::with([
+            'sector',
+            'projects.allocations',
             'projects.activities.allocations',
             'projects.activities.subActivities.allocations'
-        ])->get();
+        ])->orderBy('name')->get();
 
         // KPI totals
         $totalPrograms = $programs->count();
@@ -30,21 +48,86 @@ class AllocationSummaryController extends Controller
         $totalActivities = Activity::count();
         $totalSubActivities = SubActivity::count();
 
+        $programRows = $programs->map(function (Program $program) {
+            $projects = $program->projects;
+            $activities = $projects->flatMap->activities;
+            $subActivities = $activities->flatMap->subActivities;
+
+            $projectAllocation = (float) $projects->sum(fn (Project $project) => $project->allocations->sum('amount'));
+            $activityAllocation = (float) $activities->sum(fn (Activity $activity) => $activity->allocations->sum('amount'));
+            $subActivityAllocation = (float) $subActivities->sum(fn (SubActivity $subActivity) => $subActivity->allocations->sum('amount'));
+            $totalAllocated = $projectAllocation + $activityAllocation + $subActivityAllocation;
+            $totalBudget = (float) $projects->sum('total_budget');
+            $remaining = $totalBudget - $totalAllocated;
+
+            return [
+                'program' => $program,
+                'program_id' => (string) $program->id,
+                'name' => $program->name,
+                'sector' => $program->sector?->name ?? 'Unassigned',
+                'projects' => $projects->count(),
+                'activities' => $activities->count(),
+                'sub_activities' => $subActivities->count(),
+                'total_budget' => round($totalBudget, 2),
+                'project_allocated' => round($projectAllocation, 2),
+                'activity_allocated' => round($activityAllocation, 2),
+                'sub_activity_allocated' => round($subActivityAllocation, 2),
+                'total_allocated' => round($totalAllocated, 2),
+                'remaining' => round($remaining, 2),
+                'utilization' => $totalBudget > 0 ? round(($totalAllocated / $totalBudget) * 100, 1) : 0,
+            ];
+        })->values();
+
+        $sectorRows = $programRows
+            ->groupBy('sector')
+            ->map(function ($rows, string $sector) {
+                return [
+                    'sector' => $sector,
+                    'programs' => $rows->count(),
+                    'projects' => $rows->sum('projects'),
+                    'total_budget' => round((float) $rows->sum('total_budget'), 2),
+                    'total_allocated' => round((float) $rows->sum('total_allocated'), 2),
+                    'remaining' => round((float) $rows->sum('remaining'), 2),
+                ];
+            })
+            ->sortByDesc('total_allocated')
+            ->values();
+
         // Total budget from all projects
-        $totalBudget = Project::sum('total_budget');
+        $totalBudget = round((float) $programRows->sum('total_budget'), 2);
 
-        // Total allocation for all activities
-        $totalAllocated = Activity::with('allocations')->get()
-            ->sum(fn($a) => $a->allocations->sum('amount'));
+        $totalProjectAllocated = round((float) $programRows->sum('project_allocated'), 2);
+        $totalAllocated = round((float) $programRows->sum('activity_allocated'), 2);
+        $totalSubAllocated = round((float) $programRows->sum('sub_activity_allocated'), 2);
+        $grandAllocated = round($totalProjectAllocated + $totalAllocated + $totalSubAllocated, 2);
+        $remainingBudget = round($totalBudget - $grandAllocated, 2);
+        $allocationRate = $totalBudget > 0 ? round(($grandAllocated / $totalBudget) * 100, 1) : 0;
+        $topProgram = $programRows->sortByDesc('total_allocated')->first();
+        $topSector = $sectorRows->sortByDesc('total_allocated')->first();
 
-        // Total allocation for all sub-activities
-        $totalSubAllocated = SubActivity::with('allocations')->get()
-            ->sum(fn($sa) => $sa->allocations->sum('amount'));
+        $summary = [
+            'total_budget' => $totalBudget,
+            'project_allocated' => $totalProjectAllocated,
+            'activity_allocated' => $totalAllocated,
+            'sub_activity_allocated' => $totalSubAllocated,
+            'total_allocated' => $grandAllocated,
+            'remaining_budget' => $remainingBudget,
+            'allocation_rate' => $allocationRate,
+            'top_program' => $topProgram['name'] ?? null,
+            'top_sector' => $topSector['sector'] ?? null,
+        ];
 
-        // Variance remaining (budget - allocations)
-        $remainingBudget = $totalBudget - ($totalAllocated + $totalSubAllocated);
+        $chartData = [
+            'programLabels' => $programRows->sortByDesc('total_allocated')->take(10)->pluck('name')->values(),
+            'programAllocated' => $programRows->sortByDesc('total_allocated')->take(10)->pluck('total_allocated')->values(),
+            'programBudget' => $programRows->sortByDesc('total_allocated')->take(10)->pluck('total_budget')->values(),
+            'sectorLabels' => $sectorRows->pluck('sector')->values(),
+            'sectorAllocated' => $sectorRows->pluck('total_allocated')->values(),
+            'allocationSplitLabels' => collect(['Project', 'Activity', 'Sub-Activity']),
+            'allocationSplit' => collect([$totalProjectAllocated, $totalAllocated, $totalSubAllocated]),
+        ];
 
-        return view('reports.budget_dashboard', compact(
+        return compact(
             'programs',
             'totalPrograms',
             'totalProjects',
@@ -53,8 +136,14 @@ class AllocationSummaryController extends Controller
             'totalBudget',
             'totalAllocated',
             'totalSubAllocated',
-            'remainingBudget'
-        ));
+            'remainingBudget',
+            'grandAllocated',
+            'allocationRate',
+            'programRows',
+            'sectorRows',
+            'summary',
+            'chartData'
+        );
     }
 
 
@@ -66,34 +155,79 @@ class AllocationSummaryController extends Controller
      */
     public function executiveReports()
     {
+        return view('reports.executive_summary', $this->executiveSummaryPayload());
+    }
+
+    public function exportExecutivePdf()
+    {
+        $data = $this->executiveSummaryPayload();
+        $filename = 'budget-executive-summary-' . now()->format('Ymd-His') . '.pdf';
+
+        return Pdf::loadView('reports.executive_summary_pdf', $data)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    private function executiveSummaryPayload(): array
+    {
         // Load hierarchy for reporting
         $programs = Program::with([
+            'sector',
+            'projects.allocations',
             'projects.activities.allocations',
             'projects.activities.subActivities.allocations'
-        ])->get();
+        ])->orderBy('name')->get();
 
         // Rank projects by total allocated amount
-        $projectRankings = Project::with('activities.allocations')
+        $projectRankings = Project::with([
+            'program.sector',
+            'allocations',
+            'activities.allocations',
+            'activities.subActivities.allocations',
+        ])
             ->get()
             ->map(function ($project) {
+                $activityAllocated = (float) $project->activities->sum(
+                    fn ($activity) => $activity->allocations->sum('amount')
+                );
+                $subActivityAllocated = (float) $project->activities->sum(
+                    fn ($activity) => $activity->subActivities->sum(
+                        fn ($subActivity) => $subActivity->allocations->sum('amount')
+                    )
+                );
+                $projectAllocated = (float) $project->allocations->sum('amount');
+                $totalAllocated = $projectAllocated + $activityAllocated + $subActivityAllocated;
+                $budget = (float) ($project->total_budget ?? 0);
+
                 return [
                     'project' => $project,
-                    'allocated' => $project->activities->sum(
-                        fn($a) => $a->allocations->sum('amount')
-                    ),
+                    'allocated' => round($totalAllocated, 2),
+                    'project_allocated' => round($projectAllocated, 2),
+                    'activity_allocated' => round($activityAllocated, 2),
+                    'sub_activity_allocated' => round($subActivityAllocated, 2),
+                    'budget' => round($budget, 2),
+                    'remaining' => round($budget - $totalAllocated, 2),
+                    'utilization' => $budget > 0 ? round(($totalAllocated / $budget) * 100, 1) : 0,
                 ];
             })
             ->sortByDesc('allocated')
             ->values();
 
         // Rank activities by funding level
-        $activityRankings = Activity::with('allocations', 'project')
+        $activityRankings = Activity::with('allocations', 'subActivities.allocations', 'project.program')
             ->get()
             ->map(function ($activity) {
+                $allocated = (float) $activity->allocations->sum('amount');
+                $subAllocated = (float) $activity->subActivities->sum(
+                    fn ($subActivity) => $subActivity->allocations->sum('amount')
+                );
+
                 return [
                     'activity' => $activity,
                     'project' => $activity->project,
-                    'allocated' => $activity->allocations->sum('amount'),
+                    'allocated' => round($allocated + $subAllocated, 2),
+                    'activity_allocated' => round($allocated, 2),
+                    'sub_activity_allocated' => round($subAllocated, 2),
                 ];
             })
             ->sortByDesc('allocated')
@@ -113,11 +247,70 @@ class AllocationSummaryController extends Controller
             ->sortByDesc('allocated')
             ->values();
 
-        return view('reports.executive_summary', compact(
+        $totalProjectBudget = round((float) $projectRankings->sum('budget'), 2);
+        $totalRankedAllocation = round((float) $projectRankings->sum('allocated'), 2);
+        $averageProjectAllocation = $projectRankings->count() > 0
+            ? round($totalRankedAllocation / $projectRankings->count(), 2)
+            : 0;
+
+        $programSheets = $programs->map(function (Program $program) {
+            $projects = $program->projects;
+            $activities = $projects->flatMap->activities;
+            $subActivities = $activities->flatMap->subActivities;
+            $allocated = (float) $projects->sum(fn (Project $project) => $project->allocations->sum('amount'))
+                + (float) $activities->sum(fn (Activity $activity) => $activity->allocations->sum('amount'))
+                + (float) $subActivities->sum(fn (SubActivity $subActivity) => $subActivity->allocations->sum('amount'));
+            $budget = (float) $projects->sum('total_budget');
+
+            return [
+                'program' => $program,
+                'name' => $program->name,
+                'sector' => $program->sector?->name ?? 'Unassigned',
+                'currency' => $program->currency ?? ($projects->first()?->currency ?? ''),
+                'projects' => $projects->count(),
+                'activities' => $activities->count(),
+                'sub_activities' => $subActivities->count(),
+                'budget' => round($budget, 2),
+                'allocated' => round($allocated, 2),
+                'remaining' => round($budget - $allocated, 2),
+                'utilization' => $budget > 0 ? round(($allocated / $budget) * 100, 1) : 0,
+            ];
+        })->sortByDesc('allocated')->values();
+
+        $executiveStats = [
+            'programs' => $programs->count(),
+            'projects' => $projectRankings->count(),
+            'activities' => $activityRankings->count(),
+            'sub_activities' => $subActivityRankings->count(),
+            'total_budget' => $totalProjectBudget,
+            'total_allocated' => $totalRankedAllocation,
+            'remaining' => round($totalProjectBudget - $totalRankedAllocation, 2),
+            'average_project_allocation' => $averageProjectAllocation,
+            'top_project' => $projectRankings->first()['project']->name ?? null,
+            'top_activity' => $activityRankings->first()['activity']->name ?? null,
+            'top_sub_activity' => $subActivityRankings->first()['sub']->name ?? null,
+        ];
+
+        $chartData = [
+            'projectLabels' => $projectRankings->take(10)->map(fn ($item) => $item['project']->name)->values(),
+            'projectAllocated' => $projectRankings->take(10)->pluck('allocated')->values(),
+            'projectBudgets' => $projectRankings->take(10)->pluck('budget')->values(),
+            'activityLabels' => $activityRankings->take(10)->map(fn ($item) => $item['activity']->name)->values(),
+            'activityAllocated' => $activityRankings->take(10)->pluck('allocated')->values(),
+            'subActivityLabels' => $subActivityRankings->take(10)->map(fn ($item) => $item['sub']->name)->values(),
+            'subActivityAllocated' => $subActivityRankings->take(10)->pluck('allocated')->values(),
+            'programLabels' => $programSheets->take(10)->pluck('name')->values(),
+            'programAllocated' => $programSheets->take(10)->pluck('allocated')->values(),
+        ];
+
+        return compact(
             'programs',
             'projectRankings',
             'activityRankings',
-            'subActivityRankings'
-        ));
+            'subActivityRankings',
+            'programSheets',
+            'executiveStats',
+            'chartData'
+        );
     }
 }

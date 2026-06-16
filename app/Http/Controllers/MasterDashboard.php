@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +20,21 @@ class MasterDashboard extends Controller
      * ============================================================
      */
     public function executionDashboard(Request $request)
+    {
+        return view('finance.execution.dashboard', $this->executionDashboardPayload($request));
+    }
+
+    public function exportExecutionDashboardPdf(Request $request)
+    {
+        $data = $this->executionDashboardPayload($request);
+        $filename = 'execution-dashboard-' . now()->format('Ymd-His') . '.pdf';
+
+        return Pdf::loadView('finance.execution.dashboard_pdf', $data)
+            ->setPaper('a4', 'landscape')
+            ->download($filename);
+    }
+
+    private function executionDashboardPayload(Request $request): array
     {
         /* ============================================================
          * 1. FILTER INPUTS
@@ -213,7 +229,7 @@ class MasterDashboard extends Controller
         /* ============================================================
          * 11. RETURN VIEW
          * ============================================================ */
-        return view('finance.execution.dashboard', compact(
+        return compact(
             'sectors',
             'programs',
             'projects',
@@ -230,7 +246,7 @@ class MasterDashboard extends Controller
             'heatmap',
             'radarMetrics',
             'aiInsights'
-        ));
+        );
     }
 
     /**
