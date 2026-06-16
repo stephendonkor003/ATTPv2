@@ -132,6 +132,8 @@ class BudgetCommitmentController extends Controller
         'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
         'items.*.resource_id'          => 'required|exists:myb_resources,id',
         'items.*.deliverable_id'       => 'nullable|exists:procurement_deliverables,id',
+        'items.*.unit_price'           => 'nullable|numeric|min:0.01',
+        'items.*.quantity'             => 'nullable|numeric|min:0.01',
         'items.*.amount'               => 'required|numeric|min:0.01',
         'items.*.milestone'            => 'nullable|string|max:255',
         'items.*.milestone_date'       => 'nullable|date',
@@ -210,23 +212,7 @@ class BudgetCommitmentController extends Controller
 		            ]);
 		        }
 
-        $items = $itemsInput->map(function ($item) {
-            $milestone = isset($item['milestone']) && is_string($item['milestone'])
-                ? trim($item['milestone'])
-                : null;
-            $milestoneDate = isset($item['milestone_date']) ? $item['milestone_date'] : null;
-            $deliverableId = $item['deliverable_id'] ?? null;
-            $deliverableId = $deliverableId !== '' ? $deliverableId : null;
-
-            return [
-                'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
-                'resource_id' => (string) ($item['resource_id'] ?? ''),
-                'deliverable_id' => $deliverableId ? (string) $deliverableId : null,
-                'amount' => round((float) ($item['amount'] ?? 0), 2),
-                'milestone' => $milestone !== '' ? $milestone : null,
-                'milestone_date' => $milestoneDate ?: null,
-            ];
-        })->values();
+        $items = $itemsInput->map(fn ($item) => $this->normalizePurchaseRequestItemInput($item))->values();
 
 		        $requestedAmount = round((float) $items->sum('amount'), 2);
 		        if ($requestedAmount <= 0) {
@@ -410,6 +396,8 @@ class BudgetCommitmentController extends Controller
                 'resource_category_id' => $item['resource_category_id'],
                 'resource_id' => $item['resource_id'],
                 'deliverable_id' => $item['deliverable_id'],
+                'unit_price' => $item['unit_price'],
+                'quantity' => $item['quantity'],
                 'amount' => $item['amount'],
                 'milestone' => $item['milestone'] ?? null,
                 'milestone_date' => $item['milestone_date'] ?? null,
@@ -562,6 +550,8 @@ class BudgetCommitmentController extends Controller
                     'resource_category_id' => $item->resource_category_id,
                     'resource_id' => $item->resource_id,
                     'deliverable_id' => $item->deliverable_id,
+                    'unit_price' => (float) ($item->unit_price ?: $item->amount),
+                    'quantity' => (float) ($item->quantity ?: 1),
                     'amount' => (float) $item->amount,
                     'milestone' => $item->milestone,
                     'milestone_date' => $item->milestone_date?->format('Y-m-d'),
@@ -619,6 +609,8 @@ class BudgetCommitmentController extends Controller
             'items.*.resource_category_id' => 'required|exists:myb_resource_categories,id',
             'items.*.resource_id'          => 'required|exists:myb_resources,id',
             'items.*.deliverable_id'       => 'nullable|exists:procurement_deliverables,id',
+            'items.*.unit_price'           => 'nullable|numeric|min:0.01',
+            'items.*.quantity'             => 'nullable|numeric|min:0.01',
             'items.*.amount'               => 'required|numeric|min:0.01',
             'items.*.milestone'            => 'nullable|string|max:255',
             'items.*.milestone_date'       => 'nullable|date',
@@ -694,21 +686,7 @@ class BudgetCommitmentController extends Controller
                 ]);
             }
 
-            $items = $itemsInput->map(function ($item) {
-                $milestone = isset($item['milestone']) && is_string($item['milestone'])
-                    ? trim($item['milestone'])
-                    : null;
-                $milestoneDate = isset($item['milestone_date']) ? $item['milestone_date'] : null;
-
-                return [
-                    'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
-                    'resource_id' => (string) ($item['resource_id'] ?? ''),
-                    'deliverable_id' => !empty($item['deliverable_id']) ? (string) $item['deliverable_id'] : null,
-                    'amount' => round((float) ($item['amount'] ?? 0), 2),
-                    'milestone' => $milestone !== '' ? $milestone : null,
-                    'milestone_date' => $milestoneDate ?: null,
-                ];
-            })->values();
+            $items = $itemsInput->map(fn ($item) => $this->normalizePurchaseRequestItemInput($item))->values();
 
             $requestedAmount = round((float) $items->sum('amount'), 2);
             if ($requestedAmount <= 0) {
@@ -904,6 +882,8 @@ class BudgetCommitmentController extends Controller
                     'resource_category_id' => $item['resource_category_id'],
                     'resource_id' => $item['resource_id'],
                     'deliverable_id' => $item['deliverable_id'],
+                    'unit_price' => $item['unit_price'],
+                    'quantity' => $item['quantity'],
                     'amount' => $item['amount'],
                     'milestone' => $item['milestone'] ?? null,
                     'milestone_date' => $item['milestone_date'] ?? null,
@@ -1666,6 +1646,41 @@ protected function aiSummary(array $allocated, array $committed)
     /* =========================================================
      | ================== INTERNAL HELPERS ====================
      ========================================================= */
+
+    private function normalizePurchaseRequestItemInput(array $item): array
+    {
+        $milestone = isset($item['milestone']) && is_string($item['milestone'])
+            ? trim($item['milestone'])
+            : null;
+        $milestoneDate = isset($item['milestone_date']) ? $item['milestone_date'] : null;
+        $deliverableId = $item['deliverable_id'] ?? null;
+        $amount = round((float) ($item['amount'] ?? 0), 2);
+
+        $unitPrice = array_key_exists('unit_price', $item) && $item['unit_price'] !== null && $item['unit_price'] !== ''
+            ? round((float) $item['unit_price'], 2)
+            : $amount;
+        $quantity = array_key_exists('quantity', $item) && $item['quantity'] !== null && $item['quantity'] !== ''
+            ? round((float) $item['quantity'], 2)
+            : 1.00;
+
+        $calculatedAmount = round($unitPrice * $quantity, 2);
+        if ($calculatedAmount <= 0 && $amount > 0) {
+            $unitPrice = $amount;
+            $quantity = 1.00;
+            $calculatedAmount = $amount;
+        }
+
+        return [
+            'resource_category_id' => (string) ($item['resource_category_id'] ?? ''),
+            'resource_id' => (string) ($item['resource_id'] ?? ''),
+            'deliverable_id' => $deliverableId !== null && $deliverableId !== '' ? (string) $deliverableId : null,
+            'unit_price' => $unitPrice,
+            'quantity' => $quantity,
+            'amount' => $calculatedAmount,
+            'milestone' => $milestone !== '' ? $milestone : null,
+            'milestone_date' => $milestoneDate ?: null,
+        ];
+    }
 
     private function allocationSum(string $level, string $id, int $year): float
     {

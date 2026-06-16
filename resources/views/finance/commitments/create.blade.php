@@ -282,14 +282,16 @@
                             <table class="table table-sm table-bordered align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th style="width: {{ $showDeliverableColumn ? '22%' : '27%' }};">Resource Category</th>
-                                        <th style="width: {{ $showDeliverableColumn ? '18%' : '23%' }};">Resource Item</th>
+                                        <th style="width: {{ $showDeliverableColumn ? '16%' : '20%' }};">Resource Category</th>
+                                        <th style="width: {{ $showDeliverableColumn ? '15%' : '18%' }};">Resource Item</th>
                                         @if ($showDeliverableColumn)
-                                            <th style="width: 22%;">Deliverable</th>
+                                            <th style="width: 16%;">Deliverable</th>
                                         @endif
-                                        <th style="width: 18%;">Deliverables</th>
-                                        <th style="width: 12%;">Deliverable Date</th>
-                                        <th style="width: 170px;" class="text-end">Price / Amount</th>
+                                        <th style="width: 14%;">Deliverables</th>
+                                        <th style="width: 120px;">Deliverable Date</th>
+                                        <th style="width: 140px;" class="text-end">Unit Price</th>
+                                        <th style="width: 110px;" class="text-end">Quantity</th>
+                                        <th style="width: 150px;" class="text-end">Price / Amount</th>
                                         <th style="width: 80px;" class="text-center">Action</th>
                                     </tr>
                                 </thead>
@@ -831,7 +833,19 @@
 		                    });
 		            }
 	
+                    function recalculateItemAmount(row) {
+                        const unitPrice = Number(row.querySelector('.item-unit-price')?.value || 0);
+                        const quantity = Number(row.querySelector('.item-quantity')?.value || 0);
+                        const amountInput = row.querySelector('.item-amount');
+                        const amount = roundMoney(unitPrice * quantity);
+
+                        if (amountInput) {
+                            amountInput.value = amount > 0 ? amount.toFixed(2) : '';
+                        }
+                    }
+
 		            function setTotalFromItems({ update = true } = {}) {
+                        Array.from(itemsBody.querySelectorAll('tr')).forEach(recalculateItemAmount);
 		                const total = roundMoney(
 		                    Array.from(itemsBody.querySelectorAll('.item-amount')).reduce((sum, input) => {
 		                        const value = Number(input.value);
@@ -879,7 +893,15 @@
                                 </td>
                                 <td>
                                     <input type="number" min="0.01" step="0.01"
-                                        class="form-control text-end item-amount" data-field="amount" required>
+                                        class="form-control text-end item-unit-price" data-field="unit_price" required>
+                                </td>
+                                <td>
+                                    <input type="number" min="0.01" step="0.01"
+                                        class="form-control text-end item-quantity" data-field="quantity" value="1" required>
+                                </td>
+                                <td>
+                                    <input type="number" min="0.01" step="0.01"
+                                        class="form-control text-end item-amount" data-field="amount" readonly required>
                                 </td>
                                 <td class="text-center">
                                         <button type="button" class="btn btn-sm btn-outline-danger remove-item-btn" title="Remove">
@@ -893,6 +915,8 @@
 
                             const categorySelect = tr.querySelector('.item-category');
                             const deliverableSelect = tr.querySelector('.item-deliverable');
+                            const unitPriceInput = tr.querySelector('.item-unit-price');
+                            const quantityInput = tr.querySelector('.item-quantity');
                             const amountInput = tr.querySelector('.item-amount');
                             const milestoneInput = tr.querySelector('.item-milestone');
                             const milestoneDateInput = tr.querySelector('.item-milestone-date');
@@ -906,8 +930,10 @@
                                 deliverableSelect.value = item.deliverable_id;
                             }
 
-                            if (item && item.amount) {
-                                amountInput.value = item.amount;
+                            if (item) {
+                                unitPriceInput.value = item.unit_price ?? item.amount ?? '';
+                                quantityInput.value = item.quantity ?? 1;
+                                recalculateItemAmount(tr);
                             }
 
                             if (item && item.milestone) {
@@ -930,7 +956,8 @@
 		            });
 	
 		            itemsBody.addEventListener('input', e => {
-		                if (!e.target.classList.contains('item-amount')) return;
+		                if (!e.target.classList.contains('item-unit-price') && !e.target.classList.contains('item-quantity')) return;
+                        recalculateItemAmount(e.target.closest('tr'));
 		                setTotalFromItems();
 		            });
 	
@@ -947,6 +974,8 @@
                     if (deliverableSelect) {
                         deliverableSelect.value = '';
                     }
+                    row.querySelector('.item-unit-price').value = '';
+                    row.querySelector('.item-quantity').value = '1';
                     row.querySelector('.item-amount').value = '';
                     row.querySelector('.item-milestone').value = '';
                     row.querySelector('.item-milestone-date').value = '';

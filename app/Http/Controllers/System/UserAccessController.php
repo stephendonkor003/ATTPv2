@@ -217,9 +217,26 @@ class UserAccessController extends Controller
             ],
             'governance_node_id' => 'nullable|exists:myb_governance_nodes,id',
             'member_state_id' => 'nullable|required_if:user_type,member_state|exists:myb_au_member_states,id',
+            'confirm_user_type_conversion' => 'nullable|boolean',
         ]);
 
         $isVendor = $validated['user_type'] === 'vendor';
+        $changesVendorBoundary = ($user->user_type === 'vendor') !== $isVendor;
+
+        if ($changesVendorBoundary && ! $request->boolean('confirm_user_type_conversion')) {
+            $targetRole = ! $isVendor && ! empty($validated['role_id'])
+                ? Role::find($validated['role_id'])
+                : null;
+
+            return back()
+                ->withInput()
+                ->with('user_type_conversion_prompt', $this->userTypeConversionPromptData(
+                    $user,
+                    $validated['user_type'],
+                    $targetRole,
+                    $validated['vendor_category'] ?? null
+                ));
+        }
 
         if (! $isVendor && $request->filled('governance_node_id')) {
             $this->assertNodeInScope((int) $request->governance_node_id);
@@ -535,6 +552,23 @@ class UserAccessController extends Controller
             'email' => $user->email,
             'user_type' => ucfirst(str_replace('_', ' ', (string) $user->user_type)),
             'role' => $user->role?->name,
+        ];
+    }
+
+    private function userTypeConversionPromptData(
+        User $user,
+        string $targetUserType,
+        ?Role $targetRole = null,
+        ?string $vendorCategory = null
+    ): array {
+        return [
+            'name' => $user->name,
+            'email' => $user->email,
+            'current_user_type' => ucfirst(str_replace('_', ' ', (string) $user->user_type)),
+            'current_role' => $user->role?->name,
+            'target_user_type' => ucfirst(str_replace('_', ' ', $targetUserType)),
+            'target_role' => $targetRole?->name,
+            'vendor_category' => $vendorCategory,
         ];
     }
 

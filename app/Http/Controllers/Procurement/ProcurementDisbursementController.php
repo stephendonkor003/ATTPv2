@@ -623,7 +623,7 @@ class ProcurementDisbursementController extends Controller
 
     public function destroy(ProcurementDisbursement $disbursement)
     {
-        $this->authorizeDisbursementDelete();
+        $this->authorizeDisbursementRevert();
         $this->assertDisbursementInScope($disbursement);
 
         $disbursement->load('purchaseOrder');
@@ -648,7 +648,9 @@ class ProcurementDisbursementController extends Controller
 
             $procurementId = $disbursement->procurement_id ?: $purchaseOrder?->procurement_id;
 
-            $disbursement->delete();
+            $disbursement->update([
+                'status' => 'reversed',
+            ]);
 
             if ($purchaseOrder) {
                 $this->syncPurchaseOrderStatus($purchaseOrder);
@@ -656,16 +658,23 @@ class ProcurementDisbursementController extends Controller
 
             ProcurementAuditLog::create([
                 'user_id' => auth()->id(),
-                'action' => 'Deleted disbursement',
+                'action' => 'Reverted disbursement payment',
                 'procurement_id' => $procurementId,
-                'metadata' => $metadata,
+                'metadata' => [
+                    'before' => $metadata,
+                    'after' => [
+                        'disbursement_id' => $disbursement->id,
+                        'reference_no' => $disbursement->reference_no,
+                        'status' => 'reversed',
+                    ],
+                ],
                 'created_at' => now(),
             ]);
         });
 
         return redirect()
             ->route('procurement.disbursements.index')
-            ->with('success', 'Disbursement deleted.');
+            ->with('success', 'Payment reverted. The receipt remains on record and no longer counts as paid.');
     }
 
     public function pdf(ProcurementDisbursement $disbursement)
@@ -1257,10 +1266,10 @@ class ProcurementDisbursementController extends Controller
         }
     }
 
-    private function authorizeDisbursementDelete(): void
+    private function authorizeDisbursementRevert(): void
     {
         if (! $this->canEditDisbursements()) {
-            abort(403, 'Only administrators can delete disbursements.');
+            abort(403, 'Only administrators can revert disbursement payments.');
         }
     }
 

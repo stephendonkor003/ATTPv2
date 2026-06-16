@@ -2,6 +2,116 @@
 
 @section('title', 'Edit User')
 
+@php
+    $userTypeConversionPrompt = session('user_type_conversion_prompt');
+@endphp
+
+@push('styles')
+    <style>
+        .user-type-conversion-modal {
+            z-index: 2050 !important;
+        }
+
+        .user-type-conversion-modal .modal-dialog {
+            max-width: min(700px, calc(100vw - 32px));
+        }
+
+        .user-type-conversion-modal .modal-content {
+            border: 0;
+            border-radius: 10px;
+            background: #ffffff;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.32);
+            overflow: hidden;
+        }
+
+        .user-type-conversion-modal .modal-header {
+            align-items: flex-start;
+            gap: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #fff7ed;
+            padding: 18px 20px;
+        }
+
+        .user-type-conversion-modal .modal-icon {
+            width: 42px;
+            height: 42px;
+            flex: 0 0 42px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #92400e;
+            background: #fed7aa;
+            font-size: 1.2rem;
+        }
+
+        .user-type-conversion-modal .modal-title {
+            color: #0f172a;
+            font-size: 1.08rem;
+            font-weight: 800;
+            line-height: 1.25;
+        }
+
+        .user-type-conversion-modal .modal-subtitle {
+            color: #475569;
+            font-size: 0.86rem;
+            margin-top: 4px;
+        }
+
+        .user-type-conversion-modal .modal-body {
+            padding: 20px;
+            color: #334155;
+            font-size: 0.94rem;
+            line-height: 1.55;
+        }
+
+        .user-type-conversion-modal .account-summary {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 14px 16px;
+        }
+
+        .user-type-conversion-modal .account-summary-label {
+            color: #64748b;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .user-type-conversion-modal .account-summary-value {
+            color: #0f172a;
+            font-weight: 700;
+            margin-top: 3px;
+        }
+
+        .user-type-conversion-modal .conversion-impact {
+            margin: 14px 0 0;
+            padding-left: 18px;
+        }
+
+        .user-type-conversion-modal .conversion-impact li + li {
+            margin-top: 6px;
+        }
+
+        .user-type-conversion-modal .modal-footer {
+            border-top: 1px solid #e2e8f0;
+            background: #f8fafc;
+            padding: 14px 20px;
+        }
+
+        .user-type-conversion-modal + .modal-backdrop,
+        .modal-backdrop.user-type-conversion-backdrop {
+            z-index: 2040 !important;
+            background-color: #0f172a;
+            opacity: 0.52 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+    </style>
+@endpush
+
 @section('content')
     <main class="nxl-container">
         <div class="nxl-content">
@@ -47,9 +157,11 @@
             @endif
 
             {{-- ================= EDIT FORM ================= --}}
-            <form method="POST" action="{{ route('system.users.update', $user->id) }}">
+            <form method="POST" action="{{ route('system.users.update', $user->id) }}" id="userEditForm">
                 @csrf
                 @method('PUT')
+                <input type="hidden" name="confirm_user_type_conversion" id="confirm_user_type_conversion"
+                    value="{{ old('confirm_user_type_conversion', '0') }}">
 
                 <div class="card shadow-sm border-0">
                     <div class="card-body">
@@ -255,6 +367,50 @@
                 </div>
             </form>
 
+            <div class="modal fade user-type-conversion-modal" id="userTypeConversionModal" tabindex="-1"
+                aria-labelledby="userTypeConversionModalLabel" aria-hidden="true" data-bs-backdrop="static"
+                data-bs-keyboard="false">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <span class="modal-icon">
+                                <i class="feather-alert-triangle"></i>
+                            </span>
+                            <div class="flex-grow-1">
+                                <h5 class="modal-title" id="userTypeConversionModalLabel">
+                                    Confirm Account Type Change
+                                </h5>
+                                <div class="modal-subtitle" id="userTypeConversionSubtitle">
+                                    Review this access change before saving.
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3" id="userTypeConversionMessage"></p>
+                            <div class="account-summary mb-3">
+                                <div class="account-summary-label">Current account</div>
+                                <div class="account-summary-value" id="currentAccountSummary"></div>
+                            </div>
+                            <div class="account-summary mb-3">
+                                <div class="account-summary-label">New account</div>
+                                <div class="account-summary-value" id="targetAccountSummary"></div>
+                            </div>
+                            <p class="mb-2" id="userTypeConversionQuestion"></p>
+                            <ul class="conversion-impact" id="userTypeConversionImpact"></ul>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                                No, Review Changes
+                            </button>
+                            <button type="button" class="btn btn-warning" id="confirmUserTypeConversionBtn">
+                                Yes, Continue
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </main>
 
@@ -272,9 +428,185 @@
             const memberStatePreview = document.getElementById('member-state-preview');
             const memberStatePreviewImage = document.getElementById('member-state-preview-image');
             const memberStatePreviewName = document.getElementById('member-state-preview-name');
+            const userEditForm = document.getElementById('userEditForm');
+            const conversionConfirmInput = document.getElementById('confirm_user_type_conversion');
+            const userTypeConversionModalEl = document.getElementById('userTypeConversionModal');
+            const userTypeConversionModalLabel = document.getElementById('userTypeConversionModalLabel');
+            const userTypeConversionSubtitle = document.getElementById('userTypeConversionSubtitle');
+            const userTypeConversionMessage = document.getElementById('userTypeConversionMessage');
+            const currentAccountSummary = document.getElementById('currentAccountSummary');
+            const targetAccountSummary = document.getElementById('targetAccountSummary');
+            const userTypeConversionQuestion = document.getElementById('userTypeConversionQuestion');
+            const userTypeConversionImpact = document.getElementById('userTypeConversionImpact');
+            const confirmUserTypeConversionBtn = document.getElementById('confirmUserTypeConversionBtn');
+            const originalUserType = @json($user->user_type);
+            const originalUserTypeLabel = @json(ucfirst(str_replace('_', ' ', (string) $user->user_type)));
+            const originalRoleName = @json($user->role?->name);
+            const originalVendorCategory = @json($user->vendor_category);
+            const editedUserName = @json($user->name);
+            const editedUserEmail = @json($user->email);
+            const shouldShowConversionPrompt = @json((bool) $userTypeConversionPrompt);
+            let conversionSubmitConfirmed = false;
 
             if (!userTypeSelect) {
                 return;
+            }
+
+            const userTypeLabels = {
+                staff: 'Staff',
+                member_state: 'Member State',
+                vendor: 'Vendor',
+                funding_partner: 'Funding Partner',
+                think_tank: 'Think Tank',
+                evaluator: 'Evaluator',
+                admin: 'Admin',
+            };
+
+            function selectedOptionText(select) {
+                if (!select || !select.value) {
+                    return '';
+                }
+
+                return (select.options[select.selectedIndex]?.textContent || '').trim();
+            }
+
+            function currentAccountLabel() {
+                const parts = [originalUserTypeLabel];
+                if (originalRoleName) {
+                    parts.push(originalRoleName);
+                }
+                if (originalUserType === 'vendor' && originalVendorCategory) {
+                    parts.push(originalVendorCategory);
+                }
+
+                return parts.join(' - ');
+            }
+
+            function targetAccountLabel() {
+                const targetType = userTypeSelect.value;
+                const parts = [userTypeLabels[targetType] || targetType || 'User'];
+
+                if (targetType === 'vendor') {
+                    const vendorCategory = vendorCategorySelect?.value || '';
+                    if (vendorCategory) {
+                        parts.push(vendorCategory);
+                    }
+                } else {
+                    const roleName = selectedOptionText(roleSelect);
+                    if (roleName) {
+                        parts.push(roleName);
+                    }
+                }
+
+                return parts.join(' - ');
+            }
+
+            function isVendorBoundaryChange() {
+                return (originalUserType === 'vendor') !== (userTypeSelect.value === 'vendor');
+            }
+
+            function resetConversionConfirmation() {
+                if (conversionConfirmInput) {
+                    conversionConfirmInput.value = '0';
+                }
+                conversionSubmitConfirmed = false;
+            }
+
+            function renderImpactItems(items) {
+                if (!userTypeConversionImpact) {
+                    return;
+                }
+
+                userTypeConversionImpact.innerHTML = '';
+                items.forEach((item) => {
+                    const li = document.createElement('li');
+                    li.textContent = item;
+                    userTypeConversionImpact.appendChild(li);
+                });
+            }
+
+            function showUserTypeConversionPrompt() {
+                const convertingToVendor = userTypeSelect.value === 'vendor';
+                const title = convertingToVendor
+                    ? 'Convert Back-Office User to Vendor?'
+                    : 'Revert Vendor to Back Office?';
+                const subtitle = convertingToVendor
+                    ? 'This account will move from back-office access to vendor portal access.'
+                    : 'This account will move from vendor portal access back to back-office access.';
+                const question = convertingToVendor
+                    ? 'Do you want to convert this back-office user into a vendor account?'
+                    : 'Do you want to convert this vendor account back to a back-office user?';
+                const impacts = convertingToVendor
+                    ? [
+                        'System role, governance scope, and member-state link will be removed.',
+                        'Vendor portal access will be granted.',
+                        'The user will keep their existing password.',
+                        'This can be reverted later by editing the user and choosing a non-vendor type.',
+                    ]
+                    : [
+                        'Vendor portal-only access will be removed.',
+                        'The selected role and back-office user type will apply.',
+                        'Vendor category will be cleared.',
+                        'The user will keep their existing password.',
+                    ];
+
+                if (userTypeConversionModalLabel) userTypeConversionModalLabel.textContent = title;
+                if (userTypeConversionSubtitle) userTypeConversionSubtitle.textContent = subtitle;
+                if (userTypeConversionMessage) {
+                    userTypeConversionMessage.textContent = `${editedUserName} (${editedUserEmail}) is being changed from ${currentAccountLabel()} to ${targetAccountLabel()}.`;
+                }
+                if (currentAccountSummary) currentAccountSummary.textContent = currentAccountLabel();
+                if (targetAccountSummary) targetAccountSummary.textContent = targetAccountLabel();
+                if (userTypeConversionQuestion) userTypeConversionQuestion.textContent = question;
+                if (confirmUserTypeConversionBtn) {
+                    confirmUserTypeConversionBtn.textContent = convertingToVendor
+                        ? 'Yes, Convert to Vendor'
+                        : 'Yes, Convert to Back Office';
+                }
+                renderImpactItems(impacts);
+
+                if (!userTypeConversionModalEl) {
+                    if (confirm(question)) {
+                        submitConfirmedConversion();
+                    }
+                    return;
+                }
+
+                if (userTypeConversionModalEl.parentElement !== document.body) {
+                    document.body.appendChild(userTypeConversionModalEl);
+                }
+
+                if (window.bootstrap?.Modal) {
+                    const modal = bootstrap.Modal.getOrCreateInstance(userTypeConversionModalEl, {
+                        backdrop: 'static',
+                        keyboard: false,
+                    });
+                    modal.show();
+
+                    window.requestAnimationFrame(() => {
+                        document.querySelector('.modal-backdrop:last-child')
+                            ?.classList.add('user-type-conversion-backdrop');
+                    });
+                    return;
+                }
+
+                if (confirm(question)) {
+                    submitConfirmedConversion();
+                }
+            }
+
+            function submitConfirmedConversion() {
+                if (conversionConfirmInput) {
+                    conversionConfirmInput.value = '1';
+                }
+
+                conversionSubmitConfirmed = true;
+
+                if (userEditForm?.requestSubmit) {
+                    userEditForm.requestSubmit();
+                } else {
+                    userEditForm?.submit();
+                }
             }
 
             function updateMemberStatePreview() {
@@ -339,8 +671,26 @@
             }
 
             userTypeSelect.addEventListener('change', toggleUserTypeFields);
+            [userTypeSelect, roleSelect, vendorCategorySelect, governanceSelect, memberStateSelect].forEach((field) => {
+                field?.addEventListener('change', resetConversionConfirmation);
+            });
             memberStateSelect.addEventListener('change', updateMemberStatePreview);
+            confirmUserTypeConversionBtn?.addEventListener('click', submitConfirmedConversion);
+            userEditForm?.addEventListener('submit', function(event) {
+                if (conversionSubmitConfirmed || conversionConfirmInput?.value === '1') {
+                    return;
+                }
+
+                if (isVendorBoundaryChange()) {
+                    event.preventDefault();
+                    showUserTypeConversionPrompt();
+                }
+            });
             toggleUserTypeFields();
+
+            if (shouldShowConversionPrompt && isVendorBoundaryChange()) {
+                showUserTypeConversionPrompt();
+            }
         });
     </script>
 @endsection

@@ -542,7 +542,9 @@
                                                     <th>Requested Item</th>
                                                     <th>Linked Deliverable</th>
                                                     <th style="width: 170px;">Date</th>
-                                                    <th class="text-end">Amount</th>
+                                                    <th style="width: 140px;" class="text-end">Unit Price</th>
+                                                    <th style="width: 110px;" class="text-end">Quantity</th>
+                                                    <th style="width: 150px;" class="text-end">Amount</th>
                                                     <th style="width: 150px;" class="text-center">Evidence</th>
                                                 </tr>
                                             </thead>
@@ -603,8 +605,8 @@
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">PO Amount <span class="text-danger">*</span></label>
                                 <input type="number" step="0.01" min="0.01" name="amount" id="amountInput"
-                                    class="form-control" value="{{ old('amount', $isEdit ? $purchaseOrder->amount : null) }}" required>
-                                <div class="form-text" id="amountHelp">Select a funding year to set the maximum amount.</div>
+                                    class="form-control" value="{{ old('amount', $isEdit ? $purchaseOrder->amount : null) }}" readonly required>
+                                <div class="form-text" id="amountHelp">Auto-calculated from requested line items.</div>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold">Currency</label>
@@ -819,6 +821,8 @@
             const oldLineItemResources = @json(old('line_item_resources', []));
             const oldLineItemDeliverables = @json(old('line_item_deliverables', []));
             const oldLineItemDates = @json(old('line_item_dates', []));
+            const oldLineItemUnitPrices = @json(old('line_item_unit_prices', []));
+            const oldLineItemQuantities = @json(old('line_item_quantities', []));
             const oldLineItemAmounts = @json(old('line_item_amounts', []));
 
             const list = document.getElementById('purchaseRequestList');
@@ -858,6 +862,11 @@
                 '"': '&quot;',
                 "'": '&#039;',
             }[char]));
+            const roundMoney = (value) => {
+                const number = Number(value);
+                if (!Number.isFinite(number)) return 0;
+                return Math.round((number + Number.EPSILON) * 100) / 100;
+            };
 
             function categoryOptionsHtml(selectedCategoryId = '') {
                 const selected = String(selectedCategoryId || '');
@@ -1220,6 +1229,40 @@
                 showEvidenceModal();
             }
 
+            function updatePurchaseOrderAmountFromItems() {
+                const total = roundMoney(
+                    Array.from(document.querySelectorAll('.line-item-amount-input')).reduce((sum, input) => {
+                        const value = Number(input.value || 0);
+                        return sum + (Number.isFinite(value) ? value : 0);
+                    }, 0)
+                );
+
+                if (total > 0) {
+                    amountInput.value = total.toFixed(2);
+                }
+            }
+
+            function recalculateLineItemAmount(row, item, request) {
+                const unitPrice = Number(row.querySelector('.line-item-unit-price-input')?.value || 0);
+                const quantity = Number(row.querySelector('.line-item-quantity-input')?.value || 0);
+                const amount = roundMoney(unitPrice * quantity);
+                const amountField = row.querySelector('.line-item-amount-input');
+
+                if (amountField) {
+                    amountField.value = amount > 0 ? amount.toFixed(2) : '';
+                }
+
+                item.unit_price = unitPrice;
+                item.quantity = quantity;
+                item.amount = amount;
+
+                if (evidenceModalSubtitle && activeEvidenceFieldset?.dataset.itemId === String(item.id)) {
+                    evidenceModalSubtitle.textContent = `${item.category || 'N/A'} | ${money(request.currency, item.amount)}`;
+                }
+
+                updatePurchaseOrderAmountFromItems();
+            }
+
             function renderItems(request) {
                 const body = document.getElementById('requestItemsBody');
                 returnActiveEvidenceFieldset();
@@ -1229,7 +1272,7 @@
                 body.innerHTML = '';
 
                 if (!request.items || request.items.length === 0) {
-                    body.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No line items found.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No line items found.</td></tr>';
                     return;
                 }
 
@@ -1240,10 +1283,17 @@
                     const resourceValue = oldLineItemResources[item.id] ?? item.resource_id ?? '';
                     const deliverableValue = oldLineItemDeliverables[item.id] ?? item.line_deliverable ?? item.deliverable_title ?? '';
                     const deliverableDate = oldLineItemDates[item.id] ?? item.milestone_date ?? previous.deliverable_date ?? '';
-                    const amountValue = oldLineItemAmounts[item.id] ?? item.amount ?? '';
+                    const unitPriceValue = oldLineItemUnitPrices[item.id] ?? item.unit_price ?? item.amount ?? '';
+                    const quantityValue = oldLineItemQuantities[item.id] ?? item.quantity ?? 1;
+                    const calculatedAmount = roundMoney(Number(unitPriceValue || 0) * Number(quantityValue || 0));
+                    const amountValue = calculatedAmount > 0
+                        ? calculatedAmount.toFixed(2)
+                        : (oldLineItemAmounts[item.id] ?? item.amount ?? '');
                     item.resource_category_id = categoryValue;
                     item.resource_id = resourceValue;
                     item.line_deliverable = deliverableValue;
+                    item.unit_price = Number(unitPriceValue || 0);
+                    item.quantity = Number(quantityValue || 1);
                     item.amount = Number(amountValue || 0);
                     const row = document.createElement('tr');
                     row.dataset.itemId = item.id;
@@ -1295,12 +1345,36 @@
                         </td>
                         <td>
                             <input type="number"
+                                name="line_item_unit_prices[${item.id}]"
+                                class="form-control form-control-sm text-end line-item-unit-price-input"
+                                data-item-id="${item.id}"
+                                min="0.01"
+                                step="0.01"
+                                value="${escapeHtml(unitPriceValue)}"
+                                required
+                                aria-label="Unit price for ${escapeHtml(item.resource || item.category || 'line item')}">
+                        </td>
+                        <td>
+                            <input type="number"
+                                name="line_item_quantities[${item.id}]"
+                                class="form-control form-control-sm text-end line-item-quantity-input"
+                                data-item-id="${item.id}"
+                                min="0.01"
+                                step="0.01"
+                                value="${escapeHtml(quantityValue)}"
+                                required
+                                aria-label="Quantity for ${escapeHtml(item.resource || item.category || 'line item')}">
+                        </td>
+                        <td>
+                            <input type="number"
                                 name="line_item_amounts[${item.id}]"
                                 class="form-control form-control-sm text-end line-item-amount-input"
                                 data-item-id="${item.id}"
                                 min="0.01"
                                 step="0.01"
                                 value="${escapeHtml(amountValue)}"
+                                readonly
+                                required
                                 aria-label="Amount for ${escapeHtml(item.resource || item.category || 'line item')}">
                         </td>
                         <td class="text-center">
@@ -1351,18 +1425,20 @@
                             evidenceModalDeliverable.textContent = item.line_deliverable || item.deliverable_title || 'No deliverable linked';
                         }
                     });
-                    row.querySelector('.line-item-amount-input').addEventListener('input', (event) => {
-                        item.amount = Number(event.target.value || 0);
-                        if (evidenceModalSubtitle && activeEvidenceFieldset?.dataset.itemId === String(item.id)) {
-                            evidenceModalSubtitle.textContent = `${item.category || 'N/A'} | ${money(request.currency, item.amount)}`;
-                        }
+                    row.querySelectorAll('.line-item-unit-price-input, .line-item-quantity-input').forEach((input) => {
+                        input.addEventListener('input', () => {
+                            recalculateLineItemAmount(row, item, request);
+                        });
                     });
                     row.querySelector('.evidence-edit-btn').addEventListener('click', () => {
                         openEvidenceModal(item, request);
                     });
                     body.appendChild(row);
+                    recalculateLineItemAmount(row, item, request);
                     updateEvidenceRowState(item.id);
                 });
+
+                updatePurchaseOrderAmountFromItems();
             }
 
             function fillVendorContacts(vendorId, onlyBlank = true) {

@@ -299,6 +299,10 @@ class ProcurementPurchaseOrderController extends Controller
             'line_item_deliverables.*' => ['nullable', 'string', 'max:255'],
             'line_item_dates' => ['nullable', 'array'],
             'line_item_dates.*' => ['nullable', 'date'],
+            'line_item_unit_prices' => ['nullable', 'array'],
+            'line_item_unit_prices.*' => ['nullable', 'numeric', 'min:0.01'],
+            'line_item_quantities' => ['nullable', 'array'],
+            'line_item_quantities.*' => ['nullable', 'numeric', 'min:0.01'],
             'line_item_amounts' => ['nullable', 'array'],
             'line_item_amounts.*' => ['nullable', 'numeric', 'min:0.01'],
             'vendor_id' => ['nullable', 'exists:users,id'],
@@ -371,6 +375,8 @@ class ProcurementPurchaseOrderController extends Controller
                 'budget_commitment_id' => 'Purchase orders can only be tied to approved commitments.',
             ]);
         }
+
+        $data['amount'] = $this->lineItemTotalFromRequest($request, $purchaseRequest);
 
         $remaining = $this->remainingCommitmentAmount($commitment);
         if ((float) $data['amount'] > $remaining) {
@@ -499,6 +505,10 @@ class ProcurementPurchaseOrderController extends Controller
             'line_item_deliverables.*' => ['nullable', 'string', 'max:255'],
             'line_item_dates' => ['nullable', 'array'],
             'line_item_dates.*' => ['nullable', 'date'],
+            'line_item_unit_prices' => ['nullable', 'array'],
+            'line_item_unit_prices.*' => ['nullable', 'numeric', 'min:0.01'],
+            'line_item_quantities' => ['nullable', 'array'],
+            'line_item_quantities.*' => ['nullable', 'numeric', 'min:0.01'],
             'line_item_amounts' => ['nullable', 'array'],
             'line_item_amounts.*' => ['nullable', 'numeric', 'min:0.01'],
             'vendor_id' => ['nullable', 'exists:users,id'],
@@ -570,6 +580,8 @@ class ProcurementPurchaseOrderController extends Controller
                 'budget_commitment_id' => 'Purchase orders can only be tied to approved commitments.',
             ]);
         }
+
+        $data['amount'] = $this->lineItemTotalFromRequest($request, $purchaseRequest);
 
         $remaining = $this->remainingCommitmentAmount($commitment, $purchaseOrder);
         if ((float) $data['amount'] > $remaining) {
@@ -1069,6 +1081,8 @@ class ProcurementPurchaseOrderController extends Controller
                 'description' => $item->observations ?: $item->object_type ?: '',
                 'line_deliverable' => $item->milestone ?: $item->deliverable?->title ?: '',
                 'milestone_date' => $item->milestone_date?->format('Y-m-d'),
+                'unit_price' => round((float) ($item->unit_price ?: $item->amount), 2),
+                'quantity' => round((float) ($item->quantity ?: 1), 2),
                 'amount' => round((float) $item->amount, 2),
                 'budget_code' => $item->budget_code,
                 'deliverable_id' => $item->deliverable_id,
@@ -1111,15 +1125,83 @@ class ProcurementPurchaseOrderController extends Controller
         ];
     }
 
+    private function lineItemTotalFromRequest(Request $request, PurchaseRequest $purchaseRequest): float
+    {
+        $unitPrices = $request->input('line_item_unit_prices', []);
+        $quantities = $request->input('line_item_quantities', []);
+        $amounts = $request->input('line_item_amounts', []);
+
+        $submittedIds = collect([$unitPrices, $quantities, $amounts])
+            ->filter(fn ($values) => is_array($values))
+            ->flatMap(fn ($values) => array_keys($values))
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values();
+
+        $purchaseRequest->loadMissing('items');
+
+        if ($submittedIds->isEmpty()) {
+            return round((float) $purchaseRequest->items->sum('amount'), 2);
+        }
+
+        $itemsById = $purchaseRequest->items->keyBy(fn ($item) => (string) $item->id);
+        $total = 0.0;
+
+        foreach ($submittedIds as $key) {
+            if (! $itemsById->has($key)) {
+                throw ValidationException::withMessages([
+                    'line_item_amounts' => 'One or more edited line items do not belong to the selected purchase request.',
+                ]);
+            }
+
+            $total += $this->lineItemPricingFromRequest($key, $itemsById->get($key), $unitPrices, $quantities, $amounts)['amount'];
+        }
+
+        $total = round($total, 2);
+        if ($total <= 0) {
+            throw ValidationException::withMessages([
+                'amount' => 'Purchase order line items must have a total amount greater than zero.',
+            ]);
+        }
+
+        return $total;
+    }
+
+    private function lineItemPricingFromRequest(string $key, $item, array $unitPrices, array $quantities, array $amounts): array
+    {
+        $existingAmount = round((float) ($item->amount ?? 0), 2);
+        $unitPrice = array_key_exists($key, $unitPrices) && $unitPrices[$key] !== null && $unitPrices[$key] !== ''
+            ? round((float) $unitPrices[$key], 2)
+            : round((float) (($item->unit_price ?? null) ?: $existingAmount), 2);
+        $quantity = array_key_exists($key, $quantities) && $quantities[$key] !== null && $quantities[$key] !== ''
+            ? round((float) $quantities[$key], 2)
+            : round((float) (($item->quantity ?? null) ?: 1), 2);
+        $amount = round($unitPrice * $quantity, 2);
+
+        if ($amount <= 0 && array_key_exists($key, $amounts)) {
+            $amount = round((float) $amounts[$key], 2);
+            $unitPrice = $amount;
+            $quantity = 1.00;
+        }
+
+        return [
+            'unit_price' => $unitPrice,
+            'quantity' => $quantity,
+            'amount' => $amount,
+        ];
+    }
+
     private function syncPurchaseRequestLineItems(Request $request, PurchaseRequest $purchaseRequest): void
     {
         $categories = $request->input('line_item_resource_categories', []);
         $resources = $request->input('line_item_resources', []);
         $deliverables = $request->input('line_item_deliverables', []);
         $dates = $request->input('line_item_dates', []);
+        $unitPrices = $request->input('line_item_unit_prices', []);
+        $quantities = $request->input('line_item_quantities', []);
         $amounts = $request->input('line_item_amounts', []);
 
-        $submittedIds = collect([$categories, $resources, $deliverables, $dates, $amounts])
+        $submittedIds = collect([$categories, $resources, $deliverables, $dates, $unitPrices, $quantities, $amounts])
             ->filter(fn ($values) => is_array($values))
             ->flatMap(fn ($values) => array_keys($values))
             ->map(fn ($id) => (string) $id)
@@ -1143,9 +1225,10 @@ class ProcurementPurchaseOrderController extends Controller
             $item = $itemsById->get($key);
             $categoryId = (string) ($categories[$key] ?? $item->resource_category_id ?? '');
             $resourceId = (string) ($resources[$key] ?? $item->resource_id ?? '');
-            $amount = array_key_exists($key, $amounts)
-                ? round((float) $amounts[$key], 2)
-                : round((float) $item->amount, 2);
+            $pricing = $this->lineItemPricingFromRequest($key, $item, $unitPrices, $quantities, $amounts);
+            $unitPrice = $pricing['unit_price'];
+            $quantity = $pricing['quantity'];
+            $amount = $pricing['amount'];
             $text = array_key_exists($key, $deliverables)
                 ? trim((string) $deliverables[$key])
                 : (string) ($item->milestone ?? '');
@@ -1182,6 +1265,8 @@ class ProcurementPurchaseOrderController extends Controller
                 'resource_id' => $resourceId,
                 'milestone' => $text !== '' ? $text : null,
                 'milestone_date' => $date !== '' ? $date : null,
+                'unit_price' => $unitPrice,
+                'quantity' => $quantity,
                 'amount' => $amount,
             ]);
         }

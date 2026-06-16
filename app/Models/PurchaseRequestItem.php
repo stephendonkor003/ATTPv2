@@ -16,6 +16,8 @@ class PurchaseRequestItem extends BaseModel
         'deliverable_id',
         'milestone',
         'milestone_date',
+        'unit_price',
+        'quantity',
         'amount',
         'work_plan_source',
         'work_plan_sort_order',
@@ -40,6 +42,8 @@ class PurchaseRequestItem extends BaseModel
     ];
 
     protected $casts = [
+        'unit_price' => 'decimal:2',
+        'quantity' => 'decimal:2',
         'amount' => 'decimal:2',
         'estimated_amount' => 'decimal:2',
         'work_plan_months' => 'array',

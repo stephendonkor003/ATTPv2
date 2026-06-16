@@ -209,11 +209,11 @@
                                             </a>
                                             <form method="POST"
                                                 action="{{ route('procurement.disbursements.destroy', $disbursement) }}"
-                                                onsubmit="return confirm('Delete this disbursement? The linked purchase order payment totals will be recalculated.');">
+                                                onsubmit="return confirm('Revert this payment? The receipt will stay on record, but the linked purchase order payment totals will be recalculated.');">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                    Delete
+                                                    Revert Payment
                                                 </button>
                                             </form>
                                         @endif
