@@ -1,3 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-folder-fill" viewBox="0 0 16 16">
-  <path d="M9.828 3h3.982a2 2 0 0 1 1.992 2.181l-.637 7A2 2 0 0 1 13.174 14H2.825a2 2 0 0 1-1.991-1.819l-.637-7a2 2 0 0 1 .342-1.31L.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3m-8.322.12q.322-.119.684-.12h5.396l-.707-.707A1 1 0 0 0 6.172 2H2.5a1 1 0 0 0-1 .981z"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Yellow folder">
+  <path fill="#fbbf24" d="M8 24a8 8 0 0 1 8-8h22.5a8 8 0 0 1 5.7 2.4L51.8 26H80a8 8 0 0 1 8 8v6H8V24Z"/>
+  <path fill="#f59e0b" d="M8 36h80v36a8 8 0 0 1-8 8H16a8 8 0 0 1-8-8V36Z"/>
+  <path fill="#fde68a" d="M13 42h70v6H13z" opacity=".55"/>
+  <path fill="#92400e" d="M16 80h64a8 8 0 0 0 8-8V52L76.5 66.5A19 19 0 0 1 61.6 74H9.3A8 8 0 0 0 16 80Z" opacity=".12"/>
 </svg>

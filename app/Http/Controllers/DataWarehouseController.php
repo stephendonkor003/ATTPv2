@@ -17,7 +17,7 @@ class DataWarehouseController extends Controller
 {
     private array $knowledgeUserCache = [];
 
-    public function index(Request $request)
+    public function index(Request $request, ?string $module = null)
     {
         $allFiles = $this->knowledgeFiles();
         $definitions = collect($this->knowledgeModules());
@@ -35,7 +35,7 @@ class DataWarehouseController extends Controller
             })
             ->values();
 
-        $requestedModule = (string) $request->query('module', '');
+        $requestedModule = (string) ($module ?: $request->query('module', ''));
         $selectedModule = $modules->firstWhere('slug', $requestedModule)
             ?: $modules->first(fn (array $module) => $module['files_count'] > 0)
             ?: $modules->first();

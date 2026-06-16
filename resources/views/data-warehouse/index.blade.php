@@ -137,7 +137,7 @@
             <div class="km-hero-body d-flex flex-column flex-lg-row justify-content-between gap-3">
                 <div>
                     <div class="text-uppercase small fw-semibold text-white-50 mb-2">Knowledge Management</div>
-                    <h3 class="fw-bold mb-2">System File Library</h3>
+                    <h3 class="fw-bold mb-2 text-white">System File Library</h3>
                     <p class="mb-0 text-white-50">
                         Documents, images, evidence, contracts, PDFs, videos, and uploaded files grouped by module.
                     </p>
@@ -192,7 +192,7 @@
                 <div class="col-sm-6 col-xl-3">
                     <a class="km-folder {{ $selectedModule['slug'] === $module['slug'] ? 'active' : '' }}"
                         style="--km-accent: {{ $module['accent'] }};"
-                        href="{{ route('data-warehouse.index', ['module' => $module['slug']]) }}">
+                        href="{{ route('data-warehouse.modules.show', $module['slug']) }}">
                         <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                             <img src="{{ $folderImage }}" alt="" class="km-folder-icon">
                             <span class="km-folder-accent"></span>
