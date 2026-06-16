@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>AU Treaties Information | ATTP Impact</title>
-    <meta name="description" content="African Union treaties status — signatures, ratifications, and submissions by member state.">
+    <meta name="description" content="African Union treaties status - signatures, ratifications, and submissions by member state.">
     <link rel="icon" href="{{ asset('assets/images/au.png') }}" type="image/png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -19,10 +19,21 @@
             --orange:         #e16435;
             --light:          #f0f5f1;
             --magenta:        #006B3F;
+            --ink:            #102018;
+            --muted:          #5a7065;
+            --line:           #dbe8df;
+            --surface-soft:   #f7faf8;
+            --blue:           #2563eb;
+            --teal:           #0f766e;
+            --red:            #b91c1c;
         }
 
         *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; font-family: 'Inter', sans-serif; background: var(--light); color: #1a2e22; }
+        body {
+            margin: 0; font-family: 'Inter', sans-serif;
+            background: linear-gradient(180deg, #edf6f1 0%, #f8fbf9 36%, #eef5f1 100%);
+            color: #1a2e22;
+        }
 
         /* ── NAVBAR ── */
         .navbar {
@@ -36,74 +47,135 @@
 
         /* ── HERO ── */
         .treaties-hero {
-            background: linear-gradient(135deg, rgba(0,77,46,.96), rgba(0,107,63,.9)),
+            background: linear-gradient(135deg, rgba(0,45,29,.95), rgba(0,107,63,.78), rgba(15,118,110,.74)),
                         url('{{ asset('assets/images/au3.jpg') }}') center/cover no-repeat;
-            padding: 64px 24px 80px;
-            text-align: center; color: #fff;
+            padding: 78px 24px 104px;
+            color: #fff;
         }
+        .hero-inner { max-width: 1160px; margin: 0 auto; }
         .treaties-hero .breadcrumb {
-            font-size: .82rem; color: rgba(255,255,255,.65); margin-bottom: 14px;
+            font-size: .82rem; color: rgba(255,255,255,.76); margin-bottom: 18px;
         }
         .treaties-hero .breadcrumb a { color: var(--gold); text-decoration: none; }
         .treaties-hero .breadcrumb a:hover { text-decoration: underline; }
-        .treaties-hero h1 { font-size: 2.6rem; margin: 0 0 14px; color: var(--gold); }
-        .treaties-hero p { max-width: 680px; margin: 0 auto; line-height: 1.75; opacity: .9; font-size: 1rem; }
+        .hero-eyebrow {
+            display: inline-flex; align-items: center; gap: 8px;
+            margin: 0 0 12px; color: #dff6e9; font-size: .78rem; font-weight: 800;
+            text-transform: uppercase; letter-spacing: .08em;
+        }
+        .hero-eyebrow::before {
+            content: ""; width: 28px; height: 2px; border-radius: 999px; background: var(--gold);
+        }
+        .treaties-hero h1 {
+            max-width: 780px; font-size: clamp(2.1rem, 4.6vw, 4.2rem);
+            line-height: 1.03; margin: 0 0 18px; color: #fff; letter-spacing: 0;
+        }
+        .treaties-hero p { max-width: 720px; margin: 0; line-height: 1.75; opacity: .92; font-size: 1.03rem; }
+        .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+        .hero-link {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-height: 42px; padding: 10px 18px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,.38); color: #fff; text-decoration: none;
+            font-size: .9rem; font-weight: 800; transition: transform .2s, background .2s, border-color .2s;
+        }
+        .hero-link.primary { background: var(--gold); color: #122016; border-color: var(--gold); }
+        .hero-link:hover { transform: translateY(-1px); background: rgba(255,255,255,.12); }
+        .hero-link.primary:hover { background: #ffd65b; }
 
         /* ── STATS BAR ── */
         .stats-bar {
-            max-width: 1160px; margin: -40px auto 0; padding: 0 24px;
+            max-width: 1160px; margin: -46px auto 0; padding: 0 24px;
             position: relative; z-index: 10;
         }
         .stats-grid {
-            display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+            display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px;
         }
         .stat-card {
-            background: #fff; border-radius: 14px; border: 1px solid #e0ebe5;
-            box-shadow: 0 8px 24px rgba(0,0,0,.1);
-            padding: 20px 22px; text-align: center;
+            position: relative; background: rgba(255,255,255,.96); border-radius: 12px; border: 1px solid #e0ebe5;
+            box-shadow: 0 14px 34px rgba(16,32,24,.12);
+            padding: 18px 18px; text-align: left; overflow: hidden;
+            transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
         }
-        .stat-number { font-size: 2.2rem; font-weight: 800; color: var(--au-green); line-height: 1; margin-bottom: 6px; }
-        .stat-label { font-size: .82rem; color: #6b8676; font-weight: 500; }
+        .stat-card::before {
+            content: ""; position: absolute; left: 0; top: 0; right: 0; height: 4px;
+            background: var(--au-green);
+        }
+        .stat-card:hover { transform: translateY(-3px); box-shadow: 0 18px 42px rgba(16,32,24,.16); border-color: #c9dbd0; }
+        .stat-number { font-size: 2rem; font-weight: 800; color: var(--au-green); line-height: 1; margin-bottom: 7px; }
+        .stat-label { font-size: .79rem; color: #5f7569; font-weight: 700; line-height: 1.35; }
+        .stat-hint { margin-top: 8px; font-size: .72rem; color: #7c9185; }
         .stat-card.gold .stat-number { color: #b8860b; }
+        .stat-card.gold::before { background: var(--gold); }
         .stat-card.blue .stat-number { color: #1e5fa3; }
+        .stat-card.blue::before { background: var(--blue); }
         .stat-card.orange .stat-number { color: #c0502a; }
+        .stat-card.orange::before { background: var(--orange); }
+        .stat-card.teal .stat-number { color: var(--teal); }
+        .stat-card.teal::before { background: var(--teal); }
 
         /* ── MAIN LAYOUT ── */
         .page-wrap { max-width: 1160px; margin: 48px auto 60px; padding: 0 24px; }
+        .section-intro {
+            display: flex; justify-content: space-between; align-items: flex-end; gap: 18px;
+            margin: 0 0 16px;
+        }
+        .section-kicker {
+            display: inline-block; margin-bottom: 7px; color: var(--teal); font-size: .76rem;
+            font-weight: 800; text-transform: uppercase; letter-spacing: .08em;
+        }
+        .section-intro h2 { margin: 0; color: var(--ink); font-size: 1.45rem; letter-spacing: 0; }
+        .section-intro p { margin: 7px 0 0; color: var(--muted); max-width: 690px; line-height: 1.6; font-size: .92rem; }
+        .coverage-chip {
+            flex-shrink: 0; border: 1px solid var(--line); background: #fff; color: var(--muted);
+            border-radius: 999px; padding: 9px 14px; font-size: .82rem; font-weight: 800;
+            box-shadow: 0 8px 18px rgba(16,32,24,.06);
+        }
+        .coverage-chip strong { color: var(--au-green-dark); }
 
         /* ── TOOLBAR ── */
         .toolbar {
             background: #fff; border-radius: 12px; border: 1px solid #e0ebe5;
-            padding: 16px 20px; display: flex; gap: 12px; flex-wrap: wrap;
-            align-items: center; margin-bottom: 28px;
-            box-shadow: 0 2px 8px rgba(0,0,0,.05);
+            padding: 18px; display: grid; grid-template-columns: 1.2fr 1fr .9fr 1fr auto;
+            gap: 12px; align-items: end; margin-bottom: 12px;
+            box-shadow: 0 8px 24px rgba(16,32,24,.06);
+        }
+        .filter-control { min-width: 0; }
+        .filter-control label {
+            display: block; font-size: .76rem; font-weight: 800; color: #5a7065; margin-bottom: 6px;
         }
         .toolbar label { font-size: .82rem; font-weight: 600; color: #5a7065; white-space: nowrap; }
         .toolbar select, .toolbar input {
-            border: 1.5px solid #d0dcd5; border-radius: 8px; padding: 9px 12px;
+            width: 100%; border: 1.5px solid #d0dcd5; border-radius: 8px; padding: 10px 12px;
             font: inherit; font-size: .88rem; background: #f7faf8; outline: none;
-            transition: border-color .2s; min-width: 180px;
+            transition: border-color .2s, background .2s, box-shadow .2s; min-width: 0;
         }
         .toolbar select:focus, .toolbar input:focus {
-            border-color: var(--au-green); background: #fff;
+            border-color: var(--au-green); background: #fff; box-shadow: 0 0 0 3px rgba(0,107,63,.1);
         }
         .toolbar-spacer { flex: 1; }
+        .toolbar-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
         .reset-btn {
-            padding: 9px 18px; border-radius: 8px; border: 1.5px solid #c8d8ce;
+            min-height: 40px; padding: 9px 14px; border-radius: 8px; border: 1.5px solid #c8d8ce;
             background: #fff; color: #4a6355; font-size: .85rem; font-weight: 600;
             cursor: pointer; white-space: nowrap; transition: all .2s; text-decoration: none;
-            display: inline-block;
+            display: inline-flex; align-items: center; justify-content: center;
         }
         .reset-btn:hover { background: var(--au-green); color: #fff; border-color: var(--au-green); }
+        .reset-btn.secondary:hover { background: #102018; border-color: #102018; }
+        .results-summary {
+            display: flex; justify-content: space-between; align-items: center; gap: 14px;
+            margin-bottom: 28px; color: var(--muted); font-size: .86rem;
+        }
+        .results-summary strong { color: var(--au-green-dark); }
 
         /* Africa Treaty Map */
         .treaty-map-card {
             background: #fff; border-radius: 14px; border: 1px solid #e0ebe5;
-            box-shadow: 0 2px 10px rgba(0,0,0,.05); overflow: hidden; margin-bottom: 28px;
+            box-shadow: 0 12px 30px rgba(16,32,24,.08); overflow: hidden; margin-bottom: 28px;
         }
         .treaty-map-head {
             display: flex; justify-content: space-between; align-items: flex-start; gap: 18px;
-            padding: 18px 20px; border-bottom: 1px solid #e8f0eb; background: #f7faf8;
+            padding: 20px 22px; border-bottom: 1px solid #e8f0eb; background: linear-gradient(90deg, #f7faf8, #eef7f2);
         }
         .treaty-map-head h2 { margin: 0 0 5px; font-size: 1.12rem; color: var(--au-green-dark); }
         .treaty-map-head p { margin: 0; color: #5a7065; font-size: .88rem; line-height: 1.5; }
@@ -119,7 +191,9 @@
         }
         .map-count {
             border: 1px solid #e0ebe5; border-radius: 10px; padding: 10px 12px; background: #f7faf8;
+            transition: transform .2s, border-color .2s, background .2s;
         }
+        .map-count:hover { transform: translateY(-2px); border-color: #c9dbd0; background: #fff; }
         .map-count .k {
             display: flex; align-items: center; gap: 7px; font-size: .75rem; font-weight: 800;
             text-transform: uppercase; letter-spacing: .4px; color: #5a7065;
@@ -139,8 +213,11 @@
 
         .treaty-card {
             background: #fff; border-radius: 14px; border: 1px solid #e0ebe5;
-            box-shadow: 0 2px 10px rgba(0,0,0,.05); overflow: hidden;
+            box-shadow: 0 8px 22px rgba(16,32,24,.06); overflow: hidden;
+            transition: transform .2s, box-shadow .2s, border-color .2s;
         }
+        .treaty-card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(16,32,24,.1); border-color: #c9dbd0; }
+        .treaty-card.open { border-color: rgba(0,107,63,.28); }
         .treaty-header {
             display: flex; align-items: flex-start; gap: 20px;
             padding: 22px 24px; cursor: pointer; transition: background .15s;
@@ -167,6 +244,20 @@
         .badge-submitted{ background: #fff7ed; color: #9a3412; }
         .badge-date     { background: #f1f5f9; color: #475569; }
         .badge-status   { background: #e8f5ee; color: var(--au-green); }
+        .badge-pending  { background: #fff1f2; color: var(--red); }
+
+        .treaty-progress {
+            display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+            margin-top: 14px; max-width: 620px;
+        }
+        .progress-item { min-width: 0; }
+        .progress-label {
+            display: flex; justify-content: space-between; gap: 8px;
+            color: #5a7065; font-size: .76rem; font-weight: 800; margin-bottom: 6px;
+        }
+        .progress-track { height: 8px; border-radius: 999px; background: #edf2ef; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: inherit; background: var(--blue); width: 0; }
+        .progress-fill.ratified { background: #16a34a; }
 
         .treaty-toggle {
             flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px;
@@ -182,7 +273,7 @@
             transition: max-height .35s ease, padding .2s;
         }
         .treaty-card.open .treaty-description {
-            max-height: 2000px; padding: 20px 24px;
+            max-height: 2600px; padding: 20px 24px;
         }
 
         .treaty-desc-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; margin-bottom: 20px; }
@@ -201,7 +292,7 @@
             width: 100%; border-collapse: collapse; font-size: .83rem;
         }
         .country-table th {
-            background: var(--au-green-dark); color: #fff; padding: 8px 12px;
+            background: var(--au-green-dark); color: #fff; padding: 9px 12px;
             text-align: left; font-weight: 600; white-space: nowrap;
         }
         .country-table td {
@@ -225,13 +316,22 @@
 
         .full-table-card {
             background: #fff; border-radius: 14px; border: 1px solid #e0ebe5;
-            box-shadow: 0 2px 10px rgba(0,0,0,.05); overflow: hidden;
+            box-shadow: 0 12px 30px rgba(16,32,24,.08); overflow: hidden;
         }
+        .full-table-head {
+            display: flex; justify-content: space-between; align-items: flex-end; gap: 18px;
+            padding: 18px 20px; border-bottom: 1px solid #e8f0eb;
+            background: linear-gradient(90deg, #ffffff, #f7faf8);
+        }
+        .full-table-head h2 { margin: 0 0 5px; color: var(--au-green-dark); font-size: 1.18rem; }
+        .full-table-head p { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.5; }
+        .full-table-meta { color: var(--muted); font-size: .82rem; font-weight: 800; white-space: nowrap; }
+        .full-table-scroll { max-height: 660px; overflow: auto; }
         .full-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
         .full-table th {
             background: #f0f5f1; color: #2a3d30; padding: 11px 14px;
             text-align: left; font-weight: 700; border-bottom: 2px solid #d0dcd5;
-            white-space: nowrap; position: sticky; top: 0;
+            white-space: nowrap; position: sticky; top: 0; z-index: 2;
         }
         .full-table td { padding: 10px 14px; border-bottom: 1px solid #e8f0eb; vertical-align: middle; }
         .full-table tr:last-child td { border-bottom: none; }
@@ -245,6 +345,9 @@
         }
         .pill-yes { background: #dcfce7; color: #166534; }
         .pill-no  { background: #f1f5f9; color: #94a3b8; }
+        .pill-signed { background: #dbeafe; color: #1e40af; }
+        .pill-ratified { background: #dcfce7; color: #166534; }
+        .pill-submitted { background: #fff7ed; color: #9a3412; }
 
         /* ── EMPTY STATE ── */
         .empty-state {
@@ -258,15 +361,25 @@
         /* ── RESPONSIVE ── */
         @media (max-width: 900px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .section-intro { flex-direction: column; align-items: flex-start; }
+            .toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .toolbar-actions { justify-content: flex-start; }
             .treaty-map-head { flex-direction: column; }
             .treaty-map-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .treaty-desc-grid { grid-template-columns: 1fr; }
             .treaties-hero h1 { font-size: 1.9rem; }
+            .treaty-progress { grid-template-columns: 1fr; }
+            .full-table-head { flex-direction: column; align-items: flex-start; }
         }
         @media (max-width: 600px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .toolbar { flex-direction: column; align-items: stretch; }
+            .toolbar { grid-template-columns: 1fr; }
             .toolbar select, .toolbar input { min-width: 0; width: 100%; }
+            .treaties-hero { padding: 58px 18px 92px; }
+            .hero-actions { flex-direction: column; align-items: stretch; }
+            .treaty-header { gap: 12px; padding: 18px; }
+            .treaty-code { min-width: 58px; padding: 8px 9px; }
+            .treaty-description { padding-left: 18px; padding-right: 18px; }
         }
     </style>
 </head>
@@ -307,41 +420,66 @@
 </header>
 
 <!-- ── HERO ── -->
+@php
+    $treatyCollection = collect($treatiesData);
+    $totalTreaties    = count($treatiesData);
+    $totalSigned      = $treatyCollection->sum('signed_count');
+    $totalRatified    = $treatyCollection->sum('ratified_count');
+    $totalSubmitted   = $treatyCollection->sum('original_submitted_count');
+    $totalCountries   = count($memberStates);
+    $totalRows        = count($statusTableRows);
+    $totalPending     = collect($statusTableRows)->filter(function ($row) {
+        return !($row['is_signed'] ?? false)
+            && !($row['is_ratified'] ?? false)
+            && !($row['is_original_submitted'] ?? false);
+    })->count();
+    $signatureCoverage = $totalRows > 0 ? round(($totalSigned / $totalRows) * 100) : 0;
+    $ratificationCoverage = $totalRows > 0 ? round(($totalRatified / $totalRows) * 100) : 0;
+@endphp
+
 <section class="treaties-hero">
-    <div class="breadcrumb">
+    <div class="hero-inner">
+        <div class="breadcrumb">
         <a href="{{ route('impact.map') }}">Impact Map</a>
         &nbsp;/&nbsp; AU Treaties Information
+        </div>
+        <div class="hero-eyebrow">Public Treaty Monitor</div>
+        <h1>African Union Treaty Status Dashboard</h1>
+        <p>Track African Union treaty signatures, ratifications, and instrument submissions across member states from one public matrix.</p>
+        <div class="hero-actions">
+            <a class="hero-link primary" href="#treatyExplorer">Explore treaties</a>
+            <a class="hero-link" href="{{ route('impact.map') }}">Back to impact map</a>
+        </div>
     </div>
-    <h1>AU Treaties Information</h1>
-    <p>Comprehensive status of African Union treaties — tracking signatures, ratifications, and instrument submissions by member state.</p>
 </section>
 
 <!-- ── STATS BAR ── -->
-@php
-    $totalTreaties    = count($treatiesData);
-    $totalSigned      = collect($treatiesData)->sum('signed_count');
-    $totalRatified    = collect($treatiesData)->sum('ratified_count');
-    $totalSubmitted   = collect($treatiesData)->sum('original_submitted_count');
-    $totalCountries   = count($memberStates);
-@endphp
-
 <div class="stats-bar">
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-number">{{ $totalTreaties }}</div>
             <div class="stat-label">AU Treaties</div>
+            <div class="stat-hint">Active treaty records</div>
         </div>
         <div class="stat-card gold">
             <div class="stat-number">{{ $totalSigned }}</div>
             <div class="stat-label">Signatures recorded</div>
+            <div class="stat-hint">{{ $signatureCoverage }}% of matrix rows</div>
         </div>
         <div class="stat-card blue">
             <div class="stat-number">{{ $totalRatified }}</div>
             <div class="stat-label">Ratifications</div>
+            <div class="stat-hint">{{ $ratificationCoverage }}% of matrix rows</div>
+        </div>
+        <div class="stat-card teal">
+            <div class="stat-number">{{ $totalSubmitted }}</div>
+            <div class="stat-label">Instruments submitted</div>
+            <div class="stat-hint">Original documents tracked</div>
         </div>
         <div class="stat-card orange">
             <div class="stat-number">{{ $totalCountries }}</div>
             <div class="stat-label">Member states</div>
+            <div class="stat-hint">{{ number_format($totalPending) }} pending rows</div>
         </div>
     </div>
 </div>
@@ -358,33 +496,60 @@
     @else
 
         <!-- ── FILTER TOOLBAR ── -->
+        <section id="treatyExplorer" class="section-intro">
+            <div>
+                <span class="section-kicker">Treaty Explorer</span>
+                <h2>Browse the treaty status matrix</h2>
+                <p>Review treaty adoption details, member-state action, and country status patterns across the continent.</p>
+            </div>
+            <div class="coverage-chip"><strong id="visibleTreatyCount">{{ $totalTreaties }}</strong> visible treaties</div>
+        </section>
+
         <div class="toolbar">
-            <label for="filterTreaty">Treaty</label>
-            <select id="filterTreaty" onchange="applyFilters()">
-                <option value="">All treaties</option>
-                @foreach($treatiesData as $t)
-                    <option value="{{ $t['id'] }}">{{ $t['short_title'] ?: $t['title'] }}</option>
-                @endforeach
-            </select>
+            <div class="filter-control">
+                <label for="filterTreaty">Treaty</label>
+                <select id="filterTreaty" onchange="applyFilters()">
+                    <option value="">All treaties</option>
+                    @foreach($treatiesData as $t)
+                        <option value="{{ $t['id'] }}">{{ $t['short_title'] ?: $t['title'] }}</option>
+                    @endforeach
+                </select>
+            </div>
 
-            <label for="filterCountry">Member State</label>
-            <select id="filterCountry" onchange="applyFilters()">
-                <option value="">All countries</option>
-                @foreach($memberStates as $ms)
-                    <option value="{{ $ms['country_code'] }}">{{ $ms['country_name'] }}</option>
-                @endforeach
-            </select>
+            <div class="filter-control">
+                <label for="filterCountry">Member State</label>
+                <select id="filterCountry" onchange="applyFilters()">
+                    <option value="">All countries</option>
+                    @foreach($memberStates as $ms)
+                        <option value="{{ $ms['country_code'] }}">{{ $ms['country_name'] }}</option>
+                    @endforeach
+                </select>
+            </div>
 
-            <label for="filterStatus">Status</label>
-            <select id="filterStatus" onchange="applyFilters()">
-                <option value="">Any status</option>
-                <option value="signed">Signed</option>
-                <option value="ratified">Ratified</option>
-                <option value="submitted">Instrument submitted</option>
-            </select>
+            <div class="filter-control">
+                <label for="filterStatus">Status</label>
+                <select id="filterStatus" onchange="applyFilters()">
+                    <option value="">Any status</option>
+                    <option value="signed">Signed</option>
+                    <option value="ratified">Ratified</option>
+                    <option value="submitted">Instrument submitted</option>
+                    <option value="none">No action recorded</option>
+                </select>
+            </div>
 
-            <div class="toolbar-spacer"></div>
-            <button class="reset-btn" onclick="resetFilters()">Reset filters</button>
+            <div class="filter-control">
+                <label for="filterSearch">Search</label>
+                <input id="filterSearch" type="search" placeholder="Treaty or country" oninput="applyFilters()">
+            </div>
+
+            <div class="toolbar-actions">
+                <button class="reset-btn secondary" type="button" onclick="toggleVisibleTreaties(true)">Open</button>
+                <button class="reset-btn" type="button" onclick="resetFilters()">Reset</button>
+            </div>
+        </div>
+        <div class="results-summary">
+            <div><strong id="visibleRowCount">{{ number_format($totalRows) }}</strong> visible status rows</div>
+            <div><strong>{{ number_format($totalRows) }}</strong> total treaty/member-state rows</div>
         </div>
 
         <!-- Africa Treaty Status Map -->
@@ -420,7 +585,18 @@
         <!-- ── TREATY CARDS ── -->
         <div class="treaties-list" id="treatyCardList">
             @foreach($treatiesData as $treaty)
-                <div class="treaty-card" data-treaty-id="{{ $treaty['id'] }}">
+                @php
+                    $treatyStateCount = max(1, count($treaty['statuses']));
+                    $treatySignedPercent = min(100, round(($treaty['signed_count'] / $treatyStateCount) * 100));
+                    $treatyRatifiedPercent = min(100, round(($treaty['ratified_count'] / $treatyStateCount) * 100));
+                    $treatyPendingCount = collect($treaty['statuses'])->filter(function ($statusRow) {
+                        return !($statusRow['is_signed'] ?? false)
+                            && !($statusRow['is_ratified'] ?? false)
+                            && !($statusRow['is_original_submitted'] ?? false);
+                    })->count();
+                    $treatySearchText = strtolower(trim(($treaty['title'] ?? '') . ' ' . ($treaty['short_title'] ?? '') . ' ' . ($treaty['reference_code'] ?? '')));
+                @endphp
+                <div class="treaty-card" data-treaty-id="{{ $treaty['id'] }}" data-search="{{ $treatySearchText }}">
                     <div class="treaty-header" onclick="toggleTreaty(this.closest('.treaty-card'))">
                         <div class="treaty-code">{{ $treaty['reference_code'] ?: ('T-' . str_pad($loop->iteration, 2, '0', STR_PAD_LEFT)) }}</div>
                         <div class="treaty-meta">
@@ -441,6 +617,17 @@
                                 @if($treaty['original_submitted_count'])
                                     <span class="badge badge-submitted">&#8679; {{ $treaty['original_submitted_count'] }} Submitted</span>
                                 @endif
+                                <span class="badge badge-pending">{{ $treatyPendingCount }} Pending</span>
+                            </div>
+                            <div class="treaty-progress" aria-hidden="true">
+                                <div class="progress-item">
+                                    <div class="progress-label"><span>Signature coverage</span><span>{{ $treatySignedPercent }}%</span></div>
+                                    <div class="progress-track"><div class="progress-fill" style="width: {{ $treatySignedPercent }}%;"></div></div>
+                                </div>
+                                <div class="progress-item">
+                                    <div class="progress-label"><span>Ratification coverage</span><span>{{ $treatyRatifiedPercent }}%</span></div>
+                                    <div class="progress-track"><div class="progress-fill ratified" style="width: {{ $treatyRatifiedPercent }}%;"></div></div>
+                                </div>
                             </div>
                         </div>
                         <div class="treaty-toggle">+</div>
@@ -497,18 +684,18 @@
                                                         {{ $s['is_signed'] ? 'Yes' : 'No' }}
                                                     </div>
                                                 </td>
-                                                <td>{{ $s['signed_at'] ? \Carbon\Carbon::parse($s['signed_at'])->format('d M Y') : '—' }}</td>
+                                                <td>{{ $s['signed_at'] ? \Carbon\Carbon::parse($s['signed_at'])->format('d M Y') : '-' }}</td>
                                                 <td>
                                                     <div class="status-cell">
                                                         <span class="status-dot {{ $s['is_ratified'] ? 'dot-yes' : 'dot-no' }}"></span>
                                                         {{ $s['is_ratified'] ? 'Yes' : 'No' }}
                                                     </div>
                                                 </td>
-                                                <td>{{ $s['ratified_at'] ? \Carbon\Carbon::parse($s['ratified_at'])->format('d M Y') : '—' }}</td>
+                                                <td>{{ $s['ratified_at'] ? \Carbon\Carbon::parse($s['ratified_at'])->format('d M Y') : '-' }}</td>
                                                 <td>
                                                     <div class="status-cell">
                                                         <span class="status-dot {{ $s['is_original_submitted'] ? 'dot-yes' : 'dot-no' }}"></span>
-                                                        {{ $s['is_original_submitted'] ? 'Yes' : '—' }}
+                                                        {{ $s['is_original_submitted'] ? 'Yes' : '-' }}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -526,9 +713,15 @@
 
         <!-- ── FULL STATUS TABLE ── -->
         @if(count($statusTableRows) > 0)
-            <h2 class="section-heading">Complete Status Matrix</h2>
             <div class="full-table-card">
-                <div style="overflow-x:auto;">
+                <div class="full-table-head">
+                    <div>
+                        <h2>Complete Status Matrix</h2>
+                        <p>All treaty and member-state combinations, including pending records.</p>
+                    </div>
+                    <div class="full-table-meta"><span id="matrixVisibleCount">{{ number_format($totalRows) }}</span> rows shown</div>
+                </div>
+                <div class="full-table-scroll">
                     <table class="full-table" id="fullStatusTable">
                         <thead>
                             <tr>
@@ -547,22 +740,23 @@
                                     data-country="{{ $row['country_code'] }}"
                                     data-signed="{{ $row['is_signed'] ? '1' : '0' }}"
                                     data-ratified="{{ $row['is_ratified'] ? '1' : '0' }}"
-                                    data-submitted="{{ $row['is_original_submitted'] ? '1' : '0' }}">
+                                    data-submitted="{{ $row['is_original_submitted'] ? '1' : '0' }}"
+                                    data-search="{{ strtolower(trim(($row['treaty_title'] ?? '') . ' ' . ($row['reference_code'] ?? '') . ' ' . ($row['country_name'] ?? ''))) }}">
                                     <td class="treaty-name-col">{{ $row['treaty_title'] }}</td>
-                                    <td><span class="badge badge-date">{{ $row['reference_code'] ?: '—' }}</span></td>
+                                    <td><span class="badge badge-date">{{ $row['reference_code'] ?: '-' }}</span></td>
                                     <td class="country-col">{{ $row['country_name'] }}</td>
                                     <td>
-                                        <span class="status-pill {{ $row['is_signed'] ? 'pill-yes' : 'pill-no' }}">
+                                        <span class="status-pill {{ $row['is_signed'] ? 'pill-signed' : 'pill-no' }}">
                                             {{ $row['is_signed'] ? 'Signed' : 'No' }}
                                         </span>
                                     </td>
                                     <td>
-                                        <span class="status-pill {{ $row['is_ratified'] ? 'pill-yes' : 'pill-no' }}">
+                                        <span class="status-pill {{ $row['is_ratified'] ? 'pill-ratified' : 'pill-no' }}">
                                             {{ $row['is_ratified'] ? 'Ratified' : 'No' }}
                                         </span>
                                     </td>
                                     <td>
-                                        <span class="status-pill {{ $row['is_original_submitted'] ? 'pill-yes' : 'pill-no' }}">
+                                        <span class="status-pill {{ $row['is_original_submitted'] ? 'pill-submitted' : 'pill-no' }}">
                                             {{ $row['is_original_submitted'] ? 'Submitted' : 'No' }}
                                         </span>
                                     </td>
@@ -585,7 +779,7 @@
     <div class="footer-content">
         <div class="footer-logo">
             <h3>ATTP<span> · Administration</span></h3>
-            <p>African Think Tank Platform Administration — supporting African Union institutions through centralized governance, policy coordination, and strategic oversight.</p>
+            <p>African Think Tank Platform Administration - supporting African Union institutions through centralized governance, policy coordination, and strategic oversight.</p>
         </div>
         <div class="footer-links">
             <h4>Quick Links</h4>
@@ -698,6 +892,24 @@
         return 'none';
     }
 
+    function statusHasNoAction(status) {
+        return !status || (!status.signed && !status.ratified && !status.submitted);
+    }
+
+    function mapMatchesStatusFilter(status, statusFilter) {
+        if (!statusFilter) return true;
+        if (statusFilter === 'none') return statusHasNoAction(status);
+        return !!status?.[statusFilter];
+    }
+
+    function rowMatchesStatus(row, statusFilter) {
+        if (!statusFilter) return true;
+        if (statusFilter === 'none') {
+            return row.dataset.signed !== '1' && row.dataset.ratified !== '1' && row.dataset.submitted !== '1';
+        }
+        return row.dataset[statusFilter] === '1';
+    }
+
     function getTreatyLayerStyle(countryName) {
         const countryFilter = document.getElementById('filterCountry')?.value || '';
         const statusFilter = document.getElementById('filterStatus')?.value || '';
@@ -706,7 +918,7 @@
         const status = code ? index[code] : null;
         const strongest = getStrongestStatus(status);
         const hiddenByCountry = countryFilter && code !== countryFilter;
-        const hiddenByStatus = statusFilter && !status?.[statusFilter];
+        const hiddenByStatus = statusFilter && !mapMatchesStatusFilter(status, statusFilter);
         return {
             fillColor: (hiddenByCountry || hiddenByStatus) ? treatyMapColors.filtered : treatyMapColors[strongest],
             weight: (status && !hiddenByCountry && !hiddenByStatus) ? 1.8 : 0.8,
@@ -726,12 +938,13 @@
         Object.keys(index).forEach(code => {
             const status = index[code];
             if (countryFilter && code !== countryFilter) return;
-            if (statusFilter && !status?.[statusFilter]) return;
+            if (!mapMatchesStatusFilter(status, statusFilter)) return;
+            const strongest = getStrongestStatus(status);
+            if (strongest === 'none') counts.none += 1;
             if (status.signed) counts.signed += 1;
             if (status.ratified) counts.ratified += 1;
             if (status.submitted) counts.submitted += 1;
         });
-        if (!countryFilter && !statusFilter) counts.none = Math.max(0, treatyMapLayers.length - Object.keys(index).length);
         treatyMapEls.signed.textContent = counts.signed;
         treatyMapEls.ratified.textContent = counts.ratified;
         treatyMapEls.submitted.textContent = counts.submitted;
@@ -809,27 +1022,47 @@
         const treatyVal  = document.getElementById('filterTreaty').value;
         const countryVal = document.getElementById('filterCountry').value;
         const statusVal  = document.getElementById('filterStatus').value;
+        const searchVal  = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
+        let visibleCards = 0;
+        let visibleRows = 0;
 
-        // Treaty cards
         document.querySelectorAll('.treaty-card').forEach(card => {
             const matchTreaty = !treatyVal || card.dataset.treatyId === treatyVal;
-            card.style.display = matchTreaty ? '' : 'none';
+            const cardMatchesSearch = !searchVal || (card.dataset.search || '').includes(searchVal);
+            let cardVisibleRows = 0;
 
-            // rows inside
             card.querySelectorAll('.country-row').forEach(row => {
                 const matchCountry = !countryVal || row.dataset.country === countryVal;
-                const matchStatus  = !statusVal  || row.dataset[statusVal] === '1';
-                row.style.display = (matchCountry && matchStatus) ? '' : 'none';
+                const matchStatus  = rowMatchesStatus(row, statusVal);
+                const rowText = `${row.textContent || ''} ${row.dataset.country || ''}`.toLowerCase();
+                const matchSearch = !searchVal || cardMatchesSearch || rowText.includes(searchVal);
+                const showRow = matchCountry && matchStatus && matchSearch;
+                row.style.display = showRow ? '' : 'none';
+                if (showRow) cardVisibleRows += 1;
             });
+
+            const hasRowFilters = !!countryVal || !!statusVal || !!searchVal;
+            const showCard = matchTreaty && (!hasRowFilters ? cardMatchesSearch : cardVisibleRows > 0);
+            card.style.display = showCard ? '' : 'none';
+            if (showCard) visibleCards += 1;
         });
 
-        // Full status table
         document.querySelectorAll('.full-table-row').forEach(row => {
             const matchTreaty  = !treatyVal  || row.dataset.treaty   === treatyVal;
             const matchCountry = !countryVal || row.dataset.country  === countryVal;
-            const matchStatus  = !statusVal  || row.dataset[statusVal] === '1';
-            row.style.display = (matchTreaty && matchCountry && matchStatus) ? '' : 'none';
+            const matchStatus  = rowMatchesStatus(row, statusVal);
+            const matchSearch  = !searchVal || (row.dataset.search || row.textContent || '').toLowerCase().includes(searchVal);
+            const showRow = matchTreaty && matchCountry && matchStatus && matchSearch;
+            row.style.display = showRow ? '' : 'none';
+            if (showRow) visibleRows += 1;
         });
+
+        const visibleTreatyCount = document.getElementById('visibleTreatyCount');
+        const visibleRowCount = document.getElementById('visibleRowCount');
+        const matrixVisibleCount = document.getElementById('matrixVisibleCount');
+        if (visibleTreatyCount) visibleTreatyCount.textContent = visibleCards.toLocaleString();
+        if (visibleRowCount) visibleRowCount.textContent = visibleRows.toLocaleString();
+        if (matrixVisibleCount) matrixVisibleCount.textContent = visibleRows.toLocaleString();
 
         refreshTreatyMap();
     }
@@ -838,7 +1071,16 @@
         document.getElementById('filterTreaty').value  = '';
         document.getElementById('filterCountry').value = '';
         document.getElementById('filterStatus').value  = '';
+        const searchInput = document.getElementById('filterSearch');
+        if (searchInput) searchInput.value = '';
         applyFilters();
+    }
+
+    function toggleVisibleTreaties(open) {
+        document.querySelectorAll('.treaty-card').forEach(card => {
+            if (card.style.display === 'none') return;
+            card.classList.toggle('open', open);
+        });
     }
 
     /* ── Lang switcher close on outside click ── */
@@ -854,6 +1096,7 @@
     });
 
     document.addEventListener('DOMContentLoaded', function() {
+        applyFilters();
         initializeTreatyAfricaMap();
     });
 </script>
