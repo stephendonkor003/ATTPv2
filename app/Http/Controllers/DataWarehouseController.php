@@ -17,7 +17,29 @@ class DataWarehouseController extends Controller
 {
     private array $knowledgeUserCache = [];
 
-    public function index(Request $request, ?string $module = null)
+    public function index(Request $request)
+    {
+        [, $modules, $stats] = $this->knowledgeLibraryPayload();
+
+        return view('data-warehouse.index', compact('modules', 'stats'));
+    }
+
+    public function showModule(Request $request, string $module)
+    {
+        [$allFiles, $modules, $stats] = $this->knowledgeLibraryPayload();
+
+        $selectedModule = $modules->firstWhere('slug', $module);
+        abort_unless($selectedModule, 404, 'Knowledge folder not found.');
+
+        $files = $allFiles
+            ->where('module', $selectedModule['slug'])
+            ->sortByDesc(fn (array $file) => $file['uploaded_at'] ?? '')
+            ->values();
+
+        return view('data-warehouse.module', compact('modules', 'selectedModule', 'files', 'stats'));
+    }
+
+    private function knowledgeLibraryPayload(): array
     {
         $allFiles = $this->knowledgeFiles();
         $definitions = collect($this->knowledgeModules());
@@ -35,16 +57,6 @@ class DataWarehouseController extends Controller
             })
             ->values();
 
-        $requestedModule = (string) ($module ?: $request->query('module', ''));
-        $selectedModule = $modules->firstWhere('slug', $requestedModule)
-            ?: $modules->first(fn (array $module) => $module['files_count'] > 0)
-            ?: $modules->first();
-
-        $files = $allFiles
-            ->where('module', $selectedModule['slug'])
-            ->sortByDesc(fn (array $file) => $file['uploaded_at'] ?? '')
-            ->values();
-
         $stats = [
             'modules' => $modules->count(),
             'files' => $allFiles->count(),
@@ -53,7 +65,7 @@ class DataWarehouseController extends Controller
             'records' => DataWarehouseRecord::count(),
         ];
 
-        return view('data-warehouse.index', compact('modules', 'selectedModule', 'files', 'stats'));
+        return [$allFiles, $modules, $stats];
     }
 
     public function create()

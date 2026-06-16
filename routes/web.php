@@ -1514,7 +1514,7 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])->group(function (
                 ->name('categories.store');
             Route::get('/files/{file}/download', [DataWarehouseController::class, 'download'])
                 ->name('files.download');
-            Route::get('/modules/{module}', [DataWarehouseController::class, 'index'])
+            Route::get('/modules/{module}', [DataWarehouseController::class, 'showModule'])
                 ->name('modules.show');
             Route::get('/knowledge-file/{token}', [DataWarehouseController::class, 'libraryFile'])
                 ->name('library.file');
