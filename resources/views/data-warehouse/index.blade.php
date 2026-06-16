@@ -66,7 +66,39 @@
             color: inherit;
             text-decoration: none;
             padding: 18px;
-            transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+        }
+
+        .km-folder::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, color-mix(in srgb, var(--km-accent) 13%, transparent), transparent 52%);
+            opacity: 0;
+            transition: opacity .18s ease;
+        }
+
+        .km-folder > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .km-folder:hover,
+        .km-folder:focus {
+            border-color: var(--km-accent);
+            background: #ffffff;
+            box-shadow: 0 18px 38px rgba(15, 23, 42, .16);
+            color: inherit;
+            outline: none;
+            transform: translateY(-6px);
+        }
+
+        .km-folder:hover::before,
+        .km-folder:focus::before {
+            opacity: 1;
         }
 
         .km-folder-icon {
@@ -74,6 +106,13 @@
             height: 52px;
             object-fit: contain;
             filter: drop-shadow(0 8px 12px rgba(15, 23, 42, .18));
+            transition: transform .18s ease, filter .18s ease;
+        }
+
+        .km-folder:hover .km-folder-icon,
+        .km-folder:focus .km-folder-icon {
+            filter: drop-shadow(0 12px 18px rgba(15, 23, 42, .24));
+            transform: scale(1.08) rotate(-2deg);
         }
 
         .km-folder-accent {
@@ -82,6 +121,27 @@
             border-radius: 999px;
             background: var(--km-accent);
             display: inline-block;
+        }
+
+        .km-folder-open {
+            align-items: center;
+            border-top: 1px solid #eef2f7;
+            color: var(--km-accent);
+            display: flex;
+            font-weight: 700;
+            gap: 6px;
+            justify-content: space-between;
+            margin-top: 16px;
+            padding-top: 12px;
+        }
+
+        .km-folder-open i {
+            transition: transform .18s ease;
+        }
+
+        .km-folder:hover .km-folder-open i,
+        .km-folder:focus .km-folder-open i {
+            transform: translateX(4px);
         }
 
         @media (max-width: 767.98px) {
@@ -161,6 +221,10 @@
                         <div class="d-flex justify-content-between small">
                             <span>{{ number_format($module['files_count']) }} files</span>
                             <span>{{ $formatBytes($module['stored_size']) }}</span>
+                        </div>
+                        <div class="km-folder-open small">
+                            <span>Open files</span>
+                            <i class="feather-arrow-right"></i>
                         </div>
                     </a>
                 </div>
