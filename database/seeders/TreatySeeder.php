@@ -24,6 +24,87 @@ class TreatySeeder extends Seeder
     private const SUPPORTING_DOCUMENTS_DIR = 'treaty files/Treaties Contd';
     private const AU_TREATIES_INDEX_URL = 'https://au.int/en/treaties/';
     private const AU_BASE_URL = 'https://au.int';
+    private const OFFICIAL_TREATY_TITLE_FALLBACK = [
+        'Constitutive Act of the African Union',
+        'OAU Charter',
+        'General Convention on the Privileges and Immunities of the Organization of African Unity',
+        'Phyto-Sanitary Convention for Africa',
+        'African Convention on the Conservation of Nature and Natural Resources',
+        'African Civil Aviation Commission Constitution (AFCAC)',
+        'OAU Convention Governing the Specific Aspects of Refugee Problems in Africa',
+        'Constitution of the Association of African Trade Promotion Organizations',
+        'Inter-African Convention Establishing an African Technical Co-operation Programme',
+        'Convention for the Elimination of Mercenarism in Africa',
+        'Cultural Charter for Africa',
+        'African Charter on Human and Peoples\' Rights',
+        'Agreement for the Establishment of the African Rehabilitation Institute (ARI)',
+        'Convention for the Establishment of the African Centre for Fertilizer Development',
+        'African Charter on the Rights and Welfare of the Child',
+        'Bamako Convention on the Ban of the Import into Africa and the Control of Transboundary Movement and Management of Hazardous Wastes within Africa',
+        'Treaty Establishing the African Economic Community',
+        'African Maritime Transport Charter',
+        'The African Nuclear-Weapon-Free Zone Treaty (Pelindaba Treaty)',
+        'Protocol to the African Charter on Human And Peoples\' Rights on the Establishment of an African Court on Human and Peoples\' Rights',
+        'OAU Convention on the Prevention and Combating of Terrorism',
+        'Protocol to the Treaty Establishing the African Economic Community Relating to the Pan-African Parliament',
+        'Protocol Relating to the Establishment of the Peace and Security Council of the African Union',
+        'Revised African Convention on the Conservation of Nature and Natural Resources',
+        'Protocol to the African Charter on Human and Peoples\' Rights on the Rights of Women in Africa',
+        'Protocol of the Court of Justice of the African Union',
+        'Protocol on the Amendments to the Constitutive Act of the African Union',
+        'African Union Convention on Preventing and Combating Corruption',
+        'Protocol to the OAU Convention on the Prevention and Combating of Terrorism',
+        'The African Union Non-Aggression and Common Defence Pact',
+        'African Youth Charter',
+        'African Charter on Democracy, Elections and Governance',
+        'Charter for African Cultural Renaissance',
+        'Protocol on the Statute of the African Court of Justice and Human Rights',
+        'African Charter on Statistics',
+        'Protocol on the African Investment Bank',
+        'African Union Convention for the Protection and Assistance of Internally Displaced Persons in Africa (Kampala Convention)',
+        'Revised African Maritime Transport Charter',
+        'African Charter on Values and Principles of Public Service and Administration',
+        'Revised Constitution of the African Civil Aviation Commission',
+        'Agreement for the Establishment of the African Risk Capacity (ARC) Agency',
+        'Convention of the African Energy Commission',
+        'African Charter on the Values and Principles of Decentralisation, Local Governance and Local Development',
+        'African Union Convention on Cross-Border Cooperation (Niamey Convention)',
+        'Protocol on Amendments to the Protocol on the Statute of the African Court of Justice and Human Rights',
+        'Protocol on the Establishment of the African Monetary Fund',
+        'Protocol to the Constitutive Act of the African Union relating to the Pan-African Parliament',
+        'African Union Convention on Cyber Security and Personal Data Protection',
+        'Protocol to the African Charter on Human and Peoples\' Rights on the Rights of Older Persons',
+        'Road Safety Charter',
+        'Statute of the Africa Sports Council',
+        'Statute of the African CDC and Its Framework of Operation',
+        'Statute of the African Minerals Development Centre',
+        'Statute of the African Observatory in Science Technology and Innovation (AOSTI)',
+        'Statute of the African Science Research and Innovation Council (ASRIC)',
+        'Statute of the African Union Commission on International Law (AUCIL)',
+        'Statute of the African Union Mechanism for Police Cooperation (AFRIPOL)',
+        'Statute of the Pan African Intellectual Property Organization (PAIPO)',
+        'Statute on the Establishment of Legal Aid Fund for the African Union Human Rights Organs',
+        'Revised Statute of the Pan-African University (PAU)',
+        'African Charter on Maritime Security and Safety and Development in Africa (Lome Charter)',
+        'Protocol to the Treaty Establishing the African Economic Community Relating to Free Movement of Persons, Right of Residence and Right of Establishment',
+        'Agreement Establishing the African Continental Free Trade Area',
+        'Regulatory and Institutional Texts for the Implementation of the Yamoussoukro Decision and Framework Towards the Establishment of a Single African Air Transport Market',
+        'Statute of the African Space Agency',
+        'Statute of the African Institute for Remittances (AIR)',
+        'Protocol to the African Charter on Human and Peoples\' Rights on the Rights of Persons with Disabilities in Africa',
+        'Treaty for the Establishment of the African Medicines Agency (AMA)',
+        'Revised Statute of the African CDC and Its Framework of Operation',
+        'Protocol to the African Charter on Human and Peoples\' Rights on the Rights of Citizens to Social Protection and Social Security',
+        'Statute of the African Audio Visual and Cinema Commission',
+        'Additional Protocol to The OAU General Convention on Privileges and Immunities',
+        'Protocol to the African Charter on Human and Peoples\' Rights Relating to the Specific Aspects of the Right to a Nationality and the Eradication of Statelessness in Africa',
+        'African Union Convention on Ending Violence Against Women and Girls.',
+        'Protocol to the Agreement Establishing the African Continental Free Trade Area on Digital Trade',
+        'Protocol to the Agreement Establishing the African Continental Free Trade Area on Women and Youth in Trade',
+        'Protocol to the Agreement Establishing the African Continental Free Trade Area on Intellectual Property Rights',
+        'Protocol to the Agreement Establishing the African Continental Free Trade Area on Investment',
+        'Protocol to the Agreement Establishing the African Continental Free Trade Area on Competition Policy',
+    ];
     private const FOLDER_TITLE_ALIASES = [
         'additional protocol to the oau general convention on privileges and immunitie'
             => 'Additional Protocol to the OAU General Convention on the Privileges and Immunities of the OAU',
@@ -38,34 +119,53 @@ class TreatySeeder extends Seeder
             return;
         }
 
-        $filePath = database_path(self::SOURCE_FILE);
-        if (!is_file($filePath)) {
-            $this->command?->warn('TreatySeeder skipped: source file not found at ' . $filePath . '.');
-            return;
-        }
-
-        $titles = $this->loadTreatyTitlesFromWorkbook($filePath);
-
-        if (empty($titles)) {
-            $this->command?->warn('TreatySeeder skipped: no treaty titles found in workbook.');
-            return;
-        }
-
         $seedUserId = User::query()
             ->where('user_type', 'admin')
             ->value('id') ?? User::query()->oldest()->value('id');
 
         $officialTreatyIndex = $this->loadOfficialAuTreatyIndex();
-        if (!empty($officialTreatyIndex)) {
-            $this->command?->info('Loaded ' . count($officialTreatyIndex) . ' official AU treaty metadata rows from au.int.');
+        $officialTreaties = $this->uniqueOfficialTreaties($officialTreatyIndex);
+        if (!empty($officialTreaties)) {
+            $this->command?->info('Loaded ' . count($officialTreaties) . ' official AU treaty titles from au.int.');
+        }
+
+        $fallbackTitles = [];
+        if (empty($officialTreaties)) {
+            $fallbackTitles = self::OFFICIAL_TREATY_TITLE_FALLBACK;
+            $this->command?->warn('TreatySeeder: using bundled AU treaty fallback list with ' . count($fallbackTitles) . ' official titles.');
+        }
+
+        $filePath = database_path(self::SOURCE_FILE);
+        $workbookTitles = [];
+        if (is_file($filePath)) {
+            $workbookTitles = $this->loadTreatyTitlesFromWorkbook($filePath);
+
+            if (!empty($workbookTitles)) {
+                $this->command?->info('Loaded ' . count($workbookTitles) . ' treaty titles from workbook ' . self::SOURCE_FILE . '.');
+            }
+        } else {
+            $this->command?->warn('TreatySeeder: source workbook not found at ' . $filePath . '; continuing with au.int treaty list.');
+        }
+
+        $titles = $this->buildSeedTitles($officialTreaties, $fallbackTitles, $workbookTitles);
+
+        if (empty($titles)) {
+            $this->command?->warn('TreatySeeder skipped: no treaty titles found from au.int, fallback list, or workbook.');
+            return;
         }
 
         $synced = 0;
+        /** @var Collection<int, Treaty> $existingTreaties */
+        $existingTreaties = Treaty::query()->orderBy('title')->get();
+        $existingTreatyLookup = $this->buildTreatyLookup($existingTreaties);
+
         foreach ($titles as $index => $title) {
-            $treaty = Treaty::query()->firstOrNew(['title' => $title]);
+            $treaty = $this->findExistingTreatyForTitle($title, $existingTreatyLookup, $existingTreaties)
+                ?? new Treaty(['title' => $title]);
             $isNew = !$treaty->exists;
             $officialMetadata = $this->findOfficialTreatyMetadata($title, $officialTreatyIndex);
 
+            $treaty->title = $title;
             $treaty->short_title = Str::limit($title, 120, '');
             if ($this->shouldReplaceSeededDescription((string) $treaty->description)) {
                 $treaty->description = $this->buildDescription($title, $officialMetadata);
@@ -97,13 +197,19 @@ class TreatySeeder extends Seeder
             }
 
             $treaty->save();
+            if ($isNew) {
+                $existingTreaties->push($treaty);
+            }
+            foreach ($this->buildMatchKeys($treaty->title) as $key) {
+                $existingTreatyLookup[$key] = $treaty;
+            }
             $synced++;
         }
 
         $documentStats = $this->syncSupportingDocumentsFromFolders($seedUserId);
         $descriptionBackfills = $this->backfillSeededDescriptions($officialTreatyIndex, $seedUserId);
 
-        $this->command?->info("TreatySeeder synced {$synced} treaties from workbook " . self::SOURCE_FILE . '.');
+        $this->command?->info("TreatySeeder synced {$synced} treaty records from au.int and workbook sources.");
         if ($descriptionBackfills > 0) {
             $this->command?->info("TreatySeeder replaced {$descriptionBackfills} seeded placeholder treaty descriptions.");
         }
@@ -227,22 +333,50 @@ class TreatySeeder extends Seeder
      */
     private function loadOfficialAuTreatyIndex(): array
     {
+        $response = null;
+
         try {
             $response = Http::timeout(45)
+                ->connectTimeout(30)
                 ->retry(2, 750)
                 ->accept('text/html')
                 ->get(self::AU_TREATIES_INDEX_URL);
-
-            if (!$response->successful()) {
-                $this->command?->warn('TreatySeeder: AU treaty metadata request failed with HTTP ' . $response->status() . '.');
+        } catch (\Throwable $exception) {
+            if (!$this->isSslVerificationFailure($exception)) {
+                $this->command?->warn('TreatySeeder: AU treaty metadata request skipped: ' . $exception->getMessage());
                 return [];
             }
-        } catch (\Throwable $exception) {
-            $this->command?->warn('TreatySeeder: AU treaty metadata request skipped: ' . $exception->getMessage());
+
+            $this->command?->warn('TreatySeeder: AU treaty metadata TLS verification failed; retrying without certificate verification.');
+
+            try {
+                $response = Http::withoutVerifying()
+                    ->timeout(45)
+                    ->connectTimeout(30)
+                    ->retry(2, 750)
+                    ->accept('text/html')
+                    ->get(self::AU_TREATIES_INDEX_URL);
+            } catch (\Throwable $fallbackException) {
+                $this->command?->warn('TreatySeeder: AU treaty metadata request skipped: ' . $fallbackException->getMessage());
+                return [];
+            }
+        }
+
+        if (!$response->successful()) {
+            $this->command?->warn('TreatySeeder: AU treaty metadata request failed with HTTP ' . $response->status() . '.');
             return [];
         }
 
         return $this->parseOfficialAuTreatyRows($response->body());
+    }
+
+    private function isSslVerificationFailure(\Throwable $exception): bool
+    {
+        return Str::contains(Str::lower($exception->getMessage()), [
+            'curl error 60',
+            'ssl certificate',
+            'unable to get local issuer certificate',
+        ]);
     }
 
     /**
@@ -289,11 +423,106 @@ class TreatySeeder extends Seeder
             ];
 
             foreach ($this->buildMatchKeys($title) as $key) {
-                $rows[$key] = $metadata;
+                if (
+                    !isset($rows[$key])
+                    || $this->officialMetadataScore($metadata) > $this->officialMetadataScore($rows[$key])
+                ) {
+                    $rows[$key] = $metadata;
+                }
             }
         }
 
         return $rows;
+    }
+
+    /**
+     * @param array<string, array<string, ?string>> $officialTreatyIndex
+     * @return array<int, array<string, ?string>>
+     */
+    private function uniqueOfficialTreaties(array $officialTreatyIndex): array
+    {
+        $treatiesByKey = [];
+
+        foreach ($officialTreatyIndex as $metadata) {
+            $title = trim((string) ($metadata['title'] ?? ''));
+            if ($title === '') {
+                continue;
+            }
+
+            $key = $this->normalizeForMatching($title);
+            if (
+                !isset($treatiesByKey[$key])
+                || $this->officialMetadataScore($metadata) > $this->officialMetadataScore($treatiesByKey[$key])
+            ) {
+                $treatiesByKey[$key] = $metadata;
+            }
+        }
+
+        return array_values($treatiesByKey);
+    }
+
+    /**
+     * @param array<int, array<string, ?string>> $officialTreaties
+     * @param array<int, string> $fallbackTitles
+     * @param array<int, string> $workbookTitles
+     * @return array<int, string>
+     */
+    private function buildSeedTitles(array $officialTreaties, array $fallbackTitles, array $workbookTitles): array
+    {
+        $titlesByKey = [];
+
+        foreach ($officialTreaties as $metadata) {
+            $this->rememberSeedTitle($titlesByKey, (string) ($metadata['title'] ?? ''));
+        }
+
+        foreach ($fallbackTitles as $title) {
+            $this->rememberSeedTitle($titlesByKey, $title);
+        }
+
+        if (!empty($titlesByKey)) {
+            return array_values($titlesByKey);
+        }
+
+        foreach ($workbookTitles as $title) {
+            $this->rememberSeedTitle($titlesByKey, $title);
+        }
+
+        return array_values($titlesByKey);
+    }
+
+    /**
+     * @param array<string, string> $titlesByKey
+     */
+    private function rememberSeedTitle(array &$titlesByKey, string $title): void
+    {
+        $title = trim(html_entity_decode($title, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if ($title === '') {
+            return;
+        }
+
+        $key = $this->normalizeForMatching($title);
+        if ($key === '') {
+            return;
+        }
+
+        if (!isset($titlesByKey[$key])) {
+            $titlesByKey[$key] = $title;
+        }
+    }
+
+    /**
+     * @param array<string, ?string> $metadata
+     */
+    private function officialMetadataScore(array $metadata): int
+    {
+        $score = 0;
+        foreach (['title', 'url', 'adoption_date', 'entry_into_force_date', 'signature_date', 'category'] as $field) {
+            if (!empty($metadata[$field])) {
+                $score++;
+            }
+        }
+
+        return $score;
     }
 
     private function extractDateFromRow(\DOMXPath $xpath, \DOMNode $row, string $className): ?string
@@ -667,6 +896,21 @@ class TreatySeeder extends Seeder
         }
 
         return $lookup;
+    }
+
+    /**
+     * @param array<string, Treaty> $lookup
+     * @param Collection<int, Treaty> $treaties
+     */
+    private function findExistingTreatyForTitle(string $title, array $lookup, Collection $treaties): ?Treaty
+    {
+        foreach ($this->buildMatchKeys($title) as $key) {
+            if (isset($lookup[$key])) {
+                return $lookup[$key];
+            }
+        }
+
+        return $this->findHighConfidenceTreatyMatch($title, $treaties);
     }
 
     /**
