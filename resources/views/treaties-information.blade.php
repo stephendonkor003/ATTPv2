@@ -167,6 +167,37 @@
             margin-bottom: 28px; color: var(--muted); font-size: .86rem;
         }
         .results-summary strong { color: var(--au-green-dark); }
+        .filter-loading {
+            display: none; align-items: center; gap: 14px;
+            margin: -12px 0 28px; padding: 14px 16px;
+            border: 1px solid #d9e8df; border-radius: 12px;
+            background: linear-gradient(90deg, #ffffff, #f4faf6);
+            box-shadow: 0 12px 26px rgba(16,32,24,.08);
+        }
+        .filter-loading.active { display: flex; }
+        .loading-mark {
+            width: 42px; height: 42px; border-radius: 50%;
+            border: 4px solid #dfece5; border-top-color: var(--au-green);
+            animation: spinTreatyLoader .8s linear infinite; flex-shrink: 0;
+        }
+        .loading-copy { min-width: 0; flex: 1; }
+        .loading-copy strong { display: block; color: var(--ink); font-size: .92rem; margin-bottom: 3px; }
+        .loading-copy span { color: var(--muted); font-size: .82rem; }
+        .loading-bars { display: grid; gap: 5px; width: 170px; flex-shrink: 0; }
+        .loading-bars i {
+            display: block; height: 7px; border-radius: 999px;
+            background: linear-gradient(90deg, #dcebe3, #ffffff, #dcebe3);
+            background-size: 220% 100%; animation: shimmerTreatyLoader 1.1s ease-in-out infinite;
+        }
+        .loading-bars i:nth-child(2) { width: 78%; animation-delay: .12s; }
+        .loading-bars i:nth-child(3) { width: 58%; animation-delay: .24s; }
+        body.is-filtering .treaties-list,
+        body.is-filtering .full-table-card,
+        body.is-filtering .treaty-map-card {
+            opacity: .56; filter: saturate(.82); transition: opacity .18s, filter .18s;
+        }
+        @keyframes spinTreatyLoader { to { transform: rotate(360deg); } }
+        @keyframes shimmerTreatyLoader { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
 
         /* Africa Treaty Map */
         .treaty-map-card {
@@ -550,6 +581,14 @@
         <div class="results-summary">
             <div><strong id="visibleRowCount">{{ number_format($totalRows) }}</strong> visible status rows</div>
             <div><strong>{{ number_format($totalRows) }}</strong> total treaty/member-state rows</div>
+        </div>
+        <div id="filterLoading" class="filter-loading" role="status" aria-live="polite" aria-hidden="true">
+            <div class="loading-mark" aria-hidden="true"></div>
+            <div class="loading-copy">
+                <strong>Rendering selection</strong>
+                <span id="filterLoadingText">Preparing treaty cards, map, and matrix rows...</span>
+            </div>
+            <div class="loading-bars" aria-hidden="true"><i></i><i></i><i></i></div>
         </div>
 
         <!-- Africa Treaty Status Map -->
@@ -1018,7 +1057,33 @@
     }
 
     /* ── Filters ── */
+    let filterDebounceTimer = null;
+    let filterRenderToken = 0;
+
+    function setFilterLoading(isLoading, message = 'Preparing treaty cards, map, and matrix rows...') {
+        const loader = document.getElementById('filterLoading');
+        const loaderText = document.getElementById('filterLoadingText');
+        if (loaderText) loaderText.textContent = message;
+        if (loader) {
+            loader.classList.toggle('active', isLoading);
+            loader.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
+        }
+        document.body.classList.toggle('is-filtering', isLoading);
+    }
+
     function applyFilters() {
+        window.clearTimeout(filterDebounceTimer);
+        const token = ++filterRenderToken;
+        setFilterLoading(true, 'Rendering selection across treaty cards, map, and matrix rows...');
+
+        filterDebounceTimer = window.setTimeout(() => {
+            window.requestAnimationFrame(() => renderFilters(token));
+        }, 120);
+    }
+
+    function renderFilters(token) {
+        if (token !== filterRenderToken) return;
+
         const treatyVal  = document.getElementById('filterTreaty').value;
         const countryVal = document.getElementById('filterCountry').value;
         const statusVal  = document.getElementById('filterStatus').value;
@@ -1065,6 +1130,11 @@
         if (matrixVisibleCount) matrixVisibleCount.textContent = visibleRows.toLocaleString();
 
         refreshTreatyMap();
+        window.requestAnimationFrame(() => {
+            if (token === filterRenderToken) {
+                setFilterLoading(false);
+            }
+        });
     }
 
     function resetFilters() {
