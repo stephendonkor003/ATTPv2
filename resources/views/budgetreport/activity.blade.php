@@ -7,17 +7,9 @@
         <div class="page-header d-flex justify-content-between align-items-center">
             <h4 class="fw-bold text-dark">Activity Report — {{ $activity->name }}</h4>
 
-            <div>
-                <a href="{{ route('reports.export.pdf', ['type' => 'activity', 'id' => $activity->id]) }}"
-                    class="btn btn-danger me-2">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
-                </a>
-
-                <a href="{{ route('reports.export.excel', ['type' => 'activity', 'id' => $activity->id]) }}"
-                    class="btn btn-success">
-                    <i class="bi bi-file-earmark-excel"></i> Excel
-                </a>
-            </div>
+            <a href="{{ route('budget.reports.project', $activity->project) }}" class="btn btn-outline-secondary">
+                Back to Project
+            </a>
         </div>
 
         <!-- ACTIVITY INFORMATION -->

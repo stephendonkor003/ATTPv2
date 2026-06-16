@@ -7,18 +7,9 @@
         <div class="page-header d-flex justify-content-between align-items-center">
             <h4 class="fw-bold text-dark">Program Report — {{ $program->name }}</h4>
 
-            <div>
-                <!-- EXPORT -->
-                {{-- <a href="{{ route('reports.export.pdf', ['type' => 'program', 'id' => $program->id]) }}"
-                    class="btn btn-danger me-2">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
-                </a>
-
-                <a href="{{ route('reports.export.excel', ['type' => 'program', 'id' => $program->id]) }}"
-                    class="btn btn-success">
-                    <i class="bi bi-file-earmark-excel"></i> Excel
-                </a> --}}
-            </div>
+            <a href="{{ route('budget.reports.index') }}" class="btn btn-outline-secondary">
+                Back to Reports
+            </a>
         </div>
 
         <!-- PROGRAM DETAILS -->
@@ -104,7 +95,7 @@
                                 <td>{{ $project->activities->count() }}</td>
 
                                 <td>
-                                    <a href="{{ route('reports.project', $project->id) }}"
+                                    <a href="{{ route('budget.reports.project', $project->id) }}"
                                         class="btn btn-sm btn-secondary">
                                         View Project
                                     </a>
