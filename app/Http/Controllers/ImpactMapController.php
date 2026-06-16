@@ -822,14 +822,6 @@ class ImpactMapController extends Controller
 
         return Treaty::query()
             ->whereIn('status', ['active', 'draft'])
-            ->whereHas('memberStateStatuses', function ($query) {
-                $query->where(function ($statusQuery) {
-                    $statusQuery
-                        ->where('is_signed', true)
-                        ->orWhere('is_ratified', true)
-                        ->orWhere('is_original_submitted', true);
-                });
-            })
             ->with(['memberStateStatuses.memberState'])
             ->orderByDesc('adoption_date')
             ->orderBy('title')
@@ -837,6 +829,11 @@ class ImpactMapController extends Controller
             ->map(function ($treaty) {
                 $statusRows = $treaty->memberStateStatuses
                     ->filter(fn($row) => $row->memberState)
+                    ->sortBy(function ($row) {
+                        $sortOrder = (int) ($row->memberState->sort_order ?? 999);
+
+                        return sprintf('%03d-%s', $sortOrder, $row->memberState->name);
+                    })
                     ->map(function ($row) {
                         $codeAlpha2 = strtoupper((string) ($row->memberState->code_alpha2 ?? ''));
                         $codeFallback = strtoupper((string) ($row->memberState->code ?? ''));

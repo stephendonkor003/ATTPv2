@@ -39,7 +39,6 @@ class DatabaseSeeder extends Seeder
             AuMemberStateSeeder::class,
             AuRegionalBlockSeeder::class,
             TreatySeeder::class,
-            TreatyConstitutiveActStatusSeeder::class,
             WorldBankCatalogSeeder::class,
             PartnerPortalPermissionsSeeder::class,
             WorldBankPartnerAccessSeeder::class,

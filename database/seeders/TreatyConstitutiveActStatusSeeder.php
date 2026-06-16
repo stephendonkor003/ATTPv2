@@ -11,6 +11,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
@@ -21,6 +22,15 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
 
     public function run(): void
     {
+        if (
+            !Schema::hasTable('myb_au_member_states')
+            || !Schema::hasTable('myb_treaties')
+            || !Schema::hasTable('myb_treaty_member_state_statuses')
+        ) {
+            $this->command?->warn('TreatyConstitutiveActStatusSeeder skipped: treaty/member-state tables are not ready.');
+            return;
+        }
+
         if (AuMemberState::query()->count() < 55) {
             $this->command?->warn('AU member states are incomplete. Seeding AU member states first.');
             $this->call(AuMemberStateSeeder::class);
@@ -33,12 +43,15 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
 
         $statusFiles = $this->discoverStatusFiles();
         if (empty($statusFiles)) {
-            $this->command?->warn('TreatyConstitutiveActStatusSeeder skipped: no status Excel files found.');
-            return;
+            $this->command?->warn('TreatyConstitutiveActStatusSeeder: no status Excel files found; creating pending matrix rows only.');
         }
 
-        $memberStatesByNormalized = AuMemberState::query()
-            ->get(['id', 'name'])
+        /** @var Collection<int, AuMemberState> $memberStates */
+        $memberStates = AuMemberState::query()
+            ->ordered()
+            ->get(['id', 'name', 'code', 'code_alpha2', 'sort_order']);
+
+        $memberStatesByNormalized = $memberStates
             ->mapWithKeys(function (AuMemberState $state) {
                 return [$this->normalizeCountryName($state->name) => $state];
             });
@@ -201,6 +214,7 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
         }
 
         $backfilledCodes = $this->backfillMissingServiceCodes($seedUserId);
+        $matrixRowsCreated = $this->ensureCompleteMemberStateMatrix($treaties, $memberStates, $seedUserId);
 
         $this->command?->info(
             'TreatyConstitutiveActStatusSeeder processed '
@@ -221,8 +235,76 @@ class TreatyConstitutiveActStatusSeeder extends Seeder
             . $backfilledCodes['signed_verified']
             . ', ratified: '
             . $backfilledCodes['ratified_verified']
-            . ').'
+            . '), full matrix rows created: '
+            . $matrixRowsCreated
+            . '.'
         );
+    }
+
+    /**
+     * Ensure every treaty has a status row for every AU member state, even when
+     * the country has not yet signed or ratified the instrument.
+     *
+     * @param Collection<int, Treaty> $treaties
+     * @param Collection<int, AuMemberState> $memberStates
+     */
+    private function ensureCompleteMemberStateMatrix(Collection $treaties, Collection $memberStates, ?string $seedUserId): int
+    {
+        if ($treaties->isEmpty() || $memberStates->isEmpty()) {
+            return 0;
+        }
+
+        $existingPairs = TreatyMemberStateStatus::query()
+            ->get(['treaty_id', 'member_state_id'])
+            ->mapWithKeys(function (TreatyMemberStateStatus $status) {
+                return [$status->treaty_id . '|' . $status->member_state_id => true];
+            })
+            ->all();
+
+        $hasOriginalSubmitted = Schema::hasColumn('myb_treaty_member_state_statuses', 'is_original_submitted');
+        $now = now();
+        $pendingRows = [];
+        $created = 0;
+
+        foreach ($treaties as $treaty) {
+            foreach ($memberStates as $memberState) {
+                $pairKey = $treaty->id . '|' . $memberState->id;
+                if (isset($existingPairs[$pairKey])) {
+                    continue;
+                }
+
+                $row = [
+                    'id' => (string) Str::uuid(),
+                    'treaty_id' => $treaty->id,
+                    'member_state_id' => $memberState->id,
+                    'is_signed' => false,
+                    'is_ratified' => false,
+                    'updated_by' => $seedUserId,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                if ($hasOriginalSubmitted) {
+                    $row['is_original_submitted'] = false;
+                }
+
+                $pendingRows[] = $row;
+                $existingPairs[$pairKey] = true;
+
+                if (count($pendingRows) >= 500) {
+                    TreatyMemberStateStatus::query()->insert($pendingRows);
+                    $created += count($pendingRows);
+                    $pendingRows = [];
+                }
+            }
+        }
+
+        if (!empty($pendingRows)) {
+            TreatyMemberStateStatus::query()->insert($pendingRows);
+            $created += count($pendingRows);
+        }
+
+        return $created;
     }
 
     /**

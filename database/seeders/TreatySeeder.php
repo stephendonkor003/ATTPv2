@@ -232,6 +232,9 @@ class TreatySeeder extends Seeder
                 . ' extra treaty records from document folders that were not present in the workbook.'
             );
         }
+
+        $this->command?->info('TreatySeeder syncing AU member-state treaty signature and ratification statuses.');
+        $this->call(TreatyConstitutiveActStatusSeeder::class);
     }
 
     /**
