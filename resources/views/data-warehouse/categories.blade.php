@@ -4,11 +4,11 @@
     <div class="nxl-container">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
             <div>
-                <h4 class="fw-bold mb-1">Data Category</h4>
-                <p class="text-muted mb-0">Create and manage categories used for historical data records.</p>
+                <h4 class="fw-bold mb-1">Knowledge Categories</h4>
+                <p class="text-muted mb-0">Create and manage categories used for knowledge records.</p>
             </div>
             <a href="{{ route('data-warehouse.index') }}" class="btn btn-outline-secondary">
-                <i class="feather-arrow-left me-1"></i> View Info
+                <i class="feather-arrow-left me-1"></i> File Library
             </a>
         </div>
 

@@ -35,9 +35,129 @@ class BudgetReportController extends Controller
         $sectors = Sector::with([
             'programs.projects.allocations',
             'programs.projects.activities.subActivities'
-        ])->get();
+        ])->orderBy('name')->get();
 
-        return view('budgetreport.index', compact('sectors'));
+        $sectorSummaries = $sectors->map(function (Sector $sector) {
+            $projects = $sector->programs->flatMap->projects;
+            $totalBudget = $projects->sum(fn (Project $project) => (float) $project->allocations->sum('amount'));
+            $activityCount = $projects->sum(fn (Project $project) => $project->activities->count());
+
+            return [
+                'id' => (string) $sector->id,
+                'name' => $sector->name,
+                'programs' => $sector->programs->count(),
+                'projects' => $projects->count(),
+                'activities' => $activityCount,
+                'total_budget' => round($totalBudget, 2),
+                'average_project_budget' => $projects->count() > 0 ? round($totalBudget / $projects->count(), 2) : 0,
+            ];
+        })->values();
+
+        $programSummaries = $sectors
+            ->flatMap(fn (Sector $sector) => $sector->programs->map(function (Program $program) use ($sector) {
+                $totalBudget = $program->projects->sum(fn (Project $project) => (float) $project->allocations->sum('amount'));
+
+                return [
+                    'id' => (string) $program->id,
+                    'name' => $program->name,
+                    'sector' => $sector->name,
+                    'projects' => $program->projects->count(),
+                    'total_budget' => round($totalBudget, 2),
+                ];
+            }))
+            ->sortByDesc('total_budget')
+            ->values();
+
+        $projectSummaries = $sectors
+            ->flatMap(fn (Sector $sector) => $sector->programs->flatMap(fn (Program $program) => $program->projects->map(function (Project $project) use ($program, $sector) {
+                return [
+                    'id' => (string) $project->id,
+                    'name' => $project->name,
+                    'program' => $program->name,
+                    'sector' => $sector->name,
+                    'activities' => $project->activities->count(),
+                    'total_budget' => round((float) $project->allocations->sum('amount'), 2),
+                ];
+            })))
+            ->sortByDesc('total_budget')
+            ->values();
+
+        $annualTotals = $sectors
+            ->flatMap(fn (Sector $sector) => $sector->programs)
+            ->flatMap(fn (Program $program) => $program->projects)
+            ->flatMap(fn (Project $project) => $project->allocations)
+            ->groupBy('year')
+            ->map(fn ($allocations) => round((float) $allocations->sum('amount'), 2))
+            ->sortKeys();
+
+        $topPrograms = $programSummaries->take(8)->values();
+        $topProjects = $projectSummaries->take(10)->values();
+        $totalBudget = round((float) $sectorSummaries->sum('total_budget'), 2);
+        $averageProjectBudget = $projectSummaries->count() > 0 ? round($totalBudget / $projectSummaries->count(), 2) : 0;
+        $largestSector = $sectorSummaries->sortByDesc('total_budget')->first();
+        $largestProgram = $programSummaries->sortByDesc('total_budget')->first();
+        $projectBudgetBands = [
+            'Modest' => 0,
+            'Standard' => 0,
+            'Major' => 0,
+        ];
+
+        foreach ($projectSummaries as $project) {
+            if ($averageProjectBudget <= 0 || $project['total_budget'] < ($averageProjectBudget * 0.75)) {
+                $projectBudgetBands['Modest']++;
+            } elseif ($project['total_budget'] <= ($averageProjectBudget * 1.5)) {
+                $projectBudgetBands['Standard']++;
+            } else {
+                $projectBudgetBands['Major']++;
+            }
+        }
+
+        $portfolioStats = [
+            'sectors' => $sectorSummaries->count(),
+            'programs' => $programSummaries->count(),
+            'projects' => $projectSummaries->count(),
+            'activities' => $sectorSummaries->sum('activities'),
+            'total_budget' => $totalBudget,
+            'average_project_budget' => $averageProjectBudget,
+            'funded_sectors' => $sectorSummaries->where('total_budget', '>', 0)->count(),
+            'largest_sector' => $largestSector['name'] ?? null,
+            'largest_sector_share' => $totalBudget > 0 && $largestSector ? round(($largestSector['total_budget'] / $totalBudget) * 100, 1) : 0,
+            'largest_program' => $largestProgram['name'] ?? null,
+            'largest_program_share' => $totalBudget > 0 && $largestProgram ? round(($largestProgram['total_budget'] / $totalBudget) * 100, 1) : 0,
+        ];
+
+        $chartData = [
+            'sectorLabels' => $sectorSummaries->pluck('name')->values(),
+            'sectorTotals' => $sectorSummaries->pluck('total_budget')->values(),
+            'sectorAverageProjects' => $sectorSummaries->pluck('average_project_budget')->values(),
+            'sectorPrograms' => $sectorSummaries->pluck('programs')->values(),
+            'sectorProjects' => $sectorSummaries->pluck('projects')->values(),
+            'sectorActivities' => $sectorSummaries->pluck('activities')->values(),
+            'yearLabels' => $annualTotals->keys()->values(),
+            'yearTotals' => $annualTotals->values(),
+            'topProgramLabels' => $topPrograms->pluck('name')->values(),
+            'topProgramTotals' => $topPrograms->pluck('total_budget')->values(),
+            'topProjectLabels' => $topProjects->pluck('name')->values(),
+            'topProjectTotals' => $topProjects->pluck('total_budget')->values(),
+            'projectBandLabels' => collect($projectBudgetBands)->keys()->values(),
+            'projectBandCounts' => collect($projectBudgetBands)->values(),
+            'projectScatter' => $projectSummaries->take(25)->map(fn (array $project) => [
+                'x' => $project['activities'],
+                'y' => $project['total_budget'],
+                'r' => max(5, min(18, sqrt(max($project['total_budget'], 0)) / 150)),
+                'label' => $project['name'],
+                'sector' => $project['sector'],
+            ])->values(),
+        ];
+
+        return view('budgetreport.index', compact(
+            'sectors',
+            'sectorSummaries',
+            'programSummaries',
+            'projectSummaries',
+            'portfolioStats',
+            'chartData'
+        ));
     }
 
     /* ================================

@@ -20,7 +20,7 @@
                 <p class="text-muted mb-0">{{ $record->category?->name ?? 'Uncategorized' }} | {{ $record->reference_period ?? 'No period set' }}</p>
             </div>
             <a href="{{ route('data-warehouse.index') }}" class="btn btn-outline-secondary">
-                <i class="feather-arrow-left me-1"></i> View Info
+                <i class="feather-arrow-left me-1"></i> File Library
             </a>
         </div>
 

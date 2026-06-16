@@ -30,11 +30,11 @@
     <div class="nxl-container dw-page">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
             <div>
-                <h4 class="fw-bold mb-1">Add Historical Data</h4>
-                <p class="text-muted mb-0">Create one main data record and attach multiple titled files.</p>
+                <h4 class="fw-bold mb-1">Add Knowledge Record</h4>
+                <p class="text-muted mb-0">Create one main knowledge record and attach multiple titled files.</p>
             </div>
             <a href="{{ route('data-warehouse.index') }}" class="btn btn-outline-secondary">
-                <i class="feather-arrow-left me-1"></i> View Info
+                <i class="feather-arrow-left me-1"></i> File Library
             </a>
         </div>
 
@@ -65,7 +65,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Data Category</label>
+                            <label class="form-label fw-semibold">Knowledge Category</label>
                             <select name="category_id" class="form-select">
                                 <option value="">Select category</option>
                                 @foreach ($categories as $category)
@@ -131,14 +131,14 @@
                             </div>
                         </div>
                     </div>
-                    <div class="form-text mt-2">You can attach spreadsheets, PDFs, Word documents, images, ZIP files, and other historical data files up to 100 MB each.</div>
+                    <div class="form-text mt-2">You can attach spreadsheets, PDFs, Word documents, images, ZIP files, and other knowledge files up to 100 MB each.</div>
                 </div>
             </div>
 
             <div class="d-flex justify-content-end gap-2 mt-4">
                 <a href="{{ route('data-warehouse.index') }}" class="btn btn-light">Cancel</a>
                 <button type="submit" class="btn btn-primary">
-                    <i class="feather-upload me-1"></i> Save Historical Data
+                    <i class="feather-upload me-1"></i> Save Knowledge Record
                 </button>
             </div>
         </form>
