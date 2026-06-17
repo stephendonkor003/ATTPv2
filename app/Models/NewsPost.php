@@ -65,6 +65,31 @@ class NewsPost extends BaseModel
         return $this->status === 'published' && $this->approved_at !== null && $this->published_at !== null && $this->published_at->lte(now());
     }
 
+    public function getCoverImageUrlAttribute(): ?string
+    {
+        if (blank($this->cover_image_path)) {
+            return null;
+        }
+
+        $path = str_replace('\\', '/', trim((string) $this->cover_image_path));
+
+        if (Str::startsWith($path, ['http://', 'https://', '//'])) {
+            return $path;
+        }
+
+        $path = ltrim($path, '/');
+
+        if (Str::startsWith($path, 'public/')) {
+            $path = Str::after($path, 'public/');
+        }
+
+        if (Str::startsWith($path, 'storage/')) {
+            return asset($path);
+        }
+
+        return asset('storage/' . $path);
+    }
+
     public function getRouteKeyName(): string
     {
         return 'slug';

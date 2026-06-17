@@ -28,6 +28,17 @@ class GalleryImageService
             ->all();
     }
 
+    public function fallbackUrl(string $size = 'large'): ?string
+    {
+        $item = $this->items()[0] ?? null;
+
+        if (!$item) {
+            return null;
+        }
+
+        return $item[$size] ?? $item['large'] ?? $item['thumb'] ?? $item['original'] ?? null;
+    }
+
     public function optimizeAll(bool $force = false): array
     {
         $created = 0;

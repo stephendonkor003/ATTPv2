@@ -6,6 +6,7 @@ use App\Mail\NewsPublishedNotification;
 use App\Models\NewsAttachment;
 use App\Models\NewsPost;
 use App\Models\NewsSubscriber;
+use App\Services\GalleryImageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +17,7 @@ use Throwable;
 
 class NewsAdminController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, GalleryImageService $gallery)
     {
         $posts = NewsPost::with(['creator', 'approver'])
             ->withCount('attachments')
@@ -24,13 +25,17 @@ class NewsAdminController extends Controller
             ->latest()
             ->paginate(15)
             ->withQueryString();
+        $newsCoverFallbackUrl = $this->newsCoverFallbackUrl($gallery, 'thumb');
 
-        return view('system.news.index', compact('posts'));
+        return view('system.news.index', compact('posts', 'newsCoverFallbackUrl'));
     }
 
-    public function create()
+    public function create(GalleryImageService $gallery)
     {
-        return view('system.news.form', ['post' => new NewsPost()]);
+        return view('system.news.form', [
+            'post' => new NewsPost(),
+            'newsCoverFallbackUrl' => $this->newsCoverFallbackUrl($gallery, 'thumb'),
+        ]);
     }
 
     public function store(Request $request)
@@ -51,11 +56,14 @@ class NewsAdminController extends Controller
         return redirect()->route('system.news.edit', $post)->with('success', 'News post saved.');
     }
 
-    public function edit(NewsPost $post)
+    public function edit(NewsPost $post, GalleryImageService $gallery)
     {
         $post->load('attachments');
 
-        return view('system.news.form', compact('post'));
+        return view('system.news.form', [
+            'post' => $post,
+            'newsCoverFallbackUrl' => $this->newsCoverFallbackUrl($gallery, 'thumb'),
+        ]);
     }
 
     public function update(Request $request, NewsPost $post)
@@ -216,5 +224,10 @@ class NewsAdminController extends Controller
         $html = preg_replace('#(href|src)\s*=\s*("|\')\s*javascript:[^"\']*\2#is', '$1="#"', $html) ?? '';
 
         return trim($html);
+    }
+
+    private function newsCoverFallbackUrl(GalleryImageService $gallery, string $size): string
+    {
+        return $gallery->fallbackUrl($size) ?? asset('assets/images/au1.jpg');
     }
 }

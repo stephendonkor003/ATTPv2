@@ -22,6 +22,21 @@
         .news-editor-wrap .ql-editor {
             min-height: 360px;
         }
+
+        .cover-preview {
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 10px;
+        }
+
+        .cover-preview img {
+            width: 100%;
+            max-height: 220px;
+            border-radius: 6px;
+            object-fit: cover;
+            display: block;
+        }
     </style>
 @endpush
 
@@ -109,7 +124,17 @@
                         <div class="row g-3 mt-1">
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Cover Image</label>
-                                <input type="file" name="cover_image" class="form-control" accept="image/*">
+                                <input type="file" name="cover_image" id="coverImageInput" class="form-control" accept="image/*">
+                                <div id="coverImagePreviewWrap" class="cover-preview mt-3" @if(! $post->cover_image_url) style="display: none;" @endif>
+                                    <div id="coverImagePreviewLabel" class="small text-muted mb-2">
+                                        {{ $post->cover_image_url ? 'Current cover image' : 'Selected cover image' }}
+                                    </div>
+                                    <img id="coverImagePreview"
+                                        src="{{ $post->cover_image_url ?: '' }}"
+                                        alt="{{ $post->title ? $post->title . ' cover image' : 'News cover image preview' }}"
+                                        data-fallback-src="{{ $newsCoverFallbackUrl }}"
+                                        onerror="this.onerror=null;this.src=this.dataset.fallbackSrc;">
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Downloadable Attachments</label>
@@ -216,6 +241,32 @@
             const editorElement = document.getElementById('newsBodyEditor');
             const bodyInput = document.getElementById('newsBodyInput');
             const form = bodyInput?.closest('form');
+            const coverInput = document.getElementById('coverImageInput');
+            const coverPreviewWrap = document.getElementById('coverImagePreviewWrap');
+            const coverPreview = document.getElementById('coverImagePreview');
+            const coverPreviewLabel = document.getElementById('coverImagePreviewLabel');
+            let coverPreviewObjectUrl = null;
+
+            coverInput?.addEventListener('change', function () {
+                const file = this.files?.[0];
+
+                if (!file || !coverPreview || !coverPreviewWrap) {
+                    return;
+                }
+
+                if (coverPreviewObjectUrl) {
+                    URL.revokeObjectURL(coverPreviewObjectUrl);
+                }
+
+                coverPreviewObjectUrl = URL.createObjectURL(file);
+                coverPreview.src = coverPreviewObjectUrl;
+                coverPreview.alt = file.name;
+                coverPreviewWrap.style.display = '';
+
+                if (coverPreviewLabel) {
+                    coverPreviewLabel.textContent = 'Selected cover image';
+                }
+            });
 
             if (!editorElement || !bodyInput || typeof Quill === 'undefined') {
                 return;

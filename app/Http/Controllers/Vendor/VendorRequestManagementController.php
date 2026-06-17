@@ -4,11 +4,15 @@ namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
 use App\Mail\VendorRequestResponse;
+use App\Models\VendorDocument;
 use App\Models\VendorInformationRequest;
 use App\Models\VendorMessage;
+use App\Models\VendorPurchaseRequest;
+use App\Models\VendorReport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 class VendorRequestManagementController extends Controller
 {
@@ -89,5 +93,78 @@ class VendorRequestManagementController extends Controller
         }
 
         return back()->with('success', 'Response sent to vendor.');
+    }
+
+    public function purchaseRequestsIndex()
+    {
+        $requests = VendorPurchaseRequest::with(['user', 'procurement', 'purchaseOrder'])
+            ->latest()
+            ->get();
+
+        return view('vendor.admin.requests.purchase-requests.index', compact('requests'));
+    }
+
+    public function purchaseRequestsShow(VendorPurchaseRequest $purchaseRequest)
+    {
+        $purchaseRequest->load(['user', 'procurement', 'purchaseOrder', 'items', 'documents']);
+
+        return view('vendor.admin.requests.purchase-requests.show', compact('purchaseRequest'));
+    }
+
+    public function purchaseRequestsRespond(Request $request, VendorPurchaseRequest $purchaseRequest)
+    {
+        $validated = $request->validate([
+            'status' => 'required|in:submitted,in_review,approved,rejected,converted,completed',
+            'admin_response' => 'nullable|string|max:5000',
+        ]);
+
+        $purchaseRequest->update([
+            'status' => $validated['status'],
+            'admin_response' => $validated['admin_response'] ?? null,
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
+        ]);
+
+        return back()->with('success', 'Vendor purchase request updated.');
+    }
+
+    public function reportsIndex()
+    {
+        $reports = VendorReport::with(['user', 'procurement', 'purchaseOrder'])
+            ->latest()
+            ->get();
+
+        return view('vendor.admin.requests.reports.index', compact('reports'));
+    }
+
+    public function reportsShow(VendorReport $report)
+    {
+        $report->load(['user', 'procurement', 'purchaseOrder', 'documents']);
+
+        return view('vendor.admin.requests.reports.show', compact('report'));
+    }
+
+    public function reportsRespond(Request $request, VendorReport $report)
+    {
+        $validated = $request->validate([
+            'status' => 'required|in:submitted,reviewed,accepted,rejected',
+            'admin_feedback' => 'nullable|string|max:5000',
+        ]);
+
+        $report->update([
+            'status' => $validated['status'],
+            'admin_feedback' => $validated['admin_feedback'] ?? null,
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
+        ]);
+
+        return back()->with('success', 'Vendor report review saved.');
+    }
+
+    public function downloadDocument(VendorDocument $document)
+    {
+        abort_unless(Storage::disk('local')->exists($document->file_path), 404);
+
+        return Storage::disk('local')->download($document->file_path, $document->file_name);
     }
 }

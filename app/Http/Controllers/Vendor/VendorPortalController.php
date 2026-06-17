@@ -4,12 +4,20 @@ namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
 use App\Models\DynamicForm;
+use App\Models\ConsortiumThinkTank;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
+use App\Models\ProcurementDisbursement;
+use App\Models\ProcurementInvoice;
+use App\Models\ProcurementPurchaseOrder;
 use App\Models\User;
+use App\Models\VendorDocument;
 use App\Models\VendorInformationRequest;
 use App\Models\VendorMessage;
+use App\Models\VendorPurchaseRequest;
+use App\Models\VendorReport;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\VendorRequestCreatedNotification;
@@ -20,6 +28,7 @@ class VendorPortalController extends Controller
     {
         $user = $request->user();
         $this->assertVendor($user);
+        [$dateFrom, $dateTo] = $this->dashboardPeriod($request);
 
         [
             $submissions,
@@ -31,7 +40,118 @@ class VendorPortalController extends Controller
             $vendorProcurements,
             $notifications,
             $awardedProcurements,
-        ] = $this->loadVendorOverview($user);
+        ] = $this->loadVendorOverview($user, $dateFrom, $dateTo);
+
+        $purchaseRequests = $this->applyDateRange(
+            VendorPurchaseRequest::with(['procurement', 'purchaseOrder'])
+                ->where('user_id', $user->id)
+                ->where('request_type', 'purchase_request'),
+            $dateFrom,
+            $dateTo
+        )->latest()->get();
+
+        $reports = $this->applyDateRange(
+            VendorReport::with(['procurement', 'purchaseOrder'])
+                ->where('user_id', $user->id),
+            $dateFrom,
+            $dateTo
+        )->latest()->get();
+
+        $documents = $this->applyDateRange(
+            VendorDocument::where('user_id', $user->id),
+            $dateFrom,
+            $dateTo
+        )->latest()->get();
+
+        $invoices = $this->applyDateRange(
+            ProcurementInvoice::with('procurement')
+                ->where('vendor_id', $user->id),
+            $dateFrom,
+            $dateTo
+        )->latest()->get();
+
+        $disbursements = $this->applyDateRange(
+            ProcurementDisbursement::with('procurement')
+                ->where('vendor_id', $user->id),
+            $dateFrom,
+            $dateTo
+        )->latest()->get();
+
+        $paidDisbursements = $disbursements
+            ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at
+                && in_array(strtolower((string) $disbursement->status), ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES, true));
+
+        $dashboardStats = [
+            'applications' => $submissions->count(),
+            'open_applications' => $openCount,
+            'purchase_requests' => $purchaseRequests->where('request_type', 'purchase_request')->count(),
+            'reports' => $reports->count(),
+            'documents' => $documents->count(),
+            'invoice_amount' => (float) $invoices->sum(fn (ProcurementInvoice $invoice) => (float) $invoice->amount),
+            'payments_received' => (float) $paidDisbursements->sum(fn (ProcurementDisbursement $payment) => (float) $payment->amount),
+            'pending_reviews' => $purchaseRequests->whereIn('status', ['submitted', 'in_review'])->count()
+                + $reports->where('status', 'submitted')->count(),
+        ];
+
+        $statusChart = [
+            'labels' => ['Applications', 'Purchase Requests', 'Reports', 'Documents', 'Payments'],
+            'data' => [
+                $submissions->count(),
+                $purchaseRequests->where('request_type', 'purchase_request')->count(),
+                $reports->count(),
+                $documents->count(),
+                $paidDisbursements->count(),
+            ],
+        ];
+
+        $chartMonths = $this->chartMonths($dateFrom, $dateTo);
+        $cashflowChart = [
+            'labels' => collect($chartMonths)->pluck('label')->all(),
+            'invoices' => $this->monthlySeries(
+                $invoices,
+                $chartMonths,
+                fn (ProcurementInvoice $invoice) => $invoice->invoice_month ?: $invoice->created_at,
+                fn (ProcurementInvoice $invoice) => (float) $invoice->amount
+            ),
+            'payments' => $this->monthlySeries(
+                $paidDisbursements,
+                $chartMonths,
+                fn (ProcurementDisbursement $payment) => $payment->paid_at ?: $payment->created_at,
+                fn (ProcurementDisbursement $payment) => (float) $payment->amount
+            ),
+        ];
+
+        $activityChart = [
+            'labels' => collect($chartMonths)->pluck('label')->all(),
+            'applications' => $this->monthlySeries(
+                $submissions,
+                $chartMonths,
+                fn (FormSubmission $submission) => $submission->submitted_at ?: $submission->created_at
+            ),
+            'requests' => $this->monthlySeries(
+                $purchaseRequests,
+                $chartMonths,
+                fn (VendorPurchaseRequest $vendorRequest) => $vendorRequest->created_at
+            ),
+            'reports' => $this->monthlySeries(
+                $reports,
+                $chartMonths,
+                fn (VendorReport $report) => $report->created_at
+            ),
+            'documents' => $this->monthlySeries(
+                $documents,
+                $chartMonths,
+                fn (VendorDocument $document) => $document->created_at
+            ),
+        ];
+
+        $recentActivity = $this->recentActivity($submissions, $purchaseRequests, $reports, $documents, $paidDisbursements);
+        $thinkTankMember = ConsortiumThinkTank::with('consortium')
+            ->where(function ($query) use ($user) {
+                $query->where('vendor_user_id', $user->id)
+                    ->orWhere('portal_user_id', $user->id);
+            })
+            ->first();
 
         return view('vendor.dashboard', [
             'submissions' => $submissions,
@@ -43,6 +163,19 @@ class VendorPortalController extends Controller
             'vendorProcurements' => $vendorProcurements,
             'notifications' => $notifications,
             'awardedProcurements' => $awardedProcurements,
+            'purchaseRequests' => $purchaseRequests,
+            'reports' => $reports,
+            'documents' => $documents,
+            'invoices' => $invoices,
+            'disbursements' => $disbursements,
+            'dashboardStats' => $dashboardStats,
+            'statusChart' => $statusChart,
+            'cashflowChart' => $cashflowChart,
+            'activityChart' => $activityChart,
+            'recentActivity' => $recentActivity,
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
+            'thinkTankMember' => $thinkTankMember,
         ]);
     }
 
@@ -309,10 +442,15 @@ class VendorPortalController extends Controller
         }
     }
 
-    private function loadVendorOverview(User $user): array
+    private function loadVendorOverview(User $user, ?Carbon $dateFrom = null, ?Carbon $dateTo = null): array
     {
-        $submissions = FormSubmission::with('procurement')
-            ->where('submitted_by', $user->id)
+        $submissions = $this->applyDateRange(
+            FormSubmission::with('procurement')
+                ->where('submitted_by', $user->id),
+            $dateFrom,
+            $dateTo,
+            'submitted_at'
+        )
             ->latest('submitted_at')
             ->get();
 
@@ -334,13 +472,21 @@ class VendorPortalController extends Controller
         $openCount = $submissions->where('is_open', true)->count();
         $closedCount = $submissions->count() - $openCount;
 
-        $messages = VendorMessage::with('procurement')
-            ->where('user_id', $user->id)
+        $messages = $this->applyDateRange(
+            VendorMessage::with('procurement')
+                ->where('user_id', $user->id),
+            $dateFrom,
+            $dateTo
+        )
             ->latest()
             ->get();
 
-        $informationRequests = VendorInformationRequest::with('procurement')
-            ->where('user_id', $user->id)
+        $informationRequests = $this->applyDateRange(
+            VendorInformationRequest::with('procurement')
+                ->where('user_id', $user->id),
+            $dateFrom,
+            $dateTo
+        )
             ->latest()
             ->get();
 
@@ -349,13 +495,22 @@ class VendorPortalController extends Controller
             ->unique('id')
             ->values();
 
-        $notifications = $user->notifications()
+        $notifications = $this->applyDateRange(
+            $user->notifications(),
+            $dateFrom,
+            $dateTo
+        )
             ->latest()
             ->take(5)
             ->get();
 
-        $awardedProcurements = Procurement::where('status', 'awarded')
-            ->where('awarded_vendor_id', $user->id)
+        $awardedProcurements = $this->applyDateRange(
+            Procurement::where('status', 'awarded')
+                ->where('awarded_vendor_id', $user->id),
+            $dateFrom,
+            $dateTo,
+            'awarded_at'
+        )
             ->orderByDesc('awarded_at')
             ->get();
 
@@ -370,6 +525,114 @@ class VendorPortalController extends Controller
             $notifications,
             $awardedProcurements,
         ];
+    }
+
+    private function dashboardPeriod(Request $request): array
+    {
+        $validated = $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+        ]);
+
+        return [
+            !empty($validated['date_from']) ? Carbon::parse($validated['date_from'])->startOfDay() : null,
+            !empty($validated['date_to']) ? Carbon::parse($validated['date_to'])->endOfDay() : null,
+        ];
+    }
+
+    private function applyDateRange($query, ?Carbon $dateFrom, ?Carbon $dateTo, string $column = 'created_at')
+    {
+        if ($dateFrom) {
+            $query->where($column, '>=', $dateFrom);
+        }
+
+        if ($dateTo) {
+            $query->where($column, '<=', $dateTo);
+        }
+
+        return $query;
+    }
+
+    private function chartMonths(?Carbon $dateFrom, ?Carbon $dateTo): array
+    {
+        $end = ($dateTo ?: now())->copy()->startOfMonth();
+        $start = ($dateFrom ?: $end->copy()->subMonths(5))->copy()->startOfMonth();
+
+        if ($start->diffInMonths($end) > 17) {
+            $start = $end->copy()->subMonths(17);
+        }
+
+        $months = [];
+        $cursor = $start->copy();
+
+        while ($cursor <= $end) {
+            $months[] = [
+                'key' => $cursor->format('Y-m'),
+                'label' => $cursor->format('M Y'),
+            ];
+            $cursor->addMonth();
+        }
+
+        return $months;
+    }
+
+    private function monthlySeries($records, array $months, callable $dateResolver, ?callable $valueResolver = null): array
+    {
+        return collect($months)->map(function (array $month) use ($records, $dateResolver, $valueResolver) {
+            return round((float) $records->sum(function ($record) use ($month, $dateResolver, $valueResolver) {
+                $date = $dateResolver($record);
+
+                if (!$date || $date->format('Y-m') !== $month['key']) {
+                    return 0;
+                }
+
+                return $valueResolver ? $valueResolver($record) : 1;
+            }), 2);
+        })->all();
+    }
+
+    private function recentActivity($submissions, $purchaseRequests, $reports, $documents, $paidDisbursements)
+    {
+        return collect()
+            ->merge($submissions->map(fn (FormSubmission $submission) => [
+                'type' => 'Application',
+                'title' => $submission->procurement?->title ?: 'Procurement application',
+                'detail' => ucfirst($submission->status ?? 'pending'),
+                'date' => $submission->submitted_at ?: $submission->created_at,
+                'icon' => 'feather-file-text',
+            ]))
+            ->merge($purchaseRequests->map(fn (VendorPurchaseRequest $request) => [
+                'type' => 'Purchase Request',
+                'title' => $request->title,
+                'detail' => $request->reference_no,
+                'date' => $request->created_at,
+                'icon' => 'feather-shopping-bag',
+            ]))
+            ->merge($reports->map(fn (VendorReport $report) => [
+                'type' => 'Report',
+                'title' => $report->title,
+                'detail' => $report->reference_no,
+                'date' => $report->created_at,
+                'icon' => 'feather-clipboard',
+            ]))
+            ->merge($documents->map(fn (VendorDocument $document) => [
+                'type' => 'Document',
+                'title' => $document->title,
+                'detail' => $document->file_name,
+                'date' => $document->created_at,
+                'icon' => 'feather-folder',
+            ]))
+            ->merge($paidDisbursements->map(fn (ProcurementDisbursement $payment) => [
+                'type' => 'Payment',
+                'title' => $payment->reference_no,
+                'detail' => $payment->currency . ' ' . number_format((float) $payment->amount, 2),
+                'date' => $payment->paid_at ?: $payment->created_at,
+                'icon' => 'feather-dollar-sign',
+            ]))
+            ->filter(fn ($item) => $item['date'])
+            ->sortByDesc(fn ($item) => $item['date']->timestamp)
+            ->take(8)
+            ->values();
     }
 
     private function assertSubmissionOwnership(FormSubmission $submission, string $userId): void

@@ -136,6 +136,10 @@ use App\Http\Controllers\Vendor\{
     VendorInvoiceController,
     VendorDisbursementController,
     VendorDeliverableController,
+    VendorPurchaseRequestController,
+    VendorReportController,
+    VendorKnowledgeController,
+    VendorThinkTankController,
 };
 
 /*
@@ -2712,6 +2716,22 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:vendor.requests.ma
         Route::post('/messages/{message}/respond', [VendorRequestManagementController::class, 'messagesRespond'])
             ->middleware('permission:vendor.requests.respond')
             ->name('messages.respond');
+        Route::get('/purchase-requests', [VendorRequestManagementController::class, 'purchaseRequestsIndex'])
+            ->name('purchase-requests.index');
+        Route::get('/purchase-requests/{purchaseRequest}', [VendorRequestManagementController::class, 'purchaseRequestsShow'])
+            ->name('purchase-requests.show');
+        Route::post('/purchase-requests/{purchaseRequest}/respond', [VendorRequestManagementController::class, 'purchaseRequestsRespond'])
+            ->middleware('permission:vendor.requests.respond')
+            ->name('purchase-requests.respond');
+        Route::get('/reports', [VendorRequestManagementController::class, 'reportsIndex'])
+            ->name('reports.index');
+        Route::get('/reports/{report}', [VendorRequestManagementController::class, 'reportsShow'])
+            ->name('reports.show');
+        Route::post('/reports/{report}/respond', [VendorRequestManagementController::class, 'reportsRespond'])
+            ->middleware('permission:vendor.requests.respond')
+            ->name('reports.respond');
+        Route::get('/documents/{document}', [VendorRequestManagementController::class, 'downloadDocument'])
+            ->name('documents.download');
 
         Route::get('/information', [VendorRequestManagementController::class, 'informationIndex'])
             ->name('information.index');
@@ -2844,6 +2864,42 @@ Route::middleware(['auth'])
             ->name('clarifications');
         Route::get('/submissions', [VendorPortalController::class, 'submissions'])
             ->name('submissions');
+        Route::get('/purchase-requests', [VendorPurchaseRequestController::class, 'index'])
+            ->name('purchase-requests.index');
+        Route::get('/purchase-requests/create', [VendorPurchaseRequestController::class, 'create'])
+            ->name('purchase-requests.create');
+        Route::post('/purchase-requests', [VendorPurchaseRequestController::class, 'store'])
+            ->name('purchase-requests.store');
+        Route::get('/purchase-requests/{purchaseRequest}', [VendorPurchaseRequestController::class, 'show'])
+            ->name('purchase-requests.show');
+        Route::get('/purchase-requests/{purchaseRequest}/documents/{document}', [VendorPurchaseRequestController::class, 'download'])
+            ->name('purchase-requests.documents.download');
+        Route::get('/reports', [VendorReportController::class, 'index'])
+            ->name('reports.index');
+        Route::get('/reports/create', [VendorReportController::class, 'create'])
+            ->name('reports.create');
+        Route::post('/reports', [VendorReportController::class, 'store'])
+            ->name('reports.store');
+        Route::get('/reports/{report}', [VendorReportController::class, 'show'])
+            ->name('reports.show');
+        Route::get('/reports/{report}/documents/{document}', [VendorReportController::class, 'download'])
+            ->name('reports.documents.download');
+        Route::get('/knowledge', [VendorKnowledgeController::class, 'index'])
+            ->name('knowledge.index');
+        Route::post('/knowledge', [VendorKnowledgeController::class, 'store'])
+            ->name('knowledge.store');
+        Route::get('/knowledge/documents/{document}', [VendorKnowledgeController::class, 'download'])
+            ->name('knowledge.download');
+        Route::get('/knowledge/submission-files/{value}', [VendorKnowledgeController::class, 'downloadSubmissionFile'])
+            ->name('knowledge.submission-file');
+        Route::get('/work-plan', [VendorThinkTankController::class, 'workPlan'])
+            ->name('work-plan.index');
+        Route::get('/research-report', [VendorThinkTankController::class, 'researchReport'])
+            ->name('research-report.index');
+        Route::post('/research-report', [VendorThinkTankController::class, 'storeResearchReport'])
+            ->name('research-report.store');
+        Route::get('/research-report/{output}/download', [VendorThinkTankController::class, 'downloadResearchReport'])
+            ->name('research-report.download');
         Route::get('/payment-details', [VendorPortalController::class, 'paymentDetails'])
             ->name('payment-details');
         Route::put('/payment-details', [VendorPortalController::class, 'updatePaymentDetails'])

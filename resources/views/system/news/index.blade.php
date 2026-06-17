@@ -74,8 +74,26 @@
                             @forelse ($posts as $post)
                                 <tr>
                                     <td class="ps-4">
-                                        <div class="fw-semibold text-dark">{{ $post->title }}</div>
-                                        <small class="text-muted">{{ $post->slug }}</small>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="flex-shrink-0 rounded overflow-hidden bg-light border"
+                                                style="width: 72px; height: 48px;">
+                                                @if ($post->cover_image_url)
+                                                    <img src="{{ $post->cover_image_url }}"
+                                                        alt="{{ $post->title }} cover"
+                                                        style="width: 100%; height: 100%; object-fit: cover;"
+                                                        data-fallback-src="{{ $newsCoverFallbackUrl }}"
+                                                        onerror="this.onerror=null;this.src=this.dataset.fallbackSrc;">
+                                                @else
+                                                    <img src="{{ $newsCoverFallbackUrl }}"
+                                                        alt="Gallery fallback cover"
+                                                        style="width: 100%; height: 100%; object-fit: cover;">
+                                                @endif
+                                            </div>
+                                            <div>
+                                                <div class="fw-semibold text-dark">{{ $post->title }}</div>
+                                                <small class="text-muted">{{ $post->slug }}</small>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td>{{ ucfirst($post->category) }}</td>
                                     <td>

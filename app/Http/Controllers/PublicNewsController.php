@@ -5,15 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\NewsAttachment;
 use App\Models\NewsPost;
 use App\Models\NewsSubscriber;
+use App\Services\GalleryImageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class PublicNewsController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, GalleryImageService $gallery)
     {
-        $query = NewsPost::published()->with('attachments');
+        $query = NewsPost::published()->with(['attachments', 'creator']);
 
         if ($request->filled('category')) {
             $query->where('category', $request->string('category'));
@@ -30,11 +31,12 @@ class PublicNewsController extends Controller
 
         $posts = $query->orderByDesc('published_at')->paginate(9)->withQueryString();
         $categories = NewsPost::published()->select('category')->distinct()->orderBy('category')->pluck('category');
+        $newsCoverFallbackUrl = $this->newsCoverFallbackUrl($gallery, 'thumb');
 
-        return view('public.news.index', compact('posts', 'categories'));
+        return view('public.news.index', compact('posts', 'categories', 'newsCoverFallbackUrl'));
     }
 
-    public function show(NewsPost $post)
+    public function show(NewsPost $post, GalleryImageService $gallery)
     {
         abort_unless($post->isPublished(), 404);
 
@@ -58,7 +60,9 @@ class PublicNewsController extends Controller
             );
         }
 
-        return view('public.news.show', compact('post', 'related'));
+        $newsCoverFallbackUrl = $this->newsCoverFallbackUrl($gallery, 'large');
+
+        return view('public.news.show', compact('post', 'related', 'newsCoverFallbackUrl'));
     }
 
     public function subscribe(Request $request)
@@ -103,5 +107,10 @@ class PublicNewsController extends Controller
         $attachment->increment('download_count');
 
         return Storage::disk('local')->download($attachment->file_path, $attachment->file_name);
+    }
+
+    private function newsCoverFallbackUrl(GalleryImageService $gallery, string $size): string
+    {
+        return $gallery->fallbackUrl($size) ?? asset('assets/images/au1.jpg');
     }
 }

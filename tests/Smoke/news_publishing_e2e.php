@@ -7,6 +7,7 @@ use App\Models\NewsSubscriber;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\GalleryImageService;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithAuthentication;
@@ -85,7 +86,14 @@ class NewsPublishingSmoke
             $post = NewsPost::where('title', $title)->first();
             $this->assertTrue((bool) $post, 'News post was not created.');
             $this->assertSame('submitted', $post->status, 'News post was not submitted.');
+            $this->assertTrue((bool) $post->cover_image_path, 'News cover image path was not stored.');
+            $this->assertTrue(Storage::disk('public')->exists($post->cover_image_path), 'News cover image file was not stored.');
             $this->assertTrue($post->attachments()->exists(), 'News attachment was not stored.');
+
+            $this->actingAs($user)
+                ->get(route('system.news.edit', $post))
+                ->assertOk()
+                ->assertSee($post->cover_image_path, false);
 
             $this->get(route('news.show', $post))->assertNotFound();
 
@@ -101,17 +109,19 @@ class NewsPublishingSmoke
             $this->assertTrue($post->approved_at !== null, 'Published news was not approved.');
             $this->assertTrue($post->notified_at !== null, 'Subscribers were not marked notified.');
 
-            Mail::assertSent(NewsPublishedNotification::class, function (NewsPublishedNotification $mail) use ($subscriber, $post) {
+            Mail::assertQueued(NewsPublishedNotification::class, function (NewsPublishedNotification $mail) use ($subscriber, $post) {
                 return $mail->subscriber->email === $subscriber->email && $mail->post->id === $post->id;
             });
 
             $this->get(route('news.index'))
                 ->assertOk()
-                ->assertSee($title);
+                ->assertSee($title)
+                ->assertSee($post->cover_image_path, false);
 
             $this->get(route('news.show', $post))
                 ->assertOk()
                 ->assertSee($title)
+                ->assertSee($post->cover_image_path, false)
                 ->assertSee('Downloads')
                 ->assertSee('brief.pdf');
 
@@ -124,6 +134,32 @@ class NewsPublishingSmoke
             ])->assertRedirect();
 
             $this->assertTrue(NewsSubscriber::where('source', 'news_page')->active()->exists(), 'Public subscription did not create an active subscriber.');
+
+            $fallbackTitle = 'E2E News Without Cover ' . Str::upper(Str::random(5));
+            $fallbackPost = NewsPost::create([
+                'title' => $fallbackTitle,
+                'category' => 'announcement',
+                'excerpt' => 'News item without a custom cover image.',
+                'body' => 'Published news body that should use a gallery fallback cover.',
+                'status' => 'published',
+                'created_by' => $user->id,
+                'approved_by' => $user->id,
+                'approved_at' => now(),
+                'published_at' => now(),
+            ]);
+            $gallery = app(GalleryImageService::class);
+            $fallbackThumb = $gallery->fallbackUrl('thumb') ?? asset('assets/images/au1.jpg');
+            $fallbackLarge = $gallery->fallbackUrl('large') ?? asset('assets/images/au1.jpg');
+
+            $this->get(route('news.index'))
+                ->assertOk()
+                ->assertSee($fallbackTitle)
+                ->assertSee($fallbackThumb, false);
+
+            $this->get(route('news.show', $fallbackPost))
+                ->assertOk()
+                ->assertSee($fallbackTitle)
+                ->assertSee($fallbackLarge, false);
 
             echo "NEWS_E2E_OK\n";
         } finally {

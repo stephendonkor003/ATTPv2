@@ -1,0 +1,208 @@
+<?php
+
+namespace App\Http\Controllers\Vendor;
+
+use App\Http\Controllers\Controller;
+use App\Models\FormSubmission;
+use App\Models\ProcurementPurchaseOrder;
+use App\Models\User;
+use App\Models\VendorDocument;
+use App\Models\VendorPurchaseRequest;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+
+class VendorPurchaseRequestController extends Controller
+{
+    public function index(Request $request)
+    {
+        $user = $this->vendor($request);
+
+        $requests = VendorPurchaseRequest::with(['procurement', 'purchaseOrder', 'items'])
+            ->where('user_id', $user->id)
+            ->where('request_type', 'purchase_request')
+            ->latest()
+            ->get();
+
+        $stats = [
+            'total' => $requests->count(),
+            'submitted' => $requests->where('status', 'submitted')->count(),
+            'in_review' => $requests->where('status', 'in_review')->count(),
+            'approved' => $requests->whereIn('status', ['approved', 'converted', 'completed'])->count(),
+        ];
+
+        return view('vendor.purchase-requests.index', [
+            'requests' => $requests,
+            'stats' => $stats,
+            'pageTitle' => 'Purchase Requests',
+        ]);
+    }
+
+    public function create(Request $request)
+    {
+        $user = $this->vendor($request);
+
+        return view('vendor.purchase-requests.create', [
+            'pageTitle' => 'Create Purchase Request',
+            'procurements' => $this->vendorProcurements($user),
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $user = $this->vendor($request);
+
+        $data = $request->validate([
+            'title' => 'required|string|max:255',
+            'procurement_id' => ['nullable', Rule::exists('procurements', 'id')],
+            'requested_amount' => 'nullable|numeric|min:0',
+            'currency' => 'required|string|max:10',
+            'needed_by' => 'nullable|date',
+            'priority' => 'required|in:low,normal,high,urgent',
+            'description' => 'nullable|string|max:5000',
+            'business_justification' => 'required|string|max:5000',
+            'items' => 'nullable|array',
+            'items.*.item_name' => 'nullable|string|max:255',
+            'items.*.description' => 'nullable|string|max:1000',
+            'items.*.quantity' => 'nullable|numeric|min:0',
+            'items.*.unit_price' => 'nullable|numeric|min:0',
+            'items.*.delivery_date' => 'nullable|date',
+            'documents.*' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,jpeg,png,zip|max:20480',
+        ]);
+
+        $allowedProcurements = $this->vendorProcurements($user)->pluck('id')->all();
+        if (!empty($data['procurement_id']) && !in_array($data['procurement_id'], $allowedProcurements, true)) {
+            return back()->withErrors(['procurement_id' => 'You do not have access to this procurement.'])->withInput();
+        }
+
+        $lineItems = collect($data['items'] ?? [])
+            ->filter(fn ($item) => filled($item['item_name'] ?? null))
+            ->map(function ($item) {
+                $quantity = (float) ($item['quantity'] ?? 1);
+                $unitPrice = (float) ($item['unit_price'] ?? 0);
+
+                return [
+                    'item_name' => $item['item_name'],
+                    'description' => $item['description'] ?? null,
+                    'quantity' => $quantity,
+                    'unit_price' => $unitPrice,
+                    'amount' => round($quantity * $unitPrice, 2),
+                    'delivery_date' => $item['delivery_date'] ?? null,
+                ];
+            })
+            ->values();
+
+        $total = $lineItems->sum('amount');
+        if ($total <= 0) {
+            $total = (float) ($data['requested_amount'] ?? 0);
+        }
+
+        $vendorRequest = DB::transaction(function () use ($request, $user, $data, $lineItems, $total) {
+            $vendorRequest = VendorPurchaseRequest::create([
+                'user_id' => $user->id,
+                'procurement_id' => $data['procurement_id'] ?? null,
+                'purchase_order_id' => null,
+                'reference_no' => VendorPurchaseRequest::generateReference(),
+                'request_type' => 'purchase_request',
+                'title' => $data['title'],
+                'requested_amount' => $total,
+                'currency' => strtoupper($data['currency']),
+                'needed_by' => $data['needed_by'] ?? null,
+                'priority' => $data['priority'],
+                'status' => 'submitted',
+                'description' => $data['description'] ?? null,
+                'business_justification' => $data['business_justification'],
+            ]);
+
+            if ($lineItems->isEmpty()) {
+                $vendorRequest->items()->create([
+                    'item_name' => $data['title'],
+                    'description' => $data['description'] ?? null,
+                    'quantity' => 1,
+                    'unit_price' => $total,
+                    'amount' => $total,
+                    'delivery_date' => $data['needed_by'] ?? null,
+                ]);
+            } else {
+                $vendorRequest->items()->createMany($lineItems->all());
+            }
+
+            $this->storeDocuments($request, $user, $vendorRequest);
+
+            return $vendorRequest;
+        });
+
+        return redirect()
+            ->route('vendor.purchase-requests.show', $vendorRequest)
+            ->with('success', 'Request submitted to the ATTP administration team.');
+    }
+
+    public function show(Request $request, VendorPurchaseRequest $purchaseRequest)
+    {
+        $user = $this->vendor($request);
+        abort_unless((string) $purchaseRequest->user_id === (string) $user->id, 403);
+
+        $purchaseRequest->load(['procurement', 'purchaseOrder', 'items', 'documents']);
+
+        return view('vendor.purchase-requests.show', compact('purchaseRequest'));
+    }
+
+    public function download(Request $request, VendorPurchaseRequest $purchaseRequest, VendorDocument $document)
+    {
+        $user = $this->vendor($request);
+        abort_unless((string) $purchaseRequest->user_id === (string) $user->id, 403);
+        abort_unless((string) $document->user_id === (string) $user->id, 403);
+        abort_unless($document->source_type === 'vendor_purchase_request' && (string) $document->source_id === (string) $purchaseRequest->id, 404);
+        abort_unless(Storage::disk('local')->exists($document->file_path), 404);
+
+        return Storage::disk('local')->download($document->file_path, $document->file_name);
+    }
+
+    private function vendor(Request $request): User
+    {
+        $user = $request->user();
+        abort_unless($user && $user->user_type === 'vendor', 403);
+        abort_if($user->is_disabled || $user->is_blacklisted, 403);
+
+        return $user;
+    }
+
+    private function vendorProcurements(User $user)
+    {
+        $submissionProcurementIds = FormSubmission::where('submitted_by', $user->id)
+            ->pluck('procurement_id');
+        $poProcurementIds = ProcurementPurchaseOrder::where('vendor_id', $user->id)
+            ->pluck('procurement_id');
+
+        return \App\Models\Procurement::whereIn('id', $submissionProcurementIds->merge($poProcurementIds)->filter()->unique())
+            ->orderByDesc('created_at')
+            ->get();
+    }
+
+    private function storeDocuments(Request $request, User $user, VendorPurchaseRequest $vendorRequest): void
+    {
+        foreach ($request->file('documents', []) as $file) {
+            if (!$file) {
+                continue;
+            }
+
+            $path = $file->store("vendor-documents/{$user->id}/purchase-requests/{$vendorRequest->id}", 'local');
+
+            VendorDocument::create([
+                'user_id' => $user->id,
+                'uploaded_by' => $user->id,
+                'source_type' => 'vendor_purchase_request',
+                'source_id' => $vendorRequest->id,
+                'title' => pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                'document_type' => $vendorRequest->request_type,
+                'description' => $vendorRequest->reference_no,
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getMimeType(),
+                'file_size_bytes' => $file->getSize(),
+                'tags' => [$vendorRequest->request_type, 'submitted'],
+            ]);
+        }
+    }
+}

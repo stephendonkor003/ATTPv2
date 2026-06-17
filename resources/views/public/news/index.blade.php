@@ -265,8 +265,10 @@
         @forelse($posts as $post)
             <article class="news-card">
                 <div class="card-cover">
-                    <img src="{{ $post->cover_image_path ? asset('storage/' . $post->cover_image_path) : asset('assets/images/au1.jpg') }}"
-                         alt="{{ $post->title }}" loading="lazy">
+                    <img src="{{ $post->cover_image_url ?: $newsCoverFallbackUrl }}"
+                         alt="{{ $post->title }}" loading="lazy"
+                         data-fallback-src="{{ $newsCoverFallbackUrl }}"
+                         onerror="this.onerror=null;this.src=this.dataset.fallbackSrc;">
                 </div>
                 <div class="card-body">
                     <span class="card-badge">{{ str_replace('_', ' ', $post->category) }}</span>

@@ -148,6 +148,11 @@ class User extends Authenticatable
         return $this->hasOne(ConsortiumThinkTank::class, 'portal_user_id');
     }
 
+    public function vendorThinkTankMembership()
+    {
+        return $this->hasOne(ConsortiumThinkTank::class, 'vendor_user_id');
+    }
+
     /**
      * Direct permissions (override layer)
      */

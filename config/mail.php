@@ -136,7 +136,7 @@ return [
             'port' => $resolveMailValue(['MAIL_PORT'], 2525),
             'username' => $resolveMailValue(['MAIL_USERNAME']),
             'password' => $resolveMailValue(['MAIL_PASSWORD']),
-            'timeout' => null,
+            'timeout' => (int) $resolveMailValue(['MAIL_TIMEOUT'], 10),
             'local_domain' => $resolveMailValue(
                 ['MAIL_EHLO_DOMAIN'],
                 parse_url((string) $resolveMailValue(['APP_URL'], 'http://localhost'), PHP_URL_HOST)

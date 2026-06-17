@@ -14,12 +14,11 @@ class NewsPublishedNotification extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public string $queue = 'mail';
-
     public function __construct(
         public NewsPost $post,
         public NewsSubscriber $subscriber
     ) {
+        $this->onQueue('mail');
     }
 
     public function build()

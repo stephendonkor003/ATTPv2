@@ -230,8 +230,10 @@
 <!-- ── ARTICLE HERO ── -->
 <section class="article-hero">
     <img class="hero-img"
-         src="{{ $post->cover_image_path ? asset('storage/' . $post->cover_image_path) : asset('assets/images/au1.jpg') }}"
-         alt="{{ $post->title }}">
+         src="{{ $post->cover_image_url ?: $newsCoverFallbackUrl }}"
+         alt="{{ $post->title }}"
+         data-fallback-src="{{ $newsCoverFallbackUrl }}"
+         onerror="this.onerror=null;this.src=this.dataset.fallbackSrc;">
     <div class="hero-overlay"></div>
     <div class="hero-content">
         <a class="back-link" href="{{ route('news.index') }}">&#8592; Back to News</a>
