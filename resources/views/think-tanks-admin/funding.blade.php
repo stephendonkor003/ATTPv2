@@ -115,6 +115,71 @@
             font-size: 1.1rem;
             font-weight: 800;
         }
+
+        .tt-funding-links {
+            min-width: 190px;
+        }
+
+        .tt-funding-link-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            align-items: center;
+            margin-bottom: 0.35rem;
+        }
+
+        .tt-funding-link-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .tt-link-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            border-radius: 999px;
+            padding: 0.17rem 0.45rem;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 0.68rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .tt-funding-links a,
+        .tt-po-ledger a {
+            color: #0f766e;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .tt-funding-links a:hover,
+        .tt-po-ledger a:hover {
+            color: #0f172a;
+            text-decoration: underline;
+        }
+
+        .tt-po-ledger {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .tt-po-ledger-title {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: center;
+            padding: 0.85rem 1rem;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .tt-po-ledger-title h6 {
+            color: #0f172a;
+            font-weight: 900;
+        }
     </style>
 @endpush
 
@@ -155,15 +220,15 @@
         </div>
 
         @php
-            $currency = 'USD';
+            $currency = $source['programFunding']?->resolved_currency ?? 'USD';
         @endphp
 
         <div class="row g-3 mb-4">
             @foreach ([
-                ['label' => 'Sub-Activity Budget', 'value' => $summary['budget'], 'percent' => 100, 'bar' => '#0ea5e9'],
-                ['label' => 'Transferred', 'value' => $summary['transferred'], 'percent' => $summary['transfer_rate'], 'bar' => '#16a34a'],
-                ['label' => 'Remaining', 'value' => $summary['remaining'], 'percent' => $summary['remaining_rate'], 'bar' => '#f59e0b'],
-                ['label' => 'Confirmed Received', 'value' => $summary['confirmed'], 'percent' => $summary['confirmation_rate'], 'bar' => '#6366f1'],
+                ['label' => 'Sub-Activity Budget', 'value' => $summary['budget'], 'percent' => 100, 'bar' => '#0ea5e9', 'hint' => 'base'],
+                ['label' => 'PO Allocated', 'value' => $summary['po_allocated'], 'percent' => $summary['po_allocation_rate'], 'bar' => '#6366f1', 'hint' => 'of budget'],
+                ['label' => 'Actually Paid', 'value' => $summary['transferred'], 'percent' => $summary['transfer_rate'], 'bar' => '#16a34a', 'hint' => 'of budget'],
+                ['label' => 'PO Unpaid', 'value' => $summary['pending_payment'], 'percent' => (float) $summary['po_allocated'] > 0 ? 100 - min(100, (float) $summary['payment_rate']) : 0, 'bar' => '#f59e0b', 'hint' => 'of PO value'],
             ] as $card)
                 <div class="col-md-6 col-xl-3">
                     <div class="card tt-metric-card h-100">
@@ -172,7 +237,7 @@
                             <div class="value">{{ $currency }} {{ number_format((float) $card['value'], 2) }}</div>
                             <div class="d-flex justify-content-between small text-muted mt-3 mb-1">
                                 <span>{{ number_format((float) $card['percent'], 1) }}%</span>
-                                <span>{{ $card['label'] === 'Sub-Activity Budget' ? 'base' : 'of budget' }}</span>
+                                <span>{{ $card['hint'] }}</span>
                             </div>
                             <div class="tt-progress"><span style="width: {{ min(100, (float) $card['percent']) }}%; background: {{ $card['bar'] }}"></span></div>
                         </div>
@@ -194,10 +259,11 @@
                                 <th>Think Tank</th>
                                 <th>Consortium</th>
                                 <th>Country</th>
-                                <th>Allocated</th>
-                                <th>Current Disbursement</th>
-                                <th>Transferred</th>
-                                <th>Transfers</th>
+                                <th>PO Allocated</th>
+                                <th>Current Payment</th>
+                                <th>Paid from POs</th>
+                                <th>PO Unpaid</th>
+                                <th>Finance Links</th>
                                 <th>Receipt</th>
                                 <th>Status</th>
                                 <th>Action</th>
@@ -206,9 +272,16 @@
                         <tbody>
                             @foreach ($thinkTanks as $thinkTank)
                                 @php
-                                    $allocated = (float) $thinkTank->budget_allocated + (float) $thinkTank->fund_allocations_sum_amount_allocated;
-                                    $transferred = (float) $thinkTank->transfer_disbursements_sum_amount;
+                                    $purchaseOrders = $thinkTank->transferPurchaseOrders ?? collect();
+                                    $purchaseRequests = $purchaseOrders
+                                        ->map(fn ($purchaseOrder) => $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest)
+                                        ->filter()
+                                        ->unique('id')
+                                        ->values();
                                     $transfers = $thinkTank->transferDisbursements;
+                                    $allocated = (float) $purchaseOrders->sum('amount');
+                                    $transferred = (float) $transfers->sum('amount');
+                                    $unpaid = max($allocated - $transferred, 0);
                                     $currentDisbursement = (float) ($transfers->first()?->amount ?? 0);
                                     $confirmedAmount = (float) $transfers->where('recipient_confirmation_status', 'confirmed')->sum('amount');
                                     $pendingAmount = max($transferred - $confirmedAmount, 0);
@@ -221,7 +294,37 @@
                                     <td>{{ $currency }} {{ number_format($allocated, 2) }}</td>
                                     <td>{{ $currency }} {{ number_format($currentDisbursement, 2) }}</td>
                                     <td>{{ $currency }} {{ number_format($transferred, 2) }}</td>
-                                    <td>{{ number_format($thinkTank->transfer_disbursements_count) }}</td>
+                                    <td>{{ $currency }} {{ number_format($unpaid, 2) }}</td>
+                                    <td>
+                                        <div class="tt-funding-links">
+                                            <div class="tt-funding-link-row">
+                                                <span class="tt-link-chip">PR</span>
+                                                @forelse ($purchaseRequests->take(1) as $purchaseRequest)
+                                                    <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                                @empty
+                                                    <span class="text-muted small">No PR</span>
+                                                @endforelse
+                                                @if ($purchaseRequests->count() > 1)
+                                                    <span class="text-muted small">+{{ $purchaseRequests->count() - 1 }}</span>
+                                                @endif
+                                            </div>
+                                            <div class="tt-funding-link-row">
+                                                <span class="tt-link-chip">PO</span>
+                                                @forelse ($purchaseOrders->take(1) as $purchaseOrder)
+                                                    <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                                @empty
+                                                    <span class="text-muted small">No PO</span>
+                                                @endforelse
+                                                @if ($purchaseOrders->count() > 1)
+                                                    <span class="text-muted small">+{{ $purchaseOrders->count() - 1 }}</span>
+                                                @endif
+                                            </div>
+                                            <div class="tt-funding-link-row">
+                                                <span class="tt-link-chip">Pay</span>
+                                                <span class="text-muted small">{{ number_format($thinkTank->paid_transfer_disbursements_count) }} paid</span>
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td>{{ number_format($thinkTank->confirmed_transfers_count) }} confirmed</td>
                                     <td><span class="badge bg-light text-dark">{{ ucfirst($thinkTank->status) }}</span></td>
                                     <td>
@@ -240,11 +343,19 @@
 
     @foreach ($thinkTanks as $thinkTank)
         @php
+            $purchaseOrders = $thinkTank->transferPurchaseOrders ?? collect();
+            $purchaseRequests = $purchaseOrders
+                ->map(fn ($purchaseOrder) => $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest)
+                ->filter()
+                ->unique('id')
+                ->values();
             $transfers = $thinkTank->transferDisbursements;
             $transferred = (float) $transfers->sum('amount');
+            $allocated = (float) $purchaseOrders->sum('amount');
             $currentDisbursement = (float) ($transfers->first()?->amount ?? 0);
             $confirmedAmount = (float) $transfers->where('recipient_confirmation_status', 'confirmed')->sum('amount');
             $pendingAmount = max($transferred - $confirmedAmount, 0);
+            $unpaidAmount = max($allocated - $transferred, 0);
             $modalId = 'thinkTankTransfers' . str_replace('-', '', $thinkTank->id);
         @endphp
         <div class="modal fade tt-transfer-modal" id="{{ $modalId }}" tabindex="-1" aria-labelledby="{{ $modalId }}Label" aria-hidden="true">
@@ -260,10 +371,63 @@
                     </div>
                     <div class="modal-body">
                         <div class="row g-3 mb-4">
-                            <div class="col-md-3"><div class="tt-modal-stat"><div class="label">Number of Transfers</div><div class="value">{{ number_format($transfers->count()) }}</div></div></div>
-                            <div class="col-md-3"><div class="tt-modal-stat"><div class="label">Current Disbursement</div><div class="value">USD {{ number_format($currentDisbursement, 2) }}</div></div></div>
-                            <div class="col-md-3"><div class="tt-modal-stat"><div class="label">Total Transferred</div><div class="value">USD {{ number_format($transferred, 2) }}</div></div></div>
-                            <div class="col-md-3"><div class="tt-modal-stat"><div class="label">Pending Receipt</div><div class="value">USD {{ number_format($pendingAmount, 2) }}</div></div></div>
+                            <div class="col-md-3"><div class="tt-modal-stat"><div class="label">Linked Purchase Orders</div><div class="value">{{ number_format($purchaseOrders->count()) }}</div></div></div>
+                            <div class="col-md-3"><div class="tt-modal-stat"><div class="label">PO Allocated</div><div class="value">{{ $currency }} {{ number_format($allocated, 2) }}</div></div></div>
+                            <div class="col-md-3"><div class="tt-modal-stat"><div class="label">Paid from POs</div><div class="value">{{ $currency }} {{ number_format($transferred, 2) }}</div></div></div>
+                            <div class="col-md-3"><div class="tt-modal-stat"><div class="label">PO Unpaid</div><div class="value">{{ $currency }} {{ number_format($unpaidAmount, 2) }}</div></div></div>
+                        </div>
+
+                        <div class="tt-po-ledger mb-4">
+                            <div class="tt-po-ledger-title">
+                                <div>
+                                    <h6 class="mb-1">Linked Purchase Orders</h6>
+                                    <div class="text-muted small">Funding allocation and payment status are calculated from these purchase orders.</div>
+                                </div>
+                                <span class="badge bg-light text-dark">{{ number_format($purchaseRequests->count()) }} PR link(s)</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Purchase Order</th>
+                                            <th>Purchase Request</th>
+                                            <th>PO Amount</th>
+                                            <th>Paid</th>
+                                            <th>Unpaid</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse ($purchaseOrders as $purchaseOrder)
+                                            @php
+                                                $purchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+                                                $purchaseOrderPaid = (float) $purchaseOrder->disbursements->sum('amount');
+                                                $purchaseOrderUnpaid = max((float) $purchaseOrder->amount - $purchaseOrderPaid, 0);
+                                            @endphp
+                                            <tr>
+                                                <td>
+                                                    <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                                    <div class="text-muted small">{{ $purchaseOrder->issued_at?->format('M d, Y') ?? 'No issued date' }}</div>
+                                                </td>
+                                                <td>
+                                                    @if ($purchaseRequest)
+                                                        <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                                        <div class="text-muted small">{{ \Illuminate\Support\Str::limit($purchaseRequest->description, 70) }}</div>
+                                                    @else
+                                                        <span class="text-muted small">No linked purchase request</span>
+                                                    @endif
+                                                </td>
+                                                <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format((float) $purchaseOrder->amount, 2) }}</td>
+                                                <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format($purchaseOrderPaid, 2) }}</td>
+                                                <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format($purchaseOrderUnpaid, 2) }}</td>
+                                                <td><span class="badge bg-light text-dark">{{ str_replace('_', ' ', ucfirst($purchaseOrder->status ?? 'pending')) }}</span></td>
+                                            </tr>
+                                        @empty
+                                            <tr><td colspan="6" class="text-center text-muted py-4">No funding purchase order has been linked to this think tank yet.</td></tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         <div class="table-responsive">
@@ -272,6 +436,7 @@
                                     <tr>
                                         <th>#</th>
                                         <th>Reference</th>
+                                        <th>Finance Trail</th>
                                         <th>Amount</th>
                                         <th>Method</th>
                                         <th>Paid At</th>
@@ -284,11 +449,38 @@
                                 </thead>
                                 <tbody>
                                     @forelse ($transfers as $transfer)
-                                        @php $editRowId = 'editTransferRow' . str_replace('-', '', $transfer->id); @endphp
+                                        @php
+                                            $editRowId = 'editTransferRow' . str_replace('-', '', $transfer->id);
+                                            $purchaseOrder = $transfer->purchaseOrder;
+                                            $purchaseRequest = $purchaseOrder?->purchaseRequest ?: $purchaseOrder?->budgetCommitment?->purchaseRequest;
+                                        @endphp
                                         <tr>
                                             <td>{{ $loop->iteration }}</td>
-                                            <td><strong>{{ $transfer->transfer_reference ?: $transfer->reference_no }}</strong><br><span class="text-muted small">{{ $transfer->purchaseOrder?->reference_no }}</span></td>
-                                            <td>USD {{ number_format($transfer->amount, 2) }}</td>
+                                            <td>
+                                                <a href="{{ route('procurement.disbursements.show', $transfer) }}" class="fw-semibold">{{ $transfer->transfer_reference ?: $transfer->reference_no }}</a>
+                                                <div class="text-muted small">{{ $transfer->reference_no }}</div>
+                                            </td>
+                                            <td>
+                                                <div class="tt-funding-links">
+                                                    <div class="tt-funding-link-row">
+                                                        <span class="tt-link-chip">PO</span>
+                                                        @if ($purchaseOrder)
+                                                            <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                                        @else
+                                                            <span class="text-muted small">No PO</span>
+                                                        @endif
+                                                    </div>
+                                                    <div class="tt-funding-link-row">
+                                                        <span class="tt-link-chip">PR</span>
+                                                        @if ($purchaseRequest)
+                                                            <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                                        @else
+                                                            <span class="text-muted small">No PR</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>{{ $transfer->resolved_currency ?? $currency }} {{ number_format($transfer->amount, 2) }}</td>
                                             <td>{{ $transfer->payment_method ?: 'Bank transfer' }}</td>
                                             <td>{{ $transfer->paid_at?->format('M d, Y H:i') ?? '-' }}</td>
                                             <td>
@@ -310,7 +502,7 @@
                                         </tr>
                                         @can('think_tanks.funding.transfer.edit')
                                             <tr class="collapse" id="{{ $editRowId }}">
-                                                <td colspan="8" class="bg-light">
+                                                <td colspan="9" class="bg-light">
                                                     <form method="POST" action="{{ route('think-tanks-admin.funding.transfers.update', $transfer) }}" class="row g-3 align-items-end">
                                                         @csrf
                                                         @method('PUT')
@@ -342,7 +534,7 @@
                                             </tr>
                                         @endcan
                                     @empty
-                                        <tr><td colspan="{{ auth()->user()?->can('think_tanks.funding.transfer.edit') ? 8 : 7 }}" class="text-center text-muted py-4">No periodic disbursement has been recorded for this think tank yet.</td></tr>
+                                        <tr><td colspan="{{ auth()->user()?->can('think_tanks.funding.transfer.edit') ? 9 : 8 }}" class="text-center text-muted py-4">No paid disbursement has been recorded for this think tank yet.</td></tr>
                                     @endforelse
                                 </tbody>
                             </table>

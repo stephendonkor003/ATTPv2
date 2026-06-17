@@ -176,6 +176,51 @@
             min-height: 92px;
         }
 
+        .ops-finance-trail {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .ops-finance-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .ops-finance-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .ops-finance-chip {
+            display: inline-flex;
+            justify-content: center;
+            min-width: 34px;
+            border-radius: 999px;
+            padding: 0.2rem 0.48rem;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 0.68rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .ops-finance-row a {
+            color: #0f766e;
+            font-size: 0.75rem;
+            font-weight: 850;
+            text-decoration: none;
+        }
+
+        .ops-finance-row a:hover {
+            color: #0f172a;
+            text-decoration: underline;
+        }
+
         .metric-value {
             color: #0f172a;
             font-size: 1.08rem;
@@ -476,6 +521,9 @@
             $receiptRate = ($summary['funds_disbursed'] ?? 0) > 0
                 ? min(100, (($summary['funds_receipted'] ?? 0) / $summary['funds_disbursed']) * 100)
                 : 0;
+            $paymentRate = ($summary['po_allocated'] ?? 0) > 0
+                ? min(100, (($summary['funds_disbursed'] ?? 0) / $summary['po_allocated']) * 100)
+                : 0;
         @endphp
 
         <div class="page-header d-flex justify-content-between align-items-center mb-4">
@@ -549,7 +597,7 @@
         </div>
 
         <div class="row g-3 mb-4">
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl">
                 <div class="ops-summary-tile">
                     <div class="d-flex justify-content-between gap-3">
                         <div>
@@ -560,7 +608,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl">
                 <div class="ops-summary-tile">
                     <div class="d-flex justify-content-between gap-3">
                         <div>
@@ -571,18 +619,31 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl">
                 <div class="ops-summary-tile">
                     <div class="d-flex justify-content-between gap-3">
                         <div>
-                            <div class="ops-summary-label mb-1">Funds Sent</div>
-                            <h5 class="fw-bold mb-0">USD {{ number_format($summary['funds_disbursed'], 2) }}</h5>
+                            <div class="ops-summary-label mb-1">PO Allocated</div>
+                            <h5 class="fw-bold mb-1">USD {{ number_format($summary['po_allocated'], 2) }}</h5>
+                            <div class="small text-muted">{{ number_format($paymentRate, 1) }}% paid</div>
                         </div>
                         <span class="ops-summary-icon amber"><i class="feather-dollar-sign"></i></span>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl">
+                <div class="ops-summary-tile">
+                    <div class="d-flex justify-content-between gap-3">
+                        <div>
+                            <div class="ops-summary-label mb-1">Paid from POs</div>
+                            <h5 class="fw-bold mb-1">USD {{ number_format($summary['funds_disbursed'], 2) }}</h5>
+                            <div class="small text-muted">Unpaid: USD {{ number_format($summary['po_unpaid'], 2) }}</div>
+                        </div>
+                        <span class="ops-summary-icon green"><i class="feather-check"></i></span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl">
                 <div class="ops-summary-tile">
                     <div class="d-flex justify-content-between gap-3">
                         <div>
@@ -637,11 +698,21 @@
                 <div class="row g-3">
                     @forelse ($consortia as $consortium)
                         @php
+                            $poAllocated = (float) ($consortium->po_allocated_amount ?? 0);
                             $sent = (float) ($consortium->transferred_amount ?? 0);
                             $received = (float) ($consortium->receipted_amount ?? 0);
+                            $poUnpaid = max($poAllocated - $sent, 0);
                             $cardReceiptRate = $sent > 0 ? min(100, ($received / $sent) * 100) : 0;
+                            $cardPaymentRate = $poAllocated > 0 ? min(100, ($sent / $poAllocated) * 100) : 0;
                             $pendingTransfers = max(0, (int) ($consortium->transfer_count ?? 0) - (int) ($consortium->confirmed_transfer_count ?? 0));
                             $statusClass = in_array($consortium->status, ['paused', 'closed'], true) ? $consortium->status : 'active';
+                            $purchaseOrders = $consortium->transferPurchaseOrders ?? collect();
+                            $purchaseRequests = $purchaseOrders
+                                ->map(fn ($purchaseOrder) => $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest)
+                                ->filter()
+                                ->unique('id')
+                                ->values();
+                            $paidDisbursements = $consortium->transferDisbursements ?? collect();
                         @endphp
                         <div class="col-xl-4 col-lg-6">
                             <div class="consortium-card">
@@ -665,9 +736,19 @@
                                         <div class="small text-muted">Supported members</div>
                                     </div>
                                     <div class="metric-box">
-                                        <div class="consortium-meta-label mb-1">Funds Sent</div>
+                                        <div class="consortium-meta-label mb-1">PO Allocated</div>
+                                        <div class="metric-value">USD {{ number_format($poAllocated, 2) }}</div>
+                                        <div class="small text-muted">{{ number_format($consortium->transfer_purchase_orders_count ?? 0) }} PO(s)</div>
+                                    </div>
+                                    <div class="metric-box">
+                                        <div class="consortium-meta-label mb-1">Paid from POs</div>
                                         <div class="metric-value">USD {{ number_format($sent, 2) }}</div>
                                         <div class="small text-muted">{{ number_format($consortium->transfer_count ?? 0) }} transfer(s)</div>
+                                    </div>
+                                    <div class="metric-box">
+                                        <div class="consortium-meta-label mb-1">PO Unpaid</div>
+                                        <div class="metric-value">USD {{ number_format($poUnpaid, 2) }}</div>
+                                        <div class="small text-muted">{{ number_format($cardPaymentRate, 1) }}% paid</div>
                                     </div>
                                     <div class="metric-box">
                                         <div class="consortium-meta-label mb-1">Payment Receipt</div>
@@ -681,6 +762,42 @@
                                             {{ number_format($consortium->reports_approved_count ?? 0) }} approved,
                                             {{ number_format($consortium->reports_rejected_count ?? 0) }} rejected/revision
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div class="ops-finance-trail">
+                                    <div class="ops-finance-row">
+                                        <span class="ops-finance-chip">PR</span>
+                                        @forelse ($purchaseRequests->take(2) as $purchaseRequest)
+                                            <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                        @empty
+                                            <span class="text-muted small">No linked PR</span>
+                                        @endforelse
+                                        @if ($purchaseRequests->count() > 2)
+                                            <span class="text-muted small">+{{ $purchaseRequests->count() - 2 }}</span>
+                                        @endif
+                                    </div>
+                                    <div class="ops-finance-row">
+                                        <span class="ops-finance-chip">PO</span>
+                                        @forelse ($purchaseOrders->take(2) as $purchaseOrder)
+                                            <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                        @empty
+                                            <span class="text-muted small">No linked PO</span>
+                                        @endforelse
+                                        @if ($purchaseOrders->count() > 2)
+                                            <span class="text-muted small">+{{ $purchaseOrders->count() - 2 }}</span>
+                                        @endif
+                                    </div>
+                                    <div class="ops-finance-row">
+                                        <span class="ops-finance-chip">Pay</span>
+                                        @forelse ($paidDisbursements->take(2) as $disbursement)
+                                            <a href="{{ route('procurement.disbursements.show', $disbursement) }}">{{ $disbursement->reference_no ?: 'Disbursement' }}</a>
+                                        @empty
+                                            <span class="text-muted small">No paid disbursement</span>
+                                        @endforelse
+                                        @if ($paidDisbursements->count() > 2)
+                                            <span class="text-muted small">+{{ $paidDisbursements->count() - 2 }}</span>
+                                        @endif
                                     </div>
                                 </div>
 
@@ -726,7 +843,7 @@
                         <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-3">
                             <div>
                                 <h5 class="fw-bold mb-1">Graphical Components and Analysis</h5>
-                                <p class="text-muted mb-0">Compare disbursements, receipts, and report decisions across consortia or individual think tanks.</p>
+                                <p class="text-muted mb-0">Compare PO allocations, paid disbursements, receipts, and report decisions across consortia or individual think tanks.</p>
                             </div>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="button" class="analysis-mode-btn active" data-analysis-mode="consortia">
@@ -779,7 +896,9 @@
                                 <div class="analysis-field">
                                     <label for="analysisSortSelect">Sort by</label>
                                     <select class="form-select" id="analysisSortSelect">
-                                        <option value="transferred">Funds sent</option>
+                                        <option value="poAllocated">PO allocated</option>
+                                        <option value="transferred">Paid from POs</option>
+                                        <option value="unpaid">PO unpaid</option>
                                         <option value="receipted">Receipts confirmed</option>
                                         <option value="receiptRate">Receipt rate</option>
                                         <option value="submittedReports">Reports submitted</option>
@@ -807,7 +926,7 @@
                             <div class="col-xl-6" data-analysis-chart-wrap="funds">
                                 <div class="border rounded-3 p-3 h-100">
                                     <div class="d-flex justify-content-between gap-2 align-items-center mb-2">
-                                        <h6 class="fw-bold mb-0">Disbursements vs Receipts</h6>
+                                        <h6 class="fw-bold mb-0">PO Allocation vs Payments and Receipts</h6>
                                         <span class="badge bg-light text-dark border">USD</span>
                                     </div>
                                     <div id="fundsComparisonChart" class="chart-frame"></div>
@@ -838,7 +957,9 @@
                                         <tr>
                                             <th>Name</th>
                                             <th>Context</th>
-                                            <th>Funds Sent</th>
+                                            <th>PO Allocated</th>
+                                            <th>Paid from POs</th>
+                                            <th>PO Unpaid</th>
                                             <th>Receipts</th>
                                             <th>Receipt Rate</th>
                                             <th>Reports</th>
@@ -848,7 +969,7 @@
                                     </thead>
                                     <tbody id="analysisSheetBody">
                                         <tr>
-                                            <td colspan="8" class="text-center text-muted py-4">Apply a comparison to load the selected records.</td>
+                                            <td colspan="10" class="text-center text-muted py-4">Apply a comparison to load the selected records.</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1169,7 +1290,7 @@
                     if (!rows.length) {
                         const tr = document.createElement('tr');
                         const td = document.createElement('td');
-                        td.colSpan = 8;
+                        td.colSpan = 10;
                         td.className = 'text-center text-muted py-4';
                         td.textContent = 'No records selected for this comparison.';
                         tr.appendChild(td);
@@ -1182,7 +1303,9 @@
                         [
                             row.label || '-',
                             row.context || '-',
+                            formatUsd(row.poAllocated),
                             formatUsd(row.transferred),
+                            formatUsd(row.unpaid),
                             formatUsd(row.receipted),
                             formatRate(row.receiptRate),
                             formatNumber(row.submittedReports),
@@ -1235,7 +1358,8 @@
                     if ((metricSelect?.value || 'both') !== 'reports') {
                         fundsChart = new ApexCharts(fundsChartEl, {
                             series: [
-                                { name: 'Disbursed', data: rows.map((row) => row.transferred) },
+                                { name: 'PO Allocated', data: rows.map((row) => row.poAllocated) },
+                                { name: 'Paid from POs', data: rows.map((row) => row.transferred) },
                                 { name: 'Receipted', data: rows.map((row) => row.receipted) }
                             ],
                             chart: {
@@ -1243,7 +1367,7 @@
                                 height: chartHeight,
                                 toolbar: { show: true }
                             },
-                            colors: ['#2563eb', '#16a34a'],
+                            colors: ['#6366f1', '#2563eb', '#16a34a'],
                             plotOptions: {
                                 bar: {
                                     horizontal: true,

@@ -27,9 +27,12 @@
 </head>
 <body>
 @php
-    $currency = 'USD';
+    $currency = $purchaseOrderRecords->first()?->resolved_currency ?? $member->consortium?->currency ?? 'USD';
     $financePercent = min(100, max(0, (float) ($metrics['utilization'] ?? 0)));
     $receiptRate = min(100, max(0, (float) ($receiptSummary['rate'] ?? 0)));
+    $poPaymentRate = (float) ($metrics['po_allocated'] ?? 0) > 0
+        ? min(100, ((float) ($metrics['disbursed'] ?? 0) / (float) $metrics['po_allocated']) * 100)
+        : 0;
 @endphp
 
 <div class="header">
@@ -41,10 +44,10 @@
 
 <table class="grid" style="margin-top: 12px;">
     <tr>
-        <td><div class="metric"><div class="metric-label">Funds Disbursed</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['disbursed'], 2) }}</div></div></td>
+        <td><div class="metric"><div class="metric-label">PO Allocated</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['po_allocated'], 2) }}</div></div></td>
+        <td><div class="metric"><div class="metric-label">Paid From POs</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['disbursed'], 2) }}</div></div></td>
+        <td><div class="metric"><div class="metric-label">PO Unpaid</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['po_unpaid'], 2) }}</div><div class="muted">{{ number_format($poPaymentRate, 1) }}% paid</div></div></td>
         <td><div class="metric"><div class="metric-label">Receipt Confirmed</div><div class="metric-value">{{ $currency }} {{ number_format($receiptSummary['confirmed'], 2) }}</div></div></td>
-        <td><div class="metric"><div class="metric-label">Utilisation</div><div class="metric-value">{{ number_format($financePercent, 1) }}%</div></div></td>
-        <td><div class="metric"><div class="metric-label">Reports</div><div class="metric-value">{{ number_format($metrics['reports']) }}</div></div></td>
     </tr>
 </table>
 
@@ -101,20 +104,52 @@
 </table>
 
 <div class="section">
+    <div class="section-title">Linked Purchase Order Ledger</div>
+    <table>
+        <thead><tr><th>Purchase Order</th><th>Purchase Request</th><th>PO Amount</th><th>Paid</th><th>Unpaid</th><th>Status</th></tr></thead>
+        <tbody>
+        @forelse($purchaseOrderRecords as $purchaseOrder)
+            @php
+                $purchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+                $paidAmount = (float) $purchaseOrder->disbursements->sum('amount');
+                $unpaidAmount = max((float) $purchaseOrder->amount - $paidAmount, 0);
+            @endphp
+            <tr>
+                <td>{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}<br><span class="muted">{{ $purchaseOrder->issued_at?->format('M d, Y') ?? '-' }}</span></td>
+                <td>{{ $purchaseRequest?->reference_no ?? '-' }}</td>
+                <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format((float) $purchaseOrder->amount, 2) }}</td>
+                <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format($paidAmount, 2) }}</td>
+                <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format($unpaidAmount, 2) }}</td>
+                <td><span class="status-pill">{{ ucfirst(str_replace('_', ' ', $purchaseOrder->status ?? 'pending')) }}</span></td>
+            </tr>
+        @empty
+            <tr><td colspan="6" class="muted">No linked funding purchase orders found for this selected period.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
+</div>
+
+<div class="section">
     <div class="section-title">Transfer and Receipt Register</div>
     <table>
-        <thead><tr><th>Reference</th><th>Date</th><th>Amount</th><th>Method</th><th>Receipt</th></tr></thead>
+        <thead><tr><th>Reference</th><th>PO</th><th>PR</th><th>Date</th><th>Amount</th><th>Method</th><th>Receipt</th></tr></thead>
         <tbody>
         @forelse($transferRecords as $transfer)
+            @php
+                $purchaseOrder = $transfer->purchaseOrder;
+                $purchaseRequest = $purchaseOrder?->purchaseRequest ?: $purchaseOrder?->budgetCommitment?->purchaseRequest;
+            @endphp
             <tr>
                 <td>{{ $transfer->transfer_reference ?: $transfer->reference_no }}</td>
+                <td>{{ $purchaseOrder?->reference_no ?? '-' }}</td>
+                <td>{{ $purchaseRequest?->reference_no ?? '-' }}</td>
                 <td>{{ $transfer->paid_at?->format('M d, Y') ?? $transfer->created_at?->format('M d, Y') }}</td>
                 <td>{{ $currency }} {{ number_format((float) $transfer->amount, 2) }}</td>
                 <td>{{ ucfirst(str_replace('_', ' ', $transfer->payment_method ?? 'transfer')) }}</td>
                 <td><span class="status-pill">{{ ucfirst(str_replace('_', ' ', $transfer->recipient_confirmation_status ?: 'pending')) }}</span></td>
             </tr>
         @empty
-            <tr><td colspan="5" class="muted">No transfer records found for this selected period.</td></tr>
+            <tr><td colspan="7" class="muted">No paid transfer records found for this selected period.</td></tr>
         @endforelse
         </tbody>
     </table>

@@ -146,6 +146,48 @@
             color: #0f172a;
             padding: 0.9rem 1rem;
         }
+
+        .tt-finance-trail {
+            min-width: 230px;
+        }
+
+        .tt-finance-trail-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            align-items: center;
+            margin-bottom: 0.35rem;
+        }
+
+        .tt-finance-trail-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .tt-finance-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 34px;
+            border-radius: 999px;
+            padding: 0.18rem 0.45rem;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 0.68rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .tt-finance-trail a {
+            color: #0f766e;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .tt-finance-trail a:hover {
+            color: #0f172a;
+            text-decoration: underline;
+        }
     </style>
 @endpush
 
@@ -191,7 +233,8 @@
                 ['label' => 'Active Profiles', 'value' => number_format($summary['active'])],
                 ['label' => 'Portal Linked', 'value' => number_format($summary['portal_linked'])],
                 ['label' => 'Approved Ops Amount', 'value' => 'USD ' . number_format($summary['approved_ops'], 2)],
-                ['label' => 'Transferred', 'value' => 'USD ' . number_format($summary['transferred'], 2)],
+                ['label' => 'Linked PO Amount', 'value' => 'USD ' . number_format($summary['linked_po_amount'], 2)],
+                ['label' => 'Paid from POs', 'value' => 'USD ' . number_format($summary['transferred'], 2)],
             ] as $stat)
                 <div class="col-md-6 col-xl">
                     <div class="card tt-directory-stat h-100">
@@ -267,8 +310,9 @@
                                 <th>Think Tank</th>
                                 <th>System DB</th>
                                 <th>Consortium</th>
-                                <th>Approved Ops Amount</th>
-                                <th>Transferred</th>
+                                <th>PO Linked Amount</th>
+                                <th>Paid from POs</th>
+                                <th>Finance Trail</th>
                                 <th>Outputs</th>
                                 <th>Portal</th>
                                 <th>Status</th>
@@ -278,8 +322,16 @@
                         <tbody>
                             @forelse ($thinkTanks as $thinkTank)
                                 @php
-                                    $allocated = (float) $thinkTank->budget_allocated + (float) $thinkTank->fund_allocations_sum_amount_allocated;
-                                    $transferred = (float) $thinkTank->transfer_disbursements_sum_amount;
+                                    $profileAllocated = (float) $thinkTank->budget_allocated + (float) $thinkTank->fund_allocations_sum_amount_allocated;
+                                    $purchaseOrders = $thinkTank->purchaseOrders ?? collect();
+                                    $purchaseRequests = $purchaseOrders
+                                        ->map(fn ($purchaseOrder) => $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest)
+                                        ->filter()
+                                        ->unique('id')
+                                        ->values();
+                                    $paidDisbursements = $thinkTank->transferDisbursements ?? collect();
+                                    $linkedPoAmount = (float) $thinkTank->purchase_orders_sum_amount;
+                                    $paidAmount = (float) $thinkTank->paid_transfer_disbursements_sum_amount;
                                 @endphp
                                 <tr>
                                     <td>
@@ -302,8 +354,51 @@
                                         @endif
                                     </td>
                                     <td>{{ $thinkTank->consortium?->name ?? '-' }}</td>
-                                    <td>USD {{ number_format($allocated, 2) }}</td>
-                                    <td>USD {{ number_format($transferred, 2) }}</td>
+                                    <td>
+                                        <strong>USD {{ number_format($linkedPoAmount, 2) }}</strong>
+                                        <div class="text-muted small">Profile: USD {{ number_format($profileAllocated, 2) }}</div>
+                                    </td>
+                                    <td>
+                                        <strong>USD {{ number_format($paidAmount, 2) }}</strong>
+                                        <div class="text-muted small">{{ number_format($thinkTank->paid_transfer_disbursements_count) }} paid receipt(s)</div>
+                                    </td>
+                                    <td>
+                                        <div class="tt-finance-trail">
+                                            <div class="tt-finance-trail-row">
+                                                <span class="tt-finance-chip">PR</span>
+                                                @forelse ($purchaseRequests->take(2) as $purchaseRequest)
+                                                    <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                                @empty
+                                                    <span class="text-muted small">No linked PR</span>
+                                                @endforelse
+                                                @if ($purchaseRequests->count() > 2)
+                                                    <span class="text-muted small">+{{ $purchaseRequests->count() - 2 }}</span>
+                                                @endif
+                                            </div>
+                                            <div class="tt-finance-trail-row">
+                                                <span class="tt-finance-chip">PO</span>
+                                                @forelse ($purchaseOrders->take(2) as $purchaseOrder)
+                                                    <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                                @empty
+                                                    <span class="text-muted small">No linked PO</span>
+                                                @endforelse
+                                                @if ($purchaseOrders->count() > 2)
+                                                    <span class="text-muted small">+{{ $purchaseOrders->count() - 2 }}</span>
+                                                @endif
+                                            </div>
+                                            <div class="tt-finance-trail-row">
+                                                <span class="tt-finance-chip">Pay</span>
+                                                @forelse ($paidDisbursements->take(2) as $disbursement)
+                                                    <a href="{{ route('procurement.disbursements.show', $disbursement) }}">{{ $disbursement->reference_no ?: 'Disbursement' }}</a>
+                                                @empty
+                                                    <span class="text-muted small">No paid disbursement</span>
+                                                @endforelse
+                                                @if ($paidDisbursements->count() > 2)
+                                                    <span class="text-muted small">+{{ $paidDisbursements->count() - 2 }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td>
                                         <div class="small">Reports: <strong>{{ number_format($thinkTank->reports_count) }}</strong></div>
                                         <div class="small">Research: <strong>{{ number_format($thinkTank->research_outputs_count) }}</strong></div>

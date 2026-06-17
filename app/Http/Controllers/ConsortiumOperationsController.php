@@ -16,6 +16,7 @@ use App\Models\Funder;
 use App\Models\ProgramFunding;
 use App\Models\Procurement;
 use App\Models\ProcurementDisbursement;
+use App\Models\ProcurementPurchaseOrder;
 use App\Models\Role;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankResearchOutput;
@@ -34,24 +35,46 @@ class ConsortiumOperationsController extends Controller
     public function index(Request $request)
     {
         $query = Consortium::query()
-            ->with(['funder', 'programFunding.program', 'secretariatManager'])
+            ->with([
+                'funder',
+                'programFunding.program',
+                'secretariatManager',
+                'transferPurchaseOrders' => fn ($purchaseOrderQuery) => $purchaseOrderQuery
+                    ->with([
+                        'purchaseRequest',
+                        'budgetCommitment.purchaseRequest',
+                        'disbursements' => fn ($disbursementQuery) => $this->paidProcurementDisbursements($disbursementQuery)
+                            ->latest('paid_at')
+                            ->latest(),
+                    ])
+                    ->latest('issued_at')
+                    ->latest(),
+                'transferDisbursements' => fn ($transferQuery) => $this->paidTransferDisbursements($transferQuery)
+                    ->with(['purchaseOrder.purchaseRequest', 'purchaseOrder.budgetCommitment.purchaseRequest'])
+                    ->latest('paid_at')
+                    ->latest(),
+            ])
             ->withCount([
                 'members',
                 'activityReports as reports_total_count',
                 'activityReports as reports_approved_count' => fn ($reportQuery) => $reportQuery->where('status', 'approved'),
                 'activityReports as reports_rejected_count' => fn ($reportQuery) => $reportQuery->whereIn('status', ['rejected', 'revisions_requested']),
                 'riskFlags',
-                'transferDisbursements as transfer_count' => fn ($transferQuery) => $transferQuery->whereNotNull('think_tank_member_id'),
+                'transferPurchaseOrders',
+                'transferDisbursements as transfer_count' => fn ($transferQuery) => $this->paidTransferDisbursements($transferQuery),
                 'transferDisbursements as confirmed_transfer_count' => fn ($transferQuery) => $transferQuery
                     ->whereNotNull('think_tank_member_id')
+                    ->whereNotNull('paid_at')
+                    ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                    ->whereHas('purchaseOrder', fn ($purchaseOrderQuery) => $purchaseOrderQuery->where('po_type', 'think_tank_transfer'))
                     ->where('recipient_confirmation_status', 'confirmed'),
             ])
+            ->withSum('transferPurchaseOrders as po_allocated_amount', 'amount')
             ->withSum([
-                'transferDisbursements as transferred_amount' => fn ($transferQuery) => $transferQuery->whereNotNull('think_tank_member_id'),
+                'transferDisbursements as transferred_amount' => fn ($transferQuery) => $this->paidTransferDisbursements($transferQuery),
             ], 'amount')
             ->withSum([
-                'transferDisbursements as receipted_amount' => fn ($transferQuery) => $transferQuery
-                    ->whereNotNull('think_tank_member_id')
+                'transferDisbursements as receipted_amount' => fn ($transferQuery) => $this->paidTransferDisbursements($transferQuery)
                     ->where('recipient_confirmation_status', 'confirmed'),
             ], 'amount');
 
@@ -442,9 +465,19 @@ class ConsortiumOperationsController extends Controller
     {
         $consortiumQuery = Consortium::query()->when($funder, fn ($query) => $query->where('funder_id', $funder->id));
         $consortiumIds = (clone $consortiumQuery)->pluck('id');
+        $purchaseOrderQuery = ProcurementPurchaseOrder::query()
+            ->whereIn('consortium_id', $consortiumIds)
+            ->whereNotNull('think_tank_member_id')
+            ->where('po_type', 'think_tank_transfer');
         $transferQuery = ProcurementDisbursement::query()
             ->whereIn('consortium_id', $consortiumIds)
-            ->whereNotNull('think_tank_member_id');
+            ->whereNotNull('think_tank_member_id')
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+            ->whereHas('purchaseOrder', fn ($query) => $query->where('po_type', 'think_tank_transfer'));
+
+        $poAllocated = (float) (clone $purchaseOrderQuery)->sum('amount');
+        $paidFromPurchaseOrders = (float) (clone $transferQuery)->sum('amount');
 
         return [
             'consortia' => (clone $consortiumQuery)->count(),
@@ -452,7 +485,9 @@ class ConsortiumOperationsController extends Controller
             'submitted_reports' => ConsortiumActivityReport::whereIn('consortium_id', $consortiumIds)->count(),
             'pending_reports' => ConsortiumActivityReport::whereIn('consortium_id', $consortiumIds)->where('status', 'submitted')->count(),
             'funds_allocated' => ConsortiumFundAllocation::whereIn('consortium_id', $consortiumIds)->sum('amount_allocated'),
-            'funds_disbursed' => (clone $transferQuery)->sum('amount'),
+            'po_allocated' => $poAllocated,
+            'po_unpaid' => max($poAllocated - $paidFromPurchaseOrders, 0),
+            'funds_disbursed' => $paidFromPurchaseOrders,
             'funds_receipted' => (clone $transferQuery)->where('recipient_confirmation_status', 'confirmed')->sum('amount'),
             'pending_receipts' => (clone $transferQuery)->where('recipient_confirmation_status', '!=', 'confirmed')->count(),
             'funds_spent' => ConsortiumFundAllocation::whereIn('consortium_id', $consortiumIds)->sum('amount_spent'),
@@ -475,12 +510,18 @@ class ConsortiumOperationsController extends Controller
                 'reports as reports_total_count',
                 'reports as reports_approved_count' => fn ($query) => $query->where('status', 'approved'),
                 'reports as reports_rejected_count' => fn ($query) => $query->whereIn('status', ['rejected', 'revisions_requested']),
-                'transferDisbursements as transfer_count',
-                'transferDisbursements as confirmed_transfer_count' => fn ($query) => $query->where('recipient_confirmation_status', 'confirmed'),
+                'transferPurchaseOrders',
+                'transferDisbursements as transfer_count' => fn ($query) => $this->paidTransferDisbursements($query),
+                'transferDisbursements as confirmed_transfer_count' => fn ($query) => $this->paidTransferDisbursements($query)
+                    ->where('recipient_confirmation_status', 'confirmed'),
             ])
-            ->withSum('transferDisbursements as transferred_amount', 'amount')
+            ->withSum('transferPurchaseOrders as po_allocated_amount', 'amount')
             ->withSum([
-                'transferDisbursements as receipted_amount' => fn ($query) => $query->where('recipient_confirmation_status', 'confirmed'),
+                'transferDisbursements as transferred_amount' => fn ($query) => $this->paidTransferDisbursements($query),
+            ], 'amount')
+            ->withSum([
+                'transferDisbursements as receipted_amount' => fn ($query) => $this->paidTransferDisbursements($query)
+                    ->where('recipient_confirmation_status', 'confirmed'),
             ], 'amount')
             ->orderBy('name')
             ->get();
@@ -490,6 +531,7 @@ class ConsortiumOperationsController extends Controller
                 $consortium->id,
                 $consortium->name,
                 $consortium->code,
+                (float) ($consortium->po_allocated_amount ?? 0),
                 (float) ($consortium->transferred_amount ?? 0),
                 (float) ($consortium->receipted_amount ?? 0),
                 (int) ($consortium->reports_total_count ?? 0),
@@ -503,6 +545,7 @@ class ConsortiumOperationsController extends Controller
                 $thinkTank->id,
                 $thinkTank->name,
                 $thinkTank->consortium?->code ?: $thinkTank->consortium?->name,
+                (float) ($thinkTank->po_allocated_amount ?? 0),
                 (float) ($thinkTank->transferred_amount ?? 0),
                 (float) ($thinkTank->receipted_amount ?? 0),
                 (int) ($thinkTank->reports_total_count ?? 0),
@@ -519,6 +562,7 @@ class ConsortiumOperationsController extends Controller
         string $id,
         string $label,
         ?string $context,
+        float $poAllocated,
         float $transferred,
         float $receipted,
         int $submittedReports,
@@ -532,8 +576,10 @@ class ConsortiumOperationsController extends Controller
             'id' => $id,
             'label' => $label,
             'context' => $context,
+            'poAllocated' => round($poAllocated, 2),
             'transferred' => round($transferred, 2),
             'receipted' => round($receipted, 2),
+            'unpaid' => round(max($poAllocated - $transferred, 0), 2),
             'submittedReports' => $submittedReports,
             'approvedReports' => $approvedReports,
             'rejectedReports' => $rejectedReports,
@@ -541,7 +587,22 @@ class ConsortiumOperationsController extends Controller
             'transferCount' => $transferCount,
             'confirmedTransferCount' => $confirmedTransferCount,
             'receiptRate' => $transferred > 0 ? round(($receipted / $transferred) * 100, 1) : 0,
+            'paymentRate' => $poAllocated > 0 ? round(($transferred / $poAllocated) * 100, 1) : 0,
         ];
+    }
+
+    private function paidProcurementDisbursements($query)
+    {
+        return $query
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+    }
+
+    private function paidTransferDisbursements($query)
+    {
+        return $this->paidProcurementDisbursements($query)
+            ->whereNotNull('think_tank_member_id')
+            ->whereHas('purchaseOrder', fn ($purchaseOrderQuery) => $purchaseOrderQuery->where('po_type', 'think_tank_transfer'));
     }
 
     private function nextCode(string $prefix): string

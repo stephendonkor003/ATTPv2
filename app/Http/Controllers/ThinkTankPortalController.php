@@ -93,25 +93,36 @@ class ThinkTankPortalController extends Controller
         $procurementsBase = Procurement::where('think_tank_member_id', $member->id);
         $filteredProcurementsBase = $applyPeriod(Procurement::where('think_tank_member_id', $member->id));
         $procurementIds = (clone $filteredProcurementsBase)->pluck('id');
+        $purchaseOrderQuery = $applyPeriod(
+            ProcurementPurchaseOrder::query()
+                ->where('think_tank_member_id', $member->id)
+                ->where('po_type', 'think_tank_transfer'),
+            'issued_at'
+        );
         $allocationQuery = $applyPeriod(ConsortiumFundAllocation::where('think_tank_member_id', $member->id));
         $disbursementQuery = $applyPeriod(ConsortiumDisbursementRequest::where('think_tank_member_id', $member->id));
-        $actualPaymentQuery = $applyPeriod(ProcurementDisbursement::where('think_tank_member_id', $member->id), 'paid_at');
+        $actualPaymentQuery = $applyPeriod(
+            ProcurementDisbursement::query()
+                ->where('think_tank_member_id', $member->id)
+                ->whereNotNull('paid_at')
+                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                ->whereHas('purchaseOrder', fn ($query) => $query->where('po_type', 'think_tank_transfer')),
+            'paid_at'
+        );
         $expenseQuery = $applyPeriod(ConsortiumExpenseReport::where('think_tank_member_id', $member->id), 'expense_date');
         $reportQuery = $applyReportPeriod(ConsortiumActivityReport::where('think_tank_member_id', $member->id));
         $researchQuery = $applyPeriod(ThinkTankResearchOutput::where('think_tank_member_id', $member->id), 'submitted_at');
         $planQuery = $applyPeriod(ThinkTankProcurementPlan::where('think_tank_member_id', $member->id));
 
+        $poAllocated = (float) (clone $purchaseOrderQuery)->sum('amount');
         $actualPaid = (float) (clone $actualPaymentQuery)->sum('amount');
-        if ($actualPaid <= 0) {
-            $actualPaid = (float) (clone $disbursementQuery)->sum('amount_approved');
-        }
-        if ($actualPaid <= 0) {
-            $actualPaid = (float) (clone $allocationQuery)->sum('amount_disbursed');
-        }
+        $poUnpaid = max($poAllocated - $actualPaid, 0);
 
         $metrics = [
-            'allocated' => (clone $allocationQuery)->sum('amount_allocated') + ($dashboardFilter['is_all_time'] ? (float) $member->budget_allocated : 0),
+            'allocated' => $poAllocated,
+            'po_allocated' => $poAllocated,
             'disbursed' => $actualPaid,
+            'po_unpaid' => $poUnpaid,
             'requested' => (clone $disbursementQuery)->sum('amount_requested'),
             'spent' => (clone $expenseQuery)->sum('amount'),
             'reports' => (clone $reportQuery)->count(),
@@ -128,7 +139,14 @@ class ThinkTankPortalController extends Controller
             ? round(((float) $metrics['spent'] / (float) $metrics['disbursed']) * 100, 1)
             : 0;
 
-        $transferSummaryQuery = $applyPeriod(ProcurementDisbursement::where('think_tank_member_id', $member->id), 'paid_at');
+        $transferSummaryQuery = $applyPeriod(
+            ProcurementDisbursement::query()
+                ->where('think_tank_member_id', $member->id)
+                ->whereNotNull('paid_at')
+                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                ->whereHas('purchaseOrder', fn ($query) => $query->where('po_type', 'think_tank_transfer')),
+            'paid_at'
+        );
         $receiptSent = (float) (clone $transferSummaryQuery)->sum('amount');
         $receiptConfirmed = (float) (clone $transferSummaryQuery)
             ->where('recipient_confirmation_status', 'confirmed')
@@ -143,7 +161,23 @@ class ThinkTankPortalController extends Controller
         ];
 
         $transferRecords = (clone $transferSummaryQuery)
+            ->with(['purchaseOrder.purchaseRequest', 'purchaseOrder.budgetCommitment.purchaseRequest'])
             ->latest('paid_at')
+            ->limit(8)
+            ->get();
+
+        $purchaseOrderRecords = (clone $purchaseOrderQuery)
+            ->with([
+                'purchaseRequest',
+                'budgetCommitment.purchaseRequest',
+                'disbursements' => fn ($query) => $query
+                    ->whereNotNull('paid_at')
+                    ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                    ->latest('paid_at')
+                    ->latest(),
+            ])
+            ->latest('issued_at')
+            ->latest()
             ->limit(8)
             ->get();
 
@@ -259,10 +293,11 @@ class ThinkTankPortalController extends Controller
 
         $chartData = [
             'finance' => [
-                'labels' => ['Allocated', 'Disbursed', 'Spent', 'Requested'],
+                'labels' => ['PO Allocated', 'Paid from POs', 'PO Unpaid', 'Spent', 'Requested'],
                 'values' => [
-                    round((float) $metrics['allocated'], 2),
+                    round((float) $metrics['po_allocated'], 2),
                     round((float) $metrics['disbursed'], 2),
+                    round((float) $metrics['po_unpaid'], 2),
                     round((float) $metrics['spent'], 2),
                     round((float) $metrics['requested'], 2),
                 ],
@@ -317,6 +352,7 @@ class ThinkTankPortalController extends Controller
             'recentProcurements',
             'recentReports',
             'recentResearch',
+            'purchaseOrderRecords',
             'transferRecords',
             'fundedActivities',
             'upcomingActivities',

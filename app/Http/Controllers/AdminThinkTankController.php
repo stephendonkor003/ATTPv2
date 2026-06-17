@@ -39,14 +39,48 @@ class AdminThinkTankController extends Controller
             'dataset_linked' => ConsortiumThinkTank::whereNotNull('think_dataset_id')->count(),
             'portal_linked' => ConsortiumThinkTank::whereNotNull('portal_user_id')->count(),
             'approved_ops' => (float) ConsortiumThinkTank::sum('budget_allocated') + (float) ConsortiumFundAllocation::sum('amount_allocated'),
-            'transferred' => (float) ProcurementDisbursement::whereNotNull('think_tank_member_id')->sum('amount'),
+            'linked_po_amount' => (float) ProcurementPurchaseOrder::whereNotNull('think_tank_member_id')->sum('amount'),
+            'transferred' => (float) ProcurementDisbursement::query()
+                ->whereNotNull('think_tank_member_id')
+                ->whereNotNull('paid_at')
+                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                ->sum('amount'),
         ];
 
         $thinkTanks = ConsortiumThinkTank::query()
-            ->with(['consortium.programFunding.program', 'thinkDataset', 'portalUser', 'vendorUser'])
+            ->with([
+                'consortium.programFunding.program',
+                'thinkDataset',
+                'portalUser',
+                'vendorUser',
+                'purchaseOrders' => fn ($query) => $query
+                    ->with([
+                        'purchaseRequest',
+                        'budgetCommitment.purchaseRequest',
+                        'disbursements' => fn ($disbursementQuery) => $this->paidDisbursements($disbursementQuery)
+                            ->latest('paid_at')
+                            ->latest(),
+                    ])
+                    ->latest('issued_at')
+                    ->latest(),
+                'transferDisbursements' => fn ($query) => $this->paidDisbursements($query)
+                    ->with(['purchaseOrder.purchaseRequest', 'purchaseOrder.budgetCommitment.purchaseRequest'])
+                    ->latest('paid_at')
+                    ->latest(),
+            ])
             ->withSum('fundAllocations', 'amount_allocated')
-            ->withSum('transferDisbursements', 'amount')
-            ->withCount(['reports', 'researchOutputs', 'procurementPlans', 'procurements'])
+            ->withSum('purchaseOrders', 'amount')
+            ->withSum([
+                'transferDisbursements as paid_transfer_disbursements_sum_amount' => fn ($query) => $this->paidDisbursements($query),
+            ], 'amount')
+            ->withCount([
+                'reports',
+                'researchOutputs',
+                'procurementPlans',
+                'procurements',
+                'purchaseOrders',
+                'transferDisbursements as paid_transfer_disbursements_count' => fn ($query) => $this->paidDisbursements($query),
+            ])
             ->when($request->filled('q'), function ($query) use ($request) {
                 $search = '%' . trim((string) $request->input('q')) . '%';
                 $query->where(function ($builder) use ($search) {
@@ -165,16 +199,34 @@ class AdminThinkTankController extends Controller
         $thinkTanks = ConsortiumThinkTank::query()
             ->with([
                 'consortium',
+                'transferPurchaseOrders' => fn ($query) => $query
+                    ->with([
+                        'purchaseRequest',
+                        'budgetCommitment.purchaseRequest',
+                        'disbursements' => fn ($disbursementQuery) => $this->paidDisbursements($disbursementQuery)
+                            ->latest('paid_at')
+                            ->latest(),
+                    ])
+                    ->latest('issued_at')
+                    ->latest(),
                 'transferDisbursements' => fn ($query) => $query
-                    ->with(['purchaseOrder.budgetCommitment.purchaseRequest', 'fundAllocation', 'consortiumDisbursementRequest', 'recipientConfirmer'])
+                    ->with(['purchaseOrder.purchaseRequest', 'purchaseOrder.budgetCommitment.purchaseRequest', 'fundAllocation', 'consortiumDisbursementRequest', 'recipientConfirmer'])
+                    ->whereNotNull('paid_at')
+                    ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                    ->whereHas('purchaseOrder', fn ($purchaseOrderQuery) => $purchaseOrderQuery->where('po_type', 'think_tank_transfer'))
                     ->latest('paid_at')
                     ->latest(),
             ])
             ->withSum('fundAllocations', 'amount_allocated')
-            ->withSum('transferDisbursements', 'amount')
+            ->withSum('transferPurchaseOrders', 'amount')
+            ->withSum([
+                'transferDisbursements as paid_transfer_disbursements_sum_amount' => fn ($query) => $this->fundingTransferDisbursements($query),
+            ], 'amount')
             ->withCount([
-                'transferDisbursements',
-                'transferDisbursements as confirmed_transfers_count' => fn ($query) => $query->where('recipient_confirmation_status', 'confirmed'),
+                'transferPurchaseOrders',
+                'transferDisbursements as paid_transfer_disbursements_count' => fn ($query) => $this->fundingTransferDisbursements($query),
+                'transferDisbursements as confirmed_transfers_count' => fn ($query) => $this->fundingTransferDisbursements($query)
+                    ->where('recipient_confirmation_status', 'confirmed'),
             ])
             ->orderBy('name')
             ->get();
@@ -659,34 +711,64 @@ class AdminThinkTankController extends Controller
         $subActivity = $source['subActivity'];
         $allocated = $subActivity ? (float) $subActivity->allocations()->sum('amount') : 0.0;
         $budget = $allocated;
+        $fundingPurchaseOrderIds = ProcurementPurchaseOrder::query()
+            ->whereNotNull('think_tank_member_id')
+            ->where('po_type', 'think_tank_transfer')
+            ->select('procurement_purchase_orders.id');
 
-        $transferred = $subActivity
-            ? (float) ProcurementDisbursement::where('sub_activity_id', $subActivity->id)
-                ->whereNotNull('think_tank_member_id')
-                ->sum('amount')
-            : 0.0;
+        $poAllocated = (float) ProcurementPurchaseOrder::query()
+            ->whereNotNull('think_tank_member_id')
+            ->where('po_type', 'think_tank_transfer')
+            ->sum('amount');
 
-        $confirmed = $subActivity
-            ? (float) ProcurementDisbursement::where('sub_activity_id', $subActivity->id)
+        $transferred = (float) ProcurementDisbursement::query()
+            ->whereIn('purchase_order_id', $fundingPurchaseOrderIds)
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+            ->sum('amount');
+
+        $confirmed = (float) ProcurementDisbursement::query()
+            ->whereIn('purchase_order_id', ProcurementPurchaseOrder::query()
                 ->whereNotNull('think_tank_member_id')
-                ->where('recipient_confirmation_status', 'confirmed')
-                ->sum('amount')
-            : 0.0;
+                ->where('po_type', 'think_tank_transfer')
+                ->select('procurement_purchase_orders.id'))
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+            ->where('recipient_confirmation_status', 'confirmed')
+            ->sum('amount');
 
         $pending = max($transferred - $confirmed, 0);
-        $remaining = max($budget - $transferred, 0);
+        $pendingPayment = max($poAllocated - $transferred, 0);
+        $remaining = max($budget - $poAllocated, 0);
 
         return [
             'allocated' => $allocated,
             'budget' => $budget,
+            'po_allocated' => $poAllocated,
             'transferred' => $transferred,
             'confirmed' => $confirmed,
             'pending' => $pending,
+            'pending_payment' => $pendingPayment,
             'remaining' => $remaining,
+            'po_allocation_rate' => $budget > 0 ? round(($poAllocated / $budget) * 100, 1) : 0,
             'transfer_rate' => $budget > 0 ? round(($transferred / $budget) * 100, 1) : 0,
+            'payment_rate' => $poAllocated > 0 ? round(($transferred / $poAllocated) * 100, 1) : 0,
             'remaining_rate' => $budget > 0 ? round(($remaining / $budget) * 100, 1) : 0,
             'confirmation_rate' => $transferred > 0 ? round(($confirmed / $transferred) * 100, 1) : 0,
         ];
+    }
+
+    private function paidDisbursements($query)
+    {
+        return $query
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+    }
+
+    private function fundingTransferDisbursements($query)
+    {
+        return $this->paidDisbursements($query)
+            ->whereHas('purchaseOrder', fn ($purchaseOrderQuery) => $purchaseOrderQuery->where('po_type', 'think_tank_transfer'));
     }
 
     private function nextReference(string $prefix): string

@@ -1,8 +1,11 @@
 @php
-    $currency = 'USD';
+    $currency = $purchaseOrderRecords->first()?->resolved_currency ?? $member->consortium?->currency ?? 'USD';
     $isAdminView = auth()->user()?->isSuperAdmin() || auth()->user()?->isAdmin();
     $financePercent = min(100, max(0, (float) ($metrics['utilization'] ?? 0)));
     $receiptRate = min(100, max(0, (float) ($receiptSummary['rate'] ?? 0)));
+    $poPaymentRate = (float) ($metrics['po_allocated'] ?? 0) > 0
+        ? min(100, ((float) ($metrics['disbursed'] ?? 0) / (float) $metrics['po_allocated']) * 100)
+        : 0;
     $resetParams = $isAdminView ? ['think_tank_member_id' => $member->id] : [];
 @endphp
 
@@ -331,6 +334,43 @@
             font-size: 13px;
         }
 
+        .tt-finance-links {
+            display: grid;
+            gap: 5px;
+            min-width: 180px;
+        }
+
+        .tt-finance-line {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tt-finance-chip {
+            display: inline-flex;
+            justify-content: center;
+            min-width: 30px;
+            border-radius: 999px;
+            padding: 3px 7px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .tt-finance-line a {
+            color: #0f766e;
+            font-weight: 850;
+            text-decoration: none;
+        }
+
+        .tt-finance-line a:hover {
+            color: #0f172a;
+            text-decoration: underline;
+        }
+
         .tt-status-row {
             display: flex;
             align-items: center;
@@ -473,23 +513,23 @@
         <section class="tt-kpi-grid">
             <article class="tt-kpi-card">
                 <span class="tt-kpi-icon"><i class="feather-credit-card"></i></span>
-                <div class="tt-kpi-value">{{ $currency }} {{ number_format($metrics['disbursed'], 2) }}</div>
-                <div class="tt-kpi-label">Funds disbursed by ATTP</div>
+                <div class="tt-kpi-value">{{ $currency }} {{ number_format($metrics['po_allocated'], 2) }}</div>
+                <div class="tt-kpi-label">PO allocated by ATTP</div>
             </article>
             <article class="tt-kpi-card green">
                 <span class="tt-kpi-icon"><i class="feather-check-circle"></i></span>
-                <div class="tt-kpi-value">{{ $currency }} {{ number_format($receiptSummary['confirmed'], 2) }}</div>
-                <div class="tt-kpi-label">Payment receipt confirmed</div>
+                <div class="tt-kpi-value">{{ $currency }} {{ number_format($metrics['disbursed'], 2) }}</div>
+                <div class="tt-kpi-label">Actually paid from POs</div>
             </article>
             <article class="tt-kpi-card amber">
                 <span class="tt-kpi-icon"><i class="feather-trending-up"></i></span>
-                <div class="tt-kpi-value">{{ number_format($financePercent, 1) }}%</div>
-                <div class="tt-kpi-label">Utilisation of disbursed funds</div>
+                <div class="tt-kpi-value">{{ $currency }} {{ number_format($metrics['po_unpaid'], 2) }}</div>
+                <div class="tt-kpi-label">PO unpaid balance | {{ number_format($poPaymentRate, 1) }}% paid</div>
             </article>
             <article class="tt-kpi-card teal">
                 <span class="tt-kpi-icon"><i class="feather-file-text"></i></span>
-                <div class="tt-kpi-value">{{ number_format($metrics['reports']) }}</div>
-                <div class="tt-kpi-label">Activity reports submitted</div>
+                <div class="tt-kpi-value">{{ $currency }} {{ number_format($receiptSummary['confirmed'], 2) }}</div>
+                <div class="tt-kpi-label">Payment receipt confirmed</div>
             </article>
         </section>
 
@@ -529,6 +569,66 @@
                 <div class="tt-report-panel">
                     <div class="tt-panel-head">
                         <div>
+                            <h2>Linked Purchase Order Ledger</h2>
+                            <p>Approved funding POs, their source PRs, actual payments, and unpaid balances.</p>
+                        </div>
+                        <a class="btn btn-sm btn-light border" href="{{ route('think-tank.purchase-orders', $portalRouteParams) }}">Open POs</a>
+                    </div>
+                    <div class="tt-table-wrap">
+                        <table class="tt-report-table">
+                            <thead>
+                            <tr>
+                                <th>Purchase Order</th>
+                                <th>Purchase Request</th>
+                                <th>PO Amount</th>
+                                <th>Paid</th>
+                                <th>Unpaid</th>
+                                <th>Status</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            @forelse($purchaseOrderRecords as $purchaseOrder)
+                                @php
+                                    $purchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+                                    $paidAmount = (float) $purchaseOrder->disbursements->sum('amount');
+                                    $unpaidAmount = max((float) $purchaseOrder->amount - $paidAmount, 0);
+                                    $portalPoUrl = route('think-tank.purchase-orders.show', array_merge($portalRouteParams, ['purchaseOrder' => $purchaseOrder]));
+                                @endphp
+                                <tr>
+                                    <td>
+                                        <a href="{{ $isAdminView ? route('procurement.purchase-orders.show', $purchaseOrder) : $portalPoUrl }}" class="fw-bold">
+                                            {{ $purchaseOrder->reference_no ?: 'Purchase Order' }}
+                                        </a>
+                                        <div class="text-muted small">{{ $purchaseOrder->issued_at?->format('M d, Y') ?? 'No issued date' }}</div>
+                                    </td>
+                                    <td>
+                                        @if($purchaseRequest)
+                                            @if($isAdminView)
+                                                <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}" class="fw-bold">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                            @else
+                                                <strong>{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</strong>
+                                            @endif
+                                            <div class="text-muted small">{{ \Illuminate\Support\Str::limit($purchaseRequest->description, 70) }}</div>
+                                        @else
+                                            <span class="text-muted small">No linked purchase request</span>
+                                        @endif
+                                    </td>
+                                    <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format((float) $purchaseOrder->amount, 2) }}</td>
+                                    <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format($paidAmount, 2) }}</td>
+                                    <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format($unpaidAmount, 2) }}</td>
+                                    <td><span class="tt-badge">{{ ucfirst(str_replace('_', ' ', $purchaseOrder->status ?? 'pending')) }}</span></td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="6"><div class="tt-empty">No linked funding purchase orders found for this selected period.</div></td></tr>
+                            @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tt-report-panel">
+                    <div class="tt-panel-head">
+                        <div>
                             <h2>Transfer and Receipt Register</h2>
                             <p>Funds sent by the Secretariat and confirmation status from the think tank portal.</p>
                         </div>
@@ -538,6 +638,7 @@
                             <thead>
                             <tr>
                                 <th>Reference</th>
+                                <th>Finance Trail</th>
                                 <th>Date</th>
                                 <th>Amount</th>
                                 <th>Method</th>
@@ -549,9 +650,43 @@
                             @forelse($transferRecords as $transfer)
                                 @php
                                     $receiptStatus = $transfer->recipient_confirmation_status ?: 'pending';
+                                    $purchaseOrder = $transfer->purchaseOrder;
+                                    $purchaseRequest = $purchaseOrder?->purchaseRequest ?: $purchaseOrder?->budgetCommitment?->purchaseRequest;
                                 @endphp
                                 <tr>
-                                    <td>{{ $transfer->transfer_reference ?: $transfer->reference_no }}</td>
+                                    <td>
+                                        @if($isAdminView)
+                                            <a href="{{ route('procurement.disbursements.show', $transfer) }}" class="fw-bold">{{ $transfer->transfer_reference ?: $transfer->reference_no }}</a>
+                                        @else
+                                            <strong>{{ $transfer->transfer_reference ?: $transfer->reference_no }}</strong>
+                                        @endif
+                                        <div class="text-muted small">{{ $transfer->reference_no }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="tt-finance-links">
+                                            <div class="tt-finance-line">
+                                                <span class="tt-finance-chip">PO</span>
+                                                @if($purchaseOrder)
+                                                    @php $portalPoUrl = route('think-tank.purchase-orders.show', array_merge($portalRouteParams, ['purchaseOrder' => $purchaseOrder])); @endphp
+                                                    <a href="{{ $isAdminView ? route('procurement.purchase-orders.show', $purchaseOrder) : $portalPoUrl }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                                @else
+                                                    <span class="text-muted small">No PO</span>
+                                                @endif
+                                            </div>
+                                            <div class="tt-finance-line">
+                                                <span class="tt-finance-chip">PR</span>
+                                                @if($purchaseRequest)
+                                                    @if($isAdminView)
+                                                        <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                                    @else
+                                                        <span>{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</span>
+                                                    @endif
+                                                @else
+                                                    <span class="text-muted small">No PR</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td>{{ $transfer->paid_at?->format('M d, Y') ?? $transfer->created_at?->format('M d, Y') }}</td>
                                     <td>{{ $currency }} {{ number_format((float) $transfer->amount, 2) }}</td>
                                     <td>{{ ucfirst(str_replace('_', ' ', $transfer->payment_method ?? 'transfer')) }}</td>
@@ -563,7 +698,7 @@
                                     <td>{{ \Illuminate\Support\Str::limit($transfer->notes ?: $transfer->recipient_confirmation_notes ?: 'No notes', 80) }}</td>
                                 </tr>
                             @empty
-                                <tr><td colspan="6"><div class="tt-empty">No transfers found for this selected period.</div></td></tr>
+                                <tr><td colspan="7"><div class="tt-empty">No paid transfers found for this selected period.</div></td></tr>
                             @endforelse
                             </tbody>
                         </table>
@@ -645,7 +780,7 @@
                     <div class="tt-progress mb-3"><span style="width: {{ $receiptRate }}%"></span></div>
                     <div class="tt-status-list">
                         <div class="tt-status-row">
-                            <span>Total sent</span>
+                            <span>Total paid from POs</span>
                             <strong>{{ $currency }} {{ number_format($receiptSummary['sent'], 2) }}</strong>
                         </div>
                         <div class="tt-status-row">
@@ -740,7 +875,8 @@
             }
 
             const chartData = @json($chartData);
-            const money = (value) => 'USD ' + Number(value || 0).toLocaleString(undefined, {
+            const reportCurrency = @json($currency);
+            const money = (value) => reportCurrency + ' ' + Number(value || 0).toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             });
