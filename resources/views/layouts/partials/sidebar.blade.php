@@ -336,77 +336,52 @@
                 @endif
 
 
-                {{-- ================= THINK TANK FINANCE ================= --}}
+                {{-- ================= THINK TANK MODULE ================= --}}
                 @if ($canSeeThinkTankFinance)
                     <li class="nxl-item nxl-caption">
-                        <label>Think Tank Finance</label>
+                        <label>Think Tank Module</label>
                     </li>
 
                     <li class="nxl-item nxl-hasmenu">
                         <a href="javascript:void(0);" class="nxl-link">
                             <span class="nxl-micon"><i class="feather-credit-card"></i></span>
-                            <span class="nxl-mtext">Think Tank Finance</span>
+                            <span class="nxl-mtext">Think Tank Module</span>
                             <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
                         </a>
 
                         <ul class="nxl-submenu">
-                            @if (Route::has('think-tanks-admin.dashboard'))
+                            @if (Route::has('think-tanks-admin.consortium-analysis'))
                                 <li class="nxl-item">
-                                    <a href="{{ route('think-tanks-admin.dashboard') }}" class="nxl-link">
-                                        <i class="feather-activity me-2"></i> Finance Dashboard
+                                    <a href="{{ route('think-tanks-admin.consortium-analysis') }}" class="nxl-link">
+                                        <i class="feather-grid me-2"></i> Consortium Analysis
                                     </a>
                                 </li>
                             @endif
 
-                            @can('finance.purchase_requests.view')
-                                @if (Route::has('finance.purchase-requests.index'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('finance.purchase-requests.index') }}" class="nxl-link">
-                                            <i class="feather-file-plus me-2"></i> Purchase Requests
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
+                            @if (Route::has('think-tanks-admin.think-tank-analysis'))
+                                <li class="nxl-item">
+                                    <a href="{{ route('think-tanks-admin.think-tank-analysis') }}" class="nxl-link">
+                                        <i class="feather-users me-2"></i> Think Tank Analysis
+                                    </a>
+                                </li>
+                            @endif
 
-                            @can('finance.purchase_requests.view')
-                                @if (Route::has('procurement.purchase-orders.index'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('procurement.purchase-orders.index') }}" class="nxl-link">
-                                            <i class="feather-shopping-bag me-2"></i> Purchase Orders
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
+                            @if (Route::has('think-tanks-admin.consortium-reports'))
+                                <li class="nxl-item">
+                                    <a href="{{ route('think-tanks-admin.consortium-reports') }}" class="nxl-link">
+                                        <i class="feather-file-text me-2"></i> Consortium Reports
+                                    </a>
+                                </li>
+                            @endif
 
-                            @can('consortiums.view')
-                                @if (Route::has('consortium-operations.index'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('consortium-operations.index') }}" class="nxl-link">
-                                            <i class="feather-grid me-2"></i> Consortium Payments
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
+                            @if (Route::has('think-tanks-admin.think-tank-reports'))
+                                <li class="nxl-item">
+                                    <a href="{{ route('think-tanks-admin.think-tank-reports') }}" class="nxl-link">
+                                        <i class="feather-layers me-2"></i> Think Tank Reports
+                                    </a>
+                                </li>
+                            @endif
 
-                            @can('finance.purchase_requests.view')
-                                @if (Route::has('procurement.disbursements.index'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('procurement.disbursements.index') }}" class="nxl-link">
-                                            <i class="feather-credit-card me-2"></i> Disbursements
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
-
-                            @can('finance.purchase_requests.view')
-                                @if (Route::has('procurement.disbursements.create'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('procurement.disbursements.create') }}" class="nxl-link">
-                                            <i class="feather-send me-2"></i> Record Payment
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
                         </ul>
                     </li>
                 @endif

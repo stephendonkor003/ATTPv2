@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Mail\ThinkTankPortalWelcome;
 use App\Models\BudgetCommitment;
 use App\Models\Consortium;
+use App\Models\ConsortiumActivityReport;
 use App\Models\ConsortiumFundAllocation;
 use App\Models\ConsortiumThinkTank;
 use App\Models\ProcurementDisbursement;
@@ -32,11 +33,37 @@ class AdminThinkTankController extends Controller
 {
     public function dashboard(Request $request)
     {
+        return $this->analysisDashboard($request, 'consortium');
+    }
+
+    public function consortiumAnalysis(Request $request)
+    {
+        return $this->analysisDashboard($request, 'consortium');
+    }
+
+    public function thinkTankAnalysis(Request $request)
+    {
+        return $this->analysisDashboard($request, 'think_tank');
+    }
+
+    public function consortiumReports(Request $request)
+    {
+        return $this->reportsDashboard($request, 'consortium');
+    }
+
+    public function thinkTankReports(Request $request)
+    {
+        return $this->reportsDashboard($request, 'think_tank');
+    }
+
+    private function analysisDashboard(Request $request, string $analysisMode)
+    {
         $request->validate([
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
         ]);
 
+        $isConsortiumAnalysis = $analysisMode === 'consortium';
         $startDate = $request->filled('start_date')
             ? Carbon::parse($request->input('start_date'))->startOfDay()
             : null;
@@ -97,18 +124,27 @@ class AdminThinkTankController extends Controller
                 $latestDisbursement = $paidDisbursements
                     ->sortByDesc(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at?->getTimestamp() ?? $disbursement->created_at?->getTimestamp() ?? 0)
                     ->first();
+                $latestPurchaseRequestDate = $latestPurchaseRequest?->created_at;
                 $latestPurchaseOrderDate = $latestPurchaseOrder?->issued_at ?: $latestPurchaseOrder?->created_at;
                 $latestDisbursementDate = $latestDisbursement?->paid_at ?: $latestDisbursement?->created_at;
+                $consortiumName = $thinkTank->consortium?->name ?: 'No consortium';
+                $consortiumCode = $thinkTank->consortium?->code;
 
                 return [
                     'id' => $thinkTank->id,
                     'name' => $thinkTank->name,
+                    'primary_name' => $thinkTank->name,
                     'country' => $thinkTank->country ?: 'N/A',
                     'status' => $thinkTank->status ?: 'active',
-                    'consortium' => $thinkTank->consortium?->name ?: 'No consortium',
-                    'consortium_code' => $thinkTank->consortium?->code,
+                    'consortium_id' => $thinkTank->consortium_id,
+                    'consortium' => $consortiumName,
+                    'consortium_code' => $consortiumCode,
+                    'primary_meta' => $consortiumName . ($consortiumCode ? ' | ' . $consortiumCode : ''),
+                    'secondary_meta' => ($thinkTank->country ?: 'N/A') . ' | ' . ($thinkTank->vendorUser?->name ?: 'Vendor identity not linked'),
                     'currency' => $purchaseOrders->first()?->resolved_currency ?: $thinkTank->consortium?->currency ?: 'USD',
                     'vendor_name' => $thinkTank->vendorUser?->name,
+                    'think_tanks' => 1,
+                    'active' => ($thinkTank->status ?: 'active') === 'active' ? 1 : 0,
                     'purchase_requests' => (int) ($thinkTank->directory_pr_count ?? 0),
                     'purchase_orders' => (int) ($thinkTank->directory_po_count ?? 0),
                     'disbursements' => (int) ($thinkTank->directory_disbursement_count ?? 0),
@@ -121,10 +157,13 @@ class AdminThinkTankController extends Controller
                     'payment_rate' => $poAmount > 0 ? round(min(100, ($paidAmount / $poAmount) * 100), 1) : 0,
                     'receipt_rate' => $paidAmount > 0 ? round(min(100, ($confirmedAmount / $paidAmount) * 100), 1) : 0,
                     'latest_purchase_request' => $latestPurchaseRequest?->reference_no,
-                    'latest_purchase_request_date' => $latestPurchaseRequest?->created_at?->format('M d, Y'),
+                    'latest_purchase_request_at' => $latestPurchaseRequestDate?->toDateTimeString(),
+                    'latest_purchase_request_date' => $latestPurchaseRequestDate?->format('M d, Y'),
                     'latest_purchase_order' => $latestPurchaseOrder?->reference_no,
+                    'latest_purchase_order_at' => $latestPurchaseOrderDate?->toDateTimeString(),
                     'latest_purchase_order_date' => $latestPurchaseOrderDate?->format('M d, Y'),
                     'latest_disbursement' => $latestDisbursement?->reference_no,
+                    'latest_disbursement_at' => $latestDisbursementDate?->toDateTimeString(),
                     'latest_disbursement_date' => $latestDisbursementDate?->format('M d, Y'),
                     'last_payment_at' => $paidDisbursements->max('paid_at'),
                 ];
@@ -144,6 +183,12 @@ class AdminThinkTankController extends Controller
             'confirmed_amount' => round((float) $portfolioRows->sum('confirmed_amount'), 2),
             'unconfirmed_amount' => round((float) $portfolioRows->sum('unconfirmed_amount'), 2),
         ];
+
+        $consortiumRows = $this->consortiumAnalysisRows($portfolioRows);
+        $analysisRows = $isConsortiumAnalysis ? $consortiumRows : $portfolioRows;
+        $summary['consortia'] = $consortiumRows->count();
+        $summary['display_entities'] = $analysisRows->count();
+        $summary['display_active_entities'] = $analysisRows->where('status', 'active')->count();
         $summary['payment_rate'] = $summary['po_amount'] > 0
             ? round(min(100, ($summary['paid_amount'] / $summary['po_amount']) * 100), 1)
             : 0;
@@ -151,10 +196,42 @@ class AdminThinkTankController extends Controller
             ? round(min(100, ($summary['confirmed_amount'] / $summary['paid_amount']) * 100), 1)
             : 0;
 
-        $topThinkTanks = $portfolioRows
+        $topEntities = $analysisRows
             ->sortByDesc('po_amount')
             ->take(10)
             ->values();
+
+        $analysisCopy = $isConsortiumAnalysis
+            ? [
+                'pageTitle' => 'Consortium Analysis',
+                'heroTitle' => 'Consortium Analysis',
+                'heroText' => 'Aggregated PR, PO, disbursement, receipt, and open-balance performance by consortium.',
+                'filterRoute' => 'think-tanks-admin.consortium-analysis',
+                'entityPlural' => 'Consortia',
+                'entityColumn' => 'Consortium',
+                'topTitle' => 'Top Consortia',
+                'topSubtitle' => 'Largest consortium portfolios by PR, PO, paid disbursement, and open balance.',
+                'tableTitle' => 'Consortium Financial Analysis',
+                'tableDescription' => 'Purchase request, purchase order, disbursement, and receipt status grouped by consortium.',
+                'emptyText' => 'No consortia matched this view.',
+                'searchPlaceholder' => 'Consortium, code, country',
+                'openBalanceMeta' => 'Remaining amount across consortium POs',
+            ]
+            : [
+                'pageTitle' => 'Think Tank Analysis',
+                'heroTitle' => 'Think Tank Analysis',
+                'heroText' => 'Individual think-tank PR, PO, disbursement, receipt, and open-balance performance.',
+                'filterRoute' => 'think-tanks-admin.think-tank-analysis',
+                'entityPlural' => 'Think Tanks',
+                'entityColumn' => 'Think Tank',
+                'topTitle' => 'Top Think Tanks',
+                'topSubtitle' => 'Largest think-tank portfolios by PR, PO, paid disbursement, and open balance.',
+                'tableTitle' => 'Think Tank Financial Analysis',
+                'tableDescription' => 'Purchase request, purchase order, disbursement, and receipt status by think tank.',
+                'emptyText' => 'No think tanks matched this view.',
+                'searchPlaceholder' => 'Think tank, country, vendor',
+                'openBalanceMeta' => 'Remaining amount across think tank POs',
+            ];
 
         $chartData = [
             'finance' => [
@@ -175,12 +252,12 @@ class AdminThinkTankController extends Controller
                     $summary['disbursements'],
                 ],
             ],
-            'topThinkTanks' => [
-                'labels' => $topThinkTanks->pluck('name')->values(),
-                'pr' => $topThinkTanks->pluck('purchase_request_amount')->values(),
-                'po' => $topThinkTanks->pluck('po_amount')->values(),
-                'paid' => $topThinkTanks->pluck('paid_amount')->values(),
-                'open' => $topThinkTanks->pluck('open_amount')->values(),
+            'topEntities' => [
+                'labels' => $topEntities->pluck('primary_name')->values(),
+                'pr' => $topEntities->pluck('purchase_request_amount')->values(),
+                'po' => $topEntities->pluck('po_amount')->values(),
+                'paid' => $topEntities->pluck('paid_amount')->values(),
+                'open' => $topEntities->pluck('open_amount')->values(),
             ],
             'receipts' => [
                 'labels' => ['Confirmed Receipts', 'Awaiting Confirmation'],
@@ -197,12 +274,258 @@ class AdminThinkTankController extends Controller
         return view('think-tanks-admin.dashboard', compact(
             'thinkTanks',
             'portfolioRows',
+            'consortiumRows',
+            'analysisRows',
+            'analysisMode',
+            'analysisCopy',
             'summary',
             'chartData',
             'consortia',
             'statuses',
             'dateRangeLabel'
         ));
+    }
+
+    private function reportsDashboard(Request $request, string $reportMode)
+    {
+        $request->validate([
+            'q' => ['nullable', 'string', 'max:120'],
+            'consortium_id' => ['nullable', 'exists:attp_consortia,id'],
+            'status' => ['nullable', 'string', 'max:40'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+        ]);
+
+        $isConsortiumReports = $reportMode === 'consortium';
+        $startDate = $request->filled('start_date')
+            ? Carbon::parse($request->input('start_date'))->startOfDay()
+            : null;
+        $endDate = $request->filled('end_date')
+            ? Carbon::parse($request->input('end_date'))->endOfDay()
+            : null;
+        $dateRangeLabel = match (true) {
+            $startDate && $endDate => $startDate->format('M d, Y') . ' to ' . $endDate->format('M d, Y'),
+            (bool) $startDate => 'From ' . $startDate->format('M d, Y'),
+            (bool) $endDate => 'Up to ' . $endDate->format('M d, Y'),
+            default => 'All dates',
+        };
+
+        $reports = ConsortiumActivityReport::query()
+            ->with(['consortium.programFunding.program', 'member.consortium'])
+            ->withCount('evidence')
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $search = '%' . trim((string) $request->input('q')) . '%';
+                $query->where(function ($builder) use ($search) {
+                    $builder->where('title', 'like', $search)
+                        ->orWhere('summary', 'like', $search)
+                        ->orWhereHas('consortium', fn ($consortiumQuery) => $consortiumQuery
+                            ->where('name', 'like', $search)
+                            ->orWhere('code', 'like', $search))
+                        ->orWhereHas('member', fn ($memberQuery) => $memberQuery
+                            ->where('name', 'like', $search)
+                            ->orWhere('country', 'like', $search));
+                });
+            })
+            ->when($request->filled('consortium_id'), fn ($query) => $query->where('consortium_id', $request->input('consortium_id')))
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')))
+            ->when($startDate || $endDate, function ($query) use ($startDate, $endDate) {
+                $query->where(function ($dateQuery) use ($startDate, $endDate) {
+                    $dateQuery
+                        ->when($startDate, fn ($builder) => $builder->where('submitted_at', '>=', $startDate))
+                        ->when($endDate, fn ($builder) => $builder->where('submitted_at', '<=', $endDate))
+                        ->orWhere(function ($fallbackQuery) use ($startDate, $endDate) {
+                            $fallbackQuery->whereNull('submitted_at')
+                                ->when($startDate, fn ($builder) => $builder->where('created_at', '>=', $startDate))
+                                ->when($endDate, fn ($builder) => $builder->where('created_at', '<=', $endDate));
+                        });
+                });
+            })
+            ->latest('submitted_at')
+            ->latest()
+            ->get();
+
+        $reportRows = $this->reportOverviewRows($reports, $reportMode);
+        $summary = [
+            'entities' => $reportRows->count(),
+            'reports' => $reports->count(),
+            'submitted' => $reports->where('status', 'submitted')->count(),
+            'approved' => $reports->where('status', 'approved')->count(),
+            'attention' => $reports->whereIn('status', ['rejected', 'revisions_requested'])->count(),
+            'evidence' => (int) $reports->sum(fn (ConsortiumActivityReport $report) => (int) ($report->evidence_count ?? 0)),
+            'funds_spent' => round((float) $reports->sum(fn (ConsortiumActivityReport $report) => (float) ($report->funds_spent ?? 0)), 2),
+            'avg_progress' => round((float) $reports->avg(fn (ConsortiumActivityReport $report) => (float) ($report->progress_percent ?? 0)), 1),
+        ];
+
+        $reportCopy = $isConsortiumReports
+            ? [
+                'pageTitle' => 'Consortium Reports',
+                'heroTitle' => 'Consortium Reports',
+                'heroText' => 'Submission, approval, evidence, progress, and spending visibility grouped by consortium.',
+                'filterRoute' => 'think-tanks-admin.consortium-reports',
+                'entityPlural' => 'Consortia',
+                'entityColumn' => 'Consortium',
+                'tableTitle' => 'Consortium Report Register',
+                'tableDescription' => 'Activity report status, evidence, progress, and spend by consortium.',
+                'emptyText' => 'No consortium reports matched this view.',
+                'searchPlaceholder' => 'Consortium, code, report title',
+            ]
+            : [
+                'pageTitle' => 'Think Tank Reports',
+                'heroTitle' => 'Think Tank Reports',
+                'heroText' => 'Submission, approval, evidence, progress, and spending visibility by think tank.',
+                'filterRoute' => 'think-tanks-admin.think-tank-reports',
+                'entityPlural' => 'Think Tanks',
+                'entityColumn' => 'Think Tank',
+                'tableTitle' => 'Think Tank Report Register',
+                'tableDescription' => 'Activity report status, evidence, progress, and spend by individual think tank.',
+                'emptyText' => 'No think tank reports matched this view.',
+                'searchPlaceholder' => 'Think tank, country, report title',
+            ];
+
+        $chartData = [
+            'status' => [
+                'labels' => ['Submitted', 'Approved', 'Needs Attention'],
+                'values' => [$summary['submitted'], $summary['approved'], $summary['attention']],
+            ],
+            'topEntities' => [
+                'labels' => $reportRows->sortByDesc('reports')->take(10)->pluck('primary_name')->values(),
+                'reports' => $reportRows->sortByDesc('reports')->take(10)->pluck('reports')->values(),
+                'evidence' => $reportRows->sortByDesc('reports')->take(10)->pluck('evidence')->values(),
+            ],
+        ];
+
+        $consortia = Consortium::with('programFunding.program')->orderBy('name')->get();
+        $statuses = ['submitted', 'approved', 'rejected', 'revisions_requested', 'draft'];
+        $recentReports = $reports->take(12)->values();
+
+        return view('think-tanks-admin.reports', compact(
+            'reports',
+            'reportRows',
+            'recentReports',
+            'reportMode',
+            'reportCopy',
+            'summary',
+            'chartData',
+            'consortia',
+            'statuses',
+            'dateRangeLabel'
+        ));
+    }
+
+    private function consortiumAnalysisRows($portfolioRows)
+    {
+        return $portfolioRows
+            ->groupBy(fn (array $row) => $row['consortium_id'] ?: 'unassigned')
+            ->map(function ($rows, $consortiumId) {
+                $first = $rows->first();
+                $poAmount = (float) $rows->sum('po_amount');
+                $paidAmount = (float) $rows->sum('paid_amount');
+                $confirmedAmount = (float) $rows->sum('confirmed_amount');
+                $latestPurchaseRequest = $rows
+                    ->sortByDesc(fn (array $row) => strtotime((string) ($row['latest_purchase_request_at'] ?? '')) ?: 0)
+                    ->first();
+                $latestPurchaseOrder = $rows
+                    ->sortByDesc(fn (array $row) => strtotime((string) ($row['latest_purchase_order_at'] ?? '')) ?: 0)
+                    ->first();
+                $latestDisbursement = $rows
+                    ->sortByDesc(fn (array $row) => strtotime((string) ($row['latest_disbursement_at'] ?? '')) ?: 0)
+                    ->first();
+                $countrySummary = $rows
+                    ->pluck('country')
+                    ->filter(fn ($country) => filled($country) && $country !== 'N/A')
+                    ->unique()
+                    ->take(3)
+                    ->join(', ');
+
+                return [
+                    'id' => $consortiumId,
+                    'name' => $first['consortium'],
+                    'primary_name' => $first['consortium'],
+                    'country' => $countrySummary ?: 'Multiple countries',
+                    'status' => $rows->where('status', 'active')->isNotEmpty() ? 'active' : ($first['status'] ?? 'inactive'),
+                    'consortium_id' => $first['consortium_id'],
+                    'consortium' => $first['consortium'],
+                    'consortium_code' => $first['consortium_code'],
+                    'primary_meta' => $first['consortium_code'] ?: 'No consortium code',
+                    'secondary_meta' => ($countrySummary ?: 'Multiple countries') . ' | ' . ucfirst((string) ($first['status'] ?? 'active')),
+                    'currency' => $first['currency'],
+                    'vendor_name' => null,
+                    'think_tanks' => $rows->count(),
+                    'active' => $rows->where('status', 'active')->count(),
+                    'purchase_requests' => (int) $rows->sum('purchase_requests'),
+                    'purchase_orders' => (int) $rows->sum('purchase_orders'),
+                    'disbursements' => (int) $rows->sum('disbursements'),
+                    'purchase_request_amount' => round((float) $rows->sum('purchase_request_amount'), 2),
+                    'po_amount' => round($poAmount, 2),
+                    'paid_amount' => round($paidAmount, 2),
+                    'open_amount' => round(max($poAmount - $paidAmount, 0), 2),
+                    'confirmed_amount' => round($confirmedAmount, 2),
+                    'unconfirmed_amount' => round(max($paidAmount - $confirmedAmount, 0), 2),
+                    'payment_rate' => $poAmount > 0 ? round(min(100, ($paidAmount / $poAmount) * 100), 1) : 0,
+                    'receipt_rate' => $paidAmount > 0 ? round(min(100, ($confirmedAmount / $paidAmount) * 100), 1) : 0,
+                    'latest_purchase_request' => $latestPurchaseRequest['latest_purchase_request'] ?? null,
+                    'latest_purchase_request_at' => $latestPurchaseRequest['latest_purchase_request_at'] ?? null,
+                    'latest_purchase_request_date' => $latestPurchaseRequest['latest_purchase_request_date'] ?? null,
+                    'latest_purchase_order' => $latestPurchaseOrder['latest_purchase_order'] ?? null,
+                    'latest_purchase_order_at' => $latestPurchaseOrder['latest_purchase_order_at'] ?? null,
+                    'latest_purchase_order_date' => $latestPurchaseOrder['latest_purchase_order_date'] ?? null,
+                    'latest_disbursement' => $latestDisbursement['latest_disbursement'] ?? null,
+                    'latest_disbursement_at' => $latestDisbursement['latest_disbursement_at'] ?? null,
+                    'latest_disbursement_date' => $latestDisbursement['latest_disbursement_date'] ?? null,
+                    'last_payment_at' => $latestDisbursement['last_payment_at'] ?? null,
+                ];
+            })
+            ->sortBy('primary_name')
+            ->values();
+    }
+
+    private function reportOverviewRows($reports, string $reportMode)
+    {
+        $grouped = $reportMode === 'consortium'
+            ? $reports->groupBy(fn (ConsortiumActivityReport $report) => (string) ($report->consortium_id ?: 'unassigned'))
+            : $reports->groupBy(fn (ConsortiumActivityReport $report) => (string) ($report->think_tank_member_id ?: 'unassigned'));
+
+        return $grouped
+            ->map(function ($rows, $entityId) use ($reportMode) {
+                $first = $rows->first();
+                $latest = $rows
+                    ->sortByDesc(fn (ConsortiumActivityReport $report) => $report->submitted_at?->getTimestamp() ?? $report->created_at?->getTimestamp() ?? 0)
+                    ->first();
+                $approved = $rows->where('status', 'approved')->count();
+                $submitted = $rows->where('status', 'submitted')->count();
+                $attention = $rows->whereIn('status', ['rejected', 'revisions_requested'])->count();
+                $total = $rows->count();
+                $isConsortium = $reportMode === 'consortium';
+                $entityName = $isConsortium
+                    ? ($first->consortium?->name ?: 'Unassigned Consortium')
+                    : ($first->member?->name ?: 'Unassigned Think Tank');
+                $primaryMeta = $isConsortium
+                    ? ($first->consortium?->code ?: 'No consortium code')
+                    : ($first->member?->country ?: 'N/A');
+                $secondaryMeta = $isConsortium
+                    ? ($first->consortium?->programFunding?->program?->name ?: 'No program linked')
+                    : ucfirst((string) ($first->member?->status ?: 'active'));
+
+                return [
+                    'id' => $entityId,
+                    'primary_name' => $entityName,
+                    'primary_meta' => $primaryMeta,
+                    'secondary_meta' => $secondaryMeta,
+                    'reports' => $total,
+                    'submitted' => $submitted,
+                    'approved' => $approved,
+                    'attention' => $attention,
+                    'evidence' => (int) $rows->sum(fn (ConsortiumActivityReport $report) => (int) ($report->evidence_count ?? 0)),
+                    'funds_spent' => round((float) $rows->sum(fn (ConsortiumActivityReport $report) => (float) ($report->funds_spent ?? 0)), 2),
+                    'avg_progress' => round((float) $rows->avg(fn (ConsortiumActivityReport $report) => (float) ($report->progress_percent ?? 0)), 1),
+                    'approval_rate' => $total > 0 ? round(($approved / $total) * 100, 1) : 0,
+                    'latest_title' => $latest?->title,
+                    'latest_status' => $latest?->status,
+                    'latest_date' => ($latest?->submitted_at ?: $latest?->created_at)?->format('M d, Y'),
+                ];
+            })
+            ->sortBy('primary_name')
+            ->values();
     }
 
     public function directory(Request $request)

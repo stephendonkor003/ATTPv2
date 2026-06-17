@@ -3202,6 +3202,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:think_tanks.direct
     ->name('think-tanks-admin.')
     ->group(function () {
         Route::get('/dashboard', [\App\Http\Controllers\AdminThinkTankController::class, 'dashboard'])->middleware('permission:think_tanks.funding.view|consortiums.view|finance.purchase_requests.view|finance.commitments.create|finance.purchase_orders.create')->name('dashboard');
+        Route::get('/consortium-analysis', [\App\Http\Controllers\AdminThinkTankController::class, 'consortiumAnalysis'])->middleware('permission:think_tanks.funding.view|consortiums.view|finance.purchase_requests.view|finance.commitments.create|finance.purchase_orders.create')->name('consortium-analysis');
+        Route::get('/think-tank-analysis', [\App\Http\Controllers\AdminThinkTankController::class, 'thinkTankAnalysis'])->middleware('permission:think_tanks.funding.view|consortiums.view|finance.purchase_requests.view|finance.commitments.create|finance.purchase_orders.create')->name('think-tank-analysis');
+        Route::get('/consortium-reports', [\App\Http\Controllers\AdminThinkTankController::class, 'consortiumReports'])->middleware('permission:think_tanks.funding.view|consortiums.view|finance.purchase_requests.view|finance.commitments.create|finance.purchase_orders.create')->name('consortium-reports');
+        Route::get('/think-tank-reports', [\App\Http\Controllers\AdminThinkTankController::class, 'thinkTankReports'])->middleware('permission:think_tanks.funding.view|consortiums.view|finance.purchase_requests.view|finance.commitments.create|finance.purchase_orders.create')->name('think-tank-reports');
         Route::get('/directory', [\App\Http\Controllers\AdminThinkTankController::class, 'directory'])->middleware('permission:think_tanks.directory.view')->name('directory');
         Route::post('/directory', [\App\Http\Controllers\AdminThinkTankController::class, 'store'])->middleware('permission:think_tanks.directory.create')->name('store');
         Route::get('/funding', [\App\Http\Controllers\AdminThinkTankController::class, 'funding'])->middleware('permission:think_tanks.funding.view')->name('funding');

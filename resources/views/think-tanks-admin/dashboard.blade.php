@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Think Tank Dashboard')
+@section('title', $analysisCopy['pageTitle'] ?? 'Think Tank Module')
 
 @push('styles')
     <style>
@@ -42,6 +42,11 @@
         }
 
         .tt-soft-action:hover {
+            background: #fff;
+            color: #0f172a;
+        }
+
+        .tt-soft-action.active {
             background: #fff;
             color: #0f172a;
         }
@@ -259,7 +264,8 @@
 
 @section('content')
     @php
-        $currency = $portfolioRows->first()['currency'] ?? 'USD';
+        $isConsortiumAnalysis = ($analysisMode ?? 'consortium') === 'consortium';
+        $currency = $analysisRows->first()['currency'] ?? $portfolioRows->first()['currency'] ?? 'USD';
         $formatMoney = fn ($amount) => $currency . ' ' . number_format((float) $amount, 2);
     @endphp
 
@@ -269,10 +275,10 @@
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between gap-3 flex-wrap">
                         <div>
-                            <div class="tt-soft-kicker mb-2">Think Tank Finance</div>
-                            <h3 class="fw-bold mb-2">PR, PO and Disbursement Dashboard</h3>
+                            <div class="tt-soft-kicker mb-2">Think Tank Module</div>
+                            <h3 class="fw-bold mb-2">{{ $analysisCopy['heroTitle'] }}</h3>
                             <p class="mb-0">
-                                Financial control for qualified think tanks, focused on purchase requests, purchase orders, paid disbursements, and receipt confirmation.
+                                {{ $analysisCopy['heroText'] }}
                             </p>
                             <div class="mt-3">
                                 <span class="tt-soft-badge info">
@@ -280,51 +286,30 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="d-flex gap-2 flex-wrap align-items-start">
-                            @can('finance.commitments.create')
-                                @if (Route::has('finance.purchase-requests.create'))
-                                    <a href="{{ route('finance.purchase-requests.create') }}" class="btn tt-soft-action btn-sm">
-                                        <i class="feather-file-plus me-1"></i> New PR
-                                    </a>
-                                @endif
-                            @endcan
-                            @can('finance.purchase_orders.create')
-                                @if (Route::has('procurement.purchase-orders.create'))
-                                    <a href="{{ route('procurement.purchase-orders.create') }}" class="btn tt-soft-action btn-sm">
-                                        <i class="feather-shopping-bag me-1"></i> New PO
-                                    </a>
-                                @endif
-                            @endcan
-                            @can('finance.purchase_requests.view')
-                                @if (Route::has('procurement.disbursements.create'))
-                                    <a href="{{ route('procurement.disbursements.create') }}" class="btn tt-soft-action btn-sm">
-                                        <i class="feather-credit-card me-1"></i> Pay
-                                    </a>
-                                @endif
-                            @endcan
-                        </div>
                     </div>
                 </div>
             </div>
 
-            <form method="GET" action="{{ route('think-tanks-admin.dashboard') }}" class="card tt-soft-table mb-4">
+            <form method="GET" action="{{ route($analysisCopy['filterRoute']) }}" class="card tt-soft-table mb-4">
                 <div class="card-body">
                     <div class="tt-soft-filter">
                         <div>
                             <label for="ttSearch">Search</label>
-                            <input id="ttSearch" type="search" name="q" value="{{ request('q') }}" class="form-control" placeholder="Think tank, consortium, country, vendor">
+                            <input id="ttSearch" type="search" name="q" value="{{ request('q') }}" class="form-control" placeholder="{{ $analysisCopy['searchPlaceholder'] }}">
                         </div>
-                        <div>
-                            <label for="ttConsortium">Consortium</label>
-                            <select id="ttConsortium" name="consortium_id" class="form-select">
-                                <option value="">All consortia</option>
-                                @foreach ($consortia as $consortium)
-                                    <option value="{{ $consortium->id }}" @selected((string) request('consortium_id') === (string) $consortium->id)>
-                                        {{ $consortium->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
+                        @if ($isConsortiumAnalysis)
+                            <div>
+                                <label for="ttConsortium">Consortium</label>
+                                <select id="ttConsortium" name="consortium_id" class="form-select">
+                                    <option value="">All consortia</option>
+                                    @foreach ($consortia as $consortium)
+                                        <option value="{{ $consortium->id }}" @selected((string) request('consortium_id') === (string) $consortium->id)>
+                                            {{ $consortium->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
                         <div>
                             <label for="ttStatus">Status</label>
                             <select id="ttStatus" name="status" class="form-select">
@@ -346,7 +331,7 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="feather-search me-1"></i> Filter
                             </button>
-                            <a href="{{ route('think-tanks-admin.dashboard') }}" class="btn btn-light border">
+                            <a href="{{ route($analysisCopy['filterRoute']) }}" class="btn btn-light border">
                                 <i class="feather-x"></i>
                             </a>
                         </div>
@@ -358,9 +343,9 @@
                 <div class="card tt-soft-stat">
                     <div class="card-body d-flex justify-content-between gap-3">
                         <div>
-                            <div class="label">Think Tanks</div>
-                            <div class="value">{{ number_format($summary['think_tanks']) }}</div>
-                            <div class="meta">{{ number_format($summary['active']) }} active finance accounts</div>
+                            <div class="label">{{ $analysisCopy['entityPlural'] }}</div>
+                            <div class="value">{{ number_format($summary['display_entities']) }}</div>
+                            <div class="meta">{{ number_format($summary['display_active_entities']) }} active</div>
                         </div>
                         <span class="tt-soft-icon teal"><i class="feather-users"></i></span>
                     </div>
@@ -415,7 +400,7 @@
                             <span class="tt-soft-badge warn">{{ $formatMoney($summary['open_amount']) }}</span>
                         </div>
                         <div class="value">{{ $formatMoney($summary['open_amount']) }}</div>
-                        <div class="meta">Remaining amount across linked think tank POs</div>
+                        <div class="meta">{{ $analysisCopy['openBalanceMeta'] }}</div>
                     </div>
                 </div>
                 <div class="card tt-soft-stat">
@@ -437,8 +422,8 @@
                     <div id="ttAdminFinanceChart"></div>
                 </div>
                 <div class="tt-soft-panel">
-                    <h5>Top Think Tanks</h5>
-                    <div class="sub">Largest PR, PO, and paid disbursement portfolios.</div>
+                    <h5>{{ $analysisCopy['topTitle'] }}</h5>
+                    <div class="sub">{{ $analysisCopy['topSubtitle'] }}</div>
                     <div id="ttAdminTopChart"></div>
                 </div>
                 <div class="tt-soft-panel">
@@ -457,28 +442,19 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-3">
                         <div>
-                            <h5 class="fw-bold mb-1">Think Tank Financial Register</h5>
-                            <div class="text-muted small">Purchase request, purchase order, disbursement, and receipt status by think tank.</div>
-                        </div>
-                        <div class="d-flex gap-2 flex-wrap">
-                            @can('consortiums.view')
-                                @if (Route::has('consortium-operations.index'))
-                                    <a href="{{ route('consortium-operations.index') }}" class="btn btn-light border btn-sm">
-                                        <i class="feather-grid me-1"></i> Consortium Payments
-                                    </a>
-                                @endif
-                            @endcan
+                            <h5 class="fw-bold mb-1">{{ $analysisCopy['tableTitle'] }}</h5>
+                            <div class="text-muted small">{{ $analysisCopy['tableDescription'] }}</div>
                         </div>
                     </div>
 
-                    @if ($portfolioRows->isEmpty())
-                        <div class="tt-soft-empty">No think tanks matched this view.</div>
+                    @if ($analysisRows->isEmpty())
+                        <div class="tt-soft-empty">{{ $analysisCopy['emptyText'] }}</div>
                     @else
                         <div class="table-responsive">
                             <table class="table align-middle">
                                 <thead>
                                 <tr>
-                                    <th>Think Tank</th>
+                                    <th>{{ $analysisCopy['entityColumn'] }}</th>
                                     <th>PR</th>
                                     <th>PO</th>
                                     <th>Paid</th>
@@ -488,12 +464,12 @@
                                 </tr>
                                 </thead>
                                 <tbody>
-                                @foreach ($portfolioRows as $row)
+                                @foreach ($analysisRows as $row)
                                     <tr>
                                         <td style="min-width: 240px;">
-                                            <span class="tt-soft-name">{{ $row['name'] }}</span>
-                                            <div class="text-muted small">{{ $row['consortium'] }}{{ $row['consortium_code'] ? ' | ' . $row['consortium_code'] : '' }}</div>
-                                            <div class="text-muted small">{{ $row['country'] }} | {{ $row['vendor_name'] ?: 'Vendor identity not linked' }}</div>
+                                            <span class="tt-soft-name">{{ $row['primary_name'] }}</span>
+                                            <div class="text-muted small">{{ $row['primary_meta'] }}</div>
+                                            <div class="text-muted small">{{ $row['secondary_meta'] }}</div>
                                         </td>
                                         <td>
                                             <strong>{{ number_format($row['purchase_requests']) }}</strong>
@@ -581,16 +557,16 @@
             new ApexCharts(document.querySelector('#ttAdminTopChart'), {
                 ...base,
                 series: [
-                    { name: 'PR Amount', data: chartData.topThinkTanks.pr },
-                    { name: 'PO Amount', data: chartData.topThinkTanks.po },
-                    { name: 'Paid Disbursements', data: chartData.topThinkTanks.paid },
-                    { name: 'Open', data: chartData.topThinkTanks.open }
+                    { name: 'PR Amount', data: chartData.topEntities.pr },
+                    { name: 'PO Amount', data: chartData.topEntities.po },
+                    { name: 'Paid Disbursements', data: chartData.topEntities.paid },
+                    { name: 'Open', data: chartData.topEntities.open }
                 ],
                 chart: { ...base.chart, type: 'bar', height: 300 },
                 colors: ['#06b6d4', '#6366f1', '#22c55e', '#f59e0b'],
                 plotOptions: { bar: { horizontal: true, borderRadius: 5, barHeight: '62%' } },
                 xaxis: {
-                    categories: chartData.topThinkTanks.labels,
+                    categories: chartData.topEntities.labels,
                     labels: { formatter: (value) => Number(value || 0).toLocaleString() }
                 },
                 tooltip: { y: { formatter: (value) => money(value) } }
