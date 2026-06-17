@@ -322,6 +322,16 @@ class ThinkTankPortalController extends Controller
                 'labels' => $allResearch->groupBy(fn ($output) => str_replace('_', ' ', ucfirst($output->output_type ?? 'Research')))->keys()->values(),
                 'values' => $allResearch->groupBy(fn ($output) => str_replace('_', ' ', ucfirst($output->output_type ?? 'Research')))->map->count()->values(),
             ],
+            'delivery' => [
+                'labels' => ['Reports', 'Research', 'Plans', 'Opportunities', 'Applications'],
+                'values' => [
+                    (int) $metrics['reports'],
+                    (int) $metrics['research'],
+                    (int) $metrics['procurement_plans'],
+                    (int) $metrics['opportunities'],
+                    (int) $metrics['applications'],
+                ],
+            ],
             'receipts' => [
                 'labels' => ['Confirmed', 'Awaiting receipt'],
                 'values' => [

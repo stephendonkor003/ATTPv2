@@ -63,39 +63,14 @@
         && collect($newsCommunicationSidebarPermissions)->contains(
             fn($permission) => $sidebarUser->hasPermission($permission)
         );
-    $thinkTankManagementPermissions = [
-        'consortiums.view',
-        'consortiums.manage',
-        'consortiums.reports.review',
-        'consortiums.finance.manage',
-        'think_tanks.directory.view',
-        'think_tanks.directory.create',
-        'think_tanks.directory.edit',
-        'think_tanks.funding.view',
-        'think_tanks.funding.transfer.create',
-        'think_tanks.funding.transfer.edit',
-        'think_tanks.funding.history.view',
-        'think_tank.portal.access',
-        'think_tank.dashboard.download',
-        'think_tank.reports.view',
-        'think_tank.reports.download',
-        'think_tank.reports.submit',
-        'think_tank.research.view',
-        'think_tank.research.download',
-        'think_tank.research.submit',
-        'think_tank.procurement.view',
-        'think_tank.procurement.download',
-        'think_tank.procurement.manage',
-        'think_tank.procurement.evaluate',
-        'think_tank.procurement.select',
-    ];
-    $canSeeThinkTankManagement = $sidebarUser
-        && collect($thinkTankManagementPermissions)->contains(
-            fn($permission) => $sidebarUser->can($permission)
-        );
     $isAdminSidebarUser = (bool) ($sidebarUser?->isSuperAdmin() || $sidebarUser?->isAdmin());
     $isThinkTankPortalUser = ($sidebarUser?->isThinkTankUser() && (bool) $sidebarUser->thinkTankMembership)
         || ($isAdminSidebarUser && \App\Models\ConsortiumThinkTank::query()->exists());
+    $canSeeThinkTankPortalLinks = $sidebarUser
+        && $isThinkTankPortalUser
+        && $sidebarUser->can('think_tank.portal.access');
+    $canSeeThinkTankManagement = $sidebarUser
+        && ($sidebarUser->can('consortiums.view') || $canSeeThinkTankPortalLinks);
 @endphp
 
 <style>
@@ -371,63 +346,17 @@
                         </a>
 
                         <ul class="nxl-submenu">
-                            @can('think_tanks.directory.view')
-                                @if (Route::has('think-tanks-admin.directory'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tanks-admin.directory') }}" class="nxl-link">
-                                            <i class="feather-list me-2"></i> Directory & Profiles
-                                        </a>
-                                    </li>
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tanks-admin.directory') }}#consortiumPortfolio" class="nxl-link">
-                                            <i class="feather-grid me-2"></i> Consortium Portfolio
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
-
-                            @can('think_tanks.funding.view')
-                                @if (Route::has('think-tanks-admin.funding'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tanks-admin.funding') }}" class="nxl-link">
-                                            <i class="feather-pie-chart me-2"></i> Funding Dashboard
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
-
-                            @can('think_tanks.funding.transfer.create')
-                                @if (Route::has('think-tanks-admin.funding.create'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tanks-admin.funding.create') }}" class="nxl-link">
-                                            <i class="feather-send me-2"></i> Record Transfer
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
-
-                            @can('think_tanks.funding.history.view')
-                                @if (Route::has('think-tanks-admin.funding.history'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tanks-admin.funding.history') }}" class="nxl-link">
-                                            <i class="feather-clock me-2"></i> Transfer History
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
-
                             @can('consortiums.view')
                                 @if (Route::has('consortium-operations.index'))
                                     <li class="nxl-item">
                                         <a href="{{ route('consortium-operations.index') }}" class="nxl-link">
-                                            <i class="feather-grid me-2"></i> Consortium Operations
+                                            <i class="feather-grid me-2"></i> Consortium Dashboard
                                         </a>
                                     </li>
                                 @endif
                             @endcan
 
-                            @if ($isThinkTankPortalUser)
-                            @can('think_tank.portal.access')
+                            @if ($canSeeThinkTankPortalLinks)
                                 @if (Route::has('think-tank.dashboard'))
                                     <li class="nxl-item">
                                         <a href="{{ route('think-tank.dashboard') }}" class="nxl-link">
@@ -435,47 +364,16 @@
                                         </a>
                                     </li>
                                 @endif
-                            @endcan
 
-                            @canany(['think_tank.reports.view', 'think_tank.reports.submit'])
-                                @if (Route::has('think-tank.reports'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tank.reports') }}" class="nxl-link">
-                                            <i class="feather-file-text me-2"></i> Activity Reports
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcanany
-
-                            @can('think_tank.reports.submit')
-                                @if (Route::has('think-tank.upload-report-finding'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tank.upload-report-finding') }}" class="nxl-link">
-                                            <i class="feather-upload-cloud me-2"></i> Upload Report and Finding
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcan
-
-                            @canany(['think_tank.research.view', 'think_tank.research.submit'])
-                                @if (Route::has('think-tank.research'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tank.research') }}" class="nxl-link">
-                                            <i class="feather-book-open me-2"></i> Research Outputs
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcanany
-
-                            @canany(['think_tank.procurement.view', 'think_tank.procurement.manage', 'think_tank.procurement.evaluate', 'think_tank.procurement.select'])
-                                @if (Route::has('think-tank.procurement'))
-                                    <li class="nxl-item">
-                                        <a href="{{ route('think-tank.procurement') }}" class="nxl-link">
-                                            <i class="feather-briefcase me-2"></i> Procurement Plans & Opportunities
-                                        </a>
-                                    </li>
-                                @endif
-                            @endcanany
+                                @canany(['think_tank.reports.view', 'think_tank.reports.submit'])
+                                    @if (Route::has('think-tank.reports'))
+                                        <li class="nxl-item">
+                                            <a href="{{ route('think-tank.reports') }}" class="nxl-link">
+                                                <i class="feather-file-text me-2"></i> Reports
+                                            </a>
+                                        </li>
+                                    @endif
+                                @endcanany
                             @endif
                         </ul>
                     </li>

@@ -221,6 +221,34 @@
             text-decoration: underline;
         }
 
+        .ops-dashboard-grid {
+            display: grid;
+            grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .ops-dashboard-panel {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+            padding: 1rem;
+            min-height: 330px;
+        }
+
+        .ops-dashboard-panel h5 {
+            color: #0f172a;
+            font-weight: 900;
+            margin-bottom: 0.2rem;
+        }
+
+        .ops-dashboard-panel p {
+            color: #64748b;
+            font-size: 0.82rem;
+            margin-bottom: 0.75rem;
+        }
+
         .metric-value {
             color: #0f172a;
             font-size: 1.08rem;
@@ -487,6 +515,10 @@
         }
 
         @media (max-width: 767.98px) {
+            .ops-dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
             .metric-grid {
                 grid-template-columns: 1fr;
             }
@@ -535,11 +567,6 @@
                 <p class="mb-0">Funding receipts, think tank coverage, reporting movement, and consortium comparison.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                @can('think_tanks.funding.view')
-                    <a href="{{ route('think-tanks-admin.funding') }}" class="btn btn-light btn-sm">
-                        <i class="feather-credit-card me-1"></i> Funding Dashboard
-                    </a>
-                @endcan
                 @can('consortiums.manage')
                     <button type="button" class="btn btn-warning btn-sm fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#createConsortiumModal">
                         <i class="feather-plus me-1"></i> New Consortium
@@ -574,21 +601,16 @@
             <div class="row g-3 align-items-center">
                 <div class="col-lg-8">
                     <div class="ops-kicker mb-2">Secretariat visibility</div>
-                    <h4 class="fw-bold text-white mb-2">Track what each consortium received, confirmed, and reported.</h4>
+                    <h4 class="fw-bold text-white mb-2">Consortium dashboard for think tank finance and delivery.</h4>
                     <p class="mb-0">
-                        Each card shows the funds sent to think tanks, payment receipt confirmation, number of supported think tanks, and report outcomes.
+                        Monitor each consortium’s think tanks, purchase orders, paid disbursements, receipt confirmation, reports, and progress from one clean view.
                     </p>
                 </div>
                 <div class="col-lg-4">
                     <div class="d-flex gap-2 justify-content-lg-end flex-wrap">
-                        @can('think_tanks.funding.history.view')
-                            <a class="btn ops-action-btn btn-sm" href="{{ route('think-tanks-admin.funding.history') }}">
-                                <i class="feather-clock me-1"></i> Transfer History
-                            </a>
-                        @endcan
                         @can('think_tanks.directory.view')
                             <a class="btn ops-action-btn btn-sm" href="{{ route('think-tanks-admin.directory') }}">
-                                <i class="feather-list me-1"></i> Think Tank Directory
+                                <i class="feather-list me-1"></i> Think Tank Profiles
                             </a>
                         @endcan
                     </div>
@@ -649,7 +671,7 @@
                         <div>
                             <div class="ops-summary-label mb-1">Receipts Confirmed</div>
                             <h5 class="fw-bold mb-1">USD {{ number_format($summary['funds_receipted'], 2) }}</h5>
-                            <div class="small text-muted">{{ number_format($receiptRate, 1) }}% of sent funds</div>
+                            <div class="small text-muted">{{ number_format($receiptRate, 1) }}% of paid disbursements</div>
                         </div>
                         <span class="ops-summary-icon green"><i class="feather-check-circle"></i></span>
                     </div>
@@ -657,16 +679,31 @@
             </div>
         </div>
 
+        @can('consortiums.analysis.view')
+            <div class="ops-dashboard-grid">
+                <div class="ops-dashboard-panel">
+                    <h5>Financial Mix</h5>
+                    <p>PO value, paid disbursements, open PO balance, and receipt confirmation.</p>
+                    <div id="opsFinanceMixChart"></div>
+                </div>
+                <div class="ops-dashboard-panel">
+                    <h5>Consortium Payment Progress</h5>
+                    <p>Top consortium portfolios by purchase order value and paid amount.</p>
+                    <div id="opsPaymentProgressChart"></div>
+                </div>
+            </div>
+        @endcan
+
         <ul class="nav nav-tabs ops-tabs mb-4" id="consortiumOpsTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="cards-tab" data-bs-toggle="tab" data-bs-target="#cards-pane" type="button" role="tab" aria-controls="cards-pane" aria-selected="true">
-                    <i class="feather-layers"></i> Consortium Cards
+                    <i class="feather-layers"></i> Consortium List
                 </button>
             </li>
             @can('consortiums.analysis.view')
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="analysis-tab" data-bs-toggle="tab" data-bs-target="#analysis-pane" type="button" role="tab" aria-controls="analysis-pane" aria-selected="false">
-                        <i class="feather-bar-chart-2"></i> Graphical Components
+                        <i class="feather-bar-chart-2"></i> Advanced Comparison
                     </button>
                 </li>
             @endcan
@@ -706,13 +743,6 @@
                             $cardPaymentRate = $poAllocated > 0 ? min(100, ($sent / $poAllocated) * 100) : 0;
                             $pendingTransfers = max(0, (int) ($consortium->transfer_count ?? 0) - (int) ($consortium->confirmed_transfer_count ?? 0));
                             $statusClass = in_array($consortium->status, ['paused', 'closed'], true) ? $consortium->status : 'active';
-                            $purchaseOrders = $consortium->transferPurchaseOrders ?? collect();
-                            $purchaseRequests = $purchaseOrders
-                                ->map(fn ($purchaseOrder) => $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest)
-                                ->filter()
-                                ->unique('id')
-                                ->values();
-                            $paidDisbursements = $consortium->transferDisbursements ?? collect();
                         @endphp
                         <div class="col-xl-4 col-lg-6">
                             <div class="consortium-card">
@@ -743,7 +773,7 @@
                                     <div class="metric-box">
                                         <div class="consortium-meta-label mb-1">Paid from POs</div>
                                         <div class="metric-value">USD {{ number_format($sent, 2) }}</div>
-                                        <div class="small text-muted">{{ number_format($consortium->transfer_count ?? 0) }} transfer(s)</div>
+                                        <div class="small text-muted">{{ number_format($consortium->transfer_count ?? 0) }} paid disbursement(s)</div>
                                     </div>
                                     <div class="metric-box">
                                         <div class="consortium-meta-label mb-1">PO Unpaid</div>
@@ -765,42 +795,6 @@
                                     </div>
                                 </div>
 
-                                <div class="ops-finance-trail">
-                                    <div class="ops-finance-row">
-                                        <span class="ops-finance-chip">PR</span>
-                                        @forelse ($purchaseRequests->take(2) as $purchaseRequest)
-                                            <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
-                                        @empty
-                                            <span class="text-muted small">No linked PR</span>
-                                        @endforelse
-                                        @if ($purchaseRequests->count() > 2)
-                                            <span class="text-muted small">+{{ $purchaseRequests->count() - 2 }}</span>
-                                        @endif
-                                    </div>
-                                    <div class="ops-finance-row">
-                                        <span class="ops-finance-chip">PO</span>
-                                        @forelse ($purchaseOrders->take(2) as $purchaseOrder)
-                                            <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
-                                        @empty
-                                            <span class="text-muted small">No linked PO</span>
-                                        @endforelse
-                                        @if ($purchaseOrders->count() > 2)
-                                            <span class="text-muted small">+{{ $purchaseOrders->count() - 2 }}</span>
-                                        @endif
-                                    </div>
-                                    <div class="ops-finance-row">
-                                        <span class="ops-finance-chip">Pay</span>
-                                        @forelse ($paidDisbursements->take(2) as $disbursement)
-                                            <a href="{{ route('procurement.disbursements.show', $disbursement) }}">{{ $disbursement->reference_no ?: 'Disbursement' }}</a>
-                                        @empty
-                                            <span class="text-muted small">No paid disbursement</span>
-                                        @endforelse
-                                        @if ($paidDisbursements->count() > 2)
-                                            <span class="text-muted small">+{{ $paidDisbursements->count() - 2 }}</span>
-                                        @endif
-                                    </div>
-                                </div>
-
                                 <div class="mb-3">
                                     <div class="d-flex justify-content-between small fw-bold mb-1">
                                         <span>Receipt confirmation</span>
@@ -809,7 +803,7 @@
                                     <div class="receipt-track" aria-label="Receipt confirmation progress">
                                         <span style="width: {{ number_format($cardReceiptRate, 2, '.', '') }}%"></span>
                                     </div>
-                                    <div class="small text-muted mt-1">{{ number_format($pendingTransfers) }} transfer(s) awaiting receipt confirmation</div>
+                                    <div class="small text-muted mt-1">{{ number_format($pendingTransfers) }} paid disbursement(s) awaiting receipt confirmation</div>
                                 </div>
 
                                 <div class="d-flex justify-content-between align-items-center gap-2">
@@ -842,7 +836,7 @@
                     <div class="ops-analysis-shell mb-4">
                         <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-3">
                             <div>
-                                <h5 class="fw-bold mb-1">Graphical Components and Analysis</h5>
+                                <h5 class="fw-bold mb-1">Advanced Comparison</h5>
                                 <p class="text-muted mb-0">Compare PO allocations, paid disbursements, receipts, and report decisions across consortia or individual think tanks.</p>
                             </div>
                             <div class="d-flex gap-2 flex-wrap">
@@ -1055,6 +1049,17 @@
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 const comparisonData = @json($comparisonData);
+                const dashboardFinance = @json([
+                    'labels' => ['PO Value', 'Paid Disbursements', 'Open PO Balance', 'Receipts Confirmed'],
+                    'values' => [
+                        round((float) ($summary['po_allocated'] ?? 0), 2),
+                        round((float) ($summary['funds_disbursed'] ?? 0), 2),
+                        round((float) ($summary['po_unpaid'] ?? 0), 2),
+                        round((float) ($summary['funds_receipted'] ?? 0), 2),
+                    ],
+                ]);
+                const financeMixEl = document.querySelector('#opsFinanceMixChart');
+                const paymentProgressEl = document.querySelector('#opsPaymentProgressChart');
                 const fundsChartEl = document.querySelector('#fundsComparisonChart');
                 const reportsChartEl = document.querySelector('#reportsComparisonChart');
                 const modeButtons = document.querySelectorAll('[data-analysis-mode]');
@@ -1088,6 +1093,53 @@
                 }) + '%';
 
                 const emptyMarkup = '<div class="empty-state text-center h-100 d-flex align-items-center justify-content-center">No comparison data available for this view.</div>';
+
+                function renderDashboardCharts() {
+                    if (!window.ApexCharts) {
+                        return;
+                    }
+
+                    if (financeMixEl) {
+                        new ApexCharts(financeMixEl, {
+                            series: dashboardFinance.values,
+                            labels: dashboardFinance.labels,
+                            chart: { type: 'donut', height: 260, toolbar: { show: false } },
+                            colors: ['#6366f1', '#2563eb', '#f59e0b', '#16a34a'],
+                            dataLabels: { enabled: false },
+                            legend: { position: 'bottom' },
+                            tooltip: { y: { formatter: formatUsd } }
+                        }).render();
+                    }
+
+                    if (paymentProgressEl) {
+                        const rows = sortRows(rowsForMode('consortia'))
+                            .filter((row) => Number(row.poAllocated || 0) > 0)
+                            .slice(0, 8);
+
+                        if (!rows.length) {
+                            paymentProgressEl.innerHTML = emptyMarkup;
+                            return;
+                        }
+
+                        new ApexCharts(paymentProgressEl, {
+                            series: [
+                                { name: 'PO Value', data: rows.map((row) => row.poAllocated) },
+                                { name: 'Paid', data: rows.map((row) => row.transferred) },
+                                { name: 'Open', data: rows.map((row) => row.unpaid) }
+                            ],
+                            chart: { type: 'bar', height: 260, toolbar: { show: false } },
+                            colors: ['#6366f1', '#2563eb', '#f59e0b'],
+                            plotOptions: { bar: { horizontal: true, borderRadius: 5, barHeight: '62%' } },
+                            dataLabels: { enabled: false },
+                            xaxis: {
+                                categories: rows.map((row) => row.label),
+                                labels: { formatter: (value) => Number(value || 0).toLocaleString() }
+                            },
+                            tooltip: { y: { formatter: formatUsd } },
+                            legend: { position: 'bottom' }
+                        }).render();
+                    }
+                }
 
                 function rowsForMode(mode) {
                     return Array.isArray(comparisonData[mode]) ? [...comparisonData[mode]] : [];
@@ -1517,6 +1569,7 @@
                 populateEntitySelect(currentMode, []);
                 renderChips(selectedRows());
                 renderSheet(selectedRows());
+                renderDashboardCharts();
             });
         </script>
     @endpush

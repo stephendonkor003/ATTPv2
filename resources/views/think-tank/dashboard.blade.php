@@ -548,7 +548,7 @@
                             <div id="ttFinanceChart"></div>
                         </div>
                         <div class="tt-chart-box">
-                            <h3>Disbursement vs Receipt</h3>
+                            <h3>Paid vs Receipt</h3>
                             <div id="ttReceiptChart"></div>
                         </div>
                         <div class="tt-chart-box">
@@ -556,12 +556,8 @@
                             <div id="ttReportsChart"></div>
                         </div>
                         <div class="tt-chart-box">
-                            <h3>Procurement Pipeline</h3>
-                            <div id="ttProcurementChart"></div>
-                        </div>
-                        <div class="tt-chart-box">
-                            <h3>Research Output Mix</h3>
-                            <div id="ttResearchChart"></div>
+                            <h3>Delivery Mix</h3>
+                            <div id="ttDeliveryChart"></div>
                         </div>
                     </div>
                 </div>
@@ -629,19 +625,18 @@
                 <div class="tt-report-panel">
                     <div class="tt-panel-head">
                         <div>
-                            <h2>Transfer and Receipt Register</h2>
-                            <p>Funds sent by the Secretariat and confirmation status from the think tank portal.</p>
+                            <h2>Paid Disbursement Register</h2>
+                            <p>Paid disbursements linked to purchase orders, source purchase requests, and receipt confirmation.</p>
                         </div>
                     </div>
                     <div class="tt-table-wrap">
                         <table class="tt-report-table">
                             <thead>
                             <tr>
-                                <th>Reference</th>
-                                <th>Finance Trail</th>
+                                <th>Disbursement</th>
+                                <th>PO / PR</th>
                                 <th>Date</th>
                                 <th>Amount</th>
-                                <th>Method</th>
                                 <th>Receipt</th>
                                 <th>Notes</th>
                             </tr>
@@ -689,7 +684,6 @@
                                     </td>
                                     <td>{{ $transfer->paid_at?->format('M d, Y') ?? $transfer->created_at?->format('M d, Y') }}</td>
                                     <td>{{ $currency }} {{ number_format((float) $transfer->amount, 2) }}</td>
-                                    <td>{{ ucfirst(str_replace('_', ' ', $transfer->payment_method ?? 'transfer')) }}</td>
                                     <td>
                                         <span class="tt-badge {{ $receiptStatus === 'confirmed' ? 'good' : 'warn' }}">
                                             {{ ucfirst(str_replace('_', ' ', $receiptStatus)) }}
@@ -698,7 +692,7 @@
                                     <td>{{ \Illuminate\Support\Str::limit($transfer->notes ?: $transfer->recipient_confirmation_notes ?: 'No notes', 80) }}</td>
                                 </tr>
                             @empty
-                                <tr><td colspan="7"><div class="tt-empty">No paid transfers found for this selected period.</div></td></tr>
+                                <tr><td colspan="6"><div class="tt-empty">No paid disbursements found for this selected period.</div></td></tr>
                             @endforelse
                             </tbody>
                         </table>
@@ -770,7 +764,7 @@
                     <div class="tt-panel-head">
                         <div>
                             <h2>Receipt Confirmation</h2>
-                            <p>Comparison of Secretariat transfers and bank receipt confirmations.</p>
+                            <p>Comparison of paid disbursements and bank receipt confirmations.</p>
                         </div>
                     </div>
                     <div class="d-flex justify-content-between small fw-bold mb-2">
@@ -916,19 +910,11 @@
                 xaxis: { categories: chartData.reports.labels }
             }).render();
 
-            new ApexCharts(document.querySelector('#ttProcurementChart'), {
+            new ApexCharts(document.querySelector('#ttDeliveryChart'), {
                 ...baseOptions,
                 chart: { ...baseOptions.chart, type: 'bar', height: 250 },
-                series: [{ name: 'Procurement', data: chartData.procurements.values }],
-                xaxis: { categories: chartData.procurements.labels },
-                plotOptions: { bar: { horizontal: true, borderRadius: 5 } }
-            }).render();
-
-            new ApexCharts(document.querySelector('#ttResearchChart'), {
-                ...baseOptions,
-                chart: { ...baseOptions.chart, type: 'bar', height: 250 },
-                series: [{ name: 'Outputs', data: chartData.research.values.length ? chartData.research.values : [0] }],
-                xaxis: { categories: chartData.research.labels.length ? chartData.research.labels : ['No output yet'] },
+                series: [{ name: 'Records', data: chartData.delivery.values }],
+                xaxis: { categories: chartData.delivery.labels },
                 plotOptions: { bar: { horizontal: true, borderRadius: 5 } }
             }).render();
         });
