@@ -69,8 +69,21 @@
     $canSeeThinkTankPortalLinks = $sidebarUser
         && $isThinkTankPortalUser
         && $sidebarUser->can('think_tank.portal.access');
+    $thinkTankAdminPermissions = [
+        'think_tanks.directory.view',
+        'think_tanks.funding.view',
+        'consortiums.view',
+        'consortiums.reports.review',
+        'finance.purchase_requests.view',
+        'finance.commitments.create',
+        'finance.purchase_orders.create',
+    ];
+    $canSeeThinkTankAdminLinks = $sidebarUser
+        && collect($thinkTankAdminPermissions)->contains(
+            fn($permission) => $sidebarUser->can($permission)
+        );
     $canSeeThinkTankManagement = $sidebarUser
-        && ($sidebarUser->can('consortiums.view') || $canSeeThinkTankPortalLinks);
+        && ($canSeeThinkTankAdminLinks || $canSeeThinkTankPortalLinks);
 @endphp
 
 <style>
@@ -346,6 +359,14 @@
                         </a>
 
                         <ul class="nxl-submenu">
+                            @if ($canSeeThinkTankAdminLinks && Route::has('think-tanks-admin.dashboard'))
+                                <li class="nxl-item">
+                                    <a href="{{ route('think-tanks-admin.dashboard') }}" class="nxl-link">
+                                        <i class="feather-activity me-2"></i> Think Tank Dashboard
+                                    </a>
+                                </li>
+                            @endif
+
                             @can('consortiums.view')
                                 @if (Route::has('consortium-operations.index'))
                                     <li class="nxl-item">
@@ -356,11 +377,61 @@
                                 @endif
                             @endcan
 
+                            @can('think_tanks.directory.view')
+                                @if (Route::has('think-tanks-admin.directory'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tanks-admin.directory') }}" class="nxl-link">
+                                            <i class="feather-list me-2"></i> Think Tank Profiles
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @can('consortiums.view')
+                                @if (Route::has('consortium-operations.index'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('consortium-operations.index') }}" class="nxl-link">
+                                            <i class="feather-file-text me-2"></i> Reports
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @can('finance.purchase_requests.view')
+                                @if (Route::has('finance.purchase-requests.index'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('finance.purchase-requests.index') }}" class="nxl-link">
+                                            <i class="feather-file-plus me-2"></i> Purchase Requests
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @can('finance.purchase_requests.view')
+                                @if (Route::has('procurement.purchase-orders.index'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.purchase-orders.index') }}" class="nxl-link">
+                                            <i class="feather-shopping-bag me-2"></i> Purchase Orders
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @can('finance.purchase_requests.view')
+                                @if (Route::has('procurement.disbursements.index'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('procurement.disbursements.index') }}" class="nxl-link">
+                                            <i class="feather-credit-card me-2"></i> Disbursements
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
                             @if ($canSeeThinkTankPortalLinks)
                                 @if (Route::has('think-tank.dashboard'))
                                     <li class="nxl-item">
                                         <a href="{{ route('think-tank.dashboard') }}" class="nxl-link">
-                                            <i class="feather-home me-2"></i> Think Tank Dashboard
+                                            <i class="feather-home me-2"></i> Portal Dashboard
                                         </a>
                                     </li>
                                 @endif

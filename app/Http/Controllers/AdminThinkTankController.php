@@ -30,6 +30,198 @@ use Throwable;
 
 class AdminThinkTankController extends Controller
 {
+    public function dashboard(Request $request)
+    {
+        $thinkTanks = ConsortiumThinkTank::query()
+            ->with([
+                'consortium.programFunding.program',
+                'thinkDataset',
+                'portalUser',
+                'vendorUser',
+                'reports.evidence',
+                'fundAllocations',
+            ])
+            ->withCount([
+                'reports as reports_total_count',
+                'reports as reports_submitted_count' => fn ($query) => $query->where('status', 'submitted'),
+                'reports as reports_approved_count' => fn ($query) => $query->where('status', 'approved'),
+                'reports as reports_attention_count' => fn ($query) => $query->whereIn('status', ['rejected', 'revisions_requested']),
+                'researchOutputs',
+                'procurementPlans',
+                'procurements',
+            ])
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $search = '%' . trim((string) $request->input('q')) . '%';
+                $query->where(function ($builder) use ($search) {
+                    $builder->where('name', 'like', $search)
+                        ->orWhere('country', 'like', $search)
+                        ->orWhere('email', 'like', $search)
+                        ->orWhereHas('consortium', fn ($consortiumQuery) => $consortiumQuery
+                            ->where('name', 'like', $search)
+                            ->orWhere('code', 'like', $search))
+                        ->orWhereHas('vendorUser', fn ($vendorQuery) => $vendorQuery
+                            ->where('name', 'like', $search)
+                            ->orWhere('email', 'like', $search));
+                });
+            })
+            ->when($request->filled('consortium_id'), fn ($query) => $query->where('consortium_id', $request->input('consortium_id')))
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')))
+            ->orderBy('name')
+            ->get();
+
+        $this->hydrateDirectoryFinance($thinkTanks);
+
+        $portfolioRows = $thinkTanks
+            ->map(function (ConsortiumThinkTank $thinkTank) {
+                $purchaseOrders = $thinkTank->directoryPurchaseOrders ?? collect();
+                $purchaseRequests = $thinkTank->directoryPurchaseRequests ?? collect();
+                $paidDisbursements = $thinkTank->directoryDisbursements ?? collect();
+                $poAmount = (float) ($thinkTank->directory_po_amount ?? 0);
+                $paidAmount = (float) ($thinkTank->directory_paid_amount ?? 0);
+                $confirmedAmount = (float) $paidDisbursements
+                    ->where('recipient_confirmation_status', 'confirmed')
+                    ->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount);
+                $reportEvidenceCount = (int) $thinkTank->reports
+                    ->sum(fn ($report) => $report->evidence->count());
+                $purchaseRequestAttachmentCount = (int) $purchaseRequests
+                    ->sum(fn (PurchaseRequest $purchaseRequest) => $purchaseRequest->attachments->count());
+                $purchaseOrderDocumentCount = (int) $purchaseOrders
+                    ->sum(function (ProcurementPurchaseOrder $purchaseOrder) {
+                        $supportingDocumentCount = filled($purchaseOrder->supporting_document_path) ? 1 : 0;
+                        $evidenceDocumentCount = $purchaseOrder->lineItemEvidence
+                            ->sum(fn ($evidence) => collect($evidence->documents ?? [])->count());
+
+                        return $supportingDocumentCount + $evidenceDocumentCount;
+                    });
+                $documentCount = $reportEvidenceCount + $purchaseRequestAttachmentCount + $purchaseOrderDocumentCount;
+
+                return [
+                    'id' => $thinkTank->id,
+                    'name' => $thinkTank->name,
+                    'country' => $thinkTank->country ?: 'N/A',
+                    'status' => $thinkTank->status ?: 'active',
+                    'consortium' => $thinkTank->consortium?->name ?: 'No consortium',
+                    'consortium_code' => $thinkTank->consortium?->code,
+                    'currency' => $purchaseOrders->first()?->resolved_currency ?: $thinkTank->consortium?->currency ?: 'USD',
+                    'portal_linked' => filled($thinkTank->portal_user_id),
+                    'vendor_linked' => filled($thinkTank->vendor_user_id),
+                    'dataset_linked' => filled($thinkTank->think_dataset_id),
+                    'purchase_requests' => (int) ($thinkTank->directory_pr_count ?? 0),
+                    'purchase_orders' => (int) ($thinkTank->directory_po_count ?? 0),
+                    'disbursements' => (int) ($thinkTank->directory_disbursement_count ?? 0),
+                    'documents' => $documentCount,
+                    'report_documents' => $reportEvidenceCount,
+                    'procurement_documents' => $purchaseRequestAttachmentCount + $purchaseOrderDocumentCount,
+                    'reports_total' => (int) ($thinkTank->reports_total_count ?? 0),
+                    'reports_submitted' => (int) ($thinkTank->reports_submitted_count ?? 0),
+                    'reports_approved' => (int) ($thinkTank->reports_approved_count ?? 0),
+                    'reports_attention' => (int) ($thinkTank->reports_attention_count ?? 0),
+                    'research_outputs' => (int) ($thinkTank->research_outputs_count ?? 0),
+                    'procurement_plans' => (int) ($thinkTank->procurement_plans_count ?? 0),
+                    'procurements' => (int) ($thinkTank->procurements_count ?? 0),
+                    'po_amount' => round($poAmount, 2),
+                    'paid_amount' => round($paidAmount, 2),
+                    'open_amount' => round(max($poAmount - $paidAmount, 0), 2),
+                    'confirmed_amount' => round($confirmedAmount, 2),
+                    'payment_rate' => $poAmount > 0 ? round(min(100, ($paidAmount / $poAmount) * 100), 1) : 0,
+                    'receipt_rate' => $paidAmount > 0 ? round(min(100, ($confirmedAmount / $paidAmount) * 100), 1) : 0,
+                    'profile_rate' => collect([
+                        filled($thinkTank->portal_user_id),
+                        filled($thinkTank->vendor_user_id),
+                        filled($thinkTank->think_dataset_id),
+                    ])->filter()->count() / 3 * 100,
+                    'last_payment_at' => $paidDisbursements->max('paid_at'),
+                ];
+            })
+            ->values();
+
+        $summary = [
+            'think_tanks' => $portfolioRows->count(),
+            'active' => $portfolioRows->where('status', 'active')->count(),
+            'vendor_linked' => $portfolioRows->where('vendor_linked', true)->count(),
+            'portal_linked' => $portfolioRows->where('portal_linked', true)->count(),
+            'purchase_requests' => (int) $portfolioRows->sum('purchase_requests'),
+            'purchase_orders' => (int) $portfolioRows->sum('purchase_orders'),
+            'disbursements' => (int) $portfolioRows->sum('disbursements'),
+            'documents' => (int) $portfolioRows->sum('documents'),
+            'reports' => (int) $portfolioRows->sum('reports_total'),
+            'reports_submitted' => (int) $portfolioRows->sum('reports_submitted'),
+            'reports_approved' => (int) $portfolioRows->sum('reports_approved'),
+            'reports_attention' => (int) $portfolioRows->sum('reports_attention'),
+            'po_amount' => round((float) $portfolioRows->sum('po_amount'), 2),
+            'paid_amount' => round((float) $portfolioRows->sum('paid_amount'), 2),
+            'open_amount' => round((float) $portfolioRows->sum('open_amount'), 2),
+            'confirmed_amount' => round((float) $portfolioRows->sum('confirmed_amount'), 2),
+        ];
+        $summary['payment_rate'] = $summary['po_amount'] > 0
+            ? round(min(100, ($summary['paid_amount'] / $summary['po_amount']) * 100), 1)
+            : 0;
+        $summary['receipt_rate'] = $summary['paid_amount'] > 0
+            ? round(min(100, ($summary['confirmed_amount'] / $summary['paid_amount']) * 100), 1)
+            : 0;
+
+        $topThinkTanks = $portfolioRows
+            ->sortByDesc('po_amount')
+            ->take(10)
+            ->values();
+
+        $chartData = [
+            'finance' => [
+                'labels' => ['PO Value', 'Paid Disbursements', 'Open PO Balance', 'Receipts Confirmed'],
+                'values' => [
+                    $summary['po_amount'],
+                    $summary['paid_amount'],
+                    $summary['open_amount'],
+                    $summary['confirmed_amount'],
+                ],
+            ],
+            'pipeline' => [
+                'labels' => ['Purchase Requests', 'Purchase Orders', 'Paid Disbursements', 'Proof Documents', 'Reports'],
+                'values' => [
+                    $summary['purchase_requests'],
+                    $summary['purchase_orders'],
+                    $summary['disbursements'],
+                    $summary['documents'],
+                    $summary['reports'],
+                ],
+            ],
+            'topThinkTanks' => [
+                'labels' => $topThinkTanks->pluck('name')->values(),
+                'po' => $topThinkTanks->pluck('po_amount')->values(),
+                'paid' => $topThinkTanks->pluck('paid_amount')->values(),
+                'open' => $topThinkTanks->pluck('open_amount')->values(),
+            ],
+            'reports' => [
+                'labels' => ['Submitted', 'Approved', 'Needs Attention'],
+                'values' => [
+                    $summary['reports_submitted'],
+                    $summary['reports_approved'],
+                    $summary['reports_attention'],
+                ],
+            ],
+            'linkage' => [
+                'labels' => ['Vendor Linked', 'Portal Linked', 'Dataset Linked'],
+                'values' => [
+                    $portfolioRows->where('vendor_linked', true)->count(),
+                    $portfolioRows->where('portal_linked', true)->count(),
+                    $portfolioRows->where('dataset_linked', true)->count(),
+                ],
+            ],
+        ];
+
+        $consortia = Consortium::with('programFunding.program')->orderBy('name')->get();
+        $statuses = ['active', 'inactive', 'suspended', 'closed'];
+
+        return view('think-tanks-admin.dashboard', compact(
+            'thinkTanks',
+            'portfolioRows',
+            'summary',
+            'chartData',
+            'consortia',
+            'statuses'
+        ));
+    }
+
     public function directory(Request $request)
     {
         $allDirectoryMembers = ConsortiumThinkTank::query()
@@ -900,8 +1092,9 @@ class AdminThinkTankController extends Controller
         $purchaseOrders = ProcurementPurchaseOrder::query()
             ->with([
                 'vendor',
-                'purchaseRequest',
-                'budgetCommitment.purchaseRequest',
+                'purchaseRequest.attachments',
+                'budgetCommitment.purchaseRequest.attachments',
+                'lineItemEvidence',
                 'disbursements' => fn ($query) => $this->paidDisbursements($query)
                     ->latest('paid_at')
                     ->latest(),
@@ -921,8 +1114,8 @@ class AdminThinkTankController extends Controller
 
         $disbursements = ProcurementDisbursement::query()
             ->with([
-                'purchaseOrder.purchaseRequest',
-                'purchaseOrder.budgetCommitment.purchaseRequest',
+                'purchaseOrder.purchaseRequest.attachments',
+                'purchaseOrder.budgetCommitment.purchaseRequest.attachments',
             ])
             ->where(function ($query) use ($memberIds, $vendorIds, $purchaseOrderIds) {
                 $query->whereIn('think_tank_member_id', $memberIds);

@@ -1045,19 +1045,22 @@
 
 @can('consortiums.analysis.view')
     @push('scripts')
+        @php
+            $dashboardFinance = [
+                'labels' => ['PO Value', 'Paid Disbursements', 'Open PO Balance', 'Receipts Confirmed'],
+                'values' => [
+                    round((float) ($summary['po_allocated'] ?? 0), 2),
+                    round((float) ($summary['funds_disbursed'] ?? 0), 2),
+                    round((float) ($summary['po_unpaid'] ?? 0), 2),
+                    round((float) ($summary['funds_receipted'] ?? 0), 2),
+                ],
+            ];
+        @endphp
         <script src="{{ asset('admin/assets/vendors/js/select2.min.js') }}"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 const comparisonData = @json($comparisonData);
-                const dashboardFinance = @json([
-                    'labels' => ['PO Value', 'Paid Disbursements', 'Open PO Balance', 'Receipts Confirmed'],
-                    'values' => [
-                        round((float) ($summary['po_allocated'] ?? 0), 2),
-                        round((float) ($summary['funds_disbursed'] ?? 0), 2),
-                        round((float) ($summary['po_unpaid'] ?? 0), 2),
-                        round((float) ($summary['funds_receipted'] ?? 0), 2),
-                    ],
-                ]);
+                const dashboardFinance = @json($dashboardFinance);
                 const financeMixEl = document.querySelector('#opsFinanceMixChart');
                 const paymentProgressEl = document.querySelector('#opsPaymentProgressChart');
                 const fundsChartEl = document.querySelector('#fundsComparisonChart');
