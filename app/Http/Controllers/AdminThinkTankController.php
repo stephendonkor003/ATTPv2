@@ -32,23 +32,28 @@ class AdminThinkTankController extends Controller
 {
     public function dashboard(Request $request)
     {
+        $request->validate([
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+        ]);
+
+        $startDate = $request->filled('start_date')
+            ? Carbon::parse($request->input('start_date'))->startOfDay()
+            : null;
+        $endDate = $request->filled('end_date')
+            ? Carbon::parse($request->input('end_date'))->endOfDay()
+            : null;
+        $dateRangeLabel = match (true) {
+            $startDate && $endDate => $startDate->format('M d, Y') . ' to ' . $endDate->format('M d, Y'),
+            (bool) $startDate => 'From ' . $startDate->format('M d, Y'),
+            (bool) $endDate => 'Up to ' . $endDate->format('M d, Y'),
+            default => 'All dates',
+        };
+
         $thinkTanks = ConsortiumThinkTank::query()
             ->with([
                 'consortium.programFunding.program',
-                'thinkDataset',
-                'portalUser',
                 'vendorUser',
-                'reports.evidence',
-                'fundAllocations',
-            ])
-            ->withCount([
-                'reports as reports_total_count',
-                'reports as reports_submitted_count' => fn ($query) => $query->where('status', 'submitted'),
-                'reports as reports_approved_count' => fn ($query) => $query->where('status', 'approved'),
-                'reports as reports_attention_count' => fn ($query) => $query->whereIn('status', ['rejected', 'revisions_requested']),
-                'researchOutputs',
-                'procurementPlans',
-                'procurements',
             ])
             ->when($request->filled('q'), function ($query) use ($request) {
                 $search = '%' . trim((string) $request->input('q')) . '%';
@@ -69,31 +74,31 @@ class AdminThinkTankController extends Controller
             ->orderBy('name')
             ->get();
 
-        $this->hydrateDirectoryFinance($thinkTanks);
+        $this->hydrateDirectoryFinance($thinkTanks, $startDate, $endDate);
 
         $portfolioRows = $thinkTanks
             ->map(function (ConsortiumThinkTank $thinkTank) {
                 $purchaseOrders = $thinkTank->directoryPurchaseOrders ?? collect();
                 $purchaseRequests = $thinkTank->directoryPurchaseRequests ?? collect();
                 $paidDisbursements = $thinkTank->directoryDisbursements ?? collect();
+                $purchaseRequestAmount = (float) $purchaseRequests
+                    ->sum(fn (PurchaseRequest $purchaseRequest) => (float) $purchaseRequest->total_amount);
                 $poAmount = (float) ($thinkTank->directory_po_amount ?? 0);
                 $paidAmount = (float) ($thinkTank->directory_paid_amount ?? 0);
                 $confirmedAmount = (float) $paidDisbursements
                     ->where('recipient_confirmation_status', 'confirmed')
                     ->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount);
-                $reportEvidenceCount = (int) $thinkTank->reports
-                    ->sum(fn ($report) => $report->evidence->count());
-                $purchaseRequestAttachmentCount = (int) $purchaseRequests
-                    ->sum(fn (PurchaseRequest $purchaseRequest) => $purchaseRequest->attachments->count());
-                $purchaseOrderDocumentCount = (int) $purchaseOrders
-                    ->sum(function (ProcurementPurchaseOrder $purchaseOrder) {
-                        $supportingDocumentCount = filled($purchaseOrder->supporting_document_path) ? 1 : 0;
-                        $evidenceDocumentCount = $purchaseOrder->lineItemEvidence
-                            ->sum(fn ($evidence) => collect($evidence->documents ?? [])->count());
-
-                        return $supportingDocumentCount + $evidenceDocumentCount;
-                    });
-                $documentCount = $reportEvidenceCount + $purchaseRequestAttachmentCount + $purchaseOrderDocumentCount;
+                $latestPurchaseRequest = $purchaseRequests
+                    ->sortByDesc(fn (PurchaseRequest $purchaseRequest) => $purchaseRequest->created_at?->getTimestamp() ?? 0)
+                    ->first();
+                $latestPurchaseOrder = $purchaseOrders
+                    ->sortByDesc(fn (ProcurementPurchaseOrder $purchaseOrder) => $purchaseOrder->issued_at?->getTimestamp() ?? $purchaseOrder->created_at?->getTimestamp() ?? 0)
+                    ->first();
+                $latestDisbursement = $paidDisbursements
+                    ->sortByDesc(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at?->getTimestamp() ?? $disbursement->created_at?->getTimestamp() ?? 0)
+                    ->first();
+                $latestPurchaseOrderDate = $latestPurchaseOrder?->issued_at ?: $latestPurchaseOrder?->created_at;
+                $latestDisbursementDate = $latestDisbursement?->paid_at ?: $latestDisbursement?->created_at;
 
                 return [
                     'id' => $thinkTank->id,
@@ -103,33 +108,24 @@ class AdminThinkTankController extends Controller
                     'consortium' => $thinkTank->consortium?->name ?: 'No consortium',
                     'consortium_code' => $thinkTank->consortium?->code,
                     'currency' => $purchaseOrders->first()?->resolved_currency ?: $thinkTank->consortium?->currency ?: 'USD',
-                    'portal_linked' => filled($thinkTank->portal_user_id),
-                    'vendor_linked' => filled($thinkTank->vendor_user_id),
-                    'dataset_linked' => filled($thinkTank->think_dataset_id),
+                    'vendor_name' => $thinkTank->vendorUser?->name,
                     'purchase_requests' => (int) ($thinkTank->directory_pr_count ?? 0),
                     'purchase_orders' => (int) ($thinkTank->directory_po_count ?? 0),
                     'disbursements' => (int) ($thinkTank->directory_disbursement_count ?? 0),
-                    'documents' => $documentCount,
-                    'report_documents' => $reportEvidenceCount,
-                    'procurement_documents' => $purchaseRequestAttachmentCount + $purchaseOrderDocumentCount,
-                    'reports_total' => (int) ($thinkTank->reports_total_count ?? 0),
-                    'reports_submitted' => (int) ($thinkTank->reports_submitted_count ?? 0),
-                    'reports_approved' => (int) ($thinkTank->reports_approved_count ?? 0),
-                    'reports_attention' => (int) ($thinkTank->reports_attention_count ?? 0),
-                    'research_outputs' => (int) ($thinkTank->research_outputs_count ?? 0),
-                    'procurement_plans' => (int) ($thinkTank->procurement_plans_count ?? 0),
-                    'procurements' => (int) ($thinkTank->procurements_count ?? 0),
+                    'purchase_request_amount' => round($purchaseRequestAmount, 2),
                     'po_amount' => round($poAmount, 2),
                     'paid_amount' => round($paidAmount, 2),
                     'open_amount' => round(max($poAmount - $paidAmount, 0), 2),
                     'confirmed_amount' => round($confirmedAmount, 2),
+                    'unconfirmed_amount' => round(max($paidAmount - $confirmedAmount, 0), 2),
                     'payment_rate' => $poAmount > 0 ? round(min(100, ($paidAmount / $poAmount) * 100), 1) : 0,
                     'receipt_rate' => $paidAmount > 0 ? round(min(100, ($confirmedAmount / $paidAmount) * 100), 1) : 0,
-                    'profile_rate' => collect([
-                        filled($thinkTank->portal_user_id),
-                        filled($thinkTank->vendor_user_id),
-                        filled($thinkTank->think_dataset_id),
-                    ])->filter()->count() / 3 * 100,
+                    'latest_purchase_request' => $latestPurchaseRequest?->reference_no,
+                    'latest_purchase_request_date' => $latestPurchaseRequest?->created_at?->format('M d, Y'),
+                    'latest_purchase_order' => $latestPurchaseOrder?->reference_no,
+                    'latest_purchase_order_date' => $latestPurchaseOrderDate?->format('M d, Y'),
+                    'latest_disbursement' => $latestDisbursement?->reference_no,
+                    'latest_disbursement_date' => $latestDisbursementDate?->format('M d, Y'),
                     'last_payment_at' => $paidDisbursements->max('paid_at'),
                 ];
             })
@@ -138,20 +134,15 @@ class AdminThinkTankController extends Controller
         $summary = [
             'think_tanks' => $portfolioRows->count(),
             'active' => $portfolioRows->where('status', 'active')->count(),
-            'vendor_linked' => $portfolioRows->where('vendor_linked', true)->count(),
-            'portal_linked' => $portfolioRows->where('portal_linked', true)->count(),
             'purchase_requests' => (int) $portfolioRows->sum('purchase_requests'),
             'purchase_orders' => (int) $portfolioRows->sum('purchase_orders'),
             'disbursements' => (int) $portfolioRows->sum('disbursements'),
-            'documents' => (int) $portfolioRows->sum('documents'),
-            'reports' => (int) $portfolioRows->sum('reports_total'),
-            'reports_submitted' => (int) $portfolioRows->sum('reports_submitted'),
-            'reports_approved' => (int) $portfolioRows->sum('reports_approved'),
-            'reports_attention' => (int) $portfolioRows->sum('reports_attention'),
+            'purchase_request_amount' => round((float) $portfolioRows->sum('purchase_request_amount'), 2),
             'po_amount' => round((float) $portfolioRows->sum('po_amount'), 2),
             'paid_amount' => round((float) $portfolioRows->sum('paid_amount'), 2),
             'open_amount' => round((float) $portfolioRows->sum('open_amount'), 2),
             'confirmed_amount' => round((float) $portfolioRows->sum('confirmed_amount'), 2),
+            'unconfirmed_amount' => round((float) $portfolioRows->sum('unconfirmed_amount'), 2),
         ];
         $summary['payment_rate'] = $summary['po_amount'] > 0
             ? round(min(100, ($summary['paid_amount'] / $summary['po_amount']) * 100), 1)
@@ -167,8 +158,9 @@ class AdminThinkTankController extends Controller
 
         $chartData = [
             'finance' => [
-                'labels' => ['PO Value', 'Paid Disbursements', 'Open PO Balance', 'Receipts Confirmed'],
+                'labels' => ['PR Amount', 'PO Amount', 'Paid Disbursements', 'Open PO Balance', 'Confirmed Receipts'],
                 'values' => [
+                    $summary['purchase_request_amount'],
                     $summary['po_amount'],
                     $summary['paid_amount'],
                     $summary['open_amount'],
@@ -176,35 +168,25 @@ class AdminThinkTankController extends Controller
                 ],
             ],
             'pipeline' => [
-                'labels' => ['Purchase Requests', 'Purchase Orders', 'Paid Disbursements', 'Proof Documents', 'Reports'],
+                'labels' => ['Purchase Requests', 'Purchase Orders', 'Paid Disbursements'],
                 'values' => [
                     $summary['purchase_requests'],
                     $summary['purchase_orders'],
                     $summary['disbursements'],
-                    $summary['documents'],
-                    $summary['reports'],
                 ],
             ],
             'topThinkTanks' => [
                 'labels' => $topThinkTanks->pluck('name')->values(),
+                'pr' => $topThinkTanks->pluck('purchase_request_amount')->values(),
                 'po' => $topThinkTanks->pluck('po_amount')->values(),
                 'paid' => $topThinkTanks->pluck('paid_amount')->values(),
                 'open' => $topThinkTanks->pluck('open_amount')->values(),
             ],
-            'reports' => [
-                'labels' => ['Submitted', 'Approved', 'Needs Attention'],
+            'receipts' => [
+                'labels' => ['Confirmed Receipts', 'Awaiting Confirmation'],
                 'values' => [
-                    $summary['reports_submitted'],
-                    $summary['reports_approved'],
-                    $summary['reports_attention'],
-                ],
-            ],
-            'linkage' => [
-                'labels' => ['Vendor Linked', 'Portal Linked', 'Dataset Linked'],
-                'values' => [
-                    $portfolioRows->where('vendor_linked', true)->count(),
-                    $portfolioRows->where('portal_linked', true)->count(),
-                    $portfolioRows->where('dataset_linked', true)->count(),
+                    $summary['confirmed_amount'],
+                    $summary['unconfirmed_amount'],
                 ],
             ],
         ];
@@ -218,7 +200,8 @@ class AdminThinkTankController extends Controller
             'summary',
             'chartData',
             'consortia',
-            'statuses'
+            'statuses',
+            'dateRangeLabel'
         ));
     }
 
@@ -1080,7 +1063,7 @@ class AdminThinkTankController extends Controller
         ];
     }
 
-    private function hydrateDirectoryFinance($thinkTanks): void
+    private function hydrateDirectoryFinance($thinkTanks, ?Carbon $startDate = null, ?Carbon $endDate = null): void
     {
         if ($thinkTanks->isEmpty()) {
             return;
@@ -1106,6 +1089,18 @@ class AdminThinkTankController extends Controller
                     $query->orWhereIn('vendor_id', $vendorIds);
                 }
             })
+            ->when($startDate || $endDate, function ($query) use ($startDate, $endDate) {
+                $query->where(function ($dateQuery) use ($startDate, $endDate) {
+                    $dateQuery
+                        ->when($startDate, fn ($builder) => $builder->where('issued_at', '>=', $startDate))
+                        ->when($endDate, fn ($builder) => $builder->where('issued_at', '<=', $endDate))
+                        ->orWhere(function ($fallbackQuery) use ($startDate, $endDate) {
+                            $fallbackQuery->whereNull('issued_at')
+                                ->when($startDate, fn ($builder) => $builder->where('created_at', '>=', $startDate))
+                                ->when($endDate, fn ($builder) => $builder->where('created_at', '<=', $endDate));
+                        });
+                });
+            })
             ->latest('issued_at')
             ->latest()
             ->get();
@@ -1130,6 +1125,9 @@ class AdminThinkTankController extends Controller
             });
 
         $this->paidDisbursements($disbursements);
+        $disbursements
+            ->when($startDate, fn ($query) => $query->where('paid_at', '>=', $startDate))
+            ->when($endDate, fn ($query) => $query->where('paid_at', '<=', $endDate));
 
         $disbursements = $disbursements
             ->latest('paid_at')

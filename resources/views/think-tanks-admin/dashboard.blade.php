@@ -48,7 +48,7 @@
 
         .tt-soft-filter {
             display: grid;
-            grid-template-columns: minmax(220px, 1.3fr) minmax(170px, .75fr) minmax(130px, .55fr) auto;
+            grid-template-columns: minmax(220px, 1.2fr) minmax(170px, .7fr) minmax(130px, .5fr) minmax(145px, .55fr) minmax(145px, .55fr) auto;
             gap: 0.7rem;
             align-items: end;
         }
@@ -269,11 +269,16 @@
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between gap-3 flex-wrap">
                         <div>
-                            <div class="tt-soft-kicker mb-2">Think Tank Management</div>
-                            <h3 class="fw-bold mb-2">Think Tank Operations Dashboard</h3>
+                            <div class="tt-soft-kicker mb-2">Think Tank Finance</div>
+                            <h3 class="fw-bold mb-2">PR, PO and Disbursement Dashboard</h3>
                             <p class="mb-0">
-                                Procurement, vendor, payment, proof document, and reporting visibility for qualified consortium think tanks.
+                                Financial control for qualified think tanks, focused on purchase requests, purchase orders, paid disbursements, and receipt confirmation.
                             </p>
+                            <div class="mt-3">
+                                <span class="tt-soft-badge info">
+                                    <i class="feather-calendar"></i> {{ $dateRangeLabel }}
+                                </span>
+                            </div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap align-items-start">
                             @can('finance.commitments.create')
@@ -329,6 +334,14 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div>
+                            <label for="ttStartDate">From</label>
+                            <input id="ttStartDate" type="date" name="start_date" value="{{ request('start_date') }}" class="form-control">
+                        </div>
+                        <div>
+                            <label for="ttEndDate">To</label>
+                            <input id="ttEndDate" type="date" name="end_date" value="{{ request('end_date') }}" class="form-control">
+                        </div>
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-primary">
                                 <i class="feather-search me-1"></i> Filter
@@ -347,7 +360,7 @@
                         <div>
                             <div class="label">Think Tanks</div>
                             <div class="value">{{ number_format($summary['think_tanks']) }}</div>
-                            <div class="meta">{{ number_format($summary['active']) }} active profiles</div>
+                            <div class="meta">{{ number_format($summary['active']) }} active finance accounts</div>
                         </div>
                         <span class="tt-soft-icon teal"><i class="feather-users"></i></span>
                     </div>
@@ -365,21 +378,21 @@
                 <div class="card tt-soft-stat">
                     <div class="card-body d-flex justify-content-between gap-3">
                         <div>
-                            <div class="label">Paid Disbursements</div>
-                            <div class="value">{{ number_format($summary['disbursements']) }}</div>
-                            <div class="meta">{{ $formatMoney($summary['paid_amount']) }}</div>
+                            <div class="label">PO Amount</div>
+                            <div class="value">{{ $formatMoney($summary['po_amount']) }}</div>
+                            <div class="meta">{{ number_format($summary['purchase_orders']) }} purchase orders</div>
                         </div>
-                        <span class="tt-soft-icon emerald"><i class="feather-credit-card"></i></span>
+                        <span class="tt-soft-icon amber"><i class="feather-shopping-bag"></i></span>
                     </div>
                 </div>
                 <div class="card tt-soft-stat">
                     <div class="card-body d-flex justify-content-between gap-3">
                         <div>
-                            <div class="label">Proof Documents</div>
-                            <div class="value">{{ number_format($summary['documents']) }}</div>
-                            <div class="meta">{{ number_format($summary['reports']) }} submitted reports</div>
+                            <div class="label">Paid Disbursements</div>
+                            <div class="value">{{ number_format($summary['disbursements']) }}</div>
+                            <div class="meta">{{ $formatMoney($summary['paid_amount']) }}</div>
                         </div>
-                        <span class="tt-soft-icon amber"><i class="feather-paperclip"></i></span>
+                        <span class="tt-soft-icon emerald"><i class="feather-credit-card"></i></span>
                     </div>
                 </div>
             </div>
@@ -420,23 +433,23 @@
             <div class="tt-soft-chart-grid mb-4">
                 <div class="tt-soft-panel">
                     <h5>Financial Mix</h5>
-                    <div class="sub">PO value, paid amount, open balance, and confirmed receipts.</div>
+                    <div class="sub">PR amount, PO amount, paid amount, open balance, and confirmed receipts.</div>
                     <div id="ttAdminFinanceChart"></div>
                 </div>
                 <div class="tt-soft-panel">
                     <h5>Top Think Tanks</h5>
-                    <div class="sub">Largest purchase order portfolios by linked think tank/vendor identity.</div>
+                    <div class="sub">Largest PR, PO, and paid disbursement portfolios.</div>
                     <div id="ttAdminTopChart"></div>
                 </div>
                 <div class="tt-soft-panel">
-                    <h5>Operational Flow</h5>
-                    <div class="sub">Request, order, payment, proof, and reporting activity.</div>
+                    <h5>Financial Flow</h5>
+                    <div class="sub">Purchase request, purchase order, and paid disbursement record counts.</div>
                     <div id="ttAdminPipelineChart"></div>
                 </div>
                 <div class="tt-soft-panel">
-                    <h5>Report Status</h5>
-                    <div class="sub">Submitted, approved, and attention-needed report records.</div>
-                    <div id="ttAdminReportChart"></div>
+                    <h5>Receipt Status</h5>
+                    <div class="sub">Paid amounts confirmed by recipients versus awaiting confirmation.</div>
+                    <div id="ttAdminReceiptChart"></div>
                 </div>
             </div>
 
@@ -444,19 +457,14 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-3">
                         <div>
-                            <h5 class="fw-bold mb-1">Think Tank Operations Register</h5>
-                            <div class="text-muted small">PR, PO, disbursement, proof document, and report coverage by think tank.</div>
+                            <h5 class="fw-bold mb-1">Think Tank Financial Register</h5>
+                            <div class="text-muted small">Purchase request, purchase order, disbursement, and receipt status by think tank.</div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
-                            @if (Route::has('think-tanks-admin.directory'))
-                                <a href="{{ route('think-tanks-admin.directory') }}" class="btn btn-light border btn-sm">
-                                    <i class="feather-list me-1"></i> Profiles
-                                </a>
-                            @endif
                             @can('consortiums.view')
                                 @if (Route::has('consortium-operations.index'))
                                     <a href="{{ route('consortium-operations.index') }}" class="btn btn-light border btn-sm">
-                                        <i class="feather-grid me-1"></i> Consortium Dashboard
+                                        <i class="feather-grid me-1"></i> Consortium Payments
                                     </a>
                                 @endif
                             @endcan
@@ -471,49 +479,47 @@
                                 <thead>
                                 <tr>
                                     <th>Think Tank</th>
-                                    <th>Linkage</th>
                                     <th>PR</th>
                                     <th>PO</th>
                                     <th>Paid</th>
-                                    <th>Documents</th>
-                                    <th>Reports</th>
+                                    <th>Receipt</th>
+                                    <th>Open</th>
                                     <th>Progress</th>
-                                    <th></th>
                                 </tr>
                                 </thead>
                                 <tbody>
                                 @foreach ($portfolioRows as $row)
                                     <tr>
                                         <td style="min-width: 240px;">
-                                            <a class="tt-soft-name" href="{{ route('think-tanks-admin.show', $row['id']) }}">{{ $row['name'] }}</a>
+                                            <span class="tt-soft-name">{{ $row['name'] }}</span>
                                             <div class="text-muted small">{{ $row['consortium'] }}{{ $row['consortium_code'] ? ' | ' . $row['consortium_code'] : '' }}</div>
-                                            <div class="text-muted small">{{ $row['country'] }} | {{ ucfirst($row['status']) }}</div>
-                                        </td>
-                                        <td>
-                                            <div class="d-flex gap-1 flex-wrap">
-                                                <span class="tt-soft-badge {{ $row['vendor_linked'] ? 'good' : 'warn' }}">Vendor</span>
-                                                <span class="tt-soft-badge {{ $row['portal_linked'] ? 'good' : 'warn' }}">Portal</span>
-                                                <span class="tt-soft-badge {{ $row['dataset_linked'] ? 'info' : 'muted' }}">DB</span>
-                                            </div>
+                                            <div class="text-muted small">{{ $row['country'] }} | {{ $row['vendor_name'] ?: 'Vendor identity not linked' }}</div>
                                         </td>
                                         <td>
                                             <strong>{{ number_format($row['purchase_requests']) }}</strong>
+                                            <div class="text-muted small">{{ $row['currency'] }} {{ number_format($row['purchase_request_amount'], 2) }}</div>
+                                            <div class="text-muted small">{{ $row['latest_purchase_request'] ?: 'No PR yet' }}</div>
+                                            <div class="text-muted small">{{ $row['latest_purchase_request_date'] ?: 'No PR date' }}</div>
                                         </td>
                                         <td>
                                             <strong>{{ number_format($row['purchase_orders']) }}</strong>
                                             <div class="text-muted small">{{ $row['currency'] }} {{ number_format($row['po_amount'], 2) }}</div>
+                                            <div class="text-muted small">{{ $row['latest_purchase_order'] ?: 'No PO yet' }}</div>
+                                            <div class="text-muted small">{{ $row['latest_purchase_order_date'] ?: 'No PO date' }}</div>
                                         </td>
                                         <td>
                                             <strong>{{ number_format($row['disbursements']) }}</strong>
                                             <div class="text-muted small">{{ $row['currency'] }} {{ number_format($row['paid_amount'], 2) }}</div>
+                                            <div class="text-muted small">{{ $row['latest_disbursement'] ?: 'No payment yet' }}</div>
+                                            <div class="text-muted small">{{ $row['latest_disbursement_date'] ?: 'No payment date' }}</div>
                                         </td>
                                         <td>
-                                            <strong>{{ number_format($row['documents']) }}</strong>
-                                            <div class="text-muted small">{{ number_format($row['procurement_documents']) }} procurement | {{ number_format($row['report_documents']) }} report</div>
+                                            <strong>{{ $row['currency'] }} {{ number_format($row['confirmed_amount'], 2) }}</strong>
+                                            <div class="text-muted small">{{ $row['currency'] }} {{ number_format($row['unconfirmed_amount'], 2) }} awaiting</div>
                                         </td>
                                         <td>
-                                            <strong>{{ number_format($row['reports_total']) }}</strong>
-                                            <div class="text-muted small">{{ number_format($row['reports_submitted']) }} pending | {{ number_format($row['reports_approved']) }} approved</div>
+                                            <strong>{{ $row['currency'] }} {{ number_format($row['open_amount'], 2) }}</strong>
+                                            <div class="text-muted small">PO minus paid disbursements</div>
                                         </td>
                                         <td style="min-width: 160px;">
                                             <div class="d-flex justify-content-between small fw-bold mb-1">
@@ -530,11 +536,6 @@
                                             <div class="tt-soft-progress">
                                                 <span style="width: {{ number_format($row['receipt_rate'], 2, '.', '') }}%"></span>
                                             </div>
-                                        </td>
-                                        <td class="text-end">
-                                            <a href="{{ route('think-tanks-admin.show', $row['id']) }}" class="btn btn-sm btn-outline-primary">
-                                                <i class="feather-eye"></i>
-                                            </a>
                                         </td>
                                     </tr>
                                 @endforeach
@@ -573,19 +574,20 @@
                 series: chartData.finance.values,
                 labels: chartData.finance.labels,
                 chart: { ...base.chart, type: 'donut', height: 260 },
-                colors: ['#14b8a6', '#22c55e', '#f59e0b', '#6366f1'],
+                colors: ['#06b6d4', '#14b8a6', '#22c55e', '#f59e0b', '#6366f1'],
                 tooltip: { y: { formatter: (value) => money(value) } }
             }).render();
 
             new ApexCharts(document.querySelector('#ttAdminTopChart'), {
                 ...base,
                 series: [
-                    { name: 'PO Value', data: chartData.topThinkTanks.po },
-                    { name: 'Paid', data: chartData.topThinkTanks.paid },
+                    { name: 'PR Amount', data: chartData.topThinkTanks.pr },
+                    { name: 'PO Amount', data: chartData.topThinkTanks.po },
+                    { name: 'Paid Disbursements', data: chartData.topThinkTanks.paid },
                     { name: 'Open', data: chartData.topThinkTanks.open }
                 ],
                 chart: { ...base.chart, type: 'bar', height: 300 },
-                colors: ['#6366f1', '#22c55e', '#f59e0b'],
+                colors: ['#06b6d4', '#6366f1', '#22c55e', '#f59e0b'],
                 plotOptions: { bar: { horizontal: true, borderRadius: 5, barHeight: '62%' } },
                 xaxis: {
                     categories: chartData.topThinkTanks.labels,
@@ -603,12 +605,13 @@
                 xaxis: { categories: chartData.pipeline.labels }
             }).render();
 
-            new ApexCharts(document.querySelector('#ttAdminReportChart'), {
+            new ApexCharts(document.querySelector('#ttAdminReceiptChart'), {
                 ...base,
-                series: chartData.reports.values,
-                labels: chartData.reports.labels,
+                series: chartData.receipts.values,
+                labels: chartData.receipts.labels,
                 chart: { ...base.chart, type: 'donut', height: 260 },
-                colors: ['#06b6d4', '#22c55e', '#fb7185']
+                colors: ['#22c55e', '#f59e0b'],
+                tooltip: { y: { formatter: (value) => money(value) } }
             }).render();
         });
     </script>

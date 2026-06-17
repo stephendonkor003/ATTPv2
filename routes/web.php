@@ -3197,11 +3197,11 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:consortiums.financ
     ->post('/consortium-operations/disbursements/{disbursement}/review', [\App\Http\Controllers\ConsortiumOperationsController::class, 'reviewDisbursement'])
     ->name('consortium-operations.disbursements.review');
 
-Route::middleware(['auth', 'not.funding.partner', 'permission:think_tanks.directory.view|think_tanks.funding.view|consortiums.view|consortiums.reports.review'])
+Route::middleware(['auth', 'not.funding.partner', 'permission:think_tanks.directory.view|think_tanks.funding.view|consortiums.view|finance.purchase_requests.view|finance.commitments.create|finance.purchase_orders.create'])
     ->prefix('think-tanks-admin')
     ->name('think-tanks-admin.')
     ->group(function () {
-        Route::get('/dashboard', [\App\Http\Controllers\AdminThinkTankController::class, 'dashboard'])->middleware('permission:think_tanks.directory.view|think_tanks.funding.view|consortiums.view|consortiums.reports.review')->name('dashboard');
+        Route::get('/dashboard', [\App\Http\Controllers\AdminThinkTankController::class, 'dashboard'])->middleware('permission:think_tanks.funding.view|consortiums.view|finance.purchase_requests.view|finance.commitments.create|finance.purchase_orders.create')->name('dashboard');
         Route::get('/directory', [\App\Http\Controllers\AdminThinkTankController::class, 'directory'])->middleware('permission:think_tanks.directory.view')->name('directory');
         Route::post('/directory', [\App\Http\Controllers\AdminThinkTankController::class, 'store'])->middleware('permission:think_tanks.directory.create')->name('store');
         Route::get('/funding', [\App\Http\Controllers\AdminThinkTankController::class, 'funding'])->middleware('permission:think_tanks.funding.view')->name('funding');
