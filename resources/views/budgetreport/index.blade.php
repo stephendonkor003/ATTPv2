@@ -123,6 +123,31 @@
             font-weight: 600;
         }
 
+        .br-tabs {
+            border-bottom: 1px solid #dbe3ef;
+        }
+
+        .br-tabs .nav-link {
+            border: 0;
+            border-bottom: 3px solid transparent;
+            color: #64748b;
+            font-weight: 800;
+            padding: 0.85rem 1rem;
+        }
+
+        .br-tabs .nav-link.active {
+            color: #0f766e;
+            background: transparent;
+            border-bottom-color: #0f766e;
+        }
+
+        .br-project-selector {
+            display: grid;
+            grid-template-columns: minmax(260px, 1fr) auto;
+            gap: 0.75rem;
+            align-items: end;
+        }
+
         .br-pdf-btn {
             background: linear-gradient(135deg, #fbbf24, #f97316);
             border: 0;
@@ -211,6 +236,20 @@
             </div>
         </div>
 
+        <ul class="nav nav-tabs br-tabs mb-4">
+            <li class="nav-item">
+                <a class="nav-link {{ $activeReportTab === 'portfolio' ? 'active' : '' }}" href="{{ route('budget.reports.index') }}">
+                    <i class="feather-pie-chart me-1"></i> Portfolio Overview
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ $activeReportTab === 'project-progress' ? 'active' : '' }}" href="{{ route('budget.reports.index', ['tab' => 'project-progress', 'project_id' => $selectedProjectId]) }}">
+                    <i class="feather-trending-up me-1"></i> Project Progress
+                </a>
+            </li>
+        </ul>
+
+        @if ($activeReportTab === 'portfolio')
         <div class="row g-3 mb-4">
             <div class="col-md-6 col-xl-3">
                 <div class="br-metric">
@@ -538,6 +577,192 @@
                 </div>
             </div>
         </div>
+        @else
+            <div class="br-panel mb-4">
+                <div class="br-panel-header">
+                    <div class="br-chart-title mb-1">
+                        <span><i class="feather-search"></i></span>
+                        <h5 class="fw-bold mb-0">Project Selection</h5>
+                    </div>
+                    <div class="text-muted small">Review progress for a single project.</div>
+                </div>
+                <div class="br-panel-body">
+                    <form method="GET" action="{{ route('budget.reports.index') }}" class="br-project-selector">
+                        <input type="hidden" name="tab" value="project-progress">
+                        <div>
+                            <label for="projectProgressSelect" class="form-label fw-semibold">Project</label>
+                            <select id="projectProgressSelect" name="project_id" class="form-select">
+                                @foreach ($projectOptions as $projectOption)
+                                    <option value="{{ $projectOption['id'] }}" @selected((string) $selectedProjectId === (string) $projectOption['id'])>
+                                        {{ $projectOption['name'] }} - {{ $projectOption['program'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="feather-filter me-1"></i> View Progress
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            @if (! $projectProgress)
+                <div class="br-panel">
+                    <div class="br-panel-body text-center text-muted py-5">
+                        No project is available for progress review.
+                    </div>
+                </div>
+            @else
+                @php
+                    $projectCurrency = $projectProgress['project']['currency'] ?? 'USD';
+                    $projectMoney = fn ($value) => $projectCurrency . ' ' . number_format((float) $value, 2);
+                    $projectSummary = $projectProgress['summary'];
+                @endphp
+
+                <div class="br-panel mb-4">
+                    <div class="br-panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+                        <div>
+                            <h5 class="fw-bold mb-1">{{ $projectProgress['project']['name'] }}</h5>
+                            <div class="text-muted small">
+                                {{ $projectProgress['project']['code'] ?: 'No project code' }}
+                                @if ($projectProgress['project']['program'])
+                                    | {{ $projectProgress['project']['program'] }}
+                                @endif
+                            </div>
+                        </div>
+                        <span class="br-chip">
+                            {{ $projectProgress['project']['start_year'] ?: 'N/A' }} - {{ $projectProgress['project']['end_year'] ?: 'N/A' }}
+                        </span>
+                    </div>
+                    <div class="br-panel-body">
+                        <div class="row g-3">
+                            <div class="col-md-6 col-xl-3">
+                                <div class="br-metric">
+                                    <div class="text-muted small">Project Allocation</div>
+                                    <div class="h4 fw-bold mb-0">{{ $projectMoney($projectSummary['project_budget']) }}</div>
+                                    <div class="small text-muted mt-3">{{ number_format($projectSummary['activity_count']) }} activities</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 col-xl-3">
+                                <div class="br-metric">
+                                    <div class="text-muted small">Activity Allocation</div>
+                                    <div class="h4 fw-bold mb-0">{{ $projectMoney($projectSummary['activity_budget']) }}</div>
+                                    <div class="small text-muted mt-3">{{ number_format($projectSummary['activity_progress'], 1) }}% of project allocation</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 col-xl-3">
+                                <div class="br-metric">
+                                    <div class="text-muted small">Sub-Activity Allocation</div>
+                                    <div class="h4 fw-bold mb-0">{{ $projectMoney($projectSummary['sub_activity_budget']) }}</div>
+                                    <div class="small text-muted mt-3">{{ number_format($projectSummary['sub_activity_count']) }} sub-activities</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 col-xl-3">
+                                <div class="br-metric">
+                                    <div class="text-muted small">Remaining to Activities</div>
+                                    <div class="h4 fw-bold mb-0">{{ $projectMoney($projectSummary['remaining_to_activities']) }}</div>
+                                    <div class="small text-muted mt-3">{{ number_format($projectSummary['sub_activity_progress'], 1) }}% sub-activity coverage</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-4 mb-4">
+                    <div class="col-xl-8">
+                        <div class="br-panel h-100">
+                            <div class="br-panel-header">
+                                <div class="br-chart-title mb-1">
+                                    <span><i class="feather-trending-up"></i></span>
+                                    <h5 class="fw-bold mb-0">Project Allocation Progress</h5>
+                                </div>
+                                <div class="text-muted small">Project, activity, and sub-activity allocations by year.</div>
+                            </div>
+                            <div class="br-panel-body">
+                                <div class="br-chart-box">
+                                    <canvas id="selectedProjectProgressChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-4">
+                        <div class="br-panel h-100">
+                            <div class="br-panel-header">
+                                <div class="br-chart-title mb-1">
+                                    <span><i class="feather-target"></i></span>
+                                    <h5 class="fw-bold mb-0">Progress Ratios</h5>
+                                </div>
+                                <div class="text-muted small">Budget cascade from project to activities.</div>
+                            </div>
+                            <div class="br-panel-body">
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between small fw-semibold mb-2">
+                                        <span>Activity progress</span>
+                                        <span>{{ number_format($projectSummary['activity_progress'], 1) }}%</span>
+                                    </div>
+                                    <div class="br-progress"><span style="width: {{ min(100, $projectSummary['activity_progress']) }}%;"></span></div>
+                                </div>
+                                <div>
+                                    <div class="d-flex justify-content-between small fw-semibold mb-2">
+                                        <span>Sub-activity progress</span>
+                                        <span>{{ number_format($projectSummary['sub_activity_progress'], 1) }}%</span>
+                                    </div>
+                                    <div class="br-progress"><span style="width: {{ min(100, $projectSummary['sub_activity_progress']) }}%;"></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="br-panel">
+                    <div class="br-panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+                        <div>
+                            <h5 class="fw-bold mb-1">Activity Progress Breakdown</h5>
+                            <div class="text-muted small">Activity allocation coverage and sub-activity mapping for the selected project.</div>
+                        </div>
+                        <span class="br-chip">{{ number_format($projectSummary['activity_count']) }} activities</span>
+                    </div>
+                    <div class="br-panel-body">
+                        <div class="table-responsive br-table-wrap">
+                            <table class="table align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Activity</th>
+                                        <th class="text-center">Sub-Activities</th>
+                                        <th class="text-end">Activity Allocation</th>
+                                        <th class="text-end">Sub-Activity Allocation</th>
+                                        <th style="min-width: 190px;">Progress</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse ($projectProgress['activity_rows'] as $activityRow)
+                                        <tr>
+                                            <td>
+                                                <div class="fw-semibold">{{ $activityRow['name'] }}</div>
+                                                <div class="small text-muted">{{ number_format($activityRow['activity_share'], 1) }}% of project allocation</div>
+                                            </td>
+                                            <td class="text-center">{{ number_format($activityRow['sub_activities']) }}</td>
+                                            <td class="text-end fw-semibold">{{ $projectMoney($activityRow['activity_budget']) }}</td>
+                                            <td class="text-end">{{ $projectMoney($activityRow['sub_activity_budget']) }}</td>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <div class="br-progress flex-grow-1"><span style="width: {{ min(100, $activityRow['sub_activity_progress']) }}%;"></span></div>
+                                                    <span class="small fw-semibold">{{ number_format($activityRow['sub_activity_progress'], 1) }}%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="5" class="text-center text-muted py-4">No activities found for this project.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            @endif
+        @endif
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -546,6 +771,7 @@
             if (!window.Chart) return;
 
             const charts = @json($chartData);
+            const projectProgressChart = @json($projectProgress['chart'] ?? null);
             const palette = ['#0f766e', '#2563eb', '#7c3aed', '#ea580c', '#db2777', '#0891b2', '#65a30d', '#334155', '#dc2626', '#4f46e5'];
             const money = (value) => Number(value || 0).toLocaleString(undefined, {
                 minimumFractionDigits: 2,
@@ -902,6 +1128,32 @@
                                 grid: { color: '#e5e7eb' },
                                 angleLines: { color: '#e5e7eb' }
                             }
+                        }
+                    }
+                });
+            }
+
+            const selectedProjectCanvas = document.getElementById('selectedProjectProgressChart');
+            if (selectedProjectCanvas && projectProgressChart && projectProgressChart.labels?.length) {
+                new Chart(selectedProjectCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: projectProgressChart.labels,
+                        datasets: [
+                            { label: 'Project Allocation', data: projectProgressChart.project, backgroundColor: '#0f766e', borderRadius: 5 },
+                            { label: 'Activity Allocation', data: projectProgressChart.activities, backgroundColor: '#2563eb', borderRadius: 5 },
+                            { label: 'Sub-Activity Allocation', data: projectProgressChart.subActivities, backgroundColor: '#ea580c', borderRadius: 5 }
+                        ]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+                            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${money(ctx.raw)}` } }
+                        },
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { callback: axisMoney }, grid: { color: '#e5e7eb' } }
                         }
                     }
                 });

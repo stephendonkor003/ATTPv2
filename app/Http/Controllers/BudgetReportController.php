@@ -30,9 +30,9 @@ class BudgetReportController extends Controller
     /* ================================
        SECTOR OVERVIEW
     ================================== */
-    public function index()
+    public function index(Request $request)
     {
-        return view('budgetreport.index', $this->buildPortfolioBudgetOverviewData());
+        return view('budgetreport.index', $this->buildPortfolioBudgetOverviewData($request));
     }
 
     public function exportPortfolioPdf()
@@ -45,16 +45,22 @@ class BudgetReportController extends Controller
             ->download($filename);
     }
 
-    private function buildPortfolioBudgetOverviewData(): array
+    private function buildPortfolioBudgetOverviewData(?Request $request = null): array
     {
         $sectors = Sector::with([
             'programs.projects.allocations',
-            'programs.projects.activities.subActivities'
+            'programs.projects.activities.allocations',
+            'programs.projects.activities.subActivities.allocations'
         ])->orderBy('name')->get();
+
+        $allProjects = $sectors
+            ->flatMap(fn (Sector $sector) => $sector->programs->flatMap->projects)
+            ->values();
 
         $sectorSummaries = $sectors->map(function (Sector $sector) {
             $projects = $sector->programs->flatMap->projects;
-            $totalBudget = $projects->sum(fn (Project $project) => (float) $project->allocations->sum('amount'));
+            $totalBudget = $sector->programs->sum(fn (Program $program) => $this->programBudgetAmount($program));
+            $projectBudget = $projects->sum(fn (Project $project) => $this->projectBudgetAmount($project));
             $activityCount = $projects->sum(fn (Project $project) => $project->activities->count());
 
             return [
@@ -64,13 +70,13 @@ class BudgetReportController extends Controller
                 'projects' => $projects->count(),
                 'activities' => $activityCount,
                 'total_budget' => round($totalBudget, 2),
-                'average_project_budget' => $projects->count() > 0 ? round($totalBudget / $projects->count(), 2) : 0,
+                'average_project_budget' => $projects->count() > 0 ? round($projectBudget / $projects->count(), 2) : 0,
             ];
         })->values();
 
         $programSummaries = $sectors
             ->flatMap(fn (Sector $sector) => $sector->programs->map(function (Program $program) use ($sector) {
-                $totalBudget = $program->projects->sum(fn (Project $project) => (float) $project->allocations->sum('amount'));
+                $totalBudget = $this->programBudgetAmount($program);
 
                 return [
                     'id' => (string) $program->id,
@@ -91,15 +97,13 @@ class BudgetReportController extends Controller
                     'program' => $program->name,
                     'sector' => $sector->name,
                     'activities' => $project->activities->count(),
-                    'total_budget' => round((float) $project->allocations->sum('amount'), 2),
+                    'total_budget' => $this->projectBudgetAmount($project),
                 ];
             })))
             ->sortByDesc('total_budget')
             ->values();
 
-        $annualTotals = $sectors
-            ->flatMap(fn (Sector $sector) => $sector->programs)
-            ->flatMap(fn (Program $program) => $program->projects)
+        $annualTotals = $allProjects
             ->flatMap(fn (Project $project) => $project->allocations)
             ->groupBy('year')
             ->map(fn ($allocations) => round((float) $allocations->sum('amount'), 2))
@@ -108,7 +112,8 @@ class BudgetReportController extends Controller
         $topPrograms = $programSummaries->take(8)->values();
         $topProjects = $projectSummaries->take(10)->values();
         $totalBudget = round((float) $sectorSummaries->sum('total_budget'), 2);
-        $averageProjectBudget = $projectSummaries->count() > 0 ? round($totalBudget / $projectSummaries->count(), 2) : 0;
+        $projectBudgetTotal = round((float) $projectSummaries->sum('total_budget'), 2);
+        $averageProjectBudget = $projectSummaries->count() > 0 ? round($projectBudgetTotal / $projectSummaries->count(), 2) : 0;
         $largestSector = $sectorSummaries->sortByDesc('total_budget')->first();
         $largestProgram = $programSummaries->sortByDesc('total_budget')->first();
         $projectBudgetBands = [
@@ -165,14 +170,127 @@ class BudgetReportController extends Controller
             ])->values(),
         ];
 
+        $projectOptions = $projectSummaries
+            ->map(fn (array $project) => [
+                'id' => $project['id'],
+                'name' => $project['name'],
+                'program' => $project['program'],
+                'sector' => $project['sector'],
+                'total_budget' => $project['total_budget'],
+            ])
+            ->values();
+        $selectedProjectId = $request?->input('project_id') ?: ($topProjects->first()['id'] ?? $projectOptions->first()['id'] ?? null);
+        $selectedProject = $selectedProjectId
+            ? $allProjects->first(fn (Project $project) => (string) $project->id === (string) $selectedProjectId)
+            : null;
+        $projectProgress = $this->buildSelectedProjectProgress($selectedProject);
+        $activeReportTab = $request?->input('tab') === 'project-progress'
+            ? 'project-progress'
+            : 'portfolio';
+
         return compact(
             'sectors',
             'sectorSummaries',
             'programSummaries',
             'projectSummaries',
+            'projectOptions',
+            'selectedProjectId',
+            'projectProgress',
+            'activeReportTab',
             'portfolioStats',
             'chartData'
         );
+    }
+
+    private function programBudgetAmount(Program $program): float
+    {
+        return round((float) ($program->total_budget ?? 0), 2);
+    }
+
+    private function projectBudgetAmount(Project $project): float
+    {
+        $budget = (float) ($project->total_budget ?? 0);
+
+        if ($budget <= 0 && $project->relationLoaded('allocations')) {
+            $budget = (float) $project->allocations->sum('amount');
+        }
+
+        return round($budget, 2);
+    }
+
+    private function buildSelectedProjectProgress(?Project $project): ?array
+    {
+        if (! $project) {
+            return null;
+        }
+
+        $project->loadMissing([
+            'program',
+            'allocations',
+            'activities.allocations',
+            'activities.subActivities.allocations',
+        ]);
+
+        $projectBudget = $this->projectBudgetAmount($project);
+
+        $activityRows = $project->activities
+            ->map(function (Activity $activity) use ($projectBudget) {
+                $activityBudget = round((float) $activity->allocations->sum('amount'), 2);
+                $subActivityBudget = round((float) $activity->subActivities->sum(fn ($subActivity) => (float) $subActivity->allocations->sum('amount')), 2);
+
+                return [
+                    'id' => (string) $activity->id,
+                    'name' => $activity->name,
+                    'sub_activities' => $activity->subActivities->count(),
+                    'activity_budget' => $activityBudget,
+                    'sub_activity_budget' => $subActivityBudget,
+                    'remaining_to_sub_activities' => round(max($activityBudget - $subActivityBudget, 0), 2),
+                    'activity_share' => $projectBudget > 0 ? round(($activityBudget / $projectBudget) * 100, 1) : 0,
+                    'sub_activity_progress' => $activityBudget > 0 ? round(min(100, ($subActivityBudget / $activityBudget) * 100), 1) : 0,
+                ];
+            })
+            ->sortByDesc('activity_budget')
+            ->values();
+
+        $activityBudget = round((float) $activityRows->sum('activity_budget'), 2);
+        $subActivityBudget = round((float) $activityRows->sum('sub_activity_budget'), 2);
+        $years = collect($project->allocations->pluck('year'))
+            ->merge($project->activities->flatMap(fn (Activity $activity) => $activity->allocations->pluck('year')))
+            ->merge($project->activities->flatMap(fn (Activity $activity) => $activity->subActivities->flatMap(fn ($subActivity) => $subActivity->allocations->pluck('year'))))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        return [
+            'project' => [
+                'id' => (string) $project->id,
+                'name' => $project->name,
+                'code' => $project->project_id,
+                'program' => $project->program?->name,
+                'currency' => $project->currency ?: $project->program?->currency ?: 'USD',
+                'start_year' => $project->start_year,
+                'end_year' => $project->end_year,
+            ],
+            'summary' => [
+                'project_budget' => $projectBudget,
+                'activity_budget' => $activityBudget,
+                'sub_activity_budget' => $subActivityBudget,
+                'remaining_to_activities' => round(max($projectBudget - $activityBudget, 0), 2),
+                'remaining_to_sub_activities' => round(max($activityBudget - $subActivityBudget, 0), 2),
+                'activity_count' => $project->activities->count(),
+                'sub_activity_count' => $project->activities->sum(fn (Activity $activity) => $activity->subActivities->count()),
+                'activity_progress' => $projectBudget > 0 ? round(min(100, ($activityBudget / $projectBudget) * 100), 1) : 0,
+                'sub_activity_progress' => $activityBudget > 0 ? round(min(100, ($subActivityBudget / $activityBudget) * 100), 1) : 0,
+            ],
+            'activity_rows' => $activityRows,
+            'chart' => [
+                'labels' => $years,
+                'project' => $years->map(fn ($year) => round((float) $project->allocations->where('year', $year)->sum('amount'), 2))->values(),
+                'activities' => $years->map(fn ($year) => round((float) $project->activities->sum(fn (Activity $activity) => (float) $activity->allocations->where('year', $year)->sum('amount')), 2))->values(),
+                'subActivities' => $years->map(fn ($year) => round((float) $project->activities->sum(fn (Activity $activity) => (float) $activity->subActivities->sum(fn ($subActivity) => (float) $subActivity->allocations->where('year', $year)->sum('amount'))), 2))->values(),
+            ],
+        ];
     }
 
     /* ================================
