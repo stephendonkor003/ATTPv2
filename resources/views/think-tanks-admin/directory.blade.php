@@ -49,6 +49,108 @@
             font-weight: 900;
         }
 
+        .tt-consortium-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+            gap: 1rem;
+        }
+
+        .tt-consortium-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .tt-consortium-head {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+        }
+
+        .tt-consortium-title {
+            color: #0f172a;
+            font-weight: 900;
+            margin-bottom: 0.2rem;
+        }
+
+        .tt-consortium-code {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 0.2rem 0.5rem;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 0.7rem;
+            font-weight: 900;
+        }
+
+        .tt-consortium-body {
+            padding: 1rem;
+        }
+
+        .tt-consortium-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .tt-consortium-metric {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 0.6rem;
+            background: #ffffff;
+        }
+
+        .tt-consortium-metric span {
+            display: block;
+            color: #64748b;
+            font-size: 0.67rem;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
+
+        .tt-consortium-metric strong {
+            color: #0f172a;
+            font-size: 0.92rem;
+            font-weight: 900;
+        }
+
+        .tt-consortium-progress {
+            display: grid;
+            gap: 0.55rem;
+        }
+
+        .tt-progress-line {
+            display: grid;
+            gap: 0.25rem;
+        }
+
+        .tt-progress-label {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.7rem;
+            color: #334155;
+            font-size: 0.72rem;
+            font-weight: 850;
+        }
+
+        .tt-progress-track {
+            height: 7px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .tt-progress-track span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: #0f766e;
+        }
+
         .tt-directory-table-card {
             border: 0;
             border-radius: 8px;
@@ -147,8 +249,91 @@
             padding: 0.9rem 1rem;
         }
 
+        .tt-vendor-box {
+            display: grid;
+            gap: 0.25rem;
+            min-width: 180px;
+        }
+
+        .tt-vendor-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            width: fit-content;
+            border-radius: 999px;
+            padding: 0.28rem 0.55rem;
+            background: #ecfeff;
+            color: #0e7490;
+            font-size: 0.72rem;
+            font-weight: 900;
+        }
+
+        .tt-vendor-badge.missing {
+            background: #fff7ed;
+            color: #c2410c;
+        }
+
+        .tt-finance-card {
+            min-width: 210px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #ffffff;
+            overflow: hidden;
+        }
+
+        .tt-finance-card-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.65rem 0.75rem;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .tt-finance-card-head .label {
+            color: #64748b;
+            font-size: 0.68rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .tt-finance-card-head .value {
+            color: #0f172a;
+            font-size: 0.95rem;
+            font-weight: 900;
+        }
+
+        .tt-money-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .tt-money-grid > div {
+            padding: 0.55rem 0.75rem;
+            border-right: 1px solid #e2e8f0;
+        }
+
+        .tt-money-grid > div:last-child {
+            border-right: 0;
+        }
+
+        .tt-money-grid span {
+            display: block;
+            color: #64748b;
+            font-size: 0.68rem;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
+
+        .tt-money-grid strong {
+            color: #0f172a;
+            font-size: 0.83rem;
+        }
+
         .tt-finance-trail {
-            min-width: 230px;
+            display: grid;
+            gap: 0.45rem;
+            min-width: 260px;
         }
 
         .tt-finance-trail-row {
@@ -156,18 +341,13 @@
             flex-wrap: wrap;
             gap: 0.35rem;
             align-items: center;
-            margin-bottom: 0.35rem;
-        }
-
-        .tt-finance-trail-row:last-child {
-            margin-bottom: 0;
         }
 
         .tt-finance-chip {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-width: 34px;
+            min-width: 42px;
             border-radius: 999px;
             padding: 0.18rem 0.45rem;
             background: #eff6ff;
@@ -187,6 +367,16 @@
         .tt-finance-trail a:hover {
             color: #0f172a;
             text-decoration: underline;
+        }
+
+        .tt-finance-chip.po {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .tt-finance-chip.pay {
+            background: #dcfce7;
+            color: #166534;
         }
     </style>
 @endpush
@@ -232,9 +422,10 @@
                 ['label' => 'Linked to System DB', 'value' => number_format($summary['dataset_linked'])],
                 ['label' => 'Active Profiles', 'value' => number_format($summary['active'])],
                 ['label' => 'Portal Linked', 'value' => number_format($summary['portal_linked'])],
+                ['label' => 'Vendor Linked', 'value' => number_format($summary['vendor_linked'])],
                 ['label' => 'Approved Ops Amount', 'value' => 'USD ' . number_format($summary['approved_ops'], 2)],
-                ['label' => 'Linked PO Amount', 'value' => 'USD ' . number_format($summary['linked_po_amount'], 2)],
-                ['label' => 'Paid from POs', 'value' => 'USD ' . number_format($summary['transferred'], 2)],
+                ['label' => 'Related POs', 'value' => number_format($summary['linked_po_count']) . ' | USD ' . number_format($summary['linked_po_amount'], 2)],
+                ['label' => 'Paid Disbursements', 'value' => number_format($summary['paid_disbursement_count']) . ' | USD ' . number_format($summary['transferred'], 2)],
             ] as $stat)
                 <div class="col-md-6 col-xl">
                     <div class="card tt-directory-stat h-100">
@@ -245,6 +436,88 @@
                     </div>
                 </div>
             @endforeach
+        </div>
+
+        <div class="mb-4" id="consortiumPortfolio">
+            <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-3">
+                <div>
+                    <h5 class="fw-bold mb-1">Consortium Portfolio</h5>
+                    <div class="text-muted small">Each consortium owns a group of think tanks. This view rolls up members, vendor links, financials, and delivery progress.</div>
+                </div>
+                @can('consortiums.view')
+                    <a href="{{ route('consortium-operations.index') }}" class="btn btn-light btn-sm border">
+                        <i class="feather-grid me-1"></i> Open Consortium Operations
+                    </a>
+                @endcan
+            </div>
+
+            <div class="tt-consortium-grid">
+                @forelse ($consortiumRollups as $rollup)
+                    <article class="tt-consortium-card">
+                        <div class="tt-consortium-head">
+                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                <div>
+                                    <h6 class="tt-consortium-title">{{ $rollup['name'] }}</h6>
+                                    <div class="text-muted small">{{ $rollup['program'] ?: 'No linked program funding' }}</div>
+                                </div>
+                                <span class="tt-consortium-code">{{ $rollup['code'] ?: 'CONS' }}</span>
+                            </div>
+                        </div>
+                        <div class="tt-consortium-body">
+                            <div class="tt-consortium-metrics">
+                                <div class="tt-consortium-metric">
+                                    <span>Think Tanks</span>
+                                    <strong>{{ number_format($rollup['think_tanks']) }}</strong>
+                                    <div class="text-muted small">{{ number_format($rollup['active']) }} active</div>
+                                </div>
+                                <div class="tt-consortium-metric">
+                                    <span>PO Value</span>
+                                    <strong>{{ $rollup['currency'] }} {{ number_format($rollup['po_amount'], 2) }}</strong>
+                                    <div class="text-muted small">{{ number_format($rollup['payment_rate'], 1) }}% paid</div>
+                                </div>
+                                <div class="tt-consortium-metric">
+                                    <span>Open</span>
+                                    <strong>{{ $rollup['currency'] }} {{ number_format($rollup['unpaid_amount'], 2) }}</strong>
+                                    <div class="text-muted small">Paid {{ $rollup['currency'] }} {{ number_format($rollup['paid_amount'], 2) }}</div>
+                                </div>
+                            </div>
+
+                            <div class="tt-consortium-progress mb-3">
+                                @foreach ([
+                                    ['label' => 'Profile readiness', 'value' => $rollup['profile_rate']],
+                                    ['label' => 'Financial payment', 'value' => $rollup['payment_rate']],
+                                    ['label' => 'Activity reporting', 'value' => $rollup['activity_rate']],
+                                ] as $progress)
+                                    <div class="tt-progress-line">
+                                        <div class="tt-progress-label">
+                                            <span>{{ $progress['label'] }}</span>
+                                            <span>{{ number_format($progress['value'], 1) }}%</span>
+                                        </div>
+                                        <div class="tt-progress-track"><span style="width: {{ min(100, (float) $progress['value']) }}%"></span></div>
+                                    </div>
+                                @endforeach
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                <div class="text-muted small">
+                                    {{ number_format($rollup['reports']) }} reports |
+                                    {{ number_format($rollup['research']) }} research |
+                                    {{ number_format($rollup['procurements']) }} procurement
+                                </div>
+                                @if ($rollup['id'])
+                                    <a class="btn btn-sm btn-light border" href="{{ route('think-tanks-admin.directory', ['consortium_id' => $rollup['id']]) }}">
+                                        View Members
+                                    </a>
+                                @endif
+                            </div>
+                        </div>
+                    </article>
+                @empty
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body text-muted">No consortium-linked think tanks match the current filters.</div>
+                    </div>
+                @endforelse
+            </div>
         </div>
 
         <div class="card tt-directory-table-card">
@@ -309,10 +582,9 @@
                             <tr>
                                 <th>Think Tank</th>
                                 <th>System DB</th>
-                                <th>Consortium</th>
-                                <th>PO Linked Amount</th>
-                                <th>Paid from POs</th>
-                                <th>Finance Trail</th>
+                                <th>Vendor / Consortium</th>
+                                <th>Vendor Finance</th>
+                                <th>PR / PO / Disbursement Trail</th>
                                 <th>Outputs</th>
                                 <th>Portal</th>
                                 <th>Status</th>
@@ -323,15 +595,13 @@
                             @forelse ($thinkTanks as $thinkTank)
                                 @php
                                     $profileAllocated = (float) $thinkTank->budget_allocated + (float) $thinkTank->fund_allocations_sum_amount_allocated;
-                                    $purchaseOrders = $thinkTank->purchaseOrders ?? collect();
-                                    $purchaseRequests = $purchaseOrders
-                                        ->map(fn ($purchaseOrder) => $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest)
-                                        ->filter()
-                                        ->unique('id')
-                                        ->values();
-                                    $paidDisbursements = $thinkTank->transferDisbursements ?? collect();
-                                    $linkedPoAmount = (float) $thinkTank->purchase_orders_sum_amount;
-                                    $paidAmount = (float) $thinkTank->paid_transfer_disbursements_sum_amount;
+                                    $purchaseOrders = $thinkTank->directoryPurchaseOrders ?? collect();
+                                    $purchaseRequests = $thinkTank->directoryPurchaseRequests ?? collect();
+                                    $paidDisbursements = $thinkTank->directoryDisbursements ?? collect();
+                                    $linkedPoAmount = (float) $thinkTank->directory_po_amount;
+                                    $paidAmount = (float) $thinkTank->directory_paid_amount;
+                                    $unpaidAmount = (float) $thinkTank->directory_unpaid_amount;
+                                    $paymentRate = $linkedPoAmount > 0 ? min(100, ($paidAmount / $linkedPoAmount) * 100) : 0;
                                 @endphp
                                 <tr>
                                     <td>
@@ -353,49 +623,86 @@
                                             <div class="text-muted small mt-1">Select a record from think_datasets.</div>
                                         @endif
                                     </td>
-                                    <td>{{ $thinkTank->consortium?->name ?? '-' }}</td>
                                     <td>
-                                        <strong>USD {{ number_format($linkedPoAmount, 2) }}</strong>
-                                        <div class="text-muted small">Profile: USD {{ number_format($profileAllocated, 2) }}</div>
+                                        <div class="tt-vendor-box">
+                                            @if ($thinkTank->vendorUser)
+                                                <span class="tt-vendor-badge"><i class="feather-briefcase"></i> Vendor linked</span>
+                                                <strong>{{ $thinkTank->vendorUser->name ?: $thinkTank->vendorUser->email }}</strong>
+                                                <span class="text-muted small">{{ $thinkTank->vendorUser->email }}</span>
+                                            @elseif ($thinkTank->portalUser)
+                                                <span class="tt-vendor-badge missing"><i class="feather-alert-circle"></i> Using portal user</span>
+                                                <strong>{{ $thinkTank->portalUser->name ?: $thinkTank->portalUser->email }}</strong>
+                                                <span class="text-muted small">{{ $thinkTank->portalUser->email }}</span>
+                                            @else
+                                                <span class="tt-vendor-badge missing"><i class="feather-alert-circle"></i> No vendor account</span>
+                                            @endif
+                                            <span class="text-muted small">{{ $thinkTank->consortium?->name ?? 'No consortium linked' }}</span>
+                                        </div>
                                     </td>
                                     <td>
-                                        <strong>USD {{ number_format($paidAmount, 2) }}</strong>
-                                        <div class="text-muted small">{{ number_format($thinkTank->paid_transfer_disbursements_count) }} paid receipt(s)</div>
+                                        <div class="tt-finance-card">
+                                            <div class="tt-finance-card-head">
+                                                <div>
+                                                    <div class="label">PO value</div>
+                                                    <div class="value">USD {{ number_format($linkedPoAmount, 2) }}</div>
+                                                </div>
+                                                <div class="text-end">
+                                                    <div class="label">{{ number_format($paymentRate, 1) }}% paid</div>
+                                                    <div class="text-muted small">{{ number_format($thinkTank->directory_po_count) }} PO(s)</div>
+                                                </div>
+                                            </div>
+                                            <div class="tt-money-grid">
+                                                <div>
+                                                    <span>Paid</span>
+                                                    <strong>USD {{ number_format($paidAmount, 2) }}</strong>
+                                                </div>
+                                                <div>
+                                                    <span>Open</span>
+                                                    <strong>USD {{ number_format($unpaidAmount, 2) }}</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="text-muted small mt-1">Profile allocation: USD {{ number_format($profileAllocated, 2) }}</div>
                                     </td>
                                     <td>
                                         <div class="tt-finance-trail">
                                             <div class="tt-finance-trail-row">
                                                 <span class="tt-finance-chip">PR</span>
-                                                @forelse ($purchaseRequests->take(2) as $purchaseRequest)
+                                                @forelse ($purchaseRequests->take(3) as $purchaseRequest)
                                                     <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
                                                 @empty
-                                                    <span class="text-muted small">No linked PR</span>
+                                                    <span class="text-muted small">No related purchase request</span>
                                                 @endforelse
-                                                @if ($purchaseRequests->count() > 2)
-                                                    <span class="text-muted small">+{{ $purchaseRequests->count() - 2 }}</span>
+                                                @if ($purchaseRequests->count() > 3)
+                                                    <span class="text-muted small">+{{ $purchaseRequests->count() - 3 }}</span>
                                                 @endif
                                             </div>
                                             <div class="tt-finance-trail-row">
-                                                <span class="tt-finance-chip">PO</span>
-                                                @forelse ($purchaseOrders->take(2) as $purchaseOrder)
+                                                <span class="tt-finance-chip po">PO</span>
+                                                @forelse ($purchaseOrders->take(3) as $purchaseOrder)
                                                     <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
                                                 @empty
-                                                    <span class="text-muted small">No linked PO</span>
+                                                    <span class="text-muted small">No related purchase order</span>
                                                 @endforelse
-                                                @if ($purchaseOrders->count() > 2)
-                                                    <span class="text-muted small">+{{ $purchaseOrders->count() - 2 }}</span>
+                                                @if ($purchaseOrders->count() > 3)
+                                                    <span class="text-muted small">+{{ $purchaseOrders->count() - 3 }}</span>
                                                 @endif
                                             </div>
                                             <div class="tt-finance-trail-row">
-                                                <span class="tt-finance-chip">Pay</span>
-                                                @forelse ($paidDisbursements->take(2) as $disbursement)
+                                                <span class="tt-finance-chip pay">Pay</span>
+                                                @forelse ($paidDisbursements->take(3) as $disbursement)
                                                     <a href="{{ route('procurement.disbursements.show', $disbursement) }}">{{ $disbursement->reference_no ?: 'Disbursement' }}</a>
                                                 @empty
                                                     <span class="text-muted small">No paid disbursement</span>
                                                 @endforelse
-                                                @if ($paidDisbursements->count() > 2)
-                                                    <span class="text-muted small">+{{ $paidDisbursements->count() - 2 }}</span>
+                                                @if ($paidDisbursements->count() > 3)
+                                                    <span class="text-muted small">+{{ $paidDisbursements->count() - 3 }}</span>
                                                 @endif
+                                            </div>
+                                            <div class="text-muted small">
+                                                {{ number_format($thinkTank->directory_pr_count) }} PR(s) |
+                                                {{ number_format($thinkTank->directory_po_count) }} PO(s) |
+                                                {{ number_format($thinkTank->directory_disbursement_count) }} paid disbursement(s)
                                             </div>
                                         </div>
                                     </td>

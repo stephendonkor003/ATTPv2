@@ -375,7 +375,12 @@
                                 @if (Route::has('think-tanks-admin.directory'))
                                     <li class="nxl-item">
                                         <a href="{{ route('think-tanks-admin.directory') }}" class="nxl-link">
-                                            <i class="feather-list me-2"></i> Think Tank Directory
+                                            <i class="feather-list me-2"></i> Directory & Profiles
+                                        </a>
+                                    </li>
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tanks-admin.directory') }}#consortiumPortfolio" class="nxl-link">
+                                            <i class="feather-grid me-2"></i> Consortium Portfolio
                                         </a>
                                     </li>
                                 @endif
@@ -385,7 +390,27 @@
                                 @if (Route::has('think-tanks-admin.funding'))
                                     <li class="nxl-item">
                                         <a href="{{ route('think-tanks-admin.funding') }}" class="nxl-link">
-                                            <i class="feather-send me-2"></i> Funding to Think Tanks
+                                            <i class="feather-pie-chart me-2"></i> Funding Dashboard
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @can('think_tanks.funding.transfer.create')
+                                @if (Route::has('think-tanks-admin.funding.create'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tanks-admin.funding.create') }}" class="nxl-link">
+                                            <i class="feather-send me-2"></i> Record Transfer
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @can('think_tanks.funding.history.view')
+                                @if (Route::has('think-tanks-admin.funding.history'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tanks-admin.funding.history') }}" class="nxl-link">
+                                            <i class="feather-clock me-2"></i> Transfer History
                                         </a>
                                     </li>
                                 @endif

@@ -2,45 +2,336 @@
 
 @section('title', $thinkTank->name)
 
+@push('styles')
+    <style>
+        .tt-profile-hero {
+            border: 0;
+            border-radius: 10px;
+            background: #0f172a;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .tt-profile-hero .kicker {
+            color: #facc15;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .tt-profile-hero h3 {
+            color: #ffffff;
+            font-weight: 900;
+        }
+
+        .tt-profile-hero .copy {
+            color: #e2e8f0;
+            max-width: 780px;
+            line-height: 1.65;
+        }
+
+        .tt-profile-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border-radius: 999px;
+            padding: 0.28rem 0.58rem;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 0.72rem;
+            font-weight: 900;
+        }
+
+        .tt-profile-badge.good {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .tt-profile-badge.warn {
+            background: #fff7ed;
+            color: #c2410c;
+        }
+
+        .tt-profile-stat,
+        .tt-profile-card {
+            border: 0;
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        .tt-profile-stat .label {
+            color: #64748b;
+            font-size: 0.72rem;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
+
+        .tt-profile-stat .value {
+            color: #0f172a;
+            font-size: 1.18rem;
+            font-weight: 900;
+        }
+
+        .tt-finance-link-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .tt-link-chip {
+            display: inline-flex;
+            justify-content: center;
+            min-width: 42px;
+            border-radius: 999px;
+            padding: 0.18rem 0.48rem;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 0.68rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .tt-link-chip.po {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .tt-link-chip.pay {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .tt-profile-card a {
+            color: #0f766e;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .tt-profile-card a:hover {
+            color: #0f172a;
+            text-decoration: underline;
+        }
+
+        .tt-progress-track {
+            height: 8px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .tt-progress-track span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: #0f766e;
+        }
+
+        .tt-consortium-mini {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.6rem;
+        }
+
+        .tt-consortium-mini div {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 0.7rem;
+            background: #f8fafc;
+        }
+
+        .tt-consortium-mini span {
+            display: block;
+            color: #64748b;
+            font-size: 0.68rem;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
+
+        .tt-consortium-mini strong {
+            color: #0f172a;
+            font-size: 0.96rem;
+            font-weight: 900;
+        }
+
+        @media (max-width: 800px) {
+            .tt-consortium-mini {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+@endpush
+
 @section('content')
+    @php
+        $purchaseOrders = $thinkTank->directoryPurchaseOrders ?? collect();
+        $purchaseRequests = $thinkTank->directoryPurchaseRequests ?? collect();
+        $paidDisbursements = $thinkTank->directoryDisbursements ?? collect();
+        $currency = $purchaseOrders->first()?->resolved_currency ?? $thinkTank->consortium?->currency ?? 'USD';
+        $profileAllocated = (float) $thinkTank->budget_allocated + (float) $thinkTank->fundAllocations->sum('amount_allocated');
+        $poAmount = (float) ($thinkTank->directory_po_amount ?? 0);
+        $paidAmount = (float) ($thinkTank->directory_paid_amount ?? 0);
+        $openAmount = (float) ($thinkTank->directory_unpaid_amount ?? max($poAmount - $paidAmount, 0));
+        $confirmedAmount = (float) $paidDisbursements->where('recipient_confirmation_status', 'confirmed')->sum('amount');
+        $paymentRate = $poAmount > 0 ? min(100, ($paidAmount / $poAmount) * 100) : 0;
+        $receiptRate = $paidAmount > 0 ? min(100, ($confirmedAmount / $paidAmount) * 100) : 0;
+    @endphp
+
     <div class="nxl-container">
         <div class="page-header d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h4 class="fw-bold mb-1"><i class="feather-user text-primary me-2"></i>{{ $thinkTank->name }}</h4>
                 <p class="text-muted mb-0">{{ $thinkTank->consortium?->name ?? 'No consortium' }} | {{ ucfirst($thinkTank->status) }}</p>
             </div>
-            <div class="d-flex gap-2">
-                <a href="{{ route('think-tanks-admin.funding') }}" class="btn btn-primary btn-sm">Fund Think Tank</a>
-                <a href="{{ route('think-tanks-admin.directory') }}" class="btn btn-light btn-sm border">Back</a>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ route('think-tanks-admin.directory', $thinkTank->consortium_id ? ['consortium_id' => $thinkTank->consortium_id] : []) }}" class="btn btn-light btn-sm border">
+                    <i class="feather-list me-1"></i> Directory
+                </a>
+                <a href="{{ route('think-tanks-admin.funding') }}" class="btn btn-primary btn-sm">
+                    <i class="feather-send me-1"></i> Funding
+                </a>
             </div>
         </div>
 
         @if (session('success')) <div class="alert alert-success">{{ session('success') }}</div> @endif
         @if ($errors->any()) <div class="alert alert-danger">{{ $errors->first() }}</div> @endif
 
-        @php
-            $currency = $thinkTank->consortium?->currency ?? 'USD';
-            $allocated = (float) $thinkTank->budget_allocated + (float) $thinkTank->fundAllocations->sum('amount_allocated');
-            $transferred = (float) $thinkTank->transferDisbursements->sum('amount');
-            $confirmed = (float) $thinkTank->transferDisbursements->where('recipient_confirmation_status', 'confirmed')->sum('amount');
-        @endphp
+        <div class="card tt-profile-hero mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between gap-3 flex-wrap">
+                    <div>
+                        <div class="kicker mb-2">Think Tank Profile</div>
+                        <h3 class="mb-2">{{ $thinkTank->name }}</h3>
+                        <p class="copy mb-3">
+                            This profile connects the think tank to its consortium, vendor identity, purchase requests,
+                            purchase orders, disbursement payments, reports, research outputs, and procurement activity.
+                        </p>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <span class="tt-profile-badge {{ $thinkTank->thinkDataset ? 'good' : 'warn' }}">
+                                <i class="feather-database"></i> {{ $thinkTank->thinkDataset ? 'System DB linked' : 'System DB missing' }}
+                            </span>
+                            <span class="tt-profile-badge {{ $thinkTank->vendorUser ? 'good' : 'warn' }}">
+                                <i class="feather-briefcase"></i> {{ $thinkTank->vendorUser ? 'Vendor linked' : 'Vendor not linked' }}
+                            </span>
+                            <span class="tt-profile-badge {{ $thinkTank->portalUser ? 'good' : 'warn' }}">
+                                <i class="feather-home"></i> {{ $thinkTank->portalUser ? 'Portal linked' : 'Portal not linked' }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="text-muted small">Consortium</div>
+                        <h5 class="text-white mb-1">{{ $thinkTank->consortium?->name ?? 'Unassigned' }}</h5>
+                        <div class="text-muted small">{{ $thinkTank->country ?: 'No country' }} | {{ str_replace('_', ' ', ucfirst($thinkTank->role)) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div class="row g-3 mb-4">
             @foreach ([
-                'Approved operations amount' => $currency . ' ' . number_format($allocated, 2),
-                'Transferred' => $currency . ' ' . number_format($transferred, 2),
-                'Confirmed received' => $currency . ' ' . number_format($confirmed, 2),
-                'Research outputs' => number_format($thinkTank->researchOutputs->count()),
-            ] as $label => $value)
+                ['label' => 'Profile Allocation', 'value' => $currency . ' ' . number_format($profileAllocated, 2), 'hint' => 'Base plus fund allocations'],
+                ['label' => 'Related PO Value', 'value' => $currency . ' ' . number_format($poAmount, 2), 'hint' => number_format($purchaseOrders->count()) . ' purchase order(s)'],
+                ['label' => 'Paid Disbursements', 'value' => $currency . ' ' . number_format($paidAmount, 2), 'hint' => number_format($paymentRate, 1) . '% paid'],
+                ['label' => 'Receipt Confirmed', 'value' => $currency . ' ' . number_format($confirmedAmount, 2), 'hint' => number_format($receiptRate, 1) . '% confirmed'],
+            ] as $stat)
                 <div class="col-md-6 col-xl-3">
-                    <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">{{ $label }}</div><h4 class="mb-0">{{ $value }}</h4></div></div>
+                    <div class="card tt-profile-stat h-100">
+                        <div class="card-body">
+                            <div class="label">{{ $stat['label'] }}</div>
+                            <div class="value">{{ $stat['value'] }}</div>
+                            <div class="text-muted small">{{ $stat['hint'] }}</div>
+                        </div>
+                    </div>
                 </div>
             @endforeach
         </div>
 
-        @can('consortiums.manage')
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-white border-0"><h5 class="mb-0">Edit Profile</h5></div>
+        <div class="row g-4 mb-4">
+            <div class="col-xl-5">
+                <div class="card tt-profile-card h-100">
+                    <div class="card-header bg-white border-0">
+                        <h5 class="fw-bold mb-1">Consortium Position</h5>
+                        <div class="text-muted small">The think tank sits inside this consortium portfolio.</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="tt-consortium-mini mb-3">
+                            <div><span>Think Tanks</span><strong>{{ number_format($consortiumRollup['think_tanks']) }}</strong></div>
+                            <div><span>PO Value</span><strong>{{ $consortiumRollup['currency'] }} {{ number_format($consortiumRollup['po_amount'], 2) }}</strong></div>
+                            <div><span>Paid</span><strong>{{ $consortiumRollup['currency'] }} {{ number_format($consortiumRollup['paid_amount'], 2) }}</strong></div>
+                        </div>
+                        @foreach ([
+                            ['label' => 'Profile readiness', 'value' => $consortiumRollup['profile_rate']],
+                            ['label' => 'Financial payment', 'value' => $consortiumRollup['payment_rate']],
+                            ['label' => 'Activity reporting', 'value' => $consortiumRollup['activity_rate']],
+                        ] as $progress)
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between small fw-bold mb-1">
+                                    <span>{{ $progress['label'] }}</span>
+                                    <span>{{ number_format($progress['value'], 1) }}%</span>
+                                </div>
+                                <div class="tt-progress-track"><span style="width: {{ min(100, (float) $progress['value']) }}%"></span></div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-7">
+                <div class="card tt-profile-card h-100">
+                    <div class="card-header bg-white border-0">
+                        <h5 class="fw-bold mb-1">Finance Trail</h5>
+                        <div class="text-muted small">Vendor-aware links for purchase requests, purchase orders, and paid disbursements.</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-3">
+                            <div class="tt-finance-link-row">
+                                <span class="tt-link-chip">PR</span>
+                                @forelse ($purchaseRequests->take(5) as $purchaseRequest)
+                                    <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                @empty
+                                    <span class="text-muted small">No related purchase request</span>
+                                @endforelse
+                                @if ($purchaseRequests->count() > 5)
+                                    <span class="text-muted small">+{{ $purchaseRequests->count() - 5 }}</span>
+                                @endif
+                            </div>
+                            <div class="tt-finance-link-row">
+                                <span class="tt-link-chip po">PO</span>
+                                @forelse ($purchaseOrders->take(5) as $purchaseOrder)
+                                    <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                @empty
+                                    <span class="text-muted small">No related purchase order</span>
+                                @endforelse
+                                @if ($purchaseOrders->count() > 5)
+                                    <span class="text-muted small">+{{ $purchaseOrders->count() - 5 }}</span>
+                                @endif
+                            </div>
+                            <div class="tt-finance-link-row">
+                                <span class="tt-link-chip pay">Pay</span>
+                                @forelse ($paidDisbursements->take(5) as $disbursement)
+                                    <a href="{{ route('procurement.disbursements.show', $disbursement) }}">{{ $disbursement->reference_no ?: 'Disbursement' }}</a>
+                                @empty
+                                    <span class="text-muted small">No paid disbursement</span>
+                                @endforelse
+                                @if ($paidDisbursements->count() > 5)
+                                    <span class="text-muted small">+{{ $paidDisbursements->count() - 5 }}</span>
+                                @endif
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row g-3">
+                            <div class="col-md-4"><div class="text-muted small">Open PO balance</div><strong>{{ $currency }} {{ number_format($openAmount, 2) }}</strong></div>
+                            <div class="col-md-4"><div class="text-muted small">Reports</div><strong>{{ number_format($thinkTank->reports->count()) }}</strong></div>
+                            <div class="col-md-4"><div class="text-muted small">Research outputs</div><strong>{{ number_format($thinkTank->researchOutputs->count()) }}</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @can('think_tanks.directory.edit')
+            <div class="card tt-profile-card mb-4">
+                <div class="card-header bg-white border-0"><h5 class="mb-0 fw-bold">Edit Profile</h5></div>
                 <div class="card-body">
                     <form class="row g-3" method="POST" action="{{ route('think-tanks-admin.update', $thinkTank) }}">
                         @csrf
@@ -74,35 +365,151 @@
             </div>
         @endcan
 
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-0"><h5 class="mb-0">Funding Transfers</h5></div>
+        <div class="card tt-profile-card mb-4">
+            <div class="card-header bg-white border-0">
+                <h5 class="mb-1 fw-bold">Purchase Order Ledger</h5>
+                <div class="text-muted small">Purchase orders where this think tank is directly linked or appears as the vendor.</div>
+            </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light"><tr><th>Reference</th><th>Amount</th><th>Transfer Info</th><th>Paid</th><th>Receipt</th></tr></thead>
+                        <thead class="table-light"><tr><th>Purchase Order</th><th>Purchase Request</th><th>Amount</th><th>Paid</th><th>Open</th><th>Status</th></tr></thead>
                         <tbody>
-                            @forelse ($thinkTank->transferDisbursements->sortByDesc('paid_at') as $transfer)
+                        @forelse ($purchaseOrders as $purchaseOrder)
+                            @php
+                                $purchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+                                $poPaid = (float) $purchaseOrder->disbursements->sum('amount');
+                                $poOpen = max((float) $purchaseOrder->amount - $poPaid, 0);
+                                $poCurrency = $purchaseOrder->resolved_currency ?? $currency;
+                            @endphp
+                            <tr>
+                                <td>
+                                    <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                    <div class="text-muted small">{{ $purchaseOrder->issued_at?->format('M d, Y') ?? 'No issued date' }}</div>
+                                </td>
+                                <td>
+                                    @if ($purchaseRequest)
+                                        <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                        <div class="text-muted small">{{ \Illuminate\Support\Str::limit($purchaseRequest->description, 70) }}</div>
+                                    @else
+                                        <span class="text-muted small">No linked purchase request</span>
+                                    @endif
+                                </td>
+                                <td>{{ $poCurrency }} {{ number_format((float) $purchaseOrder->amount, 2) }}</td>
+                                <td>{{ $poCurrency }} {{ number_format($poPaid, 2) }}</td>
+                                <td>{{ $poCurrency }} {{ number_format($poOpen, 2) }}</td>
+                                <td><span class="badge bg-light text-dark">{{ str_replace('_', ' ', ucfirst($purchaseOrder->status ?? 'pending')) }}</span></td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="6" class="text-center text-muted py-4">No related purchase orders found.</td></tr>
+                        @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card tt-profile-card">
+            <div class="card-header bg-white border-0">
+                <h5 class="mb-1 fw-bold">Paid Disbursements</h5>
+                <div class="text-muted small">Paid disbursements matched by think-tank profile, vendor account, or related purchase order.</div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light"><tr><th>Reference</th><th>PO / PR</th><th>Amount</th><th>Transfer</th><th>Paid</th><th>Receipt</th></tr></thead>
+                        <tbody>
+                            @forelse ($paidDisbursements as $transfer)
+                                @php
+                                    $purchaseOrder = $transfer->purchaseOrder;
+                                    $purchaseRequest = $purchaseOrder?->purchaseRequest ?: $purchaseOrder?->budgetCommitment?->purchaseRequest;
+                                    $transferCurrency = $transfer->resolved_currency ?? $currency;
+                                @endphp
                                 <tr>
-                                    <td><strong>{{ $transfer->reference_no }}</strong><br><span class="text-muted small">{{ $transfer->purchaseOrder?->reference_no }}</span></td>
-                                    <td>{{ $transfer->currency }} {{ number_format($transfer->amount, 2) }}</td>
-                                    <td>{{ $transfer->payment_method }}<br><span class="text-muted small">{{ $transfer->transfer_reference ?: 'No transfer reference' }}</span></td>
+                                    <td>
+                                        <a href="{{ route('procurement.disbursements.show', $transfer) }}">{{ $transfer->transfer_reference ?: $transfer->reference_no }}</a>
+                                        <div class="text-muted small">{{ $transfer->reference_no }}</div>
+                                    </td>
+                                    <td>
+                                        @if ($purchaseOrder)
+                                            <a href="{{ route('procurement.purchase-orders.show', $purchaseOrder) }}">{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}</a>
+                                        @else
+                                            <span class="text-muted small">No PO</span>
+                                        @endif
+                                        <div class="small">
+                                            @if ($purchaseRequest)
+                                                <a href="{{ route('finance.purchase-requests.show', $purchaseRequest) }}">{{ $purchaseRequest->reference_no ?: 'Purchase Request' }}</a>
+                                            @else
+                                                <span class="text-muted">No PR</span>
+                                            @endif
+                                        </div>
+                                    </td>
+                                    <td>{{ $transferCurrency }} {{ number_format((float) $transfer->amount, 2) }}</td>
+                                    <td>{{ $transfer->payment_method ?: 'Bank transfer' }}<br><span class="text-muted small">{{ $transfer->transfer_reference ?: 'No transfer reference' }}</span></td>
                                     <td>{{ $transfer->paid_at?->format('M d, Y H:i') ?? '-' }}</td>
                                     <td>
                                         <span class="badge {{ $transfer->recipient_confirmation_status === 'confirmed' ? 'bg-success' : 'bg-warning text-dark' }}">
-                                            {{ str_replace('_', ' ', ucfirst($transfer->recipient_confirmation_status)) }}
+                                            {{ str_replace('_', ' ', ucfirst($transfer->recipient_confirmation_status ?: 'pending')) }}
                                         </span>
-                                        @if ($transfer->recipient_confirmed_at)
-                                            <div class="text-muted small">{{ $transfer->recipient_confirmed_at->format('M d, Y H:i') }}</div>
-                                        @endif
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="5" class="text-center text-muted py-4">No funding transfers recorded.</td></tr>
+                                <tr><td colspan="6" class="text-center text-muted py-4">No paid disbursements found.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
+
+        @if ($consortiumMembers->count() > 1)
+            <div class="card tt-profile-card mt-4">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-1 fw-bold">Consortium Think Tanks</h5>
+                    <div class="text-muted small">Other think tanks under {{ $thinkTank->consortium?->name ?? 'this consortium' }} and their financial progress.</div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light"><tr><th>Think Tank</th><th>Vendor</th><th>PO Value</th><th>Paid</th><th>Progress</th><th>Outputs</th></tr></thead>
+                            <tbody>
+                                @foreach ($consortiumMembers as $member)
+                                    @php
+                                        $memberPo = (float) ($member->directory_po_amount ?? 0);
+                                        $memberPaid = (float) ($member->directory_paid_amount ?? 0);
+                                        $memberRate = $memberPo > 0 ? min(100, ($memberPaid / $memberPo) * 100) : 0;
+                                    @endphp
+                                    <tr>
+                                        <td>
+                                            <a href="{{ route('think-tanks-admin.show', $member) }}">{{ $member->name }}</a>
+                                            <div class="text-muted small">{{ $member->country ?: '-' }} | {{ ucfirst($member->status) }}</div>
+                                        </td>
+                                        <td>
+                                            @if ($member->vendorUser)
+                                                <span class="badge bg-success">Linked</span>
+                                                <div class="text-muted small">{{ $member->vendorUser->email }}</div>
+                                            @else
+                                                <span class="badge bg-warning text-dark">Not linked</span>
+                                            @endif
+                                        </td>
+                                        <td>{{ $currency }} {{ number_format($memberPo, 2) }}</td>
+                                        <td>{{ $currency }} {{ number_format($memberPaid, 2) }}</td>
+                                        <td style="min-width: 160px;">
+                                            <div class="d-flex justify-content-between small fw-bold mb-1"><span>Paid</span><span>{{ number_format($memberRate, 1) }}%</span></div>
+                                            <div class="tt-progress-track"><span style="width: {{ $memberRate }}%"></span></div>
+                                        </td>
+                                        <td>
+                                            <div class="small">Reports: <strong>{{ number_format($member->reports_count ?? 0) }}</strong></div>
+                                            <div class="small">Research: <strong>{{ number_format($member->research_outputs_count ?? 0) }}</strong></div>
+                                            <div class="small">Procurement: <strong>{{ number_format($member->procurements_count ?? 0) }}</strong></div>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        @endif
     </div>
 @endsection

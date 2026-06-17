@@ -32,19 +32,22 @@ class AdminThinkTankController extends Controller
 {
     public function directory(Request $request)
     {
+        $allDirectoryMembers = ConsortiumThinkTank::query()
+            ->get(['id', 'portal_user_id', 'vendor_user_id']);
+        $directoryFinance = $this->directoryFinanceTotals($allDirectoryMembers);
+
         $summary = [
             'total' => ConsortiumThinkTank::count(),
             'active' => ConsortiumThinkTank::where('status', 'active')->count(),
             'system_dataset' => ThinkDataset::count(),
             'dataset_linked' => ConsortiumThinkTank::whereNotNull('think_dataset_id')->count(),
             'portal_linked' => ConsortiumThinkTank::whereNotNull('portal_user_id')->count(),
+            'vendor_linked' => ConsortiumThinkTank::whereNotNull('vendor_user_id')->count(),
             'approved_ops' => (float) ConsortiumThinkTank::sum('budget_allocated') + (float) ConsortiumFundAllocation::sum('amount_allocated'),
-            'linked_po_amount' => (float) ProcurementPurchaseOrder::whereNotNull('think_tank_member_id')->sum('amount'),
-            'transferred' => (float) ProcurementDisbursement::query()
-                ->whereNotNull('think_tank_member_id')
-                ->whereNotNull('paid_at')
-                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
-                ->sum('amount'),
+            'linked_po_amount' => $directoryFinance['po_amount'],
+            'linked_po_count' => $directoryFinance['po_count'],
+            'transferred' => $directoryFinance['paid_amount'],
+            'paid_disbursement_count' => $directoryFinance['paid_disbursement_count'],
         ];
 
         $thinkTanks = ConsortiumThinkTank::query()
@@ -53,33 +56,13 @@ class AdminThinkTankController extends Controller
                 'thinkDataset',
                 'portalUser',
                 'vendorUser',
-                'purchaseOrders' => fn ($query) => $query
-                    ->with([
-                        'purchaseRequest',
-                        'budgetCommitment.purchaseRequest',
-                        'disbursements' => fn ($disbursementQuery) => $this->paidDisbursements($disbursementQuery)
-                            ->latest('paid_at')
-                            ->latest(),
-                    ])
-                    ->latest('issued_at')
-                    ->latest(),
-                'transferDisbursements' => fn ($query) => $this->paidDisbursements($query)
-                    ->with(['purchaseOrder.purchaseRequest', 'purchaseOrder.budgetCommitment.purchaseRequest'])
-                    ->latest('paid_at')
-                    ->latest(),
             ])
             ->withSum('fundAllocations', 'amount_allocated')
-            ->withSum('purchaseOrders', 'amount')
-            ->withSum([
-                'transferDisbursements as paid_transfer_disbursements_sum_amount' => fn ($query) => $this->paidDisbursements($query),
-            ], 'amount')
             ->withCount([
                 'reports',
                 'researchOutputs',
                 'procurementPlans',
                 'procurements',
-                'purchaseOrders',
-                'transferDisbursements as paid_transfer_disbursements_count' => fn ($query) => $this->paidDisbursements($query),
             ])
             ->when($request->filled('q'), function ($query) use ($request) {
                 $search = '%' . trim((string) $request->input('q')) . '%';
@@ -104,6 +87,11 @@ class AdminThinkTankController extends Controller
             ->orderBy('name')
             ->get();
 
+        $this->hydrateDirectoryFinance($thinkTanks);
+
+        $consortia = Consortium::with('programFunding.program')->orderBy('name')->get();
+        $consortiumRollups = $this->directoryConsortiumRollups($thinkTanks, $consortia);
+
         $thinkDatasets = ThinkDataset::query()
             ->orderBy('tt_name_en')
             ->get(['id', 'ottd_id', 'tt_name_en', 'country', 'g_email', 'website', 'is_validated']);
@@ -121,7 +109,8 @@ class AdminThinkTankController extends Controller
 
         return view('think-tanks-admin.directory', [
             'thinkTanks' => $thinkTanks,
-            'consortia' => Consortium::orderBy('name')->get(),
+            'consortia' => $consortia,
+            'consortiumRollups' => $consortiumRollups,
             'thinkDatasets' => $thinkDatasets,
             'datasetLookup' => $datasetLookup,
             'roles' => ['lead', 'member', 'implementing_partner'],
@@ -160,15 +149,41 @@ class AdminThinkTankController extends Controller
     {
         $thinkTank->load([
             'consortium.programFunding.program',
+            'thinkDataset',
             'portalUser',
+            'vendorUser',
             'fundAllocations.disbursementRequests',
-            'transferDisbursements.purchaseOrder.budgetCommitment',
             'reports',
             'researchOutputs',
             'procurementPlans',
+            'procurements',
         ]);
 
-        return view('think-tanks-admin.show', compact('thinkTank'));
+        $consortiumMembers = $thinkTank->consortium_id
+            ? ConsortiumThinkTank::query()
+                ->with([
+                    'consortium.programFunding.program',
+                    'portalUser',
+                    'vendorUser',
+                    'thinkDataset',
+                    'fundAllocations',
+                    'reports',
+                    'researchOutputs',
+                    'procurementPlans',
+                    'procurements',
+                ])
+                ->withCount(['reports', 'researchOutputs', 'procurements'])
+                ->where('consortium_id', $thinkTank->consortium_id)
+                ->orderBy('name')
+                ->get()
+            : collect([$thinkTank]);
+
+        $this->hydrateDirectoryFinance($consortiumMembers);
+
+        $thinkTank = $consortiumMembers->firstWhere('id', $thinkTank->id) ?: $thinkTank;
+        $consortiumRollup = $this->directoryConsortiumRollupRow($thinkTank->consortium, $consortiumMembers);
+
+        return view('think-tanks-admin.show', compact('thinkTank', 'consortiumMembers', 'consortiumRollup'));
     }
 
     public function update(Request $request, ConsortiumThinkTank $thinkTank)
@@ -756,6 +771,247 @@ class AdminThinkTankController extends Controller
             'remaining_rate' => $budget > 0 ? round(($remaining / $budget) * 100, 1) : 0,
             'confirmation_rate' => $transferred > 0 ? round(($confirmed / $transferred) * 100, 1) : 0,
         ];
+    }
+
+    private function directoryConsortiumRollups($thinkTanks, $consortia)
+    {
+        $thinkTanksByConsortium = $thinkTanks->groupBy(fn (ConsortiumThinkTank $thinkTank) => (string) ($thinkTank->consortium_id ?: 'unassigned'));
+
+        $rollups = $consortia
+            ->map(function (Consortium $consortium) use ($thinkTanksByConsortium) {
+                $members = $thinkTanksByConsortium->get((string) $consortium->id, collect());
+
+                return $this->directoryConsortiumRollupRow($consortium, $members);
+            })
+            ->filter(fn (array $row) => $row['think_tanks'] > 0)
+            ->values();
+
+        $unassignedMembers = $thinkTanksByConsortium->get('unassigned', collect());
+        if ($unassignedMembers->isNotEmpty()) {
+            $rollups->push($this->directoryConsortiumRollupRow(null, $unassignedMembers));
+        }
+
+        return $rollups
+            ->sortByDesc('think_tanks')
+            ->values();
+    }
+
+    private function directoryConsortiumRollupRow(?Consortium $consortium, $members): array
+    {
+        $thinkTankCount = $members->count();
+        $activeCount = $members->where('status', 'active')->count();
+        $portalLinked = $members->filter(fn (ConsortiumThinkTank $member) => filled($member->portal_user_id))->count();
+        $vendorLinked = $members->filter(fn (ConsortiumThinkTank $member) => filled($member->vendor_user_id))->count();
+        $datasetLinked = $members->filter(fn (ConsortiumThinkTank $member) => filled($member->think_dataset_id))->count();
+        $withReports = $members->filter(fn (ConsortiumThinkTank $member) => (int) ($member->reports_count ?? 0) > 0)->count();
+        $poAmount = (float) $members->sum(fn (ConsortiumThinkTank $member) => (float) ($member->directory_po_amount ?? 0));
+        $paidAmount = (float) $members->sum(fn (ConsortiumThinkTank $member) => (float) ($member->directory_paid_amount ?? 0));
+
+        $profileRate = $thinkTankCount > 0
+            ? round((($portalLinked + $vendorLinked + $datasetLinked) / ($thinkTankCount * 3)) * 100, 1)
+            : 0;
+        $activityRate = $thinkTankCount > 0 ? round(($withReports / $thinkTankCount) * 100, 1) : 0;
+        $paymentRate = $poAmount > 0 ? round(($paidAmount / $poAmount) * 100, 1) : 0;
+
+        return [
+            'id' => $consortium?->id,
+            'name' => $consortium?->name ?? 'Unassigned Think Tanks',
+            'code' => $consortium?->code,
+            'program' => $consortium?->programFunding?->program?->name,
+            'currency' => $consortium?->currency ?? 'USD',
+            'think_tanks' => $thinkTankCount,
+            'active' => $activeCount,
+            'portal_linked' => $portalLinked,
+            'vendor_linked' => $vendorLinked,
+            'dataset_linked' => $datasetLinked,
+            'reports' => (int) $members->sum(fn (ConsortiumThinkTank $member) => (int) ($member->reports_count ?? 0)),
+            'research' => (int) $members->sum(fn (ConsortiumThinkTank $member) => (int) ($member->research_outputs_count ?? 0)),
+            'procurements' => (int) $members->sum(fn (ConsortiumThinkTank $member) => (int) ($member->procurements_count ?? 0)),
+            'po_amount' => $poAmount,
+            'paid_amount' => $paidAmount,
+            'unpaid_amount' => max($poAmount - $paidAmount, 0),
+            'profile_rate' => $profileRate,
+            'activity_rate' => $activityRate,
+            'payment_rate' => $paymentRate,
+            'progress_rate' => round(($profileRate + $activityRate + $paymentRate) / 3, 1),
+        ];
+    }
+
+    private function directoryFinanceTotals($members): array
+    {
+        if ($members->isEmpty()) {
+            return [
+                'po_amount' => 0.0,
+                'po_count' => 0,
+                'paid_amount' => 0.0,
+                'paid_disbursement_count' => 0,
+            ];
+        }
+
+        $memberIds = $members->pluck('id')->filter()->values();
+        $vendorIds = $this->directoryVendorIds($members);
+
+        $purchaseOrderIds = ProcurementPurchaseOrder::query()
+            ->where(function ($query) use ($memberIds, $vendorIds) {
+                $query->whereIn('think_tank_member_id', $memberIds);
+
+                if ($vendorIds->isNotEmpty()) {
+                    $query->orWhereIn('vendor_id', $vendorIds);
+                }
+            })
+            ->pluck('id');
+
+        $poAmount = (float) ProcurementPurchaseOrder::query()
+            ->whereKey($purchaseOrderIds)
+            ->sum('amount');
+
+        $paidDisbursementQuery = ProcurementDisbursement::query()
+            ->where(function ($query) use ($memberIds, $vendorIds, $purchaseOrderIds) {
+                $query->whereIn('think_tank_member_id', $memberIds);
+
+                if ($vendorIds->isNotEmpty()) {
+                    $query->orWhereIn('vendor_id', $vendorIds);
+                }
+
+                if ($purchaseOrderIds->isNotEmpty()) {
+                    $query->orWhereIn('purchase_order_id', $purchaseOrderIds);
+                }
+            });
+
+        $this->paidDisbursements($paidDisbursementQuery);
+
+        return [
+            'po_amount' => $poAmount,
+            'po_count' => $purchaseOrderIds->count(),
+            'paid_amount' => (float) (clone $paidDisbursementQuery)->sum('amount'),
+            'paid_disbursement_count' => (int) (clone $paidDisbursementQuery)->count(),
+        ];
+    }
+
+    private function hydrateDirectoryFinance($thinkTanks): void
+    {
+        if ($thinkTanks->isEmpty()) {
+            return;
+        }
+
+        $memberIds = $thinkTanks->pluck('id')->filter()->values();
+        $vendorIds = $this->directoryVendorIds($thinkTanks);
+
+        $purchaseOrders = ProcurementPurchaseOrder::query()
+            ->with([
+                'vendor',
+                'purchaseRequest',
+                'budgetCommitment.purchaseRequest',
+                'disbursements' => fn ($query) => $this->paidDisbursements($query)
+                    ->latest('paid_at')
+                    ->latest(),
+            ])
+            ->where(function ($query) use ($memberIds, $vendorIds) {
+                $query->whereIn('think_tank_member_id', $memberIds);
+
+                if ($vendorIds->isNotEmpty()) {
+                    $query->orWhereIn('vendor_id', $vendorIds);
+                }
+            })
+            ->latest('issued_at')
+            ->latest()
+            ->get();
+
+        $purchaseOrderIds = $purchaseOrders->pluck('id')->filter()->values();
+
+        $disbursements = ProcurementDisbursement::query()
+            ->with([
+                'purchaseOrder.purchaseRequest',
+                'purchaseOrder.budgetCommitment.purchaseRequest',
+            ])
+            ->where(function ($query) use ($memberIds, $vendorIds, $purchaseOrderIds) {
+                $query->whereIn('think_tank_member_id', $memberIds);
+
+                if ($vendorIds->isNotEmpty()) {
+                    $query->orWhereIn('vendor_id', $vendorIds);
+                }
+
+                if ($purchaseOrderIds->isNotEmpty()) {
+                    $query->orWhereIn('purchase_order_id', $purchaseOrderIds);
+                }
+            });
+
+        $this->paidDisbursements($disbursements);
+
+        $disbursements = $disbursements
+            ->latest('paid_at')
+            ->latest()
+            ->get();
+
+        $thinkTanks->each(function (ConsortiumThinkTank $thinkTank) use ($purchaseOrders, $disbursements) {
+            $financeVendorIds = collect([$thinkTank->vendor_user_id, $thinkTank->portal_user_id])
+                ->filter()
+                ->map(fn ($id) => (string) $id)
+                ->values()
+                ->all();
+
+            $relatedPurchaseOrders = $purchaseOrders
+                ->filter(function (ProcurementPurchaseOrder $purchaseOrder) use ($thinkTank, $financeVendorIds) {
+                    $directMemberMatch = (string) $purchaseOrder->think_tank_member_id === (string) $thinkTank->id;
+                    $vendorMatch = $purchaseOrder->vendor_id
+                        && in_array((string) $purchaseOrder->vendor_id, $financeVendorIds, true);
+
+                    return $directMemberMatch || $vendorMatch;
+                })
+                ->unique('id')
+                ->values();
+
+            $relatedPurchaseOrderIds = $relatedPurchaseOrders
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+
+            $relatedDisbursements = $disbursements
+                ->filter(function (ProcurementDisbursement $disbursement) use ($thinkTank, $financeVendorIds, $relatedPurchaseOrderIds) {
+                    $directMemberMatch = (string) $disbursement->think_tank_member_id === (string) $thinkTank->id;
+                    $vendorMatch = $disbursement->vendor_id
+                        && in_array((string) $disbursement->vendor_id, $financeVendorIds, true);
+                    $purchaseOrderMatch = $disbursement->purchase_order_id
+                        && in_array((string) $disbursement->purchase_order_id, $relatedPurchaseOrderIds, true);
+
+                    return $directMemberMatch || $vendorMatch || $purchaseOrderMatch;
+                })
+                ->unique('id')
+                ->values();
+
+            $purchaseRequests = $relatedPurchaseOrders
+                ->map(fn (ProcurementPurchaseOrder $purchaseOrder) => $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest)
+                ->merge($relatedDisbursements->map(function (ProcurementDisbursement $disbursement) {
+                    $purchaseOrder = $disbursement->purchaseOrder;
+
+                    return $purchaseOrder?->purchaseRequest ?: $purchaseOrder?->budgetCommitment?->purchaseRequest;
+                }))
+                ->filter()
+                ->unique('id')
+                ->values();
+
+            $poAmount = (float) $relatedPurchaseOrders->sum(fn (ProcurementPurchaseOrder $purchaseOrder) => (float) $purchaseOrder->amount);
+            $paidAmount = (float) $relatedDisbursements->sum(fn (ProcurementDisbursement $disbursement) => (float) $disbursement->amount);
+
+            $thinkTank->setRelation('directoryPurchaseOrders', $relatedPurchaseOrders);
+            $thinkTank->setRelation('directoryPurchaseRequests', $purchaseRequests);
+            $thinkTank->setRelation('directoryDisbursements', $relatedDisbursements);
+            $thinkTank->setAttribute('directory_po_amount', $poAmount);
+            $thinkTank->setAttribute('directory_paid_amount', $paidAmount);
+            $thinkTank->setAttribute('directory_unpaid_amount', max($poAmount - $paidAmount, 0));
+            $thinkTank->setAttribute('directory_po_count', $relatedPurchaseOrders->count());
+            $thinkTank->setAttribute('directory_pr_count', $purchaseRequests->count());
+            $thinkTank->setAttribute('directory_disbursement_count', $relatedDisbursements->count());
+        });
+    }
+
+    private function directoryVendorIds($members)
+    {
+        return $members
+            ->flatMap(fn (ConsortiumThinkTank $member) => [$member->vendor_user_id, $member->portal_user_id])
+            ->filter()
+            ->unique()
+            ->values();
     }
 
     private function paidDisbursements($query)
