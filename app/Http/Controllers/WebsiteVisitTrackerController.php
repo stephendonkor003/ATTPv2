@@ -4,8 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\WebsiteVisit;
 use App\Models\WebsiteVisitActivity;
-use App\Models\WorldBankCountry;
-use App\Support\IpGeo;
+use App\Services\WebsiteVisitLocationResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -13,6 +12,10 @@ use Illuminate\Support\Str;
 
 class WebsiteVisitTrackerController extends Controller
 {
+    public function __construct(private WebsiteVisitLocationResolver $locationResolver)
+    {
+    }
+
     public function start(Request $request): JsonResponse
     {
         if ($this->shouldIgnore($request)) {
@@ -51,6 +54,8 @@ class WebsiteVisitTrackerController extends Controller
                 'first_seen_at' => $now,
                 'last_seen_at' => $now,
                 'is_active' => true,
+                'location_lookup_last_attempt_at' => $clientIp ? $now : null,
+                'location_lookup_provider' => $geo['location_lookup_provider'] ?? null,
             ]);
         }
 
@@ -64,12 +69,11 @@ class WebsiteVisitTrackerController extends Controller
             $visit->ip_address = $clientIp;
             $visit->ip_hash = $this->ipHash($clientIp);
         }
-
-        foreach (['country_name', 'country_iso2', 'continent', 'latitude', 'longitude'] as $field) {
-            if (blank($visit->{$field}) && filled($geo[$field] ?? null)) {
-                $visit->{$field} = $geo[$field];
-            }
+        if ($clientIp && $this->locationResolver->needsLocation($visit)) {
+            $visit->location_lookup_last_attempt_at = $now;
         }
+
+        $this->locationResolver->apply($visit, $geo);
 
         $visit->page_views = ((int) $visit->page_views) + 1;
         $visit->duration_seconds = max((int) $visit->duration_seconds, $this->duration($data));
@@ -113,6 +117,11 @@ class WebsiteVisitTrackerController extends Controller
         if ($clientIp) {
             $visit->ip_address = $clientIp;
             $visit->ip_hash = $this->ipHash($clientIp);
+        }
+        if ($clientIp && $this->locationResolver->needsLocation($visit)) {
+            $geo = $this->resolveGeo($request, $clientIp);
+            $visit->location_lookup_last_attempt_at = now();
+            $this->locationResolver->apply($visit, $geo);
         }
         $visit->duration_seconds = max((int) $visit->duration_seconds, $this->duration($data));
         $visit->save();
@@ -205,41 +214,7 @@ class WebsiteVisitTrackerController extends Controller
 
     private function resolveGeo(Request $request, ?string $clientIp): array
     {
-        $headerCountry = $this->countryCodeFromHeaders($request);
-        if ($headerCountry) {
-            return $this->countryFromIso2($headerCountry);
-        }
-
-        $lookup = IpGeo::lookup($clientIp);
-        $countryCode = strtoupper((string) ($lookup['country_code'] ?? ''));
-        if ($countryCode !== '') {
-            $country = $this->countryFromIso2($countryCode);
-
-            return array_filter([
-                ...$country,
-                'latitude' => $country['latitude'] ?? $lookup['latitude'] ?? null,
-                'longitude' => $country['longitude'] ?? $lookup['longitude'] ?? null,
-            ], fn ($value) => $value !== null && $value !== '');
-        }
-
-        $countryName = trim((string) ($lookup['country_name'] ?? ''));
-        if ($countryName !== '') {
-            $country = WorldBankCountry::query()
-                ->where('is_aggregate', false)
-                ->where(function ($query) use ($countryName) {
-                    $query->where('name', $countryName)
-                        ->orWhere('name', 'like', '%' . $countryName . '%');
-                })
-                ->first();
-
-            if ($country) {
-                return $this->countryPayload($country);
-            }
-
-            return ['country_name' => $countryName];
-        }
-
-        return [];
+        return $this->locationResolver->resolve($clientIp, $this->countryCodeFromHeaders($request));
     }
 
     private function countryCodeFromHeaders(Request $request): ?string
@@ -252,31 +227,6 @@ class WebsiteVisitTrackerController extends Controller
         }
 
         return null;
-    }
-
-    private function countryFromIso2(string $iso2): array
-    {
-        $country = WorldBankCountry::query()
-            ->where('is_aggregate', false)
-            ->where('iso2_code', strtoupper($iso2))
-            ->first();
-
-        if (! $country) {
-            return ['country_iso2' => strtoupper($iso2)];
-        }
-
-        return $this->countryPayload($country);
-    }
-
-    private function countryPayload(WorldBankCountry $country): array
-    {
-        return [
-            'country_name' => $country->name,
-            'country_iso2' => strtoupper((string) $country->iso2_code),
-            'continent' => $country->continent,
-            'latitude' => is_numeric($country->latitude) ? (float) $country->latitude : null,
-            'longitude' => is_numeric($country->longitude) ? (float) $country->longitude : null,
-        ];
     }
 
     private function ipHash(?string $ip): ?string

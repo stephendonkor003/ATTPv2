@@ -150,6 +150,34 @@
             font-size: .68rem;
         }
 
+        .wva-map-actions {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .wva-map-preview {
+            height: calc(100vh - 190px);
+            min-height: 620px;
+        }
+
+        .wva-map-modal .modal-dialog {
+            max-width: min(1500px, calc(100vw - 32px));
+        }
+
+        .wva-map-modal .modal-content {
+            border: 0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .wva-map-modal .modal-body {
+            background: #eff6ff;
+            padding: 0;
+        }
+
         .wva-map-marker {
             align-items: center;
             border: 2px solid #ffffff;
@@ -355,6 +383,11 @@
                 min-height: 340px;
             }
 
+            .wva-map-preview {
+                height: calc(100vh - 140px);
+                min-height: 480px;
+            }
+
             .wva-url {
                 max-width: 240px;
             }
@@ -521,14 +554,27 @@
         </div>
 
         <div class="row g-4 mb-4">
-            <div class="col-xl-8">
+            <div class="col-12">
                 <div class="wva-card h-100">
                     <div class="wva-card-header">
                         <div>
                             <h5>World Visit Map</h5>
                             <div class="text-muted small">Marker numbers show visit counts. Selected continent or country is highlighted in green.</div>
                         </div>
-                        <span class="badge bg-light text-dark border">{{ number_format($summary['active_visitors']) }} active now</span>
+                        <div class="wva-map-actions">
+                            <span class="badge bg-light text-dark border">{{ number_format($summary['active_visitors']) }} active now</span>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-success"
+                                data-bs-toggle="modal"
+                                data-bs-target="#visitWorldMapModal"
+                                title="Open full map preview"
+                                aria-label="Open full map preview"
+                            >
+                                <i class="feather-maximize-2"></i>
+                                <span class="d-none d-sm-inline ms-1">Full preview</span>
+                            </button>
+                        </div>
                     </div>
                     <div id="visitWorldMap" class="wva-map"></div>
                     <div class="wva-legend">
@@ -537,7 +583,10 @@
                     </div>
                 </div>
             </div>
-            <div class="col-xl-4">
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-12">
                 <div class="wva-card h-100">
                     <div class="wva-card-header">
                         <h5>Countries</h5>
@@ -725,6 +774,27 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade wva-map-modal" id="visitWorldMapModal" tabindex="-1" aria-labelledby="visitWorldMapModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title" id="visitWorldMapModalLabel">World Visit Map</h5>
+                        <div class="text-muted small">Full preview with the current continent and country filter highlighted.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="visitWorldMapPreview" class="wva-map wva-map-preview"></div>
+                </div>
+                <div class="wva-legend">
+                    <span><i class="wva-dot" style="background:#16a34a;"></i>{{ number_format($mapCounts['with_data']) }} countries with data</span>
+                    <span><i class="wva-dot" style="background:#dc2626;"></i>{{ number_format($mapCounts['without_data']) }} countries without data</span>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -884,27 +954,9 @@
             renderCountryOptions(filters.country || '');
             initializeCountrySelect();
 
-            if (window.L && document.getElementById('visitWorldMap')) {
+            if (window.L) {
+                const mapInstances = [];
                 const worldBounds = L.latLngBounds([[-62, -180], [82, 180]]);
-                const map = L.map('visitWorldMap', {
-                    center: [18, 0],
-                    zoom: 1,
-                    minZoom: 0,
-                    maxZoom: 9,
-                    zoomSnap: .25,
-                    zoomDelta: .5,
-                    scrollWheelZoom: false,
-                    maxBounds: [[-85, -190], [85, 190]],
-                    maxBoundsViscosity: .75
-                });
-
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors',
-                    noWrap: true
-                }).addTo(map);
-
-                const markerInstances = [];
-                const highlightLayer = L.layerGroup().addTo(map);
 
                 function markerIcon(marker, highlighted, dimmed) {
                     const hasData = Boolean(marker.hasData);
@@ -959,88 +1011,150 @@
                     return Boolean(continent && marker.continent === continent);
                 }
 
-                markers.forEach(function (marker) {
-                    if (!Array.isArray(marker.latLng) || marker.latLng.length !== 2) {
-                        return;
+                function createVisitMap(elementId, options) {
+                    const element = document.getElementById(elementId);
+
+                    if (!element) {
+                        return null;
                     }
 
-                    const leafletMarker = L.marker(marker.latLng, {
-                        icon: markerIcon(marker, false, false),
-                        title: marker.name
-                    }).addTo(map).bindPopup(markerPopup(marker));
+                    const map = L.map(element, Object.assign({
+                        center: [18, 0],
+                        zoom: 1,
+                        minZoom: 0,
+                        maxZoom: 9,
+                        zoomSnap: .25,
+                        zoomDelta: .5,
+                        scrollWheelZoom: false,
+                        maxBounds: [[-85, -190], [85, 190]],
+                        maxBoundsViscosity: .75
+                    }, options || {}));
 
-                    markerInstances.push({
-                        data: marker,
-                        leafletMarker: leafletMarker
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap contributors',
+                        noWrap: true
+                    }).addTo(map);
+
+                    const markerInstances = [];
+                    const highlightLayer = L.layerGroup().addTo(map);
+
+                    markers.forEach(function (marker) {
+                        if (!Array.isArray(marker.latLng) || marker.latLng.length !== 2) {
+                            return;
+                        }
+
+                        const leafletMarker = L.marker(marker.latLng, {
+                            icon: markerIcon(marker, false, false),
+                            title: marker.name
+                        }).addTo(map).bindPopup(markerPopup(marker));
+
+                        markerInstances.push({
+                            data: marker,
+                            leafletMarker: leafletMarker
+                        });
                     });
-                });
+
+                    const instance = {
+                        map: map,
+                        applyHighlight: function () {
+                            const country = currentCountry();
+                            const continent = currentContinent();
+                            const hasSelection = Boolean(country || continent);
+                            const highlighted = [];
+
+                            highlightLayer.clearLayers();
+
+                            markerInstances.forEach(function (item) {
+                                const isHighlighted = markerIsHighlighted(item.data);
+                                item.leafletMarker.setIcon(markerIcon(item.data, isHighlighted, hasSelection && !isHighlighted));
+
+                                if (isHighlighted) {
+                                    highlighted.push(item);
+                                    L.circleMarker(item.data.latLng, {
+                                        radius: country ? 22 : 14,
+                                        color: '#16a34a',
+                                        fillColor: '#16a34a',
+                                        fillOpacity: .16,
+                                        opacity: .95,
+                                        weight: 3,
+                                        interactive: false
+                                    }).addTo(highlightLayer);
+                                }
+                            });
+
+                            if (highlighted.length) {
+                                const bounds = L.latLngBounds(highlighted.map(function (item) {
+                                    return item.data.latLng;
+                                }));
+                                const fitOptions = {
+                                    padding: [50, 50],
+                                    animate: false
+                                };
+
+                                if (country) {
+                                    fitOptions.maxZoom = 5;
+                                } else if (continent) {
+                                    fitOptions.maxZoom = 3;
+                                }
+
+                                map.fitBounds(bounds, fitOptions);
+
+                                if (country && highlighted[0]) {
+                                    highlighted[0].leafletMarker.openPopup();
+                                }
+
+                                return;
+                            }
+
+                            map.fitBounds(worldBounds, {
+                                padding: [12, 12],
+                                animate: false
+                            });
+                        }
+                    };
+
+                    instance.applyHighlight();
+                    mapInstances.push(instance);
+
+                    setTimeout(function () {
+                        map.invalidateSize();
+                        instance.applyHighlight();
+                    }, 150);
+
+                    window.addEventListener('resize', function () {
+                        map.invalidateSize();
+                    });
+
+                    return instance;
+                }
 
                 applyMapHighlight = function () {
-                    const country = currentCountry();
-                    const continent = currentContinent();
-                    const hasSelection = Boolean(country || continent);
-                    const highlighted = [];
-
-                    highlightLayer.clearLayers();
-
-                    markerInstances.forEach(function (item) {
-                        const isHighlighted = markerIsHighlighted(item.data);
-                        item.leafletMarker.setIcon(markerIcon(item.data, isHighlighted, hasSelection && !isHighlighted));
-
-                        if (isHighlighted) {
-                            highlighted.push(item);
-                            L.circleMarker(item.data.latLng, {
-                                radius: country ? 22 : 14,
-                                color: '#16a34a',
-                                fillColor: '#16a34a',
-                                fillOpacity: .16,
-                                opacity: .95,
-                                weight: 3,
-                                interactive: false
-                            }).addTo(highlightLayer);
-                        }
-                    });
-
-                    if (highlighted.length) {
-                        const bounds = L.latLngBounds(highlighted.map(function (item) {
-                            return item.data.latLng;
-                        }));
-                        const fitOptions = {
-                            padding: [50, 50],
-                            animate: false
-                        };
-
-                        if (country) {
-                            fitOptions.maxZoom = 5;
-                        } else if (continent) {
-                            fitOptions.maxZoom = 3;
-                        }
-
-                        map.fitBounds(bounds, fitOptions);
-
-                        if (country && highlighted[0]) {
-                            highlighted[0].leafletMarker.openPopup();
-                        }
-
-                        return;
-                    }
-
-                    map.fitBounds(worldBounds, {
-                        padding: [12, 12],
-                        animate: false
+                    mapInstances.forEach(function (instance) {
+                        instance.applyHighlight();
                     });
                 };
 
-                applyMapHighlight();
+                createVisitMap('visitWorldMap');
 
-                setTimeout(function () {
-                    map.invalidateSize();
-                    applyMapHighlight();
-                }, 150);
+                const mapModal = document.getElementById('visitWorldMapModal');
+                let modalVisitMap = null;
 
-                window.addEventListener('resize', function () {
-                    map.invalidateSize();
-                });
+                if (mapModal) {
+                    mapModal.addEventListener('shown.bs.modal', function () {
+                        if (!modalVisitMap) {
+                            modalVisitMap = createVisitMap('visitWorldMapPreview', {
+                                scrollWheelZoom: true
+                            });
+                        }
+
+                        if (modalVisitMap) {
+                            setTimeout(function () {
+                                modalVisitMap.map.invalidateSize();
+                                modalVisitMap.applyHighlight();
+                            }, 75);
+                        }
+                    });
+                }
             }
 
             if (continentSelect) {

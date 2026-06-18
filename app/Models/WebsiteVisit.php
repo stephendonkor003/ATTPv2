@@ -26,6 +26,10 @@ class WebsiteVisit extends BaseModel
         'first_seen_at',
         'last_seen_at',
         'is_active',
+        'location_lookup_attempts',
+        'location_lookup_last_attempt_at',
+        'location_lookup_provider',
+        'location_lookup_failed_at',
     ];
 
     protected $casts = [
@@ -36,6 +40,9 @@ class WebsiteVisit extends BaseModel
         'first_seen_at' => 'datetime',
         'last_seen_at' => 'datetime',
         'is_active' => 'boolean',
+        'location_lookup_attempts' => 'integer',
+        'location_lookup_last_attempt_at' => 'datetime',
+        'location_lookup_failed_at' => 'datetime',
     ];
 
     public function activities(): HasMany

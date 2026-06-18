@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
+    ->withCommands()
     ->withSchedule(function (Schedule $schedule): void {
         // Send indicator reminder emails every 4 hours via queued job.
         $schedule->job(new IndicatorReminderJob())->everyFourHours();
@@ -31,6 +32,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Refresh World Bank catalog + recent values for used indicators each day.
         $schedule->command('worldbank:sync --catalog --used')->dailyAt('02:15')->withoutOverlapping();
+
+        // Keep retrying website visits whose country was not resolved on first capture.
+        $schedule->command('website-visits:resolve-locations --limit=200')->everyFifteenMinutes()->withoutOverlapping();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
