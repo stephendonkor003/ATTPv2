@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureNotFundingPartner;
 use App\Http\Middleware\EnsureOtpVerified;
 use App\Http\Middleware\EnsurePasswordNotExpired;
 use App\Http\Middleware\EnsureThinkTankUser;
+use App\Http\Middleware\InjectWebsiteVisitTracker;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use App\Jobs\IndicatorReminderJob;
@@ -48,6 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
             SetLocale::class,
             EnsurePasswordNotExpired::class,
             EnsureOtpVerified::class,
+            InjectWebsiteVisitTracker::class,
         ]);
 
         $middleware->api(append: [

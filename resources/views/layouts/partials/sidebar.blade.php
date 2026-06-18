@@ -294,6 +294,31 @@
                     </li>
                 @endif
 
+                @if ($isAdminSidebarUser)
+                    <li class="nxl-item nxl-caption">
+                        <label>Website Visit Analysis</label>
+                    </li>
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-activity"></i></span>
+                            <span class="nxl-mtext">Website Visit Analysis</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+                        <ul class="nxl-submenu">
+                            <li class="nxl-item">
+                                <a href="{{ route('website-visit-analysis.index') }}" class="nxl-link">
+                                    <i class="feather-map-pin me-2"></i> Visit Analysis
+                                </a>
+                            </li>
+                            <li class="nxl-item">
+                                <a href="{{ route('website-visit-analysis.activity') }}" class="nxl-link">
+                                    <i class="feather-list me-2"></i> Activity Performed
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                @endif
+
                 {{-- ================= NEWS & COMMUNICATIONS ================= --}}
                 @if ($canSeeNewsCommunicationSidebar)
                     <li class="nxl-item nxl-caption">

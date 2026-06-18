@@ -15,6 +15,8 @@ use App\Http\Controllers\{
     ProfileController,
     ChangePasswordController,
     DataWarehouseController,
+    WebsiteVisitAnalyticsController,
+    WebsiteVisitTrackerController,
     UserController,
     PrescreeningTemplateController,
     PrescreeningCriterionController,
@@ -209,6 +211,14 @@ use App\Http\Controllers\MemberState\{
 Route::post('/language/switch/{locale}', [LanguageController::class, 'switch'])->name('language.switch');
 Route::get('/language/current', [LanguageController::class, 'current'])->name('language.current');
 Route::get('/language/available', [LanguageController::class, 'available'])->name('language.available');
+
+Route::prefix('website-visit-tracker')
+    ->name('website-visit-tracker.')
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
+    ->group(function () {
+        Route::post('/start', [WebsiteVisitTrackerController::class, 'start'])->name('start');
+        Route::post('/heartbeat', [WebsiteVisitTrackerController::class, 'heartbeat'])->name('heartbeat');
+    });
 
 Route::middleware(['auth', 'verified', 'not.funding.partner'])
     ->prefix('system')
@@ -1540,6 +1550,16 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])->group(function (
                 ->name('library.file');
             Route::get('/{record}', [DataWarehouseController::class, 'show'])
                 ->name('show');
+        });
+
+    Route::prefix('website-visit-analysis')
+        ->name('website-visit-analysis.')
+        ->middleware('permission:website_visits.view')
+        ->group(function () {
+            Route::get('/', [WebsiteVisitAnalyticsController::class, 'index'])
+                ->name('index');
+            Route::get('/activity-performed', [WebsiteVisitAnalyticsController::class, 'activity'])
+                ->name('activity');
         });
 
 

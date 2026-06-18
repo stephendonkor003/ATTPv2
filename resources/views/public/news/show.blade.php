@@ -241,8 +241,6 @@
         <h1>{{ $post->title }}</h1>
         <div class="hero-meta">
             <span>{{ optional($post->published_at)->format('d M Y') }}</span>
-            <span class="hero-meta-sep">|</span>
-            <span>{{ $post->creator?->name ?? 'ATTP Communications' }}</span>
             @if($post->attachments->count())
                 <span class="hero-meta-sep">|</span>
                 <span>{{ $post->attachments->count() }} {{ \Illuminate\Support\Str::plural('attachment', $post->attachments->count()) }}</span>

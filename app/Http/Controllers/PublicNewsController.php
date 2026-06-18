@@ -14,7 +14,7 @@ class PublicNewsController extends Controller
 {
     public function index(Request $request, GalleryImageService $gallery)
     {
-        $query = NewsPost::published()->with(['attachments', 'creator']);
+        $query = NewsPost::published();
 
         if ($request->filled('category')) {
             $query->where('category', $request->string('category'));
@@ -40,7 +40,7 @@ class PublicNewsController extends Controller
     {
         abort_unless($post->isPublished(), 404);
 
-        $post->load('attachments', 'creator');
+        $post->load('attachments');
 
         $related = NewsPost::published()
             ->whereKeyNot($post->id)

@@ -275,11 +275,6 @@
                     <a class="card-title" href="{{ route('news.show', $post) }}">{{ $post->title }}</a>
                     <div class="card-meta">
                         {{ optional($post->published_at)->format('d M Y') }}
-                        @if($post->creator?->name)
-                            &middot; {{ $post->creator->name }}
-                        @else
-                            &middot; ATTP Communications
-                        @endif
                     </div>
                     <p class="card-excerpt">{{ $post->excerpt ?: \Illuminate\Support\Str::limit(strip_tags($post->body), 140) }}</p>
                     <a class="card-link" href="{{ route('news.show', $post) }}">Read more &rarr;</a>
