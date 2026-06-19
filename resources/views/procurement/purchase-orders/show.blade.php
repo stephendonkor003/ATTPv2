@@ -75,8 +75,9 @@
             ->map(fn ($deliverableId) => (string) $deliverableId)
             ->values()
             ->all();
-        $linePaidAmountForItem = function ($item) use ($paidAmountsByItem, $legacyPaidDeliverableIds): float {
-            $lineAmount = (float) ($item->amount ?? 0);
+        $lineAmountForItem = fn ($item): float => $purchaseOrder->lineItemPayableAmount($item);
+        $linePaidAmountForItem = function ($item) use ($paidAmountsByItem, $legacyPaidDeliverableIds, $lineAmountForItem): float {
+            $lineAmount = $lineAmountForItem($item);
             $paidAmount = (float) $paidAmountsByItem->get((string) $item->id, 0);
 
             if ($paidAmount <= 0 && $item->deliverable_id && in_array((string) $item->deliverable_id, $legacyPaidDeliverableIds, true)) {
@@ -85,7 +86,7 @@
 
             return round(min($lineAmount, $paidAmount), 2);
         };
-        $lineItemTotalAmount = round($lineItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
+        $lineItemTotalAmount = round($lineItems->sum(fn ($item) => $lineAmountForItem($item)), 2);
         $lineItemPaidAmount = round($lineItems->sum($linePaidAmountForItem), 2);
         $lineItemPendingAmount = round(max($lineItemTotalAmount - $lineItemPaidAmount, 0), 2);
         $summaryPoAmount = $lineItems->isNotEmpty() ? $lineItemTotalAmount : (float) ($purchaseOrder->amount ?? 0);
@@ -386,9 +387,12 @@
                                         <th>Resource</th>
                                         <th>Deliverable</th>
                                         <th>Date</th>
+                                        <th class="text-end">Unit Price</th>
+                                        <th class="text-end">Ordered Qty</th>
+                                        <th class="text-end">Delivered Qty</th>
                                         <th>Evidence</th>
                                         <th>Notes</th>
-                                        <th class="text-end">Amount</th>
+                                        <th class="text-end">Delivered Total</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -398,7 +402,11 @@
                                             $itemDocuments = collect($itemEvidence?->documents ?? []);
                                             $itemPaidAmount = $linePaidAmountForItem($item);
                                             $itemHasPaidDisbursement = $itemPaidAmount > 0;
-                                            $itemFullyPaid = $itemPaidAmount >= (float) ($item->amount ?? 0) && (float) ($item->amount ?? 0) > 0;
+                                            $itemAmount = $lineAmountForItem($item);
+                                            $itemUnitPrice = $purchaseOrder->lineItemDeliveredUnitPrice($item);
+                                            $itemOrderedQuantity = $purchaseOrder->lineItemOrderedQuantity($item);
+                                            $itemDeliveredQuantity = $purchaseOrder->lineItemDeliveredQuantity($item);
+                                            $itemFullyPaid = $itemPaidAmount >= $itemAmount && $itemAmount > 0;
                                         @endphp
                                         <tr>
                                             <td>{{ $loop->iteration }}</td>
@@ -406,6 +414,14 @@
                                             <td>{{ $item->resource?->name ?? 'N/A' }}</td>
                                             <td>{{ $item->milestone ?: ($item->deliverable?->title ?? 'N/A') }}</td>
                                             <td>{{ $itemEvidence?->deliverable_date?->format('M d, Y') ?? 'N/A' }}</td>
+                                            <td class="text-end">{{ $currency }} {{ number_format($itemUnitPrice, 2) }}</td>
+                                            <td class="text-end">{{ number_format($itemOrderedQuantity, 2) }}</td>
+                                            <td class="text-end">
+                                                {{ number_format($itemDeliveredQuantity, 2) }}
+                                                @if ($itemDeliveredQuantity < $itemOrderedQuantity)
+                                                    <div class="small text-warning">Partial delivery</div>
+                                                @endif
+                                            </td>
                                             <td>
                                                 @if ($itemEvidence)
                                                     <span class="badge {{ $itemEvidence->is_met || $itemHasPaidDisbursement ? 'bg-success' : 'bg-info' }}">
@@ -450,7 +466,7 @@
                                                 <div class="small text-muted">{{ $item->budget_code ?? $item->work_plan_payment_basis ?? '' }}</div>
                                             </td>
                                             <td class="text-end fw-semibold">
-                                                {{ $currency }} {{ number_format((float) $item->amount, 2) }}
+                                                {{ $currency }} {{ number_format($itemAmount, 2) }}
                                                 @if ($itemHasPaidDisbursement)
                                                     <div class="small text-muted">Paid {{ number_format($itemPaidAmount, 2) }}</div>
                                                 @endif

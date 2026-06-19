@@ -1035,6 +1035,8 @@
                         </td>
                         <td class="text-end">
                             <div class="fw-semibold">${escapeHtml(po.currency || '')} ${fmt(lineAmount)}</div>
+                            <div class="small text-muted">Unit ${fmt(item.unit_price || 0)} x delivered ${fmt(item.delivered_quantity || 0)}</div>
+                            <div class="small text-muted">Ordered ${fmt(item.ordered_quantity || 0)}</div>
                             <div class="small text-muted">Paid ${fmt(linePaid)}</div>
                             <div class="small ${lineRemaining > 0 ? 'text-success' : 'text-muted'}">Balance ${fmt(lineRemaining)}</div>
                         </td>

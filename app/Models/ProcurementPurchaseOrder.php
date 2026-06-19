@@ -126,6 +126,60 @@ class ProcurementPurchaseOrder extends BaseModel
         return $this->hasMany(ProcurementPurchaseOrderItemEvidence::class, 'purchase_order_id');
     }
 
+    public function lineItemEvidenceFor($item): ?ProcurementPurchaseOrderItemEvidence
+    {
+        $itemId = is_object($item) ? (string) ($item->id ?? '') : (string) $item;
+        if ($itemId === '') {
+            return null;
+        }
+
+        $this->loadMissing('lineItemEvidence');
+
+        return $this->lineItemEvidence
+            ->first(fn (ProcurementPurchaseOrderItemEvidence $evidence) => (string) $evidence->purchase_request_item_id === $itemId);
+    }
+
+    public function lineItemUnitPrice($item): float
+    {
+        $amount = round((float) ($item->amount ?? 0), 2);
+
+        return round((float) (($item->unit_price ?? null) ?: $amount), 2);
+    }
+
+    public function lineItemOrderedQuantity($item): float
+    {
+        return round((float) (($item->quantity ?? null) ?: 1), 2);
+    }
+
+    public function lineItemDeliveredUnitPrice($item): float
+    {
+        $evidence = $this->lineItemEvidenceFor($item);
+
+        return $evidence && $evidence->delivered_unit_price !== null
+            ? round((float) $evidence->delivered_unit_price, 2)
+            : $this->lineItemUnitPrice($item);
+    }
+
+    public function lineItemDeliveredQuantity($item): float
+    {
+        $evidence = $this->lineItemEvidenceFor($item);
+
+        return $evidence && $evidence->delivered_quantity !== null
+            ? round((float) $evidence->delivered_quantity, 2)
+            : $this->lineItemOrderedQuantity($item);
+    }
+
+    public function lineItemPayableAmount($item): float
+    {
+        $evidence = $this->lineItemEvidenceFor($item);
+
+        if ($evidence && $evidence->delivered_amount !== null) {
+            return round((float) $evidence->delivered_amount, 2);
+        }
+
+        return round((float) ($item->amount ?? 0), 2);
+    }
+
     public function paidAmount(): float
     {
         return $this->actualPaidAmount();
@@ -185,7 +239,7 @@ class ProcurementPurchaseOrder extends BaseModel
             ];
         }
 
-        $totalAmount = round($lineItems->sum(fn ($item) => (float) ($item->amount ?? 0)), 2);
+        $totalAmount = round($lineItems->sum(fn ($item) => $this->lineItemPayableAmount($item)), 2);
         $paidDisbursements = $this->disbursements
             ->filter(fn (ProcurementDisbursement $disbursement) => $disbursement->paid_at
                 && in_array(strtolower((string) $disbursement->status), self::PAID_DISBURSEMENT_STATUSES, true));
@@ -200,7 +254,7 @@ class ProcurementPurchaseOrder extends BaseModel
             ->values()
             ->all();
         $linePaidAmounts = $lineItems->mapWithKeys(function ($item) use ($paidAmountsByItem, $legacyPaidDeliverableIds) {
-            $lineAmount = round((float) ($item->amount ?? 0), 2);
+            $lineAmount = $this->lineItemPayableAmount($item);
             $paidAmount = round((float) ($paidAmountsByItem->get((string) $item->id, 0)), 2);
 
             if ($paidAmount <= 0 && $item->deliverable_id && in_array((string) $item->deliverable_id, $legacyPaidDeliverableIds, true)) {
@@ -211,8 +265,8 @@ class ProcurementPurchaseOrder extends BaseModel
         });
         $paidAmount = round($linePaidAmounts->sum(), 2);
         $paidItemsCount = $lineItems
-            ->filter(fn ($item) => (float) $linePaidAmounts->get((string) $item->id, 0) >= (float) ($item->amount ?? 0)
-                && (float) ($item->amount ?? 0) > 0)
+            ->filter(fn ($item) => (float) $linePaidAmounts->get((string) $item->id, 0) >= $this->lineItemPayableAmount($item)
+                && $this->lineItemPayableAmount($item) > 0)
             ->count();
 
         return [

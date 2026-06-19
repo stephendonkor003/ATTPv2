@@ -171,14 +171,16 @@ class ProcurementDisbursementController extends Controller
             $orderCurrency = $order->resolved_currency;
             $evidenceByItem = $order->lineItemEvidence->keyBy(fn (ProcurementPurchaseOrderItemEvidence $evidence) => (string) $evidence->purchase_request_item_id);
             $lineItemPaymentSummaries = $this->lineItemPaymentSummariesForPurchaseOrder($order);
-            $poAmount = round((float) ($order->amount ?? 0), 2);
+            $lineItemSummary = $order->lineItemSummary();
+            $poAmount = round((float) $lineItemSummary['total_amount'], 2);
             $paidAmount = round($order->paidAmount(), 2);
             $balanceAmount = round(max($poAmount - $paidAmount, 0), 2);
             $lineItems = $sourcePurchaseRequest?->items?->map(function ($item) use ($evidenceByItem, $lineItemPaymentSummaries, $order) {
+                $lineAmount = $order->lineItemPayableAmount($item);
                 $evidence = $evidenceByItem->get((string) $item->id);
                 $paymentSummary = $lineItemPaymentSummaries->get((string) $item->id, [
                     'paid_amount' => 0.0,
-                    'remaining_amount' => round((float) ($item->amount ?? 0), 2),
+                    'remaining_amount' => $lineAmount,
                 ]);
 
                 return [
@@ -187,7 +189,10 @@ class ProcurementDisbursementController extends Controller
                     'resource' => $item->resource?->name ?: 'N/A',
                     'description' => $item->observations ?: $item->object_type ?: '',
                     'budget_code' => $item->budget_code,
-                    'amount' => round((float) $item->amount, 2),
+                    'unit_price' => $order->lineItemDeliveredUnitPrice($item),
+                    'ordered_quantity' => $order->lineItemOrderedQuantity($item),
+                    'delivered_quantity' => $order->lineItemDeliveredQuantity($item),
+                    'amount' => $lineAmount,
                     'paid_amount' => $paymentSummary['paid_amount'],
                     'remaining_amount' => $paymentSummary['remaining_amount'],
                     'deliverable_id' => $item->deliverable_id ? (string) $item->deliverable_id : null,
@@ -898,8 +903,8 @@ class ProcurementDisbursementController extends Controller
         $paidAmountsByItem = $this->paidAmountsByLineItemForPurchaseOrderExcludingIds($purchaseOrder, $excludeDisbursementIds);
 
         return $this->sourceLineItemsForPurchaseOrder($purchaseOrder)
-            ->mapWithKeys(function (PurchaseRequestItem $item) use ($paidAmountsByItem) {
-                $lineAmount = round((float) ($item->amount ?? 0), 2);
+            ->mapWithKeys(function (PurchaseRequestItem $item) use ($paidAmountsByItem, $purchaseOrder) {
+                $lineAmount = $purchaseOrder->lineItemPayableAmount($item);
                 $paidAmount = round(min($lineAmount, (float) $paidAmountsByItem->get((string) $item->id, 0)), 2);
 
                 return [
@@ -942,7 +947,7 @@ class ProcurementDisbursementController extends Controller
         PurchaseRequestItem $lineItem,
         ?ProcurementDisbursement $excludeDisbursement = null
     ): float {
-        $lineAmount = round((float) ($lineItem->amount ?? 0), 2);
+        $lineAmount = $purchaseOrder->lineItemPayableAmount($lineItem);
         $paidAmount = round((float) $this->paidAmountsByLineItemForPurchaseOrder($purchaseOrder, $excludeDisbursement)
             ->get((string) $lineItem->id, 0), 2);
 
@@ -979,7 +984,7 @@ class ProcurementDisbursementController extends Controller
         PurchaseRequestItem $lineItem,
         ?string $newStatus
     ): float {
-        $lineAmount = round((float) ($lineItem->amount ?? 0), 2);
+        $lineAmount = $purchaseOrder->lineItemPayableAmount($lineItem);
 
         if (! $this->statusCountsAgainstPurchaseOrder($newStatus)) {
             return $lineAmount;
@@ -995,9 +1000,10 @@ class ProcurementDisbursementController extends Controller
     {
         return $this->sourceLineItemsForPurchaseOrder($purchaseOrder)
             ->map(function (PurchaseRequestItem $item) use ($lineItemPaymentSummaries, $purchaseOrder) {
+                $lineAmount = $purchaseOrder->lineItemPayableAmount($item);
                 $summary = $lineItemPaymentSummaries->get((string) $item->id, [
                     'paid_amount' => 0,
-                    'remaining_amount' => (float) ($item->amount ?? 0),
+                    'remaining_amount' => $lineAmount,
                 ]);
 
                 return [
@@ -1008,7 +1014,10 @@ class ProcurementDisbursementController extends Controller
                     'resource' => $item->resource?->name ?: 'N/A',
                     'deliverable_title' => $item->milestone ?: $item->deliverable?->title,
                     'budget_code' => $item->budget_code,
-                    'amount' => round((float) ($item->amount ?? 0), 2),
+                    'amount' => $lineAmount,
+                    'unit_price' => $purchaseOrder->lineItemDeliveredUnitPrice($item),
+                    'ordered_quantity' => $purchaseOrder->lineItemOrderedQuantity($item),
+                    'delivered_quantity' => $purchaseOrder->lineItemDeliveredQuantity($item),
                     'base_paid_amount' => round((float) ($summary['paid_amount'] ?? 0), 2),
                     'base_remaining_amount' => round((float) ($summary['remaining_amount'] ?? 0), 2),
                     'currency' => $purchaseOrder->resolved_currency,
@@ -1095,7 +1104,7 @@ class ProcurementDisbursementController extends Controller
             }
 
             $amount = round((float) ($payment['amount'] ?? 0), 2);
-            $lineAmount = round((float) ($lineItem->amount ?? 0), 2);
+            $lineAmount = $purchaseOrder->lineItemPayableAmount($lineItem);
             if ($amount > $lineAmount) {
                 throw ValidationException::withMessages([
                     "payments.{$index}.amount" => 'Payment amount cannot exceed the selected item line amount of ' . number_format($lineAmount, 2) . ' ' . $purchaseOrder->resolved_currency . '.',
@@ -1167,7 +1176,7 @@ class ProcurementDisbursementController extends Controller
 
         foreach ($submittedPaidByLine as $lineId => $submittedAmount) {
             $lineItem = $lineItems->get((string) $lineId);
-            $lineAmount = round((float) ($lineItem?->amount ?? 0), 2);
+            $lineAmount = $lineItem ? $purchaseOrder->lineItemPayableAmount($lineItem) : 0.0;
             $allowed = round(max($lineAmount - (float) $baseLinePaid->get((string) $lineId, 0), 0), 2);
 
             if ($submittedAmount > $allowed + 0.004) {
@@ -1356,8 +1365,12 @@ class ProcurementDisbursementController extends Controller
             $isMet = (bool) ($input['is_met'] ?? false);
             $deliverableDate = trim((string) ($input['deliverable_date'] ?? ''));
             $notes = trim((string) ($input['notes'] ?? ''));
+            $hasDeliveredPricing = $existing
+                && ($existing->delivered_unit_price !== null
+                    || $existing->delivered_quantity !== null
+                    || $existing->delivered_amount !== null);
 
-            if (! $isMet && $deliverableDate === '' && $notes === '' && empty($documents)) {
+            if (! $isMet && $deliverableDate === '' && $notes === '' && empty($documents) && ! $hasDeliveredPricing) {
                 if ($existing) {
                     $existing->delete();
                 }

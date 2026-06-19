@@ -15,6 +15,9 @@ class ProcurementPurchaseOrderItemEvidence extends BaseModel
         'deliverable_id',
         'is_met',
         'deliverable_date',
+        'delivered_unit_price',
+        'delivered_quantity',
+        'delivered_amount',
         'notes',
         'documents',
         'created_by',
@@ -23,6 +26,9 @@ class ProcurementPurchaseOrderItemEvidence extends BaseModel
     protected $casts = [
         'is_met' => 'boolean',
         'deliverable_date' => 'date',
+        'delivered_unit_price' => 'decimal:2',
+        'delivered_quantity' => 'decimal:2',
+        'delivered_amount' => 'decimal:2',
         'documents' => 'array',
     ];
 

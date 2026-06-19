@@ -152,7 +152,9 @@
             $sourcePurchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
             $lineItems = $sourcePurchaseRequest?->items ?? collect();
             $currency = $purchaseOrder->resolved_currency;
-            $poAmount = (float) ($purchaseOrder->amount ?? 0);
+            $poAmount = $lineItems->isNotEmpty()
+                ? round($lineItems->sum(fn ($item) => $purchaseOrder->lineItemPayableAmount($item)), 2)
+                : (float) ($purchaseOrder->amount ?? 0);
             $commitmentAmount = (float) ($purchaseOrder->budgetCommitment?->commitment_amount ?? 0);
             $vendorContactName = $purchaseOrder->vendor_contact_name ?: ($purchaseOrder->vendor?->name ?? 'N/A');
             $vendorContactEmail = $purchaseOrder->vendor_contact_email ?: ($purchaseOrder->vendor?->email ?? 'N/A');
@@ -279,14 +281,23 @@
                             <th style="width: 28px;">#</th>
                             <th style="width: 16%;">Category</th>
                             <th style="width: 16%;">Resource</th>
-                            <th style="width: 18%;">Deliverable</th>
+                            <th style="width: 16%;">Deliverable</th>
                             <th>Notes</th>
                             <th style="width: 14%;">Deliverable Date</th>
-                            <th class="right" style="width: 16%;">Amount</th>
+                            <th class="right" style="width: 11%;">Unit Price</th>
+                            <th class="right" style="width: 9%;">Ordered Qty</th>
+                            <th class="right" style="width: 9%;">Delivered Qty</th>
+                            <th class="right" style="width: 13%;">Delivered Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($lineItems as $item)
+                            @php
+                                $itemAmount = $purchaseOrder->lineItemPayableAmount($item);
+                                $itemUnitPrice = $purchaseOrder->lineItemDeliveredUnitPrice($item);
+                                $itemOrderedQuantity = $purchaseOrder->lineItemOrderedQuantity($item);
+                                $itemDeliveredQuantity = $purchaseOrder->lineItemDeliveredQuantity($item);
+                            @endphp
                             <tr>
                                 <td>{{ $loop->iteration }}</td>
                                 <td>{{ $item->resourceCategory?->name ?? 'N/A' }}</td>
@@ -299,21 +310,24 @@
                                     @endif
                                 </td>
                                 <td>{{ $item->milestone_date?->format('d M Y') ?? 'N/A' }}</td>
-                                <td class="right">{{ $currency }} {{ number_format((float) $item->amount, 2) }}</td>
+                                <td class="right">{{ $currency }} {{ number_format($itemUnitPrice, 2) }}</td>
+                                <td class="right">{{ number_format($itemOrderedQuantity, 2) }}</td>
+                                <td class="right">{{ number_format($itemDeliveredQuantity, 2) }}</td>
+                                <td class="right">{{ $currency }} {{ number_format($itemAmount, 2) }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7">No purchase request line items were found.</td>
+                                <td colspan="10">No purchase request line items were found.</td>
                             </tr>
                         @endforelse
                     </tbody>
                     <tfoot>
                         <tr>
-                            <th colspan="6" class="right">Purchase Order Amount</th>
+                            <th colspan="9" class="right">Purchase Order Amount</th>
                             <th class="right">{{ $currency }} {{ number_format($poAmount, 2) }}</th>
                         </tr>
                         <tr>
-                            <th colspan="6" class="right">Selected Commitment Amount</th>
+                            <th colspan="9" class="right">Selected Commitment Amount</th>
                             <th class="right">{{ $currency }} {{ number_format($commitmentAmount, 2) }}</th>
                         </tr>
                     </tfoot>

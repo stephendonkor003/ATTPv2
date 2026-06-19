@@ -256,6 +256,9 @@ class ProcurementPurchaseOrderController extends Controller
                     (string) $evidence->purchase_request_item_id => [
                         'is_met' => $evidence->is_met ? '1' : '0',
                         'deliverable_date' => $evidence->deliverable_date?->format('Y-m-d'),
+                        'delivered_unit_price' => $evidence->delivered_unit_price !== null ? number_format((float) $evidence->delivered_unit_price, 2, '.', '') : null,
+                        'delivered_quantity' => $evidence->delivered_quantity !== null ? number_format((float) $evidence->delivered_quantity, 2, '.', '') : null,
+                        'delivered_amount' => $evidence->delivered_amount !== null ? number_format((float) $evidence->delivered_amount, 2, '.', '') : null,
                         'notes' => $evidence->notes,
                         'existing_documents' => collect($evidence->documents ?? [])
                             ->map(fn ($document) => [
@@ -335,6 +338,9 @@ class ProcurementPurchaseOrderController extends Controller
             'item_evidence' => ['nullable', 'array'],
             'item_evidence.*.is_met' => ['nullable', 'boolean'],
             'item_evidence.*.deliverable_date' => ['nullable', 'date'],
+            'item_evidence.*.delivered_unit_price' => ['nullable', 'numeric', 'min:0.01'],
+            'item_evidence.*.delivered_quantity' => ['nullable', 'numeric', 'min:0'],
+            'item_evidence.*.delivered_amount' => ['nullable', 'numeric', 'min:0'],
             'item_evidence.*.notes' => ['nullable', 'string', 'max:3000'],
             'item_evidence.*.document_names' => ['nullable', 'array', 'max:20'],
             'item_evidence.*.document_names.*' => ['nullable', 'string', 'max:255'],
@@ -541,6 +547,9 @@ class ProcurementPurchaseOrderController extends Controller
             'item_evidence' => ['nullable', 'array'],
             'item_evidence.*.is_met' => ['nullable', 'boolean'],
             'item_evidence.*.deliverable_date' => ['nullable', 'date'],
+            'item_evidence.*.delivered_unit_price' => ['nullable', 'numeric', 'min:0.01'],
+            'item_evidence.*.delivered_quantity' => ['nullable', 'numeric', 'min:0'],
+            'item_evidence.*.delivered_amount' => ['nullable', 'numeric', 'min:0'],
             'item_evidence.*.notes' => ['nullable', 'string', 'max:3000'],
             'item_evidence.*.document_names' => ['nullable', 'array', 'max:20'],
             'item_evidence.*.document_names.*' => ['nullable', 'string', 'max:255'],
@@ -725,6 +734,7 @@ class ProcurementPurchaseOrderController extends Controller
             'subActivity',
             'negotiation',
             'invoice',
+            'lineItemEvidence',
             'budgetCommitment.purchaseRequest.items.resourceCategory',
             'budgetCommitment.purchaseRequest.items.resource',
             'budgetCommitment.purchaseRequest.items.deliverable',
@@ -753,6 +763,7 @@ class ProcurementPurchaseOrderController extends Controller
             'subActivity',
             'negotiation',
             'invoice',
+            'lineItemEvidence',
             'budgetCommitment.purchaseRequest.items.resourceCategory',
             'budgetCommitment.purchaseRequest.items.resource',
             'budgetCommitment.purchaseRequest.items.deliverable',
@@ -1130,8 +1141,9 @@ class ProcurementPurchaseOrderController extends Controller
         $unitPrices = $request->input('line_item_unit_prices', []);
         $quantities = $request->input('line_item_quantities', []);
         $amounts = $request->input('line_item_amounts', []);
+        $evidenceInput = $request->input('item_evidence', []);
 
-        $submittedIds = collect([$unitPrices, $quantities, $amounts])
+        $submittedIds = collect([$unitPrices, $quantities, $amounts, $evidenceInput])
             ->filter(fn ($values) => is_array($values))
             ->flatMap(fn ($values) => array_keys($values))
             ->map(fn ($id) => (string) $id)
@@ -1154,7 +1166,8 @@ class ProcurementPurchaseOrderController extends Controller
                 ]);
             }
 
-            $total += $this->lineItemPricingFromRequest($key, $itemsById->get($key), $unitPrices, $quantities, $amounts)['amount'];
+            $orderedPricing = $this->lineItemPricingFromRequest($key, $itemsById->get($key), $unitPrices, $quantities, $amounts);
+            $total += $this->lineItemDeliveredPricingFromRequest($key, $orderedPricing, $evidenceInput[$key] ?? [])['amount'];
         }
 
         $total = round($total, 2);
@@ -1188,6 +1201,30 @@ class ProcurementPurchaseOrderController extends Controller
             'unit_price' => $unitPrice,
             'quantity' => $quantity,
             'amount' => $amount,
+        ];
+    }
+
+    private function lineItemDeliveredPricingFromRequest(string $key, array $orderedPricing, $input): array
+    {
+        $input = is_array($input) ? $input : [];
+        $unitPrice = array_key_exists('delivered_unit_price', $input) && $input['delivered_unit_price'] !== null && $input['delivered_unit_price'] !== ''
+            ? round((float) $input['delivered_unit_price'], 2)
+            : round((float) $orderedPricing['unit_price'], 2);
+        $quantity = array_key_exists('delivered_quantity', $input) && $input['delivered_quantity'] !== null && $input['delivered_quantity'] !== ''
+            ? round((float) $input['delivered_quantity'], 2)
+            : round((float) $orderedPricing['quantity'], 2);
+        $orderedQuantity = round((float) $orderedPricing['quantity'], 2);
+
+        if ($quantity > $orderedQuantity) {
+            throw ValidationException::withMessages([
+                "item_evidence.{$key}.delivered_quantity" => 'Delivered quantity cannot exceed the ordered quantity of ' . number_format($orderedQuantity, 2) . '.',
+            ]);
+        }
+
+        return [
+            'unit_price' => $unitPrice,
+            'quantity' => $quantity,
+            'amount' => round($unitPrice * $quantity, 2),
         ];
     }
 
@@ -1304,6 +1341,9 @@ class ProcurementPurchaseOrderController extends Controller
     {
         $evidenceInput = $request->input('item_evidence', []);
         $filesInput = $request->file('item_evidence', []);
+        $unitPrices = $request->input('line_item_unit_prices', []);
+        $quantities = $request->input('line_item_quantities', []);
+        $amounts = $request->input('line_item_amounts', []);
         $items = $purchaseRequest->items->keyBy(fn ($item) => (string) $item->id);
         $existingEvidence = $preserveExistingDocuments
             ? $purchaseOrder->lineItemEvidence()->get()->keyBy(fn (ProcurementPurchaseOrderItemEvidence $evidence) => (string) $evidence->purchase_request_item_id)
@@ -1322,6 +1362,8 @@ class ProcurementPurchaseOrderController extends Controller
             $notes = trim((string) ($input['notes'] ?? ''));
             $documentNames = $input['document_names'] ?? [];
             $existing = $existingEvidence->get((string) $itemId);
+            $orderedPricing = $this->lineItemPricingFromRequest((string) $itemId, $item, $unitPrices, $quantities, $amounts);
+            $deliveredPricing = $this->lineItemDeliveredPricingFromRequest((string) $itemId, $orderedPricing, $input);
             $documents = $preserveExistingDocuments
                 ? collect($existing?->documents ?? [])->filter(fn ($document) => is_array($document))->values()->all()
                 : [];
@@ -1344,9 +1386,14 @@ class ProcurementPurchaseOrderController extends Controller
                 ];
             }
 
-            if (!$isMet && $deliverableDate === '' && $notes === '' && empty($documents)) {
+            $hasDeliveredPricing = array_key_exists('delivered_unit_price', $input)
+                || array_key_exists('delivered_quantity', $input)
+                || array_key_exists('delivered_amount', $input);
+
+            if (!$isMet && $deliverableDate === '' && $notes === '' && empty($documents) && ! $hasDeliveredPricing) {
                 if ($existing) {
                     $existing->delete();
+                    continue;
                 }
 
                 continue;
@@ -1361,6 +1408,9 @@ class ProcurementPurchaseOrderController extends Controller
                     'deliverable_id' => $item->deliverable_id,
                     'is_met' => $isMet,
                     'deliverable_date' => $deliverableDate !== '' ? $deliverableDate : null,
+                    'delivered_unit_price' => $deliveredPricing['unit_price'],
+                    'delivered_quantity' => $deliveredPricing['quantity'],
+                    'delivered_amount' => $deliveredPricing['amount'],
                     'notes' => $notes !== '' ? $notes : null,
                     'documents' => $documents,
                     'created_by' => auth()->id(),
