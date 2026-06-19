@@ -636,6 +636,12 @@
                                     </a>
                                 </li>
                                 <li class="nxl-item">
+                                    <a href="{{ route('budget.reports.commitment-disbursement') }}" class="nxl-link">
+                                        <i class="feather-repeat me-2"></i>
+                                        {{ __('admin.commitment_disbursement_report') }}
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
                                     <a href="{{ route('budget.reports.ifr') }}" class="nxl-link">
                                         <i class="feather-activity me-2"></i>
                                         {{ __('admin.ifr_report') }}

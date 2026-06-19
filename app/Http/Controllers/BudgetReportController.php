@@ -11,6 +11,7 @@ use App\Models\ProgramFunding;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
+use App\Models\PurchaseRequest;
 use App\Models\SystemAuditLog;
 
 use App\Exports\ProgramExport;
@@ -551,7 +552,7 @@ class BudgetReportController extends Controller
 
         $fundingIds = $fundings->pluck('id')->all();
 
-        $commitments = BudgetCommitment::with('purchaseRequest')
+        $commitments = BudgetCommitment::with('purchaseRequest.items')
             ->whereIn('program_funding_id', $fundingIds)
             ->where('allocation_level', 'sub_activity')
             ->get();
@@ -655,20 +656,6 @@ class BudgetReportController extends Controller
             $funders = $fundings->pluck('funder')->filter()->unique('id')->values();
             $fundingIds = $fundings->pluck('id')->all();
 
-            $commitments = BudgetCommitment::with('purchaseRequest')
-                ->whereIn('program_funding_id', $fundingIds)
-                ->where('allocation_level', 'sub_activity')
-                ->get();
-
-            $filteredCommitments = $commitments->filter(function ($commitment) use ($filters) {
-                $date = $this->resolveCommitmentDate($commitment);
-                if (!$filters['start_date'] || !$filters['end_date']) {
-                    return true;
-                }
-
-                return $date->between($filters['start_date'], $filters['end_date']);
-            });
-
             $subActivityIds = $program->projects
                 ->flatMap(fn ($project) => $project->activities
                     ->flatMap(fn ($activity) => $activity->subActivities->pluck('id')))
@@ -676,6 +663,17 @@ class BudgetReportController extends Controller
                 ->unique()
                 ->values()
                 ->all();
+
+            $commitments = $this->buildIfrCommitmentFacts($program, $fundingIds, $subActivityIds);
+
+            $filteredCommitments = $commitments->filter(function ($commitment) use ($filters) {
+                $date = $commitment['date'];
+                if (!$filters['start_date'] || !$filters['end_date']) {
+                    return true;
+                }
+
+                return $date->between($filters['start_date'], $filters['end_date']);
+            })->values();
 
             $disbursements = empty($subActivityIds)
                 ? collect()
@@ -691,27 +689,28 @@ class BudgetReportController extends Controller
             });
 
             $commitmentBySub = $filteredCommitments
-                ->groupBy('allocation_id')
-                ->map(fn ($rows) => round((float) $rows->sum('commitment_amount'), 2))
+                ->groupBy('sub_activity_id')
+                ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
                 ->all();
 
             $commitmentReferencesBySub = $filteredCommitments
-                ->groupBy('allocation_id')
+                ->groupBy('sub_activity_id')
                 ->map(function ($rows) {
                     return $rows->map(function ($commitment) {
-                        return $commitment->purchaseRequest?->reference_no;
+                        return $commitment['reference'];
                     })->filter()->unique()->values()->all();
                 })
                 ->all();
 
             $commitmentBySubYear = [];
             foreach ($filteredCommitments as $commitment) {
-                $year = $this->resolveCommitmentDate($commitment)->year;
+                $year = $commitment['date']->year;
                 if (!in_array($year, $filters['year_range'], true)) {
                     continue;
                 }
-                $commitmentBySubYear[$commitment->allocation_id][$year] = ($commitmentBySubYear[$commitment->allocation_id][$year] ?? 0)
-                    + (float) $commitment->commitment_amount;
+                $subActivityId = $commitment['sub_activity_id'];
+                $commitmentBySubYear[$subActivityId][$year] = ($commitmentBySubYear[$subActivityId][$year] ?? 0)
+                    + (float) $commitment['amount'];
             }
 
             $disbursementBySub = $filteredDisbursements
@@ -762,6 +761,12 @@ class BudgetReportController extends Controller
             'filters' => $filters,
             'query' => $request->query(),
         ]);
+    }
+
+    public function commitmentDisbursementReport(Request $request)
+    {
+        return $this->ifrReport($request)
+            ->with('reportMeta', $this->commitmentDisbursementReportMeta());
     }
 
     /* ================================
@@ -886,6 +891,44 @@ class BudgetReportController extends Controller
         return Excel::download($export, 'ifr-report-' . ($data['program']?->id ?? 'program') . '.xlsx');
     }
 
+    public function exportCommitmentDisbursementPdf(Request $request)
+    {
+        $data = $this->buildIfrExportData($request);
+        $data['chartImages'] = [
+            'line' => $request->input('chart_line'),
+            'bar' => $request->input('chart_bar'),
+            'bubble' => $request->input('chart_bubble'),
+        ];
+        $data['reportMeta'] = $this->commitmentDisbursementReportMeta();
+
+        $pdf = PDF::loadView('budgetreport.ifr_pdf', $data)->setPaper('a4', 'landscape');
+
+        return $pdf->download('commitment-disbursement-report-' . ($data['program']?->id ?? 'program') . '.pdf');
+    }
+
+    public function exportCommitmentDisbursementExcel(Request $request)
+    {
+        $data = $this->buildIfrExportData($request);
+        $export = new InterimFinancialReportExport($data['rows'], $data['totals'], $data['program'], $data['filters']['year_range']);
+
+        return Excel::download($export, 'commitment-disbursement-report-' . ($data['program']?->id ?? 'program') . '.xlsx');
+    }
+
+    private function commitmentDisbursementReportMeta(): array
+    {
+        return [
+            'title' => 'Commitment and Disbursement Report',
+            'description' => 'Commitments, actual disbursements, variances, utilization, and trends by program structure.',
+            'form_route' => 'budget.reports.commitment-disbursement',
+            'pdf_route' => 'budget.reports.commitment-disbursement.export.pdf',
+            'excel_route' => 'budget.reports.commitment-disbursement.export.excel',
+            'empty_message' => 'Select a program and filter range to generate the commitment and disbursement report.',
+            'section_title' => 'Section 1: Commitment and Disbursement Balance Sheet',
+            'period_label' => 'Commitment and Disbursement Report',
+            'summary_title' => 'Section 3: Commitment and Disbursement Summary',
+        ];
+    }
+
     private function buildIfrExportData(Request $request): array
     {
         $programId = $request->input('program_id');
@@ -913,20 +956,6 @@ class BudgetReportController extends Controller
 
         $fundingIds = $fundings->pluck('id')->all();
 
-        $commitments = BudgetCommitment::with('purchaseRequest')
-            ->whereIn('program_funding_id', $fundingIds)
-            ->where('allocation_level', 'sub_activity')
-            ->get();
-
-        $filteredCommitments = $commitments->filter(function ($commitment) use ($filters) {
-            $date = $this->resolveCommitmentDate($commitment);
-            if (!$filters['start_date'] || !$filters['end_date']) {
-                return true;
-            }
-
-            return $date->between($filters['start_date'], $filters['end_date']);
-        });
-
         $subActivityIds = $program->projects
             ->flatMap(fn ($project) => $project->activities
                 ->flatMap(fn ($activity) => $activity->subActivities->pluck('id')))
@@ -934,6 +963,17 @@ class BudgetReportController extends Controller
             ->unique()
             ->values()
             ->all();
+
+        $commitments = $this->buildIfrCommitmentFacts($program, $fundingIds, $subActivityIds);
+
+        $filteredCommitments = $commitments->filter(function ($commitment) use ($filters) {
+            $date = $commitment['date'];
+            if (!$filters['start_date'] || !$filters['end_date']) {
+                return true;
+            }
+
+            return $date->between($filters['start_date'], $filters['end_date']);
+        })->values();
 
         $disbursements = empty($subActivityIds)
             ? collect()
@@ -949,27 +989,28 @@ class BudgetReportController extends Controller
         });
 
         $commitmentBySub = $filteredCommitments
-            ->groupBy('allocation_id')
-            ->map(fn ($rows) => round((float) $rows->sum('commitment_amount'), 2))
+            ->groupBy('sub_activity_id')
+            ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
             ->all();
 
         $commitmentReferencesBySub = $filteredCommitments
-            ->groupBy('allocation_id')
+            ->groupBy('sub_activity_id')
             ->map(function ($rows) {
                 return $rows->map(function ($commitment) {
-                    return $commitment->purchaseRequest?->reference_no;
+                    return $commitment['reference'];
                 })->filter()->unique()->values()->all();
             })
             ->all();
 
         $commitmentBySubYear = [];
         foreach ($filteredCommitments as $commitment) {
-            $year = $this->resolveCommitmentDate($commitment)->year;
+            $year = $commitment['date']->year;
             if (!in_array($year, $filters['year_range'], true)) {
                 continue;
             }
-            $commitmentBySubYear[$commitment->allocation_id][$year] = ($commitmentBySubYear[$commitment->allocation_id][$year] ?? 0)
-                + (float) $commitment->commitment_amount;
+            $subActivityId = $commitment['sub_activity_id'];
+            $commitmentBySubYear[$subActivityId][$year] = ($commitmentBySubYear[$subActivityId][$year] ?? 0)
+                + (float) $commitment['amount'];
         }
 
         $disbursementBySub = $filteredDisbursements
@@ -1109,8 +1150,360 @@ class BudgetReportController extends Controller
             return Carbon::create((int) $commitment->commitment_year, 1, 1);
         }
 
+        if (!empty($commitment->purchaseRequest?->start_year)) {
+            return Carbon::create((int) $commitment->purchaseRequest->start_year, 1, 1);
+        }
+
         if ($commitment->purchaseRequest?->commitment_date) {
             return Carbon::parse($commitment->purchaseRequest->commitment_date)->startOfDay();
+        }
+
+        if ($commitment->approved_at) {
+            return Carbon::parse($commitment->approved_at)->startOfDay();
+        }
+
+        if ($commitment->purchaseRequest?->approved_at) {
+            return Carbon::parse($commitment->purchaseRequest->approved_at)->startOfDay();
+        }
+
+        if ($commitment->purchaseRequest?->created_at) {
+            return Carbon::parse($commitment->purchaseRequest->created_at)->startOfDay();
+        }
+
+        return now()->startOfDay();
+    }
+
+    private function buildIfrCommitmentFacts(Program $program, array $fundingIds, array $subActivityIds)
+    {
+        if (empty($fundingIds) && empty($subActivityIds)) {
+            return collect();
+        }
+
+        $subActivityLookup = collect($subActivityIds)
+            ->mapWithKeys(fn ($id) => [(string) $id => true])
+            ->all();
+
+        $commitments = BudgetCommitment::with('purchaseRequest.items')
+            ->where(function ($query) use ($fundingIds, $subActivityIds) {
+                $query->whereRaw('1 = 0');
+
+                if (!empty($fundingIds)) {
+                    $query->orWhereIn('program_funding_id', $fundingIds);
+                }
+
+                if (!empty($subActivityIds)) {
+                    $query->orWhere(function ($subQuery) use ($subActivityIds) {
+                        $subQuery->where('allocation_level', 'sub_activity')
+                            ->whereIn('allocation_id', $subActivityIds);
+                    });
+
+                    $query->orWhereHas('purchaseRequest', function ($requestQuery) use ($subActivityIds) {
+                        $requestQuery->where('allocation_level', 'sub_activity')
+                            ->whereIn('allocation_id', $subActivityIds);
+                    });
+                }
+            })
+            ->where(function ($query) {
+                $query->whereNull('status')
+                    ->orWhereNotIn('status', [BudgetCommitment::STATUS_CANCELLED, 'rejected', 'void']);
+            })
+            ->get();
+
+        $purchaseRequests = empty($subActivityIds)
+            ? collect()
+            : PurchaseRequest::with(['commitments', 'items'])
+                ->where('allocation_level', 'sub_activity')
+                ->whereIn('allocation_id', $subActivityIds)
+                ->where(function ($query) {
+                    $query->whereNull('status')
+                        ->orWhereNotIn('status', ['cancelled', 'void', 'rejected', 'failed']);
+                })
+                ->get();
+
+        $purchaseRequestIds = $purchaseRequests
+            ->pluck('id')
+            ->merge($commitments->pluck('purchase_request_id'))
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
+        $commitmentIds = $commitments
+            ->pluck('id')
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $purchaseOrders = (empty($commitmentIds) && empty($purchaseRequestIds) && empty($subActivityIds))
+            ? collect()
+            : ProcurementPurchaseOrder::with(['budgetCommitment.purchaseRequest', 'purchaseRequest'])
+                ->where(function ($query) use ($commitmentIds, $purchaseRequestIds, $subActivityIds) {
+                    $query->whereRaw('1 = 0');
+
+                    if (!empty($commitmentIds)) {
+                        $query->orWhereIn('budget_commitment_id', $commitmentIds);
+                    }
+
+                    if (!empty($purchaseRequestIds)) {
+                        $query->orWhereIn('purchase_request_id', $purchaseRequestIds);
+                    }
+
+                    if (!empty($subActivityIds)) {
+                        $query->orWhereIn('sub_activity_id', $subActivityIds)
+                            ->orWhereHas('budgetCommitment', function ($commitmentQuery) use ($subActivityIds) {
+                                $commitmentQuery->where('allocation_level', 'sub_activity')
+                                    ->whereIn('allocation_id', $subActivityIds);
+                            })
+                            ->orWhereHas('purchaseRequest', function ($requestQuery) use ($subActivityIds) {
+                                $requestQuery->where('allocation_level', 'sub_activity')
+                                    ->whereIn('allocation_id', $subActivityIds);
+                            })
+                            ->orWhereHas('budgetCommitment.purchaseRequest', function ($requestQuery) use ($subActivityIds) {
+                                $requestQuery->where('allocation_level', 'sub_activity')
+                                    ->whereIn('allocation_id', $subActivityIds);
+                            });
+                    }
+                })
+                ->where(function ($query) {
+                    $query->whereNull('status')
+                        ->orWhereNotIn('status', ['cancelled', 'void', 'rejected']);
+                })
+                ->get();
+
+        $facts = [];
+        $coveredCommitmentIds = [];
+        $coveredPurchaseRequestIds = [];
+        $positivePurchaseRequestIds = $commitments
+            ->filter(fn (BudgetCommitment $commitment) => (float) ($commitment->commitment_amount ?? 0) > 0 && !empty($commitment->purchase_request_id))
+            ->pluck('purchase_request_id')
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->all();
+        $positivePurchaseRequestLookup = array_fill_keys($positivePurchaseRequestIds, true);
+
+        foreach ($commitments as $commitment) {
+            $subActivityId = $this->resolveIfrCommitmentSubActivityId($commitment);
+            if (!$this->ifrSubActivityInScope($subActivityId, $subActivityLookup)) {
+                continue;
+            }
+
+            $purchaseRequestId = $commitment->purchase_request_id ? (string) $commitment->purchase_request_id : null;
+            $amount = (float) ($commitment->commitment_amount ?? 0);
+
+            if ($amount <= 0 && $purchaseRequestId && isset($positivePurchaseRequestLookup[$purchaseRequestId])) {
+                continue;
+            }
+
+            if ($amount <= 0) {
+                $amount = (float) ($commitment->purchaseRequest?->total_amount ?? 0);
+            }
+
+            if ($amount <= 0 && $commitment->purchaseRequest?->relationLoaded('items')) {
+                $amount = (float) $commitment->purchaseRequest->items->sum('amount');
+            }
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $this->addIfrCommitmentFact(
+                $facts,
+                'commitment',
+                $commitment->id,
+                $subActivityId,
+                $amount,
+                $this->resolveCommitmentDate($commitment),
+                $commitment->purchaseRequest?->reference_no
+            );
+
+            $coveredCommitmentIds[(string) $commitment->id] = true;
+            if ($purchaseRequestId) {
+                $coveredPurchaseRequestIds[$purchaseRequestId] = true;
+            }
+        }
+
+        foreach ($purchaseRequests as $purchaseRequest) {
+            $purchaseRequestId = (string) $purchaseRequest->id;
+            if (isset($coveredPurchaseRequestIds[$purchaseRequestId])) {
+                continue;
+            }
+
+            $subActivityId = $this->resolveIfrPurchaseRequestSubActivityId($purchaseRequest);
+            if (!$this->ifrSubActivityInScope($subActivityId, $subActivityLookup)) {
+                continue;
+            }
+
+            $amount = (float) ($purchaseRequest->total_amount ?? 0);
+            if ($amount <= 0 && $purchaseRequest->relationLoaded('items')) {
+                $amount = (float) $purchaseRequest->items->sum('amount');
+            }
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $this->addIfrCommitmentFact(
+                $facts,
+                'purchase_request',
+                $purchaseRequest->id,
+                $subActivityId,
+                $amount,
+                $this->resolveIfrPurchaseRequestDate($purchaseRequest),
+                $purchaseRequest->reference_no
+            );
+
+            $coveredPurchaseRequestIds[$purchaseRequestId] = true;
+        }
+
+        foreach ($purchaseOrders as $purchaseOrder) {
+            $commitmentId = $purchaseOrder->budget_commitment_id ? (string) $purchaseOrder->budget_commitment_id : null;
+            $purchaseRequest = $purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest;
+            $purchaseRequestId = $purchaseRequest?->id ? (string) $purchaseRequest->id : null;
+
+            if (($commitmentId && isset($coveredCommitmentIds[$commitmentId]))
+                || ($purchaseRequestId && isset($coveredPurchaseRequestIds[$purchaseRequestId]))) {
+                continue;
+            }
+
+            $subActivityId = $this->resolveIfrPurchaseOrderSubActivityId($purchaseOrder);
+            if (!$this->ifrSubActivityInScope($subActivityId, $subActivityLookup)) {
+                continue;
+            }
+
+            $amount = (float) ($purchaseOrder->amount ?? 0);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $this->addIfrCommitmentFact(
+                $facts,
+                'purchase_order',
+                $purchaseOrder->id,
+                $subActivityId,
+                $amount,
+                $this->resolveIfrPurchaseOrderDate($purchaseOrder),
+                $purchaseOrder->reference_no ?: $purchaseRequest?->reference_no
+            );
+
+            if ($commitmentId) {
+                $coveredCommitmentIds[$commitmentId] = true;
+            }
+            if ($purchaseRequestId) {
+                $coveredPurchaseRequestIds[$purchaseRequestId] = true;
+            }
+        }
+
+        return collect($facts)->values();
+    }
+
+    private function addIfrCommitmentFact(
+        array &$facts,
+        string $sourceType,
+        $sourceId,
+        ?string $subActivityId,
+        float $amount,
+        Carbon $date,
+        ?string $reference
+    ): void {
+        if ($sourceId === null || $subActivityId === null || $amount <= 0) {
+            return;
+        }
+
+        $key = $sourceType . ':' . (string) $sourceId;
+        if (isset($facts[$key])) {
+            return;
+        }
+
+        $facts[$key] = [
+            'source_type' => $sourceType,
+            'source_id' => (string) $sourceId,
+            'sub_activity_id' => (string) $subActivityId,
+            'amount' => round($amount, 2),
+            'date' => $date->copy()->startOfDay(),
+            'reference' => $reference,
+        ];
+    }
+
+    private function resolveIfrCommitmentSubActivityId(BudgetCommitment $commitment): ?string
+    {
+        if ($commitment->allocation_level === 'sub_activity' && !empty($commitment->allocation_id)) {
+            return (string) $commitment->allocation_id;
+        }
+
+        return $this->resolveIfrPurchaseRequestSubActivityId($commitment->purchaseRequest);
+    }
+
+    private function resolveIfrPurchaseRequestSubActivityId(?PurchaseRequest $purchaseRequest): ?string
+    {
+        if ($purchaseRequest?->allocation_level === 'sub_activity' && !empty($purchaseRequest->allocation_id)) {
+            return (string) $purchaseRequest->allocation_id;
+        }
+
+        return null;
+    }
+
+    private function resolveIfrPurchaseOrderSubActivityId(ProcurementPurchaseOrder $purchaseOrder): ?string
+    {
+        if (!empty($purchaseOrder->sub_activity_id)) {
+            return (string) $purchaseOrder->sub_activity_id;
+        }
+
+        if ($purchaseOrder->budgetCommitment?->allocation_level === 'sub_activity' && !empty($purchaseOrder->budgetCommitment->allocation_id)) {
+            return (string) $purchaseOrder->budgetCommitment->allocation_id;
+        }
+
+        return $this->resolveIfrPurchaseRequestSubActivityId($purchaseOrder->purchaseRequest ?: $purchaseOrder->budgetCommitment?->purchaseRequest);
+    }
+
+    private function ifrSubActivityInScope(?string $subActivityId, array $subActivityLookup): bool
+    {
+        return $subActivityId !== null && isset($subActivityLookup[(string) $subActivityId]);
+    }
+
+    private function resolveIfrPurchaseRequestDate(?PurchaseRequest $purchaseRequest): Carbon
+    {
+        if (!$purchaseRequest) {
+            return now()->startOfDay();
+        }
+
+        if (!empty($purchaseRequest->start_year)) {
+            return Carbon::create((int) $purchaseRequest->start_year, 1, 1);
+        }
+
+        if ($purchaseRequest->commitment_date) {
+            return Carbon::parse($purchaseRequest->commitment_date)->startOfDay();
+        }
+
+        if ($purchaseRequest->approved_at) {
+            return Carbon::parse($purchaseRequest->approved_at)->startOfDay();
+        }
+
+        if ($purchaseRequest->created_at) {
+            return Carbon::parse($purchaseRequest->created_at)->startOfDay();
+        }
+
+        return now()->startOfDay();
+    }
+
+    private function resolveIfrPurchaseOrderDate(ProcurementPurchaseOrder $purchaseOrder): Carbon
+    {
+        if ($purchaseOrder->budgetCommitment) {
+            return $this->resolveCommitmentDate($purchaseOrder->budgetCommitment);
+        }
+
+        $purchaseRequest = $purchaseOrder->purchaseRequest;
+        if ($purchaseRequest) {
+            return $this->resolveIfrPurchaseRequestDate($purchaseRequest);
+        }
+
+        if ($purchaseOrder->issued_at) {
+            return Carbon::parse($purchaseOrder->issued_at)->startOfDay();
+        }
+
+        if ($purchaseOrder->created_at) {
+            return Carbon::parse($purchaseOrder->created_at)->startOfDay();
         }
 
         return now()->startOfDay();
@@ -1571,10 +1964,10 @@ class BudgetReportController extends Controller
         $totals['funding_balance'] = round($approvedFunding - $totals['disbursed'], 2);
         $totals['allocation_balance'] = round($approvedFunding - $totals['budget'], 2);
         $totals['uncommitted_budget'] = round($totals['budget'] - $totals['committed'], 2);
-        $totals['unpaid_commitments'] = round($totals['committed'] - $totals['disbursed'], 2);
+        $totals['unpaid_commitments'] = round(max($totals['committed'] - $totals['disbursed'], 0), 2);
         $totals['invoice_balance'] = round($totals['invoiced'] - $totals['disbursed'], 2);
         $totals['commitment_rate'] = $totals['budget'] > 0 ? round(($totals['committed'] / $totals['budget']) * 100, 1) : 0;
-        $totals['disbursement_rate'] = $totals['committed'] > 0 ? round(($totals['disbursed'] / $totals['committed']) * 100, 1) : 0;
+        $totals['disbursement_rate'] = $totals['committed'] > 0 ? min(100, round(($totals['disbursed'] / $totals['committed']) * 100, 1)) : 0;
 
         return [
             'currency' => $fundings->first()?->currency ?? $program->currency ?? 'USD',
@@ -1700,6 +2093,7 @@ class BudgetReportController extends Controller
         $purchaseOrders = (float) $direct['purchase_orders'] + (float) $children['purchase_orders'];
         $invoiced = (float) $direct['invoiced'] + (float) $children['invoiced'];
         $disbursed = (float) $direct['disbursed'] + (float) $children['disbursed'];
+        $committed = max($committed, $disbursed);
 
         return [
             'label' => $label,
@@ -1710,11 +2104,11 @@ class BudgetReportController extends Controller
             'invoiced' => round($invoiced, 2),
             'disbursed' => round($disbursed, 2),
             'uncommitted_budget' => round($budget - $committed, 2),
-            'unpaid_commitments' => round($committed - $disbursed, 2),
+            'unpaid_commitments' => round(max($committed - $disbursed, 0), 2),
             'po_balance' => round($purchaseOrders - $disbursed, 2),
             'invoice_balance' => round($invoiced - $disbursed, 2),
             'commitment_rate' => $budget > 0 ? round(($committed / $budget) * 100, 1) : 0,
-            'disbursement_rate' => $committed > 0 ? round(($disbursed / $committed) * 100, 1) : 0,
+            'disbursement_rate' => $committed > 0 ? min(100, round(($disbursed / $committed) * 100, 1)) : 0,
             'references' => $direct['references'] ?? [],
             'children' => collect(),
         ];
@@ -2170,6 +2564,7 @@ class BudgetReportController extends Controller
                 foreach ($activity->subActivities->sortBy('name') as $subActivity) {
                     $committed = (float) ($commitmentBySub[$subActivity->id] ?? 0);
                     $disbursed = (float) ($disbursementBySub[$subActivity->id] ?? 0);
+                    $committed = max($committed, $disbursed);
                     $references = $commitmentReferencesBySub[$subActivity->id] ?? [];
                     $referenceLabel = $this->formatReferenceDisplay($references);
 
@@ -2193,13 +2588,14 @@ class BudgetReportController extends Controller
 
                     $varianceByYear = [];
                     foreach ($yearRange as $year) {
-                        $varianceByYear[$year] = round($committedByYear[$year] - $disbursedByYear[$year], 2);
+                        $committedByYear[$year] = max($committedByYear[$year], $disbursedByYear[$year]);
+                        $varianceByYear[$year] = round(max($committedByYear[$year] - $disbursedByYear[$year], 0), 2);
                         $activityYearlyCommitted[$year] += $committedByYear[$year];
                         $activityYearlyDisbursed[$year] += $disbursedByYear[$year];
                     }
 
-                    $variance = round($committed - $disbursed, 2);
-                    $utilization = $committed > 0 ? round(($disbursed / $committed) * 100, 2) : 0;
+                    $variance = round(max($committed - $disbursed, 0), 2);
+                    $utilization = $committed > 0 ? min(100, round(($disbursed / $committed) * 100, 2)) : 0;
 
                     $subRows[] = [
                         'subActivity' => $subActivity,
@@ -2227,7 +2623,7 @@ class BudgetReportController extends Controller
 
                 $activityVarianceByYear = [];
                 foreach ($yearRange as $year) {
-                    $activityVarianceByYear[$year] = round($activityYearlyCommitted[$year] - $activityYearlyDisbursed[$year], 2);
+                    $activityVarianceByYear[$year] = round(max($activityYearlyCommitted[$year] - $activityYearlyDisbursed[$year], 0), 2);
                 }
 
                 $activities[] = [
@@ -2235,9 +2631,9 @@ class BudgetReportController extends Controller
                     'references' => '',
                     'committed' => round($activityTotalCommitted, 2),
                     'disbursed' => round($activityTotalDisbursed, 2),
-                    'variance' => round($activityTotalCommitted - $activityTotalDisbursed, 2),
+                    'variance' => round(max($activityTotalCommitted - $activityTotalDisbursed, 0), 2),
                     'utilization' => $activityTotalCommitted > 0
-                        ? round(($activityTotalDisbursed / $activityTotalCommitted) * 100, 2)
+                        ? min(100, round(($activityTotalDisbursed / $activityTotalCommitted) * 100, 2))
                         : 0,
                     'yearly' => [
                         'committed' => array_map(fn ($v) => round((float) $v, 2), $activityYearlyCommitted),
@@ -2253,7 +2649,7 @@ class BudgetReportController extends Controller
 
             $projectVarianceByYear = [];
             foreach ($yearRange as $year) {
-                $projectVarianceByYear[$year] = round($projectYearlyCommitted[$year] - $projectYearlyDisbursed[$year], 2);
+                $projectVarianceByYear[$year] = round(max($projectYearlyCommitted[$year] - $projectYearlyDisbursed[$year], 0), 2);
             }
 
             $rows[] = [
@@ -2261,9 +2657,9 @@ class BudgetReportController extends Controller
                 'references' => '',
                 'committed' => round($projectTotalCommitted, 2),
                 'disbursed' => round($projectTotalDisbursed, 2),
-                'variance' => round($projectTotalCommitted - $projectTotalDisbursed, 2),
+                'variance' => round(max($projectTotalCommitted - $projectTotalDisbursed, 0), 2),
                 'utilization' => $projectTotalCommitted > 0
-                    ? round(($projectTotalDisbursed / $projectTotalCommitted) * 100, 2)
+                    ? min(100, round(($projectTotalDisbursed / $projectTotalCommitted) * 100, 2))
                     : 0,
                 'yearly' => [
                     'committed' => array_map(fn ($v) => round((float) $v, 2), $projectYearlyCommitted),
@@ -2287,8 +2683,8 @@ class BudgetReportController extends Controller
             $disbursed += $projectRow['disbursed'];
         }
 
-        $variance = round($committed - $disbursed, 2);
-        $utilization = $committed > 0 ? round(($disbursed / $committed) * 100, 2) : 0;
+        $variance = round(max($committed - $disbursed, 0), 2);
+        $utilization = $committed > 0 ? min(100, round(($disbursed / $committed) * 100, 2)) : 0;
 
         return [
             'committed' => round($committed, 2),
@@ -2306,11 +2702,11 @@ class BudgetReportController extends Controller
         $useMonthly = $mode === 'range' && $diffMonths <= 18;
 
         foreach ($commitments as $commitment) {
-            $date = $this->resolveCommitmentDate($commitment);
+            $date = $commitment['date'];
             $key = $useMonthly
                 ? $date->format('M Y')
                 : $this->periodKey($date, $mode);
-            $periodCommitments[$key] = ($periodCommitments[$key] ?? 0) + (float) $commitment->commitment_amount;
+            $periodCommitments[$key] = ($periodCommitments[$key] ?? 0) + (float) $commitment['amount'];
         }
 
         foreach ($disbursements as $disbursement) {
@@ -2319,6 +2715,10 @@ class BudgetReportController extends Controller
                 ? $date->format('M Y')
                 : $this->periodKey($date, $mode);
             $periodDisbursements[$key] = ($periodDisbursements[$key] ?? 0) + (float) $disbursement->amount;
+        }
+
+        foreach ($periodDisbursements as $key => $amount) {
+            $periodCommitments[$key] = max((float) ($periodCommitments[$key] ?? 0), (float) $amount);
         }
 
         $lineLabels = array_values(array_unique(array_merge(array_keys($periodCommitments), array_keys($periodDisbursements))));
@@ -2331,10 +2731,10 @@ class BudgetReportController extends Controller
         $disbursementByYear = array_fill_keys($yearRange, 0);
 
         foreach ($commitments as $commitment) {
-            $date = $this->resolveCommitmentDate($commitment);
+            $date = $commitment['date'];
             $year = $date->year;
             if (array_key_exists($year, $commitmentByYear)) {
-                $commitmentByYear[$year] += (float) $commitment->commitment_amount;
+                $commitmentByYear[$year] += (float) $commitment['amount'];
             }
         }
 
@@ -2346,6 +2746,10 @@ class BudgetReportController extends Controller
             }
         }
 
+        foreach ($commitmentByYear as $year => $amount) {
+            $commitmentByYear[$year] = max((float) $amount, (float) ($disbursementByYear[$year] ?? 0));
+        }
+
         $barLabels = array_map('strval', array_keys($commitmentByYear));
         $barCommitments = array_map(fn ($value) => round((float) $value, 2), array_values($commitmentByYear));
         $barDisbursements = array_map(fn ($value) => round((float) $value, 2), array_values($disbursementByYear));
@@ -2355,11 +2759,12 @@ class BudgetReportController extends Controller
             foreach ($project->activities as $activity) {
                 foreach ($activity->subActivities as $subActivity) {
                     $committed = (float) $commitments
-                        ->where('allocation_id', $subActivity->id)
-                        ->sum('commitment_amount');
+                        ->where('sub_activity_id', (string) $subActivity->id)
+                        ->sum('amount');
                     $disbursed = (float) $disbursements
                         ->where('sub_activity_id', $subActivity->id)
                         ->sum('amount');
+                    $committed = max($committed, $disbursed);
                     if ($committed <= 0 && $disbursed <= 0) {
                         continue;
                     }

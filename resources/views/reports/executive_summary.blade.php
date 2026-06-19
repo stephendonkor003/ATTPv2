@@ -190,7 +190,7 @@
                 <div class="es-card">
                     <div class="d-flex justify-content-between gap-3">
                         <div>
-                            <div class="text-muted small">Ranked Allocation</div>
+                            <div class="text-muted small">Project Allocation</div>
                             <div class="h4 fw-bold mb-0">{{ $money($executiveStats['total_allocated']) }}</div>
                         </div>
                         <span class="es-card-icon"><i class="feather-award"></i></span>

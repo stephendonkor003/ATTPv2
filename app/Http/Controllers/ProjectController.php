@@ -151,20 +151,30 @@ class ProjectController extends Controller
             'created_by'   => auth()->id(),
         ]);
 
-        // Save Allocations
-        $yearNumber = 1;
-        foreach ($request->allocations as $actualYear => $amount) {
+        $allocations = $this->normalizeProjectAllocations(
+            $project,
+            (array) $request->input('allocations', [])
+        );
 
-            ProjectAllocation::create([
-                'project_id'  => $project->id,
-                'year'        => $actualYear,        // REQUIRED BY YOUR TABLE
-                'year_number' => $yearNumber,        // 1,2,3, etc
-                'actual_year' => $actualYear,        // calendar year
-                'amount'      => $amount ?? 0
-            ]);
-
-            $yearNumber++;
+        if (empty($allocations)) {
+            $allocations = $this->buildEvenAllocations(
+                (int) $request->start_year,
+                (int) $request->end_year,
+                (float) $request->total_budget
+            );
         }
+
+        $allocations = $this->completeProjectAllocations($project, $allocations);
+
+        $allocationTotal = round(array_sum($allocations), 2);
+        if ($allocationTotal - (float) $request->total_budget > 0.01) {
+            throw new \Exception(
+                'Yearly allocations (' . number_format($allocationTotal, 2) . ') exceed total budget (' . number_format((float) $request->total_budget, 2) . ').'
+            );
+        }
+
+        $allocations = $this->balanceAllocationsToBudget($allocations, (float) $request->total_budget);
+        $this->persistProjectAllocations($project, $allocations);
 
         DB::commit();
         return redirect()->route('budget.projects.index')->with('success', 'Project created successfully.');
@@ -293,6 +303,8 @@ public function update(Request $request, $id)
             ->withInput();
     }
 
+    $allocations = $this->balanceAllocationsToBudget($allocations, (float) $request->total_budget);
+
     $childAllocationError = $this->projectChildAllocationError($project, $allocations);
     if ($childAllocationError) {
         return back()
@@ -392,6 +404,8 @@ public function update(Request $request, $id)
                 ->withInput()
                 ->with('error', 'Project allocations were not saved because the yearly total is above the project budget.');
         }
+
+        $allocations = $this->balanceAllocationsToBudget($allocations, (float) $project->total_budget);
 
         $childAllocationError = $this->projectChildAllocationError($project, $allocations);
         if ($childAllocationError) {
@@ -567,6 +581,23 @@ public function update(Request $request, $id)
         }
 
         ksort($allocations);
+
+        return $allocations;
+    }
+
+    private function balanceAllocationsToBudget(array $allocations, float $totalBudget): array
+    {
+        if (empty($allocations)) {
+            return $allocations;
+        }
+
+        ksort($allocations);
+
+        $difference = round($totalBudget - array_sum($allocations), 2);
+        if ($difference > 0) {
+            $lastYear = array_key_last($allocations);
+            $allocations[$lastYear] = round((float) ($allocations[$lastYear] ?? 0) + $difference, 2);
+        }
 
         return $allocations;
     }

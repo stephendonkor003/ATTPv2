@@ -1460,6 +1460,18 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:budget.reports.view')
             ->name('reports.commitments.export.excel');
 
+        Route::get('reports/commitment-disbursement', [BudgetReportController::class, 'commitmentDisbursementReport'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.commitment-disbursement');
+
+        Route::match(['get', 'post'], 'reports/commitment-disbursement/export/pdf', [BudgetReportController::class, 'exportCommitmentDisbursementPdf'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.commitment-disbursement.export.pdf');
+
+        Route::get('reports/commitment-disbursement/export/excel', [BudgetReportController::class, 'exportCommitmentDisbursementExcel'])
+            ->middleware('permission:budget.reports.view')
+            ->name('reports.commitment-disbursement.export.excel');
+
         Route::get('reports/ifr', [BudgetReportController::class, 'ifrReport'])
             ->middleware('permission:budget.reports.view')
             ->name('reports.ifr');

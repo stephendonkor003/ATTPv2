@@ -85,7 +85,7 @@
      * KPI SUMMARY
      * ================================ --}}
         <div class="row g-4 mb-4">
-            <div class="col-md-3">
+            <div class="col-md-4 col-xl-2">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body">
                         <p class="text-muted mb-1">Total Allocation</p>
@@ -94,7 +94,7 @@
                 </div>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-4 col-xl-2">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body">
                         <p class="text-muted mb-1">Total Commitment</p>
@@ -103,7 +103,7 @@
                 </div>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-4 col-xl-2">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body">
                         <p class="text-muted mb-1">Execution Rate</p>
@@ -112,7 +112,25 @@
                 </div>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-4 col-xl-2">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <p class="text-muted mb-1">Total Disbursements</p>
+                        <h4 class="fw-bold">{{ number_format($totalDisbursements, 2) }}</h4>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 col-xl-2">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <p class="text-muted mb-1">Disbursement Rate</p>
+                        <h4 class="fw-bold">{{ $disbursementRate }}%</h4>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 col-xl-2">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body">
                         <p class="text-muted mb-1">Variance</p>
@@ -133,9 +151,9 @@
             <div class="col-lg-6">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-body">
-                        <h6 class="fw-semibold mb-1">Planned (Budgeted) vs Actual Execution (Committed)</h6>
+                        <h6 class="fw-semibold mb-1">Planned vs Committed vs Disbursed</h6>
                         <p class="text-muted small mb-3">
-                            Compares yearly allocations against actual commitments to show execution progress over time.
+                            Compares yearly allocations, commitments, and paid disbursements to show execution progress over time.
                         </p>
                         <canvas id="executionLineChart" height="140"></canvas>
                     </div>
@@ -161,7 +179,7 @@
                     <div class="card-body">
                         <h6 class="fw-semibold mb-1">Cumulative Execution Momentum</h6>
                         <p class="text-muted small mb-3">
-                            Tracks cumulative allocation versus commitment to reveal long-term execution momentum.
+                            Tracks cumulative allocation, commitment, and disbursement to reveal long-term execution momentum.
                         </p>
                         <canvas id="executionCumulativeChart" height="140"></canvas>
                     </div>
@@ -192,7 +210,7 @@
                     <div>
                         <h5 class="fw-semibold mb-1">Execution Performance Breakdown</h5>
                         <p class="text-muted small mb-0">
-                            Year-by-year allocation vs commitment, remaining balance, and execution rate
+                            Year-by-year allocation, commitment, disbursement, remaining balance, and execution rates
                         </p>
                     </div>
                 </div>
@@ -204,8 +222,10 @@
                                 <th>Year</th>
                                 <th class="text-end">Allocated Amount</th>
                                 <th class="text-end">Committed Amount</th>
+                                <th class="text-end">Disbursed Amount</th>
                                 <th class="text-end">Remaining</th>
                                 <th class="text-center">Execution %</th>
+                                <th class="text-center">Disbursement %</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -213,8 +233,10 @@
                                 @php
                                     $allocated = $allocationByYear[$year] ?? 0;
                                     $committed = $commitmentByYear[$year] ?? 0;
+                                    $disbursed = $disbursementByYear[$year] ?? 0;
                                     $remaining = $allocated - $committed;
                                     $percent = $allocated > 0 ? ($committed / $allocated) * 100 : 0;
+                                    $disbursementPercent = $committed > 0 ? min(100, ($disbursed / $committed) * 100) : 0;
                                 @endphp
                                 <tr>
                                     <td class="fw-semibold text-center">{{ $year }}</td>
@@ -225,6 +247,10 @@
 
                                     <td class="text-end">
                                         {{ number_format($committed, 2) }}
+                                    </td>
+
+                                    <td class="text-end">
+                                        {{ number_format($disbursed, 2) }}
                                     </td>
 
                                     <td class="text-end fw-semibold {{ $remaining < 0 ? 'text-danger' : 'text-success' }}">
@@ -238,6 +264,14 @@
                                             {{ number_format($percent, 1) }}%
                                         </span>
                                     </td>
+
+                                    <td class="text-center">
+                                        <span
+                                            class="badge rounded-pill
+                                    {{ $disbursementPercent < 50 ? 'bg-danger' : ($disbursementPercent < 80 ? 'bg-warning text-dark' : 'bg-success') }}">
+                                            {{ number_format($disbursementPercent, 1) }}%
+                                        </span>
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -246,19 +280,27 @@
                             @php
                                 $totalAlloc = collect($allocationByYear)->sum();
                                 $totalCommit = collect($commitmentByYear)->sum();
+                                $totalDisbursed = collect($disbursementByYear)->sum();
                                 $totalRemain = $totalAlloc - $totalCommit;
                                 $totalPercent = $totalAlloc > 0 ? ($totalCommit / $totalAlloc) * 100 : 0;
+                                $totalDisbursementPercent = $totalCommit > 0 ? ($totalDisbursed / $totalCommit) * 100 : 0;
                             @endphp
                             <tr>
                                 <td class="text-center">TOTAL</td>
                                 <td class="text-end">{{ number_format($totalAlloc, 2) }}</td>
                                 <td class="text-end">{{ number_format($totalCommit, 2) }}</td>
+                                <td class="text-end">{{ number_format($totalDisbursed, 2) }}</td>
                                 <td class="text-end {{ $totalRemain < 0 ? 'text-danger' : 'text-success' }}">
                                     {{ number_format($totalRemain, 2) }}
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-primary">
                                         {{ number_format($totalPercent, 1) }}%
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary">
+                                        {{ number_format($totalDisbursementPercent, 1) }}%
                                     </span>
                                 </td>
                             </tr>
@@ -324,6 +366,8 @@
 
             const COMMITMENTS = @json(collect($years)->map(fn($y) => $commitmentByYear[$y] ?? 0)->values());
 
+            const DISBURSEMENTS = @json(collect($years)->map(fn($y) => $disbursementByYear[$y] ?? 0)->values());
+
             const VARIANCE = ALLOCATIONS.map((a, i) => a - COMMITMENTS[i]);
 
             /* =========================================================
@@ -352,6 +396,17 @@
                                 fill: true,
                                 tension: 0.4,
                                 borderWidth: 2
+                            },
+                            {
+                                label: 'Paid Disbursements',
+                                data: DISBURSEMENTS,
+                                borderColor: '#f97316',
+                                backgroundColor: 'rgba(249,115,22,0.12)',
+                                fill: false,
+                                tension: 0.4,
+                                borderWidth: 3,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
                             }
                         ]
                     },
@@ -421,9 +476,11 @@
 
                 let cumAlloc = 0;
                 let cumCommit = 0;
+                let cumDisbursement = 0;
 
                 const CUM_ALLOC = ALLOCATIONS.map(v => (cumAlloc += v));
                 const CUM_COMMIT = COMMITMENTS.map(v => (cumCommit += v));
+                const CUM_DISBURSEMENT = DISBURSEMENTS.map(v => (cumDisbursement += v));
 
                 new Chart(cumulativeEl, {
                     type: 'line',
@@ -444,6 +501,17 @@
                                 backgroundColor: 'rgba(21,128,61,0.2)',
                                 fill: true,
                                 tension: 0.3
+                            },
+                            {
+                                label: 'Cumulative Paid Disbursements',
+                                data: CUM_DISBURSEMENT,
+                                borderColor: '#ea580c',
+                                backgroundColor: 'rgba(234,88,12,0.14)',
+                                fill: true,
+                                tension: 0.3,
+                                borderWidth: 3,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
                             }
                         ]
                     },

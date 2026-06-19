@@ -2,7 +2,14 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>IFR Report</title>
+    @php
+        $reportMeta = array_merge([
+            'title' => 'IFR Report',
+            'section_title' => 'Section 1: Interim Financial Balance Sheet',
+            'summary_title' => 'Section 3: IFR Summary',
+        ], $reportMeta ?? []);
+    @endphp
+    <title>{{ $reportMeta['title'] }}</title>
     <style>
         body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color: #111; }
         h1, h2 { margin: 0 0 6px 0; }
@@ -21,7 +28,7 @@
 </head>
 <body>
     <div class="header">
-        <div class="title">{{ $program->name ?? 'IFR Report' }}</div>
+        <div class="title">{{ $program->name ?? $reportMeta['title'] }}</div>
         <div>{{ $filters['label'] ?? '' }}</div>
     </div>
 
@@ -47,7 +54,7 @@
     </div>
 
     <div class="section">
-        <h3 style="margin: 0 0 8px 0; color: #0f172a;">Section 1: Interim Financial Balance Sheet</h3>
+        <h3 style="margin: 0 0 8px 0; color: #0f172a;">{{ $reportMeta['section_title'] }}</h3>
         <table>
             <thead>
                 <tr>
@@ -202,7 +209,7 @@
     </div>
 
     <div class="section">
-        <h3 style="margin: 0 0 8px 0; color: #0f172a;">Section 3: IFR Summary</h3>
+        <h3 style="margin: 0 0 8px 0; color: #0f172a;">{{ $reportMeta['summary_title'] }}</h3>
         <ul>
             @foreach ($summary as $line)
                 <li>{{ $line }}</li>

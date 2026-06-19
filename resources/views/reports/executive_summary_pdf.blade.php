@@ -171,7 +171,7 @@
         <table class="summary-table">
             <tr>
                 <td>
-                    <div class="label">Ranked Allocation</div>
+                    <div class="label">Project Allocation</div>
                     <div class="value">{{ $money($executiveStats['total_allocated']) }}</div>
                     <div class="muted">{{ number_format($executiveStats['projects']) }} projects ranked</div>
                 </td>

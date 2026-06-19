@@ -78,7 +78,7 @@
         .summary-table td {
             background: #ffffff;
             border: 1px solid #dbeafe;
-            width: 25%;
+            width: 16.66%;
         }
 
         .label {
@@ -207,8 +207,10 @@
         $generatedAt = now()->format('d M Y, H:i');
         $totalAlloc = collect($allocationByYear)->sum();
         $totalCommit = collect($commitmentByYear)->sum();
+        $totalDisbursed = collect($disbursementByYear)->sum();
         $totalRemain = $totalAlloc - $totalCommit;
         $totalPercent = $totalAlloc > 0 ? ($totalCommit / $totalAlloc) * 100 : 0;
+        $totalDisbursementPercent = $totalCommit > 0 ? ($totalDisbursed / $totalCommit) * 100 : 0;
     @endphp
 
     <div class="header">
@@ -239,6 +241,16 @@
                     <div class="muted">Commitment against allocation</div>
                 </td>
                 <td>
+                    <div class="label">Total Disbursements</div>
+                    <div class="value">{{ $money($totalDisbursements) }}</div>
+                    <div class="muted">Paid disbursements</div>
+                </td>
+                <td>
+                    <div class="label">Disbursement Rate</div>
+                    <div class="value">{{ number_format($disbursementRate, 2) }}%</div>
+                    <div class="muted">Paid against commitment</div>
+                </td>
+                <td>
                     <div class="label">Variance</div>
                     <div class="value {{ $variance < 0 ? 'negative' : 'positive' }}">{{ $money($variance) }}</div>
                     <div class="muted">Allocation minus commitment</div>
@@ -255,8 +267,10 @@
                     <th class="center">Year</th>
                     <th class="right">Allocated Amount</th>
                     <th class="right">Committed Amount</th>
+                    <th class="right">Disbursed Amount</th>
                     <th class="right">Remaining</th>
                     <th class="center">Execution %</th>
+                    <th class="center">Disbursement %</th>
                     <th style="width: 210px;">Progress</th>
                 </tr>
             </thead>
@@ -265,17 +279,22 @@
                     @php
                         $allocated = $allocationByYear[$year] ?? 0;
                         $committed = $commitmentByYear[$year] ?? 0;
+                        $disbursed = $disbursementByYear[$year] ?? 0;
                         $remaining = $allocated - $committed;
                         $percent = $allocated > 0 ? ($committed / $allocated) * 100 : 0;
+                        $disbursementPercent = $committed > 0 ? min(100, ($disbursed / $committed) * 100) : 0;
                         $barClass = $percent < 50 ? 'danger' : ($percent < 80 ? 'warning' : '');
                         $badgeClass = $percent < 50 ? 'badge-bad' : ($percent < 80 ? 'badge-warn' : 'badge-good');
+                        $disbursementBadgeClass = $disbursementPercent < 50 ? 'badge-bad' : ($disbursementPercent < 80 ? 'badge-warn' : 'badge-good');
                     @endphp
                     <tr>
                         <td class="center"><strong>{{ $year }}</strong></td>
                         <td class="right">{{ $money($allocated) }}</td>
                         <td class="right">{{ $money($committed) }}</td>
+                        <td class="right">{{ $money($disbursed) }}</td>
                         <td class="right {{ $remaining < 0 ? 'negative' : 'positive' }}">{{ $money($remaining) }}</td>
                         <td class="center"><span class="badge {{ $badgeClass }}">{{ $rate($percent) }}</span></td>
+                        <td class="center"><span class="badge {{ $disbursementBadgeClass }}">{{ $rate($disbursementPercent) }}</span></td>
                         <td>
                             <div class="bar {{ $barClass }}"><span style="width: {{ min(100, max(0, $percent)) }}%;"></span></div>
                         </td>
@@ -287,8 +306,10 @@
                     <th class="center">TOTAL</th>
                     <th class="right">{{ $money($totalAlloc) }}</th>
                     <th class="right">{{ $money($totalCommit) }}</th>
+                    <th class="right">{{ $money($totalDisbursed) }}</th>
                     <th class="right {{ $totalRemain < 0 ? 'negative' : 'positive' }}">{{ $money($totalRemain) }}</th>
                     <th class="center">{{ $rate($totalPercent) }}</th>
+                    <th class="center">{{ $rate($totalDisbursementPercent) }}</th>
                     <th></th>
                 </tr>
             </tfoot>

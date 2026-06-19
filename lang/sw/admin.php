@@ -41,6 +41,7 @@ return [
     'reports_oversight' => 'Ripoti & Usimamizi',
     'budget_reports' => 'Ripoti za Bajeti',
     'commitment_report' => 'Ripoti ya Ahadi',
+    'commitment_disbursement_report' => 'Ripoti ya Ahadi na Malipo',
     'ifr_report' => 'Ripoti ya IFR',
     'project_financial_position' => 'Project Financial Position',
     'execution_dashboard' => 'Dashibodi ya Utekelezaji',

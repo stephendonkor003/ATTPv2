@@ -41,6 +41,7 @@ return [
     'reports_oversight' => 'Rapports & Supervision',
     'budget_reports' => 'Rapports Budgétaires',
     'commitment_report' => 'Rapport des Engagements',
+    'commitment_disbursement_report' => 'Rapport des Engagements et Decaissements',
     'ifr_report' => 'Rapport IFR',
     'project_financial_position' => 'Position Financiere du Projet',
     'execution_dashboard' => 'Tableau de Bord d\'Exécution',

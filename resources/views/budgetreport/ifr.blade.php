@@ -1,12 +1,26 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        $reportMeta = array_merge([
+            'title' => 'IFR - Interim Financial Report',
+            'description' => 'Committed vs actual disbursements on sub-activities with insights and charts',
+            'form_route' => 'budget.reports.ifr',
+            'pdf_route' => 'budget.reports.ifr.export.pdf',
+            'excel_route' => 'budget.reports.ifr.export.excel',
+            'empty_message' => 'Select a program and filter range to generate the IFR report.',
+            'section_title' => 'Section 1: Interim Financial Balance Sheet',
+            'period_label' => 'IFR',
+            'summary_title' => 'Section 3: IFR Summary',
+        ], $reportMeta ?? []);
+    @endphp
+
     <div class="nxl-container">
 
         <div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
-                <h4 class="fw-bold mb-1">IFR - Interim Financial Report</h4>
-                <p class="text-muted mb-0">Committed vs actual disbursements on sub-activities with insights and charts</p>
+                <h4 class="fw-bold mb-1">{{ $reportMeta['title'] }}</h4>
+                <p class="text-muted mb-0">{{ $reportMeta['description'] }}</p>
             </div>
 
             @if ($program)
@@ -15,7 +29,7 @@
                     <button type="button" class="btn btn-outline-secondary" id="exportPdfBtn">
                         <i class="feather-file-text me-1"></i> Export PDF
                     </button>
-                    <a href="{{ route('budget.reports.ifr.export.excel') }}{{ $exportQuery ? '?' . $exportQuery : '' }}"
+                    <a href="{{ route($reportMeta['excel_route']) }}{{ $exportQuery ? '?' . $exportQuery : '' }}"
                         class="btn btn-outline-success">
                         <i class="feather-download me-1"></i> Export Excel
                     </a>
@@ -28,7 +42,7 @@
 
         <div class="card shadow-sm mt-3">
             <div class="card-body">
-                <form method="GET" action="{{ route('budget.reports.ifr') }}" class="row g-3 align-items-end">
+                <form method="GET" action="{{ route($reportMeta['form_route']) }}" class="row g-3 align-items-end">
                     <div class="col-md-4">
                         <label class="form-label">Program</label>
                         <select name="program_id" class="form-select" required>
@@ -110,7 +124,7 @@
         </div>
 
         @if (!$program)
-            <div class="alert alert-info mt-4">Select a program and filter range to generate the IFR report.</div>
+            <div class="alert alert-info mt-4">{{ $reportMeta['empty_message'] }}</div>
         @else
             @php
                 $currency = $program->currency
@@ -122,11 +136,11 @@
             {{-- SECTION 1: BALANCE-SHEET STYLE TABLE --}}
             <div class="card shadow-sm mt-4">
                 <div class="card-body">
-                    <div class="section-title">Section 1: Interim Financial Balance Sheet</div>
+                    <div class="section-title">{{ $reportMeta['section_title'] }}</div>
                     <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-3 mb-3">
                         <div>
                             <h5 class="fw-bold mb-1">{{ $program->name }}</h5>
-                            <div class="text-muted">IFR — {{ $filters['label'] }}</div>
+                            <div class="text-muted">{{ $reportMeta['period_label'] }} - {{ $filters['label'] }}</div>
                             <div class="text-muted mt-1">
                                 Funding Partners:
                                 @if ($funders->isEmpty())
@@ -259,7 +273,7 @@
             {{-- SECTION 3: SUMMARY --}}
             <div class="card shadow-sm mt-4">
                 <div class="card-body summary-card">
-                    <div class="section-title">Section 3: IFR Summary</div>
+                    <div class="section-title">{{ $reportMeta['summary_title'] }}</div>
                     <h5 class="fw-bold mb-3">Summary</h5>
                     <ul class="mb-0">
                         @foreach ($summary as $line)
@@ -271,7 +285,7 @@
         @endif
 
         @if ($program)
-            <form method="POST" action="{{ route('budget.reports.ifr.export.pdf') }}" id="pdfExportForm" class="d-none">
+            <form method="POST" action="{{ route($reportMeta['pdf_route']) }}" id="pdfExportForm" class="d-none">
                 @csrf
                 <input type="hidden" name="program_id" value="{{ request('program_id') }}">
                 <input type="hidden" name="filter_mode" value="{{ request('filter_mode', $filters['mode']) }}">

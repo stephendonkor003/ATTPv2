@@ -238,8 +238,19 @@
                 allocationsSection.classList.remove('d-none');
                 const years = e - s + 1;
                 const mode = document.querySelector('input[name="allocation_mode"]:checked')?.value || 'amount';
+                const hasCachedAllocations = Object.keys(allocationsCache).length > 0;
+                const baseDefault = Math.floor((total / years) * 100) / 100;
+                let runningDefault = 0;
                 for (let y = s; y <= e; y++) {
-                    const prev = allocationsCache[y] ?? (total / years);
+                    let prev = allocationsCache[y];
+                    if (prev === undefined) {
+                        if (!hasCachedAllocations && y === e) {
+                            prev = Math.max(0, Number((total - runningDefault).toFixed(2)));
+                        } else {
+                            prev = hasCachedAllocations ? (total / years) : baseDefault;
+                            runningDefault += prev;
+                        }
+                    }
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td class="fw-semibold">${y}</td>
@@ -326,5 +337,4 @@
     </script>
 
 @endsection
-
 

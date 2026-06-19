@@ -751,6 +751,8 @@ class PartnerDashboardController extends Controller
 
     protected function financialNode(string $label, string $level, float $budget, float $committed, float $disbursed): array
     {
+        $committed = max($committed, $disbursed);
+
         return [
             'label' => $label,
             'level' => $level,
@@ -760,7 +762,7 @@ class PartnerDashboardController extends Controller
             'remaining_budget' => max($budget - $committed, 0),
             'remaining_to_disburse' => max($committed - $disbursed, 0),
             'commitment_rate' => $budget > 0 ? round(($committed / $budget) * 100, 1) : 0,
-            'disbursement_rate' => $committed > 0 ? round(($disbursed / $committed) * 100, 1) : 0,
+            'disbursement_rate' => $committed > 0 ? min(100, round(($disbursed / $committed) * 100, 1)) : 0,
             'children' => collect(),
         ];
     }

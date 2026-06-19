@@ -226,6 +226,9 @@
                     <a href="{{ route('budget.reports.commitments') }}" class="btn btn-light">
                         <i class="feather-file-text me-1"></i> Commitment Report
                     </a>
+                    <a href="{{ route('budget.reports.commitment-disbursement') }}" class="btn btn-outline-light">
+                        <i class="feather-repeat me-1"></i> Commitment & Disbursement
+                    </a>
                     <a href="{{ route('budget.reports.ifr') }}" class="btn btn-outline-light">
                         <i class="feather-activity me-1"></i> IFR Report
                     </a>

@@ -53,11 +53,11 @@ class AllocationSummaryController extends Controller
             $activities = $projects->flatMap->activities;
             $subActivities = $activities->flatMap->subActivities;
 
-            $projectAllocation = (float) $projects->sum(fn (Project $project) => $project->allocations->sum('amount'));
+            $totalBudget = (float) $projects->sum(fn (Project $project) => $this->projectBudgetAmount($project));
+            $projectAllocation = (float) $projects->sum(fn (Project $project) => $this->projectAllocationEnvelope($project));
             $activityAllocation = (float) $activities->sum(fn (Activity $activity) => $activity->allocations->sum('amount'));
             $subActivityAllocation = (float) $subActivities->sum(fn (SubActivity $subActivity) => $subActivity->allocations->sum('amount'));
-            $totalAllocated = $projectAllocation + $activityAllocation + $subActivityAllocation;
-            $totalBudget = (float) $projects->sum('total_budget');
+            $totalAllocated = $projectAllocation;
             $remaining = $totalBudget - $totalAllocated;
 
             return [
@@ -97,9 +97,9 @@ class AllocationSummaryController extends Controller
         $totalBudget = round((float) $programRows->sum('total_budget'), 2);
 
         $totalProjectAllocated = round((float) $programRows->sum('project_allocated'), 2);
-        $totalAllocated = round((float) $programRows->sum('activity_allocated'), 2);
+        $totalActivityAllocated = round((float) $programRows->sum('activity_allocated'), 2);
         $totalSubAllocated = round((float) $programRows->sum('sub_activity_allocated'), 2);
-        $grandAllocated = round($totalProjectAllocated + $totalAllocated + $totalSubAllocated, 2);
+        $grandAllocated = $totalProjectAllocated;
         $remainingBudget = round($totalBudget - $grandAllocated, 2);
         $allocationRate = $totalBudget > 0 ? round(($grandAllocated / $totalBudget) * 100, 1) : 0;
         $topProgram = $programRows->sortByDesc('total_allocated')->first();
@@ -108,7 +108,7 @@ class AllocationSummaryController extends Controller
         $summary = [
             'total_budget' => $totalBudget,
             'project_allocated' => $totalProjectAllocated,
-            'activity_allocated' => $totalAllocated,
+            'activity_allocated' => $totalActivityAllocated,
             'sub_activity_allocated' => $totalSubAllocated,
             'total_allocated' => $grandAllocated,
             'remaining_budget' => $remainingBudget,
@@ -124,7 +124,7 @@ class AllocationSummaryController extends Controller
             'sectorLabels' => $sectorRows->pluck('sector')->values(),
             'sectorAllocated' => $sectorRows->pluck('total_allocated')->values(),
             'allocationSplitLabels' => collect(['Project', 'Activity', 'Sub-Activity']),
-            'allocationSplit' => collect([$totalProjectAllocated, $totalAllocated, $totalSubAllocated]),
+            'allocationSplit' => collect([$totalProjectAllocated, $totalActivityAllocated, $totalSubAllocated]),
         ];
 
         return compact(
@@ -134,7 +134,7 @@ class AllocationSummaryController extends Controller
             'totalActivities',
             'totalSubActivities',
             'totalBudget',
-            'totalAllocated',
+            'totalActivityAllocated',
             'totalSubAllocated',
             'remainingBudget',
             'grandAllocated',
@@ -195,9 +195,9 @@ class AllocationSummaryController extends Controller
                         fn ($subActivity) => $subActivity->allocations->sum('amount')
                     )
                 );
-                $projectAllocated = (float) $project->allocations->sum('amount');
-                $totalAllocated = $projectAllocated + $activityAllocated + $subActivityAllocated;
-                $budget = (float) ($project->total_budget ?? 0);
+                $projectAllocated = $this->projectAllocationEnvelope($project);
+                $totalAllocated = $projectAllocated;
+                $budget = $this->projectBudgetAmount($project);
 
                 return [
                     'project' => $project,
@@ -225,7 +225,7 @@ class AllocationSummaryController extends Controller
                 return [
                     'activity' => $activity,
                     'project' => $activity->project,
-                    'allocated' => round($allocated + $subAllocated, 2),
+                    'allocated' => round($allocated, 2),
                     'activity_allocated' => round($allocated, 2),
                     'sub_activity_allocated' => round($subAllocated, 2),
                 ];
@@ -257,10 +257,10 @@ class AllocationSummaryController extends Controller
             $projects = $program->projects;
             $activities = $projects->flatMap->activities;
             $subActivities = $activities->flatMap->subActivities;
-            $allocated = (float) $projects->sum(fn (Project $project) => $project->allocations->sum('amount'))
-                + (float) $activities->sum(fn (Activity $activity) => $activity->allocations->sum('amount'))
-                + (float) $subActivities->sum(fn (SubActivity $subActivity) => $subActivity->allocations->sum('amount'));
-            $budget = (float) $projects->sum('total_budget');
+            $activityAllocated = (float) $activities->sum(fn (Activity $activity) => $activity->allocations->sum('amount'));
+            $subActivityAllocated = (float) $subActivities->sum(fn (SubActivity $subActivity) => $subActivity->allocations->sum('amount'));
+            $allocated = (float) $projects->sum(fn (Project $project) => $this->projectAllocationEnvelope($project));
+            $budget = (float) $projects->sum(fn (Project $project) => $this->projectBudgetAmount($project));
 
             return [
                 'program' => $program,
@@ -272,6 +272,8 @@ class AllocationSummaryController extends Controller
                 'sub_activities' => $subActivities->count(),
                 'budget' => round($budget, 2),
                 'allocated' => round($allocated, 2),
+                'activity_allocated' => round($activityAllocated, 2),
+                'sub_activity_allocated' => round($subActivityAllocated, 2),
                 'remaining' => round($budget - $allocated, 2),
                 'utilization' => $budget > 0 ? round(($allocated / $budget) * 100, 1) : 0,
             ];
@@ -312,5 +314,31 @@ class AllocationSummaryController extends Controller
             'executiveStats',
             'chartData'
         );
+    }
+
+    private function projectBudgetAmount(Project $project): float
+    {
+        $budget = (float) ($project->total_budget ?? 0);
+
+        if ($budget <= 0 && $project->relationLoaded('allocations')) {
+            $budget = (float) $project->allocations->sum('amount');
+        }
+
+        return round($budget, 2);
+    }
+
+    private function projectAllocationEnvelope(Project $project): float
+    {
+        $budget = $this->projectBudgetAmount($project);
+
+        if ($budget > 0) {
+            return $budget;
+        }
+
+        if ($project->relationLoaded('allocations')) {
+            return round((float) $project->allocations->sum('amount'), 2);
+        }
+
+        return 0.0;
     }
 }

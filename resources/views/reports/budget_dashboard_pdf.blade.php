@@ -174,7 +174,7 @@
                 <td>
                     <div class="label">Remaining Balance</div>
                     <div class="value {{ $summary['remaining_budget'] < 0 ? 'negative' : 'positive' }}">{{ $money($summary['remaining_budget']) }}</div>
-                    <div class="muted">Budget minus allocations</div>
+                    <div class="muted">Budget minus project allocation</div>
                 </td>
                 <td>
                     <div class="label">Programs</div>

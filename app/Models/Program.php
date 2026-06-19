@@ -74,28 +74,24 @@ public function approvedFundings()
     }
 
     /**
-     * Total allocations under this program
-     * (projects + activities + sub-activities)
+     * Total project allocation envelope under this program.
      */
     public function totalAllocatedAmount()
     {
         return $this->projects->sum(function ($project) {
+            $budget = (float) ($project->total_budget ?? 0);
 
-        $projectAllocations = $project->allocations->sum('amount');
+            if ($budget > 0) {
+                return $budget;
+            }
 
-        $activityAllocations = $project->activities->sum(function ($activity) {
-            return $activity->allocations->sum('amount');
+            if ($project->relationLoaded('allocations')) {
+                return (float) $project->allocations->sum('amount');
+            }
+
+            return (float) $project->allocations()->sum('amount');
         });
-
-        $subActivityAllocations = $project->activities->sum(function ($activity) {
-            return $activity->subActivities->sum(function ($sub) {
-                return $sub->allocations->sum('amount');
-            });
-        });
-
-        return $projectAllocations + $activityAllocations + $subActivityAllocations;
-    });
-}
+    }
 
 
 }

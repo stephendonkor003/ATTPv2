@@ -209,7 +209,7 @@
                         </div>
                         <span class="bs-card-icon"><i class="feather-pie-chart"></i></span>
                     </div>
-                    <div class="small text-muted mt-3">Budget minus all allocation levels</div>
+                    <div class="small text-muted mt-3">Budget minus project-level allocation</div>
                 </div>
             </div>
             <div class="col-md-6 col-xl-3">
@@ -276,7 +276,7 @@
                 <div class="bs-panel h-100">
                     <div class="bs-panel-header">
                         <h5 class="fw-bold mb-1">Allocation Split</h5>
-                        <div class="text-muted small">Project, activity, and sub-activity totals</div>
+                        <div class="text-muted small">Project envelope with downstream activity and sub-activity totals</div>
                     </div>
                     <div class="bs-panel-body">
                         <div class="bs-chart-box sm">
@@ -314,7 +314,7 @@
             <div class="bs-panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
                 <div>
                     <h5 class="fw-bold mb-1">Program Allocation Breakdown</h5>
-                    <div class="text-muted small">Program budget, allocation level totals, remaining balance, and utilization.</div>
+                    <div class="text-muted small">Program budget, project-level allocation, remaining balance, and utilization.</div>
                 </div>
                 <span class="bs-chip">{{ number_format($programRows->count()) }} programs</span>
             </div>

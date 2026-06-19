@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -10,6 +11,8 @@ use App\Models\Sector;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\BudgetCommitment;
+use App\Models\ProcurementDisbursement;
+use App\Models\ProcurementPurchaseOrder;
 use App\Services\ExecutionInsightBuilder;
 
 class MasterDashboard extends Controller
@@ -117,8 +120,17 @@ class MasterDashboard extends Controller
                 ]
             )
             ->when($scopeType === 'program', function ($q) use ($scope) {
-                $q->whereHas('programFunding', function ($qq) use ($scope) {
-                    $qq->where('program_id', $scope->id);
+                $q->where(function ($scopeQuery) use ($scope) {
+                    $scopeQuery
+                        ->whereHas('programFunding', fn ($qq) => $qq->where('program_id', $scope->id))
+                        ->orWhereHas('purchaseRequest.programFunding', fn ($qq) => $qq->where('program_id', $scope->id));
+                });
+            })
+            ->when($scopeType === 'sector', function ($q) use ($scope) {
+                $q->where(function ($scopeQuery) use ($scope) {
+                    $scopeQuery
+                        ->whereHas('programFunding.program', fn ($qq) => $qq->where('sector_id', $scope->id))
+                        ->orWhereHas('purchaseRequest.programFunding.program', fn ($qq) => $qq->where('sector_id', $scope->id));
                 });
             })
             ->when($scopeType === 'project', function ($q) use ($scope) {
@@ -134,19 +146,59 @@ class MasterDashboard extends Controller
             ->toArray();
 
         /* ============================================================
-         * 6. KPI CALCULATIONS
+         * 6. YEARLY DISBURSEMENTS (PAID)
+         * ============================================================ */
+        $yearStart = collect($years)->min();
+        $yearEnd = collect($years)->max();
+
+        $disbursementQuery = ProcurementDisbursement::query()
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+            ->when($yearStart && $yearEnd, function ($q) use ($yearStart, $yearEnd) {
+                $q->whereBetween('paid_at', [
+                    Carbon::create((int) $yearStart, 1, 1)->startOfDay(),
+                    Carbon::create((int) $yearEnd, 12, 31)->endOfDay(),
+                ]);
+            })
+            ->when($scopeType !== 'global', function ($q) use ($scopeType, $scope) {
+                $q->whereHas('purchaseOrder', function ($poQuery) use ($scopeType, $scope) {
+                    $this->applyExecutionScopeToPurchaseOrderQuery($poQuery, $scopeType, $scope);
+                });
+            });
+
+        $disbursementByYear = (clone $disbursementQuery)
+            ->get(['paid_at', 'amount'])
+            ->groupBy(fn ($disbursement) => Carbon::parse($disbursement->paid_at)->year)
+            ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
+            ->toArray();
+
+        foreach ($years as $year) {
+            $commitmentByYear[$year] = round(max(
+                (float) ($commitmentByYear[$year] ?? 0),
+                (float) ($disbursementByYear[$year] ?? 0)
+            ), 2);
+            $disbursementByYear[$year] = round((float) ($disbursementByYear[$year] ?? 0), 2);
+        }
+
+        /* ============================================================
+         * 7. KPI CALCULATIONS
          * ============================================================ */
         $totalAllocation = array_sum($allocationByYear);
         $totalCommitment = array_sum($commitmentByYear);
+        $totalDisbursements = array_sum($disbursementByYear);
 
         $executionRate = $totalAllocation > 0
             ? round(($totalCommitment / $totalAllocation) * 100, 2)
             : 0;
 
+        $disbursementRate = $totalCommitment > 0
+            ? min(100, round(($totalDisbursements / $totalCommitment) * 100, 2))
+            : 0;
+
         $variance = $totalAllocation - $totalCommitment;
 
         /* ============================================================
-         * 7. LINE CHART DATA
+         * 8. LINE CHART DATA
          * ============================================================ */
         $lineChart = [
             'labels' => $years,
@@ -155,30 +207,40 @@ class MasterDashboard extends Controller
                 fn ($y) => $commitmentByYear[$y] ?? 0,
                 $years
             ),
+            'disbursement' => array_map(
+                fn ($y) => $disbursementByYear[$y] ?? 0,
+                $years
+            ),
         ];
 
         /* ============================================================
-         * 8. HEAT MAP DATA
+         * 9. HEAT MAP DATA
          * ============================================================ */
         $heatmap = collect($years)->map(function ($year) use (
             $allocationByYear,
-            $commitmentByYear
+            $commitmentByYear,
+            $disbursementByYear
         ) {
             $alloc = $allocationByYear[$year] ?? 0;
             $commit = $commitmentByYear[$year] ?? 0;
+            $disbursed = $disbursementByYear[$year] ?? 0;
 
             return [
                 'year' => $year,
                 'allocation' => $alloc,
                 'commitment' => $commit,
+                'disbursement' => $disbursed,
                 'execution_rate' => $alloc > 0
                     ? round(($commit / $alloc) * 100, 1)
-                    : 0
+                    : 0,
+                'disbursement_rate' => $commit > 0
+                    ? min(100, round(($disbursed / $commit) * 100, 1))
+                    : 0,
             ];
         });
 
         /* ============================================================
-         * 9. RADAR METRICS
+         * 10. RADAR METRICS
          * ============================================================ */
         $totalYears = count($years);
 
@@ -213,13 +275,15 @@ class MasterDashboard extends Controller
         ];
 
         /* ============================================================
-         * 10. AI PAYLOAD & INSIGHTS
+         * 11. AI PAYLOAD & INSIGHTS
          * ============================================================ */
         $aiPayload = [
             'scope' => $scopeType,
             'total_allocation' => $totalAllocation,
             'total_commitment' => $totalCommitment,
+            'total_disbursements' => $totalDisbursements,
             'execution_rate' => $executionRate,
+            'disbursement_rate' => $disbursementRate,
             'variance' => $variance,
             'yearly' => $heatmap->values()->toArray(),
         ];
@@ -227,7 +291,7 @@ class MasterDashboard extends Controller
         $aiInsights = ExecutionInsightBuilder::build($aiPayload);
 
         /* ============================================================
-         * 11. RETURN VIEW
+         * 12. RETURN VIEW
          * ============================================================ */
         return compact(
             'sectors',
@@ -238,15 +302,57 @@ class MasterDashboard extends Controller
             'years',
             'allocationByYear',
             'commitmentByYear',
+            'disbursementByYear',
             'totalAllocation',
             'totalCommitment',
+            'totalDisbursements',
             'executionRate',
+            'disbursementRate',
             'variance',
             'lineChart',
             'heatmap',
             'radarMetrics',
             'aiInsights'
         );
+    }
+
+    /**
+     * ============================================================
+     * PURCHASE ORDER SCOPE FILTER FOR DISBURSEMENTS
+     * ============================================================
+     */
+    protected function applyExecutionScopeToPurchaseOrderQuery($query, string $scopeType, $scope): void
+    {
+        if ($scopeType === 'program') {
+            $query->where(function ($scopeQuery) use ($scope) {
+                $scopeQuery
+                    ->whereHas('purchaseRequest.programFunding', fn ($q) => $q->where('program_id', $scope->id))
+                    ->orWhereHas('budgetCommitment.programFunding', fn ($q) => $q->where('program_id', $scope->id))
+                    ->orWhereHas('budgetCommitment.purchaseRequest.programFunding', fn ($q) => $q->where('program_id', $scope->id));
+            });
+
+            return;
+        }
+
+        if ($scopeType === 'sector') {
+            $query->where(function ($scopeQuery) use ($scope) {
+                $scopeQuery
+                    ->whereHas('purchaseRequest.programFunding.program', fn ($q) => $q->where('sector_id', $scope->id))
+                    ->orWhereHas('budgetCommitment.programFunding.program', fn ($q) => $q->where('sector_id', $scope->id))
+                    ->orWhereHas('budgetCommitment.purchaseRequest.programFunding.program', fn ($q) => $q->where('sector_id', $scope->id));
+            });
+
+            return;
+        }
+
+        if ($scopeType === 'project') {
+            $query->where(function ($scopeQuery) use ($scope) {
+                $scopeQuery
+                    ->whereHas('purchaseRequest', fn ($q) => $q->where('allocation_level', 'project')->where('allocation_id', $scope->id))
+                    ->orWhereHas('budgetCommitment', fn ($q) => $q->where('allocation_level', 'project')->where('allocation_id', $scope->id))
+                    ->orWhereHas('budgetCommitment.purchaseRequest', fn ($q) => $q->where('allocation_level', 'project')->where('allocation_id', $scope->id));
+            });
+        }
     }
 
     /**
