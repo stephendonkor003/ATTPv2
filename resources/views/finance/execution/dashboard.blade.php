@@ -235,7 +235,7 @@
                                     $committed = $commitmentByYear[$year] ?? 0;
                                     $disbursed = $disbursementByYear[$year] ?? 0;
                                     $remaining = max($allocated - $committed, 0);
-                                    $percent = $allocated > 0 ? ($committed / $allocated) * 100 : 0;
+                                    $percent = $allocated > 0 ? min(100, ($committed / $allocated) * 100) : 0;
                                     $disbursementPercent = $committed > 0 ? min(100, ($disbursed / $committed) * 100) : 0;
                                 @endphp
                                 <tr>
@@ -282,7 +282,7 @@
                                 $totalCommit = collect($commitmentByYear)->sum();
                                 $totalDisbursed = collect($disbursementByYear)->sum();
                                 $totalRemain = max($totalAlloc - $totalCommit, 0);
-                                $totalPercent = $totalAlloc > 0 ? ($totalCommit / $totalAlloc) * 100 : 0;
+                                $totalPercent = $totalAlloc > 0 ? min(100, ($totalCommit / $totalAlloc) * 100) : 0;
                                 $totalDisbursementPercent = $totalCommit > 0 ? min(100, ($totalDisbursed / $totalCommit) * 100) : 0;
                             @endphp
                             <tr>

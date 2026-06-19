@@ -188,7 +188,7 @@ class MasterDashboard extends Controller
         $totalDisbursements = array_sum($disbursementByYear);
 
         $executionRate = $totalAllocation > 0
-            ? round(($totalCommitment / $totalAllocation) * 100, 2)
+            ? min(100, round(($totalCommitment / $totalAllocation) * 100, 2))
             : 0;
 
         $disbursementRate = $totalCommitment > 0
@@ -231,7 +231,7 @@ class MasterDashboard extends Controller
                 'commitment' => $commit,
                 'disbursement' => $disbursed,
                 'execution_rate' => $alloc > 0
-                    ? round(($commit / $alloc) * 100, 1)
+                    ? min(100, round(($commit / $alloc) * 100, 1))
                     : 0,
                 'disbursement_rate' => $commit > 0
                     ? min(100, round(($disbursed / $commit) * 100, 1))
@@ -267,11 +267,11 @@ class MasterDashboard extends Controller
         $riskExposure = ($riskYears / max(1, $totalYears)) * 100;
 
         $radarMetrics = [
-            'budget_utilization' => round($budgetUtilization, 1),
-            'timeliness' => round($timeliness, 1),
-            'consistency' => round($consistency, 1),
-            'coverage' => round($timeliness, 1),
-            'risk_exposure' => round(100 - $riskExposure, 1),
+            'budget_utilization' => min(100, max(0, round($budgetUtilization, 1))),
+            'timeliness' => min(100, max(0, round($timeliness, 1))),
+            'consistency' => min(100, max(0, round($consistency, 1))),
+            'coverage' => min(100, max(0, round($timeliness, 1))),
+            'risk_exposure' => min(100, max(0, round(100 - $riskExposure, 1))),
         ];
 
         /* ============================================================
