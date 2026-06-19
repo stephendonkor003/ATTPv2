@@ -239,6 +239,27 @@ class MasterDashboard extends Controller
             ];
         });
 
+        $executionBreakdownRows = $heatmap->map(function (array $row) {
+            return [
+                'year' => $row['year'],
+                'allocation' => round((float) ($row['allocation'] ?? 0), 2),
+                'commitment' => round((float) ($row['commitment'] ?? 0), 2),
+                'disbursement' => round((float) ($row['disbursement'] ?? 0), 2),
+                'remaining' => round(max((float) ($row['allocation'] ?? 0) - (float) ($row['commitment'] ?? 0), 0), 2),
+                'execution_rate' => min(100, max(0, round((float) ($row['execution_rate'] ?? 0), 1))),
+                'disbursement_rate' => min(100, max(0, round((float) ($row['disbursement_rate'] ?? 0), 1))),
+            ];
+        })->values();
+
+        $executionBreakdownTotals = [
+            'allocation' => round($totalAllocation, 2),
+            'commitment' => round($totalCommitment, 2),
+            'disbursement' => round($totalDisbursements, 2),
+            'remaining' => round(max($totalAllocation - $totalCommitment, 0), 2),
+            'execution_rate' => min(100, max(0, round($executionRate, 1))),
+            'disbursement_rate' => min(100, max(0, round($disbursementRate, 1))),
+        ];
+
         /* ============================================================
          * 10. RADAR METRICS
          * ============================================================ */
@@ -311,6 +332,8 @@ class MasterDashboard extends Controller
             'variance',
             'lineChart',
             'heatmap',
+            'executionBreakdownRows',
+            'executionBreakdownTotals',
             'radarMetrics',
             'aiInsights'
         );

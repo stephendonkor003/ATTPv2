@@ -208,9 +208,17 @@
         $totalAlloc = collect($allocationByYear)->sum();
         $totalCommit = collect($commitmentByYear)->sum();
         $totalDisbursed = collect($disbursementByYear)->sum();
-        $totalRemain = max($totalAlloc - $totalCommit, 0);
-        $totalPercent = $totalAlloc > 0 ? min(100, ($totalCommit / $totalAlloc) * 100) : 0;
-        $totalDisbursementPercent = $totalCommit > 0 ? min(100, ($totalDisbursed / $totalCommit) * 100) : 0;
+        $breakdownTotals = $executionBreakdownTotals ?? [
+            'allocation' => $totalAlloc,
+            'commitment' => $totalCommit,
+            'disbursement' => $totalDisbursed,
+            'remaining' => max($totalAlloc - $totalCommit, 0),
+            'execution_rate' => 0,
+            'disbursement_rate' => 0,
+        ];
+        $totalRemain = $breakdownTotals['remaining'];
+        $totalPercent = min(100, max(0, (float) ($breakdownTotals['execution_rate'] ?? 0)));
+        $totalDisbursementPercent = min(100, max(0, (float) ($breakdownTotals['disbursement_rate'] ?? 0)));
     @endphp
 
     <div class="header">
@@ -275,24 +283,20 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach ($years as $year)
+                @foreach (($executionBreakdownRows ?? collect()) as $row)
                     @php
-                        $allocated = $allocationByYear[$year] ?? 0;
-                        $committed = $commitmentByYear[$year] ?? 0;
-                        $disbursed = $disbursementByYear[$year] ?? 0;
-                        $remaining = max($allocated - $committed, 0);
-                        $percent = $allocated > 0 ? min(100, ($committed / $allocated) * 100) : 0;
-                        $disbursementPercent = $committed > 0 ? min(100, ($disbursed / $committed) * 100) : 0;
+                        $percent = min(100, max(0, (float) ($row['execution_rate'] ?? 0)));
+                        $disbursementPercent = min(100, max(0, (float) ($row['disbursement_rate'] ?? 0)));
                         $barClass = $percent < 50 ? 'danger' : ($percent < 80 ? 'warning' : '');
                         $badgeClass = $percent < 50 ? 'badge-bad' : ($percent < 80 ? 'badge-warn' : 'badge-good');
                         $disbursementBadgeClass = $disbursementPercent < 50 ? 'badge-bad' : ($disbursementPercent < 80 ? 'badge-warn' : 'badge-good');
                     @endphp
                     <tr>
-                        <td class="center"><strong>{{ $year }}</strong></td>
-                        <td class="right">{{ $money($allocated) }}</td>
-                        <td class="right">{{ $money($committed) }}</td>
-                        <td class="right">{{ $money($disbursed) }}</td>
-                        <td class="right positive">{{ $money($remaining) }}</td>
+                        <td class="center"><strong>{{ $row['year'] }}</strong></td>
+                        <td class="right">{{ $money($row['allocation']) }}</td>
+                        <td class="right">{{ $money($row['commitment']) }}</td>
+                        <td class="right">{{ $money($row['disbursement']) }}</td>
+                        <td class="right positive">{{ $money($row['remaining']) }}</td>
                         <td class="center"><span class="badge {{ $badgeClass }}">{{ $rate($percent) }}</span></td>
                         <td class="center"><span class="badge {{ $disbursementBadgeClass }}">{{ $rate($disbursementPercent) }}</span></td>
                         <td>
@@ -304,9 +308,9 @@
             <tfoot>
                 <tr>
                     <th class="center">TOTAL</th>
-                    <th class="right">{{ $money($totalAlloc) }}</th>
-                    <th class="right">{{ $money($totalCommit) }}</th>
-                    <th class="right">{{ $money($totalDisbursed) }}</th>
+                    <th class="right">{{ $money($breakdownTotals['allocation']) }}</th>
+                    <th class="right">{{ $money($breakdownTotals['commitment']) }}</th>
+                    <th class="right">{{ $money($breakdownTotals['disbursement']) }}</th>
                     <th class="right positive">{{ $money($totalRemain) }}</th>
                     <th class="center">{{ $rate($totalPercent) }}</th>
                     <th class="center">{{ $rate($totalDisbursementPercent) }}</th>

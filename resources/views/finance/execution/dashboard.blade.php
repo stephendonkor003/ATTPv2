@@ -229,32 +229,28 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($years as $year)
+                            @foreach (($executionBreakdownRows ?? collect()) as $row)
                                 @php
-                                    $allocated = $allocationByYear[$year] ?? 0;
-                                    $committed = $commitmentByYear[$year] ?? 0;
-                                    $disbursed = $disbursementByYear[$year] ?? 0;
-                                    $remaining = max($allocated - $committed, 0);
-                                    $percent = $allocated > 0 ? min(100, ($committed / $allocated) * 100) : 0;
-                                    $disbursementPercent = $committed > 0 ? min(100, ($disbursed / $committed) * 100) : 0;
+                                    $percent = min(100, max(0, (float) ($row['execution_rate'] ?? 0)));
+                                    $disbursementPercent = min(100, max(0, (float) ($row['disbursement_rate'] ?? 0)));
                                 @endphp
                                 <tr>
-                                    <td class="fw-semibold text-center">{{ $year }}</td>
+                                    <td class="fw-semibold text-center">{{ $row['year'] }}</td>
 
                                     <td class="text-end">
-                                        {{ number_format($allocated, 2) }}
+                                        {{ number_format($row['allocation'], 2) }}
                                     </td>
 
                                     <td class="text-end">
-                                        {{ number_format($committed, 2) }}
+                                        {{ number_format($row['commitment'], 2) }}
                                     </td>
 
                                     <td class="text-end">
-                                        {{ number_format($disbursed, 2) }}
+                                        {{ number_format($row['disbursement'], 2) }}
                                     </td>
 
                                     <td class="text-end fw-semibold text-success">
-                                        {{ number_format($remaining, 2) }}
+                                        {{ number_format($row['remaining'], 2) }}
                                     </td>
 
                                     <td class="text-center">
@@ -278,20 +274,24 @@
 
                         <tfoot class="table-light fw-semibold">
                             @php
-                                $totalAlloc = collect($allocationByYear)->sum();
-                                $totalCommit = collect($commitmentByYear)->sum();
-                                $totalDisbursed = collect($disbursementByYear)->sum();
-                                $totalRemain = max($totalAlloc - $totalCommit, 0);
-                                $totalPercent = $totalAlloc > 0 ? min(100, ($totalCommit / $totalAlloc) * 100) : 0;
-                                $totalDisbursementPercent = $totalCommit > 0 ? min(100, ($totalDisbursed / $totalCommit) * 100) : 0;
+                                $breakdownTotals = $executionBreakdownTotals ?? [
+                                    'allocation' => collect($allocationByYear)->sum(),
+                                    'commitment' => collect($commitmentByYear)->sum(),
+                                    'disbursement' => collect($disbursementByYear)->sum(),
+                                    'remaining' => 0,
+                                    'execution_rate' => 0,
+                                    'disbursement_rate' => 0,
+                                ];
+                                $totalPercent = min(100, max(0, (float) ($breakdownTotals['execution_rate'] ?? 0)));
+                                $totalDisbursementPercent = min(100, max(0, (float) ($breakdownTotals['disbursement_rate'] ?? 0)));
                             @endphp
                             <tr>
                                 <td class="text-center">TOTAL</td>
-                                <td class="text-end">{{ number_format($totalAlloc, 2) }}</td>
-                                <td class="text-end">{{ number_format($totalCommit, 2) }}</td>
-                                <td class="text-end">{{ number_format($totalDisbursed, 2) }}</td>
+                                <td class="text-end">{{ number_format($breakdownTotals['allocation'], 2) }}</td>
+                                <td class="text-end">{{ number_format($breakdownTotals['commitment'], 2) }}</td>
+                                <td class="text-end">{{ number_format($breakdownTotals['disbursement'], 2) }}</td>
                                 <td class="text-end text-success">
-                                    {{ number_format($totalRemain, 2) }}
+                                    {{ number_format($breakdownTotals['remaining'], 2) }}
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-primary">
