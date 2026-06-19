@@ -134,8 +134,15 @@ class MasterDashboard extends Controller
                 });
             })
             ->when($scopeType === 'project', function ($q) use ($scope) {
-                $q->where('allocation_level', 'project')
-                  ->where('allocation_id', $scope->id);
+                $projectScope = $this->projectExecutionScopeIds($scope);
+
+                $q->where(function ($scopeQuery) use ($projectScope) {
+                    $this->applyProjectExecutionAllocationScope($scopeQuery, $projectScope);
+
+                    $scopeQuery->orWhereHas('purchaseRequest', function ($requestQuery) use ($projectScope) {
+                        $this->applyProjectExecutionAllocationScope($requestQuery, $projectScope);
+                    });
+                });
             })
             ->select(
                 'commitment_year',
@@ -260,6 +267,29 @@ class MasterDashboard extends Controller
             'disbursement_rate' => min(100, max(0, round($disbursementRate, 1))),
         ];
 
+        $peakCommitmentRow = $executionBreakdownRows
+            ->sortByDesc('commitment')
+            ->first() ?? [];
+        $latestExecutionRow = $executionBreakdownRows->last() ?? [];
+        $unpaidCommitments = round(max($totalCommitment - $totalDisbursements, 0), 2);
+        $overCommitment = round(max($totalCommitment - $totalAllocation, 0), 2);
+        $currency = $this->resolveExecutionCurrency($scopeType, $scope);
+
+        $executionSummary = [
+            'currency' => $currency,
+            'budget_envelope' => round($totalAllocation, 2),
+            'committed' => round($totalCommitment, 2),
+            'disbursed' => round($totalDisbursements, 2),
+            'remaining_allocation' => $executionBreakdownTotals['remaining'],
+            'unpaid_commitments' => $unpaidCommitments,
+            'over_commitment' => $overCommitment,
+            'active_years' => count($years),
+            'latest_year' => $latestExecutionRow['year'] ?? null,
+            'latest_execution_rate' => $latestExecutionRow['execution_rate'] ?? 0,
+            'peak_commitment_year' => $peakCommitmentRow['year'] ?? null,
+            'peak_commitment' => $peakCommitmentRow['commitment'] ?? 0,
+        ];
+
         /* ============================================================
          * 10. RADAR METRICS
          * ============================================================ */
@@ -334,6 +364,8 @@ class MasterDashboard extends Controller
             'heatmap',
             'executionBreakdownRows',
             'executionBreakdownTotals',
+            'executionSummary',
+            'currency',
             'radarMetrics',
             'aiInsights'
         );
@@ -369,13 +401,97 @@ class MasterDashboard extends Controller
         }
 
         if ($scopeType === 'project') {
-            $query->where(function ($scopeQuery) use ($scope) {
+            $projectScope = $this->projectExecutionScopeIds($scope);
+
+            $query->where(function ($scopeQuery) use ($projectScope) {
+                if (!empty($projectScope['sub_activity_ids'])) {
+                    $scopeQuery->whereIn('sub_activity_id', $projectScope['sub_activity_ids']);
+                } else {
+                    $scopeQuery->whereRaw('1 = 0');
+                }
+
                 $scopeQuery
-                    ->whereHas('purchaseRequest', fn ($q) => $q->where('allocation_level', 'project')->where('allocation_id', $scope->id))
-                    ->orWhereHas('budgetCommitment', fn ($q) => $q->where('allocation_level', 'project')->where('allocation_id', $scope->id))
-                    ->orWhereHas('budgetCommitment.purchaseRequest', fn ($q) => $q->where('allocation_level', 'project')->where('allocation_id', $scope->id));
+                    ->orWhereHas('purchaseRequest', function ($requestQuery) use ($projectScope) {
+                        $this->applyProjectExecutionAllocationScope($requestQuery, $projectScope);
+                    })
+                    ->orWhereHas('budgetCommitment', function ($commitmentQuery) use ($projectScope) {
+                        $this->applyProjectExecutionAllocationScope($commitmentQuery, $projectScope);
+                    })
+                    ->orWhereHas('budgetCommitment.purchaseRequest', function ($requestQuery) use ($projectScope) {
+                        $this->applyProjectExecutionAllocationScope($requestQuery, $projectScope);
+                    });
             });
         }
+    }
+
+    private function projectExecutionScopeIds(Project $project): array
+    {
+        $activityIds = DB::table('myb_activities')
+            ->where('project_id', $project->id)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        $subActivityIds = empty($activityIds)
+            ? []
+            : DB::table('myb_sub_activities')
+                ->whereIn('activity_id', $activityIds)
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+
+        return [
+            'project_id' => (string) $project->id,
+            'activity_ids' => $activityIds,
+            'sub_activity_ids' => $subActivityIds,
+        ];
+    }
+
+    private function applyProjectExecutionAllocationScope($query, array $projectScope): void
+    {
+        $query->where(function ($scopeQuery) use ($projectScope) {
+            $scopeQuery->where(function ($projectQuery) use ($projectScope) {
+                $projectQuery->where('allocation_level', 'project')
+                    ->where('allocation_id', $projectScope['project_id']);
+            });
+
+            if (!empty($projectScope['activity_ids'])) {
+                $scopeQuery->orWhere(function ($activityQuery) use ($projectScope) {
+                    $activityQuery->where('allocation_level', 'activity')
+                        ->whereIn('allocation_id', $projectScope['activity_ids']);
+                });
+            }
+
+            if (!empty($projectScope['sub_activity_ids'])) {
+                $scopeQuery->orWhere(function ($subActivityQuery) use ($projectScope) {
+                    $subActivityQuery->where('allocation_level', 'sub_activity')
+                        ->whereIn('allocation_id', $projectScope['sub_activity_ids']);
+                });
+            }
+        });
+    }
+
+    private function resolveExecutionCurrency(string $scopeType, $scope): string
+    {
+        if ($scopeType === 'project' && $scope?->currency) {
+            return $scope->currency;
+        }
+
+        if ($scopeType === 'project' && $scope?->program?->currency) {
+            return $scope->program->currency;
+        }
+
+        if ($scopeType === 'program' && $scope?->currency) {
+            return $scope->currency;
+        }
+
+        if ($scopeType === 'sector' && $scope?->id) {
+            return Program::where('sector_id', $scope->id)
+                ->whereNotNull('currency')
+                ->value('currency') ?: 'USD';
+        }
+
+        return Program::whereNotNull('currency')->value('currency') ?: 'USD';
     }
 
     /**

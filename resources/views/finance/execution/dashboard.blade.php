@@ -1,593 +1,997 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        $rows = collect($executionBreakdownRows ?? []);
+        $totals = $executionBreakdownTotals ?? [
+            'allocation' => $totalAllocation ?? 0,
+            'commitment' => $totalCommitment ?? 0,
+            'disbursement' => $totalDisbursements ?? 0,
+            'remaining' => max(($totalAllocation ?? 0) - ($totalCommitment ?? 0), 0),
+            'execution_rate' => $executionRate ?? 0,
+            'disbursement_rate' => $disbursementRate ?? 0,
+        ];
+        $summary = $executionSummary ?? [];
+        $currencyCode = $currency ?? ($summary['currency'] ?? 'USD');
+        $money = fn ($value) => $currencyCode . ' ' . number_format((float) $value, 2);
+        $compactMoney = function ($value) use ($currencyCode) {
+            $value = (float) $value;
+            if (abs($value) >= 1000000) {
+                return $currencyCode . ' ' . number_format($value / 1000000, 2) . 'M';
+            }
+            if (abs($value) >= 1000) {
+                return $currencyCode . ' ' . number_format($value / 1000, 1) . 'K';
+            }
+            return $currencyCode . ' ' . number_format($value, 2);
+        };
+        $percent = fn ($value, $decimals = 1) => number_format(min(100, max(0, (float) $value)), $decimals) . '%';
+        $scopeLabel = match ($scopeType ?? 'global') {
+            'sector' => 'Sector: ' . ($scope?->name ?? 'N/A'),
+            'program' => 'Program: ' . ($scope?->name ?? 'N/A'),
+            'project' => 'Project: ' . ($scope?->name ?? 'N/A'),
+            default => 'All sectors, programs, and projects',
+        };
+        $budgetEnvelope = (float) ($summary['budget_envelope'] ?? $totals['allocation'] ?? 0);
+        $kpiCards = [
+            [
+                'label' => 'Budget Envelope',
+                'value' => $compactMoney($budgetEnvelope),
+                'meta' => $money($budgetEnvelope),
+                'icon' => 'feather-target',
+                'tone' => 'teal',
+            ],
+            [
+                'label' => 'Committed',
+                'value' => $compactMoney($totals['commitment'] ?? 0),
+                'meta' => $percent($totals['execution_rate'] ?? 0) . ' execution',
+                'icon' => 'feather-lock',
+                'tone' => 'gold',
+            ],
+            [
+                'label' => 'Disbursed',
+                'value' => $compactMoney($totals['disbursement'] ?? 0),
+                'meta' => $percent($totals['disbursement_rate'] ?? 0) . ' paid',
+                'icon' => 'feather-send',
+                'tone' => 'green',
+            ],
+            [
+                'label' => 'Remaining Allocation',
+                'value' => $compactMoney($totals['remaining'] ?? 0),
+                'meta' => $money($totals['remaining'] ?? 0),
+                'icon' => 'feather-pie-chart',
+                'tone' => 'blue',
+            ],
+            [
+                'label' => 'Unpaid Commitments',
+                'value' => $compactMoney($summary['unpaid_commitments'] ?? 0),
+                'meta' => $money($summary['unpaid_commitments'] ?? 0),
+                'icon' => 'feather-clock',
+                'tone' => 'coral',
+            ],
+            [
+                'label' => 'Peak Commitment Year',
+                'value' => $summary['peak_commitment_year'] ?? 'N/A',
+                'meta' => $compactMoney($summary['peak_commitment'] ?? 0),
+                'icon' => 'feather-trending-up',
+                'tone' => 'violet',
+            ],
+        ];
+    @endphp
+
     <style>
-        .execution-pdf-btn {
-            background: linear-gradient(135deg, #fbbf24, #f97316);
-            border: 0;
-            color: #111827;
+        .execution-shell {
+            --ink: #10212f;
+            --muted: #667085;
+            --line: #d9e2ea;
+            --panel: #ffffff;
+            --wash: #f4f7f9;
+            --teal: #0f766e;
+            --green: #168a5b;
+            --gold: #b7791f;
+            --blue: #2563eb;
+            --coral: #d65a31;
+            --violet: #6d5bd0;
+            background: var(--wash);
+            margin: -1.5rem;
+            padding: 1.5rem;
+            min-height: calc(100vh - 70px);
+            color: var(--ink);
+        }
+
+        .execution-topbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 1rem;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .execution-title {
+            font-size: 1.35rem;
             font-weight: 800;
-            box-shadow: 0 12px 22px rgba(15, 23, 42, .16);
-            transition: transform .16s ease, box-shadow .16s ease;
+            margin: 0;
+            letter-spacing: 0;
+        }
+
+        .execution-scope {
+            color: var(--muted);
+            font-size: .92rem;
+            margin-top: .25rem;
+        }
+
+        .execution-pdf-btn {
+            background: var(--ink);
+            border: 0;
+            color: #fff;
+            font-weight: 800;
+            border-radius: 8px;
+            padding: .72rem 1rem;
         }
 
         .execution-pdf-btn:hover,
         .execution-pdf-btn:focus {
-            color: #111827;
-            box-shadow: 0 16px 28px rgba(15, 23, 42, .24);
-            transform: translateY(-2px);
+            color: #fff;
+            background: #0b1721;
+        }
+
+        .execution-filter-panel,
+        .execution-hero,
+        .execution-kpi,
+        .execution-panel,
+        .execution-table-panel,
+        .execution-insight-panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(16, 33, 47, .06);
+        }
+
+        .execution-filter-panel {
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .execution-filter-panel .form-label {
+            color: var(--muted);
+            font-size: .78rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: .04em;
+        }
+
+        .execution-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr);
+            gap: 1rem;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .execution-hero-figure {
+            font-size: clamp(2rem, 5vw, 4rem);
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: 0;
+            margin: .15rem 0 .5rem;
+        }
+
+        .execution-hero-label {
+            color: var(--muted);
+            font-size: .82rem;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: .06em;
+        }
+
+        .execution-hero-sub {
+            color: var(--muted);
+            max-width: 680px;
+            margin: 0;
+        }
+
+        .execution-hero-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .75rem;
+        }
+
+        .execution-mini {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: .85rem;
+            min-width: 0;
+        }
+
+        .execution-mini span {
+            display: block;
+            color: var(--muted);
+            font-size: .75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .execution-mini strong {
+            display: block;
+            font-size: 1.15rem;
+            margin-top: .2rem;
+        }
+
+        .execution-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: .85rem;
+            margin-bottom: 1rem;
+        }
+
+        .execution-kpi {
+            padding: 1rem;
+            min-width: 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .execution-kpi::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 4px;
+            background: var(--tone, var(--teal));
+        }
+
+        .execution-kpi .icon {
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            color: var(--tone, var(--teal));
+            background: color-mix(in srgb, var(--tone, var(--teal)) 12%, white);
+            margin-bottom: .75rem;
+        }
+
+        .execution-kpi .label {
+            color: var(--muted);
+            font-size: .76rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            white-space: normal;
+        }
+
+        .execution-kpi .value {
+            font-size: 1.35rem;
+            font-weight: 900;
+            margin-top: .25rem;
+            overflow-wrap: anywhere;
+        }
+
+        .execution-kpi .meta {
+            color: var(--muted);
+            font-size: .85rem;
+            margin-top: .15rem;
+        }
+
+        .tone-teal { --tone: var(--teal); }
+        .tone-green { --tone: var(--green); }
+        .tone-gold { --tone: var(--gold); }
+        .tone-blue { --tone: var(--blue); }
+        .tone-coral { --tone: var(--coral); }
+        .tone-violet { --tone: var(--violet); }
+
+        .execution-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .execution-panel {
+            padding: 1rem;
+            min-height: 310px;
+        }
+
+        .execution-panel.span-8 { grid-column: span 8; }
+        .execution-panel.span-6 { grid-column: span 6; }
+        .execution-panel.span-4 { grid-column: span 4; }
+
+        .execution-panel-head {
+            display: flex;
+            justify-content: space-between;
+            gap: .75rem;
+            align-items: flex-start;
+            margin-bottom: .75rem;
+        }
+
+        .execution-panel-title {
+            font-weight: 900;
+            margin: 0;
+            font-size: .98rem;
+        }
+
+        .execution-panel-note {
+            color: var(--muted);
+            margin: .18rem 0 0;
+            font-size: .84rem;
+        }
+
+        .execution-chart {
+            position: relative;
+            min-height: 235px;
+        }
+
+        .execution-table-panel {
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .execution-table-panel table {
+            margin-bottom: 0;
+        }
+
+        .execution-table-panel thead th {
+            white-space: nowrap;
+            color: var(--muted);
+            font-size: .76rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .execution-table-panel td,
+        .execution-table-panel th {
+            vertical-align: middle;
+        }
+
+        .execution-rate-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 68px;
+            padding: .34rem .55rem;
+            border-radius: 999px;
+            font-weight: 900;
+            font-size: .78rem;
+        }
+
+        .rate-low { color: #991b1b; background: #fee2e2; }
+        .rate-mid { color: #92400e; background: #fef3c7; }
+        .rate-good { color: #14532d; background: #dcfce7; }
+
+        .execution-insight-panel {
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 1400px) {
+            .execution-kpi-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 992px) {
+            .execution-topbar,
+            .execution-hero {
+                grid-template-columns: 1fr;
+            }
+
+            .execution-panel.span-8,
+            .execution-panel.span-6,
+            .execution-panel.span-4 {
+                grid-column: span 12;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .execution-shell {
+                margin: -1rem;
+                padding: 1rem;
+            }
+
+            .execution-kpi-grid,
+            .execution-hero-metrics {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 
-    <div class="nxl-container">
-
-        {{-- ================================
-     * PAGE HEADER
-     * ================================ --}}
-        <div class="page-header mb-4 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+    <div class="execution-shell">
+        <div class="execution-topbar">
             <div>
-                <h4 class="fw-bold mb-1">Execution Dashboard</h4>
-                <p class="text-muted mb-0">
-                    Financial execution performance — planned vs actual, variance, momentum, and risk
-                </p>
+                <h4 class="execution-title">Execution Dashboard</h4>
+                <div class="execution-scope">{{ $scopeLabel }}</div>
             </div>
             <a href="{{ route('finance.execution.dashboard.export.pdf', request()->query()) }}" class="btn execution-pdf-btn">
                 <i class="feather-download me-1"></i> Download PDF
             </a>
         </div>
 
-        {{-- ================================
-     * FILTERS
-     * ================================ --}}
-        <div class="card shadow-sm border-0 mb-4">
-            <div class="card-body">
-                <form method="GET" action="{{ route('finance.execution.dashboard') }}" class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Sector</label>
-                        <select name="sector_id" class="form-select" onchange="this.form.submit()">
-                            <option value="">All Sectors</option>
-                            @foreach ($sectors as $sector)
-                                <option value="{{ $sector->id }}" @selected(request('sector_id') == $sector->id)>
-                                    {{ $sector->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+        <div class="execution-filter-panel">
+            <form method="GET" action="{{ route('finance.execution.dashboard') }}" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Sector</label>
+                    <select name="sector_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Sectors</option>
+                        @foreach ($sectors as $sector)
+                            <option value="{{ $sector->id }}" @selected(request('sector_id') == $sector->id)>
+                                {{ $sector->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Program</label>
-                        <select name="program_id" class="form-select" onchange="this.form.submit()">
-                            <option value="">All Programs</option>
-                            @foreach ($programs as $program)
-                                <option value="{{ $program->id }}" @selected(request('program_id') == $program->id)>
-                                    {{ $program->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+                <div class="col-md-4">
+                    <label class="form-label">Program</label>
+                    <select name="program_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Programs</option>
+                        @foreach ($programs as $program)
+                            <option value="{{ $program->id }}" @selected(request('program_id') == $program->id)>
+                                {{ $program->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
 
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Project</label>
-                        <select name="project_id" class="form-select" onchange="this.form.submit()">
-                            <option value="">All Projects</option>
-                            @foreach ($projects as $project)
-                                <option value="{{ $project->id }}" @selected(request('project_id') == $project->id)>
-                                    {{ $project->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </form>
-            </div>
+                <div class="col-md-4">
+                    <label class="form-label">Project</label>
+                    <select name="project_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Projects</option>
+                        @foreach ($projects as $project)
+                            <option value="{{ $project->id }}" @selected(request('project_id') == $project->id)>
+                                {{ $project->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </form>
         </div>
 
-        {{-- ================================
-     * KPI SUMMARY
-     * ================================ --}}
-        <div class="row g-4 mb-4">
-            <div class="col-md-4 col-xl-2">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Total Allocation</p>
-                        <h4 class="fw-bold">{{ number_format($totalAllocation, 2) }}</h4>
-                    </div>
+        <section class="execution-hero">
+            <div>
+                <div class="execution-hero-label">Budget Envelope</div>
+                <div class="execution-hero-figure">{{ $compactMoney($budgetEnvelope) }}</div>
+                <p class="execution-hero-sub">
+                    {{ $money($budgetEnvelope) }} approved for the selected execution scope.
+                </p>
+            </div>
+            <div class="execution-hero-metrics">
+                <div class="execution-mini">
+                    <span>Execution</span>
+                    <strong>{{ $percent($totals['execution_rate'] ?? 0, 1) }}</strong>
+                </div>
+                <div class="execution-mini">
+                    <span>Disbursement</span>
+                    <strong>{{ $percent($totals['disbursement_rate'] ?? 0, 1) }}</strong>
+                </div>
+                <div class="execution-mini">
+                    <span>Latest Year</span>
+                    <strong>{{ $summary['latest_year'] ?? 'N/A' }}</strong>
+                </div>
+                <div class="execution-mini">
+                    <span>Years</span>
+                    <strong>{{ number_format($summary['active_years'] ?? count($years)) }}</strong>
                 </div>
             </div>
+        </section>
 
-            <div class="col-md-4 col-xl-2">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Total Commitment</p>
-                        <h4 class="fw-bold">{{ number_format($totalCommitment, 2) }}</h4>
-                    </div>
+        <section class="execution-kpi-grid">
+            @foreach ($kpiCards as $card)
+                <div class="execution-kpi tone-{{ $card['tone'] }}">
+                    <span class="icon"><i class="{{ $card['icon'] }}"></i></span>
+                    <div class="label">{{ $card['label'] }}</div>
+                    <div class="value">{{ $card['value'] }}</div>
+                    <div class="meta">{{ $card['meta'] }}</div>
                 </div>
-            </div>
+            @endforeach
+        </section>
 
-            <div class="col-md-4 col-xl-2">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Execution Rate</p>
-                        <h4 class="fw-bold">{{ $executionRate }}%</h4>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-4 col-xl-2">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Total Disbursements</p>
-                        <h4 class="fw-bold">{{ number_format($totalDisbursements, 2) }}</h4>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-4 col-xl-2">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Disbursement Rate</p>
-                        <h4 class="fw-bold">{{ $disbursementRate }}%</h4>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-4 col-xl-2">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <p class="text-muted mb-1">Variance</p>
-                        <h4 class="fw-bold {{ $variance < 0 ? 'text-danger' : 'text-success' }}">
-                            {{ number_format($variance, 2) }}
-                        </h4>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {{-- =====================================================
-     * FINANCIAL EXECUTION GRAPHS (2 × 2 GRID)
-     * ===================================================== --}}
-        <div class="row g-4 mb-4">
-
-            {{-- 1. Planned vs Actual --}}
-            <div class="col-lg-6">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="fw-semibold mb-1">Planned vs Committed vs Disbursed</h6>
-                        <p class="text-muted small mb-3">
-                            Compares yearly allocations, commitments, and paid disbursements to show execution progress over time.
-                        </p>
-                        <canvas id="executionLineChart" height="140"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            {{-- 2. Yearly Variance --}}
-            <div class="col-lg-6">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="fw-semibold mb-1">Yearly Budget Variance</h6>
-                        <p class="text-muted small mb-3">
-                            Shows under- or over-execution per year (Allocation − Commitment).
-                        </p>
-                        <canvas id="executionVarianceChart" height="140"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            {{-- 3. Cumulative Execution --}}
-            <div class="col-lg-6">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="fw-semibold mb-1">Cumulative Execution Momentum</h6>
-                        <p class="text-muted small mb-3">
-                            Tracks cumulative allocation, commitment, and disbursement to reveal long-term execution momentum.
-                        </p>
-                        <canvas id="executionCumulativeChart" height="140"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            {{-- 4. Risk Bubble --}}
-            <div class="col-lg-6">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="fw-semibold mb-1">Execution Risk Concentration</h6>
-                        <p class="text-muted small mb-3">
-                            Highlights years with high financial exposure using variance-based bubble sizing.
-                        </p>
-                        <canvas id="executionBubbleChart" height="140"></canvas>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
-        {{-- =====================================================
- * EXECUTION PERFORMANCE TABLE
- * ===================================================== --}}
-        <div class="card shadow-sm border-0 mb-5">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
+        <section class="execution-grid">
+            <div class="execution-panel span-8">
+                <div class="execution-panel-head">
                     <div>
-                        <h5 class="fw-semibold mb-1">Execution Performance Breakdown</h5>
-                        <p class="text-muted small mb-0">
-                            Year-by-year allocation, commitment, disbursement, remaining balance, and execution rates
-                        </p>
+                        <h6 class="execution-panel-title">Allocation, Commitment, Disbursement</h6>
+                        <p class="execution-panel-note">Annual execution trend</p>
                     </div>
                 </div>
+                <div class="execution-chart"><canvas id="executionLineChart"></canvas></div>
+            </div>
 
-                <div class="table-responsive">
-                    <table class="table table-bordered table-striped align-middle w-100" id="executionTable">
-                        <thead class="table-light">
-                            <tr class="text-center">
-                                <th>Year</th>
-                                <th class="text-end">Allocated Amount</th>
-                                <th class="text-end">Committed Amount</th>
-                                <th class="text-end">Disbursed Amount</th>
-                                <th class="text-end">Remaining</th>
-                                <th class="text-center">Execution %</th>
-                                <th class="text-center">Disbursement %</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (($executionBreakdownRows ?? collect()) as $row)
-                                @php
-                                    $percent = min(100, max(0, (float) ($row['execution_rate'] ?? 0)));
-                                    $disbursementPercent = min(100, max(0, (float) ($row['disbursement_rate'] ?? 0)));
-                                @endphp
-                                <tr>
-                                    <td class="fw-semibold text-center">{{ $row['year'] }}</td>
+            <div class="execution-panel span-4">
+                <div class="execution-panel-head">
+                    <div>
+                        <h6 class="execution-panel-title">Execution Mix</h6>
+                        <p class="execution-panel-note">Disbursed, unpaid, and remaining</p>
+                    </div>
+                </div>
+                <div class="execution-chart"><canvas id="executionMixChart"></canvas></div>
+            </div>
 
-                                    <td class="text-end">
-                                        {{ number_format($row['allocation'], 2) }}
-                                    </td>
+            <div class="execution-panel span-6">
+                <div class="execution-panel-head">
+                    <div>
+                        <h6 class="execution-panel-title">Rate Movement</h6>
+                        <p class="execution-panel-note">Execution and disbursement percentages</p>
+                    </div>
+                </div>
+                <div class="execution-chart"><canvas id="executionRateChart"></canvas></div>
+            </div>
 
-                                    <td class="text-end">
-                                        {{ number_format($row['commitment'], 2) }}
-                                    </td>
+            <div class="execution-panel span-6">
+                <div class="execution-panel-head">
+                    <div>
+                        <h6 class="execution-panel-title">Cumulative Momentum</h6>
+                        <p class="execution-panel-note">Running allocation, commitment, and payment flow</p>
+                    </div>
+                </div>
+                <div class="execution-chart"><canvas id="executionCumulativeChart"></canvas></div>
+            </div>
 
-                                    <td class="text-end">
-                                        {{ number_format($row['disbursement'], 2) }}
-                                    </td>
+            <div class="execution-panel span-6">
+                <div class="execution-panel-head">
+                    <div>
+                        <h6 class="execution-panel-title">Annual Financial Profile</h6>
+                        <p class="execution-panel-note">Grouped values by year</p>
+                    </div>
+                </div>
+                <div class="execution-chart"><canvas id="executionAnnualProfileChart"></canvas></div>
+            </div>
 
-                                    <td class="text-end fw-semibold text-success">
-                                        {{ number_format($row['remaining'], 2) }}
-                                    </td>
+            <div class="execution-panel span-6">
+                <div class="execution-panel-head">
+                    <div>
+                        <h6 class="execution-panel-title">Variance Control</h6>
+                        <p class="execution-panel-note">Remaining allocation after commitments</p>
+                    </div>
+                </div>
+                <div class="execution-chart"><canvas id="executionVarianceChart"></canvas></div>
+            </div>
 
-                                    <td class="text-center">
-                                        <span
-                                            class="badge rounded-pill
-                                    {{ $percent < 50 ? 'bg-danger' : ($percent < 80 ? 'bg-warning text-dark' : 'bg-success') }}">
-                                            {{ number_format($percent, 1) }}%
-                                        </span>
-                                    </td>
+            <div class="execution-panel span-6">
+                <div class="execution-panel-head">
+                    <div>
+                        <h6 class="execution-panel-title">Quality Radar</h6>
+                        <p class="execution-panel-note">Execution balance and coverage</p>
+                    </div>
+                </div>
+                <div class="execution-chart"><canvas id="executionRadarChart"></canvas></div>
+            </div>
 
-                                    <td class="text-center">
-                                        <span
-                                            class="badge rounded-pill
-                                    {{ $disbursementPercent < 50 ? 'bg-danger' : ($disbursementPercent < 80 ? 'bg-warning text-dark' : 'bg-success') }}">
-                                            {{ number_format($disbursementPercent, 1) }}%
-                                        </span>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
+            <div class="execution-panel span-6">
+                <div class="execution-panel-head">
+                    <div>
+                        <h6 class="execution-panel-title">Exposure Concentration</h6>
+                        <p class="execution-panel-note">Commitment scale and variance pressure</p>
+                    </div>
+                </div>
+                <div class="execution-chart"><canvas id="executionBubbleChart"></canvas></div>
+            </div>
+        </section>
 
-                        <tfoot class="table-light fw-semibold">
+        <section class="execution-table-panel">
+            <div class="execution-panel-head">
+                <div>
+                    <h5 class="execution-panel-title">Execution Performance Breakdown</h5>
+                    <p class="execution-panel-note">Year-by-year allocation, commitment, disbursement, remaining balance, and capped rates</p>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle w-100" id="executionTable">
+                    <thead>
+                        <tr class="text-center">
+                            <th>Year</th>
+                            <th class="text-end">Allocated Amount</th>
+                            <th class="text-end">Committed Amount</th>
+                            <th class="text-end">Disbursed Amount</th>
+                            <th class="text-end">Remaining</th>
+                            <th class="text-center">Execution %</th>
+                            <th class="text-center">Disbursement %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($rows as $row)
                             @php
-                                $breakdownTotals = $executionBreakdownTotals ?? [
-                                    'allocation' => collect($allocationByYear)->sum(),
-                                    'commitment' => collect($commitmentByYear)->sum(),
-                                    'disbursement' => collect($disbursementByYear)->sum(),
-                                    'remaining' => 0,
-                                    'execution_rate' => 0,
-                                    'disbursement_rate' => 0,
-                                ];
-                                $totalPercent = min(100, max(0, (float) ($breakdownTotals['execution_rate'] ?? 0)));
-                                $totalDisbursementPercent = min(100, max(0, (float) ($breakdownTotals['disbursement_rate'] ?? 0)));
+                                $executionClass = ($row['execution_rate'] ?? 0) < 50 ? 'rate-low' : (($row['execution_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
+                                $disbursementClass = ($row['disbursement_rate'] ?? 0) < 50 ? 'rate-low' : (($row['disbursement_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
                             @endphp
                             <tr>
-                                <td class="text-center">TOTAL</td>
-                                <td class="text-end">{{ number_format($breakdownTotals['allocation'], 2) }}</td>
-                                <td class="text-end">{{ number_format($breakdownTotals['commitment'], 2) }}</td>
-                                <td class="text-end">{{ number_format($breakdownTotals['disbursement'], 2) }}</td>
-                                <td class="text-end text-success">
-                                    {{ number_format($breakdownTotals['remaining'], 2) }}
+                                <td class="fw-semibold text-center">{{ $row['year'] }}</td>
+                                <td class="text-end">{{ number_format($row['allocation'], 2) }}</td>
+                                <td class="text-end">{{ number_format($row['commitment'], 2) }}</td>
+                                <td class="text-end">{{ number_format($row['disbursement'], 2) }}</td>
+                                <td class="text-end fw-semibold">{{ number_format($row['remaining'], 2) }}</td>
+                                <td class="text-center">
+                                    <span class="execution-rate-pill {{ $executionClass }}">{{ $percent($row['execution_rate']) }}</span>
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge bg-primary">
-                                        {{ number_format($totalPercent, 1) }}%
-                                    </span>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-primary">
-                                        {{ number_format($totalDisbursementPercent, 1) }}%
-                                    </span>
+                                    <span class="execution-rate-pill {{ $disbursementClass }}">{{ $percent($row['disbursement_rate']) }}</span>
                                 </td>
                             </tr>
-                        </tfoot>
-                    </table>
+                        @endforeach
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td class="text-center fw-bold">TOTAL</td>
+                            <td class="text-end fw-bold">{{ number_format($totals['allocation'], 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($totals['commitment'], 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($totals['disbursement'], 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($totals['remaining'], 2) }}</td>
+                            <td class="text-center"><span class="execution-rate-pill rate-good">{{ $percent($totals['execution_rate']) }}</span></td>
+                            <td class="text-center"><span class="execution-rate-pill rate-good">{{ $percent($totals['disbursement_rate']) }}</span></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <section class="execution-insight-panel">
+            <div class="execution-panel-head">
+                <div>
+                    <h5 class="execution-panel-title">Execution Insights</h5>
+                    <p class="execution-panel-note">Risk and progress signals from the current financial position</p>
                 </div>
             </div>
-        </div>
-
-
-        {{-- ================================
-     * AI EXECUTION INSIGHTS (UNCHANGED)
-     * ================================ --}}
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body">
-                <h5 class="fw-semibold mb-3">AI Execution Insights</h5>
-
-                @forelse($aiInsights as $insight)
-                    <div class="alert alert-{{ $insight['type'] }} mb-3">
-                        <h6 class="fw-semibold mb-1">{{ $insight['title'] }}</h6>
-                        <p class="mb-0">{{ $insight['message'] }}</p>
-                    </div>
-                @empty
-                    <p class="text-muted mb-0">
-                        No significant execution risks or anomalies detected.
-                    </p>
-                @endforelse
-            </div>
-        </div>
-
+            @forelse($aiInsights as $insight)
+                <div class="alert alert-{{ $insight['type'] }} mb-3">
+                    <h6 class="fw-semibold mb-1">{{ $insight['title'] }}</h6>
+                    <p class="mb-0">{{ $insight['message'] }}</p>
+                </div>
+            @empty
+                <p class="text-muted mb-0">No significant execution risks or anomalies detected.</p>
+            @endforelse
+        </section>
     </div>
 
-
-
-
-
-
-
-    <!-- =========================================================
-                                                     LOAD LIBRARIES (ONCE ONLY)
-                                                ========================================================= -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
-
-
-    <!-- =========================================================
-                                         LOAD CHART.JS (ONCE ONLY)
-                                    ========================================================= -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            if (!window.Chart) {
+                return;
+            }
 
-            /* =========================================================
-             * GLOBAL STYLING (CLEAN & PROFESSIONAL)
-             * ========================================================= */
+            const rows = @json($rows->values());
+            const totals = @json($totals);
+            const radarMetrics = @json($radarMetrics ?? []);
+            const currency = @json($currencyCode);
+            const labels = rows.map(row => String(row.year));
+            const allocations = rows.map(row => Number(row.allocation || 0));
+            const commitments = rows.map(row => Number(row.commitment || 0));
+            const disbursements = rows.map(row => Number(row.disbursement || 0));
+            const remaining = rows.map(row => Number(row.remaining || 0));
+            const executionRates = rows.map(row => Math.min(100, Number(row.execution_rate || 0)));
+            const disbursementRates = rows.map(row => Math.min(100, Number(row.disbursement_rate || 0)));
+            const variance = rows.map(row => Math.max(Number(row.allocation || 0) - Number(row.commitment || 0), 0));
+            const unpaidCommitments = Math.max(Number(totals.commitment || 0) - Number(totals.disbursement || 0), 0);
+            const mixValues = [
+                Math.max(Number(totals.disbursement || 0), 0),
+                unpaidCommitments,
+                Math.max(Number(totals.remaining || 0), 0),
+            ];
+
+            const money = value => `${currency} ${new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(Number(value || 0))}`;
+            const compactMoney = value => `${currency} ${new Intl.NumberFormat('en-US', {
+                notation: 'compact',
+                maximumFractionDigits: 2
+            }).format(Number(value || 0))}`;
+
             Chart.defaults.font.family = "'Inter','Segoe UI',sans-serif";
             Chart.defaults.font.size = 12;
-            Chart.defaults.color = '#6b7280';
+            Chart.defaults.color = '#667085';
 
-            const YEARS = @json($years);
-
-            const ALLOCATIONS = @json(collect($years)->map(fn($y) => $allocationByYear[$y] ?? 0)->values());
-
-            const COMMITMENTS = @json(collect($years)->map(fn($y) => $commitmentByYear[$y] ?? 0)->values());
-
-            const DISBURSEMENTS = @json(collect($years)->map(fn($y) => $disbursementByYear[$y] ?? 0)->values());
-
-            const VARIANCE = ALLOCATIONS.map((a, i) => a - COMMITMENTS[i]);
-
-            /* =========================================================
-             * 1. LINE CHART — Planned vs Actual (CORE GRAPH)
-             * ========================================================= */
-            const lineEl = document.getElementById('executionLineChart');
-            if (lineEl) {
-                new Chart(lineEl, {
-                    type: 'line',
-                    data: {
-                        labels: YEARS,
-                        datasets: [{
-                                label: 'Allocation (Planned)',
-                                data: ALLOCATIONS,
-                                borderColor: '#2563eb',
-                                backgroundColor: 'rgba(37,99,235,0.15)',
-                                fill: true,
-                                tension: 0.4,
-                                borderWidth: 2
-                            },
-                            {
-                                label: 'Commitment (Actual)',
-                                data: COMMITMENTS,
-                                borderColor: '#16a34a',
-                                backgroundColor: 'rgba(22,163,74,0.15)',
-                                fill: true,
-                                tension: 0.4,
-                                borderWidth: 2
-                            },
-                            {
-                                label: 'Paid Disbursements',
-                                data: DISBURSEMENTS,
-                                borderColor: '#f97316',
-                                backgroundColor: 'rgba(249,115,22,0.12)',
-                                fill: false,
-                                tension: 0.4,
-                                borderWidth: 3,
-                                pointRadius: 4,
-                                pointHoverRadius: 6
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'bottom'
-                            },
-                            tooltip: {
-                                mode: 'index',
-                                intersect: false
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true
-                            }
+            const commonPlugins = {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 8
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: context => {
+                            const label = context.dataset.label || context.label || '';
+                            const value = context.parsed.y ?? context.parsed.x ?? context.parsed ?? 0;
+                            return `${label}: ${context.dataset.percent ? Number(value).toFixed(1) + '%' : money(value)}`;
                         }
                     }
-                });
-            }
+                }
+            };
 
-            /* =========================================================
-             * 2. VARIANCE BAR CHART — Under / Over Execution
-             * ========================================================= */
-            const varianceEl = document.getElementById('executionVarianceChart');
-            if (varianceEl) {
-                new Chart(varianceEl, {
-                    type: 'bar',
-                    data: {
-                        labels: YEARS,
-                        datasets: [{
-                            label: 'Variance (Allocation − Commitment)',
-                            data: VARIANCE,
-                            backgroundColor: VARIANCE.map(v =>
-                                v < 0 ? '#dc2626' : '#22c55e'
-                            ),
-                            borderRadius: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'bottom'
-                            }
+            const makeChart = (id, config) => {
+                const element = document.getElementById(id);
+                if (!element) {
+                    return null;
+                }
+                return new Chart(element, config);
+            };
+
+            makeChart('executionLineChart', {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Allocation',
+                            data: allocations,
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37,99,235,.12)',
+                            fill: true,
+                            tension: .35,
+                            borderWidth: 2
                         },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Variance Amount'
-                                }
-                            }
+                        {
+                            label: 'Commitment',
+                            data: commitments,
+                            borderColor: '#b7791f',
+                            backgroundColor: 'rgba(183,121,31,.12)',
+                            fill: true,
+                            tension: .35,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Disbursement',
+                            data: disbursements,
+                            borderColor: '#168a5b',
+                            backgroundColor: 'rgba(22,138,91,.1)',
+                            fill: false,
+                            tension: .35,
+                            borderWidth: 3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: commonPlugins,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { callback: value => compactMoney(value) }
                         }
                     }
-                });
-            }
+                }
+            });
 
-            /* =========================================================
-             * 3. CUMULATIVE AREA CHART — Execution Momentum
-             * ========================================================= */
-            const cumulativeEl = document.getElementById('executionCumulativeChart');
-            if (cumulativeEl) {
+            makeChart('executionMixChart', {
+                type: 'doughnut',
+                data: {
+                    labels: ['Disbursed', 'Unpaid Commitments', 'Remaining Allocation'],
+                    datasets: [{
+                        data: mixValues,
+                        backgroundColor: ['#168a5b', '#d65a31', '#2563eb'],
+                        borderColor: '#fff',
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '62%',
+                    plugins: commonPlugins
+                }
+            });
 
-                let cumAlloc = 0;
-                let cumCommit = 0;
-                let cumDisbursement = 0;
-
-                const CUM_ALLOC = ALLOCATIONS.map(v => (cumAlloc += v));
-                const CUM_COMMIT = COMMITMENTS.map(v => (cumCommit += v));
-                const CUM_DISBURSEMENT = DISBURSEMENTS.map(v => (cumDisbursement += v));
-
-                new Chart(cumulativeEl, {
-                    type: 'line',
-                    data: {
-                        labels: YEARS,
-                        datasets: [{
-                                label: 'Cumulative Allocation',
-                                data: CUM_ALLOC,
-                                borderColor: '#1d4ed8',
-                                backgroundColor: 'rgba(29,78,216,0.2)',
-                                fill: true,
-                                tension: 0.3
-                            },
-                            {
-                                label: 'Cumulative Commitment',
-                                data: CUM_COMMIT,
-                                borderColor: '#15803d',
-                                backgroundColor: 'rgba(21,128,61,0.2)',
-                                fill: true,
-                                tension: 0.3
-                            },
-                            {
-                                label: 'Cumulative Paid Disbursements',
-                                data: CUM_DISBURSEMENT,
-                                borderColor: '#ea580c',
-                                backgroundColor: 'rgba(234,88,12,0.14)',
-                                fill: true,
-                                tension: 0.3,
-                                borderWidth: 3,
-                                pointRadius: 4,
-                                pointHoverRadius: 6
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'bottom'
-                            }
+            makeChart('executionRateChart', {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Execution %',
+                            data: executionRates,
+                            percent: true,
+                            borderColor: '#0f766e',
+                            backgroundColor: 'rgba(15,118,110,.13)',
+                            fill: true,
+                            tension: .35,
+                            borderWidth: 2
                         },
-                        scales: {
-                            y: {
-                                beginAtZero: true
-                            }
+                        {
+                            label: 'Disbursement %',
+                            data: disbursementRates,
+                            percent: true,
+                            borderColor: '#6d5bd0',
+                            backgroundColor: 'rgba(109,91,208,.13)',
+                            fill: true,
+                            tension: .35,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: commonPlugins,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { callback: value => `${value}%` }
                         }
                     }
-                });
-            }
+                }
+            });
 
-            /* =========================================================
-             * 4. BUBBLE CHART — Financial Risk Concentration
-             * ========================================================= */
-            const bubbleEl = document.getElementById('executionBubbleChart');
-            if (bubbleEl) {
+            let runningAllocation = 0;
+            let runningCommitment = 0;
+            let runningDisbursement = 0;
+            const cumulativeAllocation = allocations.map(value => runningAllocation += value);
+            const cumulativeCommitment = commitments.map(value => runningCommitment += value);
+            const cumulativeDisbursement = disbursements.map(value => runningDisbursement += value);
 
-                const bubbleData = YEARS.map((year, i) => ({
-                    x: year,
-                    y: COMMITMENTS[i],
-                    r: Math.max(6, Math.abs(VARIANCE[i]) / 10000)
-                }));
-
-                new Chart(bubbleEl, {
-                    type: 'bubble',
-                    data: {
-                        datasets: [{
-                            label: 'Execution Risk by Year',
-                            data: bubbleData,
-                            backgroundColor: 'rgba(234,179,8,0.45)',
-                            borderColor: '#eab308'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'bottom'
-                            }
+            makeChart('executionCumulativeChart', {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Cumulative Allocation',
+                            data: cumulativeAllocation,
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37,99,235,.12)',
+                            fill: true,
+                            tension: .3
                         },
-                        scales: {
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Year'
-                                }
-                            },
-                            y: {
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Commitment Amount'
-                                }
-                            }
+                        {
+                            label: 'Cumulative Commitment',
+                            data: cumulativeCommitment,
+                            borderColor: '#b7791f',
+                            backgroundColor: 'rgba(183,121,31,.12)',
+                            fill: true,
+                            tension: .3
+                        },
+                        {
+                            label: 'Cumulative Disbursement',
+                            data: cumulativeDisbursement,
+                            borderColor: '#168a5b',
+                            backgroundColor: 'rgba(22,138,91,.12)',
+                            fill: true,
+                            tension: .3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: commonPlugins,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { callback: value => compactMoney(value) }
                         }
                     }
-                });
-            }
+                }
+            });
 
-        });
-    </script>
+            makeChart('executionAnnualProfileChart', {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Allocation', data: allocations, backgroundColor: '#2563eb' },
+                        { label: 'Commitment', data: commitments, backgroundColor: '#b7791f' },
+                        { label: 'Disbursement', data: disbursements, backgroundColor: '#168a5b' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: commonPlugins,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { callback: value => compactMoney(value) }
+                        }
+                    }
+                }
+            });
 
+            makeChart('executionVarianceChart', {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Remaining Allocation',
+                        data: variance,
+                        backgroundColor: variance.map(value => value > 0 ? '#0f766e' : '#d65a31'),
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: commonPlugins,
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { callback: value => compactMoney(value) }
+                        }
+                    }
+                }
+            });
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
+            makeChart('executionRadarChart', {
+                type: 'radar',
+                data: {
+                    labels: ['Budget Utilization', 'Timeliness', 'Consistency', 'Coverage', 'Risk Control'],
+                    datasets: [{
+                        label: 'Score',
+                        data: [
+                            Number(radarMetrics.budget_utilization || 0),
+                            Number(radarMetrics.timeliness || 0),
+                            Number(radarMetrics.consistency || 0),
+                            Number(radarMetrics.coverage || 0),
+                            Number(radarMetrics.risk_exposure || 0)
+                        ],
+                        backgroundColor: 'rgba(109,91,208,.18)',
+                        borderColor: '#6d5bd0',
+                        pointBackgroundColor: '#6d5bd0'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: commonPlugins,
+                    scales: {
+                        r: {
+                            min: 0,
+                            max: 100,
+                            ticks: { callback: value => `${value}%` }
+                        }
+                    }
+                }
+            });
+
+            makeChart('executionBubbleChart', {
+                type: 'bubble',
+                data: {
+                    datasets: [{
+                        label: 'Year Exposure',
+                        data: rows.map(row => ({
+                            x: Number(row.execution_rate || 0),
+                            y: Number(row.commitment || 0),
+                            r: Math.max(5, Math.min(22, Math.sqrt(Math.max(Number(row.remaining || 0), 1)) / 900)),
+                            year: row.year
+                        })),
+                        backgroundColor: 'rgba(214,90,49,.38)',
+                        borderColor: '#d65a31'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        ...commonPlugins,
+                        tooltip: {
+                            callbacks: {
+                                label: context => `${context.raw.year}: ${context.raw.x.toFixed(1)}%, ${money(context.raw.y)}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            min: 0,
+                            max: 100,
+                            title: { display: true, text: 'Execution %' },
+                            ticks: { callback: value => `${value}%` }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Commitment' },
+                            ticks: { callback: value => compactMoney(value) }
+                        }
+                    }
+                }
+            });
+
             const table = document.getElementById('executionTable');
-
-            if (table) {
+            if (table && window.DataTable) {
                 new DataTable(table, {
                     paging: true,
                     searching: true,
@@ -595,13 +999,11 @@
                     responsive: true,
                     pageLength: 10,
                     lengthMenu: [5, 10, 25, 50],
-                    order: [
-                        [0, 'asc']
-                    ],
+                    order: [[0, 'asc']],
                     language: {
-                        search: "Search year:",
-                        lengthMenu: "Show _MENU_ entries",
-                        info: "Showing _START_ to _END_ of _TOTAL_ records"
+                        search: 'Search year:',
+                        lengthMenu: 'Show _MENU_ entries',
+                        info: 'Showing _START_ to _END_ of _TOTAL_ records'
                     }
                 });
             }
