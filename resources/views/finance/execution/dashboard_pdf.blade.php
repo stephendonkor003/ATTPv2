@@ -208,9 +208,9 @@
         $totalAlloc = collect($allocationByYear)->sum();
         $totalCommit = collect($commitmentByYear)->sum();
         $totalDisbursed = collect($disbursementByYear)->sum();
-        $totalRemain = $totalAlloc - $totalCommit;
+        $totalRemain = max($totalAlloc - $totalCommit, 0);
         $totalPercent = $totalAlloc > 0 ? ($totalCommit / $totalAlloc) * 100 : 0;
-        $totalDisbursementPercent = $totalCommit > 0 ? ($totalDisbursed / $totalCommit) * 100 : 0;
+        $totalDisbursementPercent = $totalCommit > 0 ? min(100, ($totalDisbursed / $totalCommit) * 100) : 0;
     @endphp
 
     <div class="header">
@@ -280,7 +280,7 @@
                         $allocated = $allocationByYear[$year] ?? 0;
                         $committed = $commitmentByYear[$year] ?? 0;
                         $disbursed = $disbursementByYear[$year] ?? 0;
-                        $remaining = $allocated - $committed;
+                        $remaining = max($allocated - $committed, 0);
                         $percent = $allocated > 0 ? ($committed / $allocated) * 100 : 0;
                         $disbursementPercent = $committed > 0 ? min(100, ($disbursed / $committed) * 100) : 0;
                         $barClass = $percent < 50 ? 'danger' : ($percent < 80 ? 'warning' : '');
@@ -292,7 +292,7 @@
                         <td class="right">{{ $money($allocated) }}</td>
                         <td class="right">{{ $money($committed) }}</td>
                         <td class="right">{{ $money($disbursed) }}</td>
-                        <td class="right {{ $remaining < 0 ? 'negative' : 'positive' }}">{{ $money($remaining) }}</td>
+                        <td class="right positive">{{ $money($remaining) }}</td>
                         <td class="center"><span class="badge {{ $badgeClass }}">{{ $rate($percent) }}</span></td>
                         <td class="center"><span class="badge {{ $disbursementBadgeClass }}">{{ $rate($disbursementPercent) }}</span></td>
                         <td>
@@ -307,7 +307,7 @@
                     <th class="right">{{ $money($totalAlloc) }}</th>
                     <th class="right">{{ $money($totalCommit) }}</th>
                     <th class="right">{{ $money($totalDisbursed) }}</th>
-                    <th class="right {{ $totalRemain < 0 ? 'negative' : 'positive' }}">{{ $money($totalRemain) }}</th>
+                    <th class="right positive">{{ $money($totalRemain) }}</th>
                     <th class="center">{{ $rate($totalPercent) }}</th>
                     <th class="center">{{ $rate($totalDisbursementPercent) }}</th>
                     <th></th>

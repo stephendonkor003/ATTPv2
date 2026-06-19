@@ -234,7 +234,7 @@
                                     $allocated = $allocationByYear[$year] ?? 0;
                                     $committed = $commitmentByYear[$year] ?? 0;
                                     $disbursed = $disbursementByYear[$year] ?? 0;
-                                    $remaining = $allocated - $committed;
+                                    $remaining = max($allocated - $committed, 0);
                                     $percent = $allocated > 0 ? ($committed / $allocated) * 100 : 0;
                                     $disbursementPercent = $committed > 0 ? min(100, ($disbursed / $committed) * 100) : 0;
                                 @endphp
@@ -253,7 +253,7 @@
                                         {{ number_format($disbursed, 2) }}
                                     </td>
 
-                                    <td class="text-end fw-semibold {{ $remaining < 0 ? 'text-danger' : 'text-success' }}">
+                                    <td class="text-end fw-semibold text-success">
                                         {{ number_format($remaining, 2) }}
                                     </td>
 
@@ -281,16 +281,16 @@
                                 $totalAlloc = collect($allocationByYear)->sum();
                                 $totalCommit = collect($commitmentByYear)->sum();
                                 $totalDisbursed = collect($disbursementByYear)->sum();
-                                $totalRemain = $totalAlloc - $totalCommit;
+                                $totalRemain = max($totalAlloc - $totalCommit, 0);
                                 $totalPercent = $totalAlloc > 0 ? ($totalCommit / $totalAlloc) * 100 : 0;
-                                $totalDisbursementPercent = $totalCommit > 0 ? ($totalDisbursed / $totalCommit) * 100 : 0;
+                                $totalDisbursementPercent = $totalCommit > 0 ? min(100, ($totalDisbursed / $totalCommit) * 100) : 0;
                             @endphp
                             <tr>
                                 <td class="text-center">TOTAL</td>
                                 <td class="text-end">{{ number_format($totalAlloc, 2) }}</td>
                                 <td class="text-end">{{ number_format($totalCommit, 2) }}</td>
                                 <td class="text-end">{{ number_format($totalDisbursed, 2) }}</td>
-                                <td class="text-end {{ $totalRemain < 0 ? 'text-danger' : 'text-success' }}">
+                                <td class="text-end text-success">
                                     {{ number_format($totalRemain, 2) }}
                                 </td>
                                 <td class="text-center">
