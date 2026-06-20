@@ -148,6 +148,51 @@
             white-space: normal;
         }
 
+        #procurementProcessingModal {
+            z-index: 2095;
+        }
+
+        #procurementProcessingModal.show {
+            background: rgba(15, 23, 42, .48);
+            display: block;
+        }
+
+        #procurementProcessingModal .modal-dialog {
+            max-width: min(620px, calc(100vw - 28px));
+        }
+
+        #procurementProcessingModal .modal-content {
+            border: 0;
+            border-radius: 14px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+            overflow: hidden;
+        }
+
+        #procurementProcessingModal .modal-header {
+            padding: 18px 20px;
+        }
+
+        #procurementProcessingModal .modal-body {
+            background: #f8fafc;
+            padding: 18px 20px;
+        }
+
+        body.procurement-processing-modal-open {
+            overflow: hidden;
+        }
+
+        body.procurement-processing-modal-open .main-wrapper,
+        body.procurement-processing-modal-open .nxl-container.disb-show {
+            filter: none !important;
+            -webkit-filter: none !important;
+        }
+
+        body.procurement-processing-modal-open .modal-backdrop {
+            display: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
         @media (max-width: 1199.98px) {
             .disb-show .summary-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -552,7 +597,7 @@
                                     {{ $disbursement->procurement_processing_status_label }}
                                 </span>
                                 @if ($canHandleProcurementProcessing && $disbursement->isAwaitingProcurementProcessing())
-                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#procurementProcessingModal">
+                                    <button type="button" class="btn btn-sm btn-primary procurement-processing-open">
                                         <i class="feather-edit-3 me-1"></i> Input SAP 52
                                     </button>
                                 @endif
@@ -725,7 +770,7 @@
                                 <h5 class="modal-title" id="procurementProcessingTitle">Record Procurement Processing</h5>
                                 <div class="small text-muted">{{ $disbursement->reference_no ?? 'Payment receipt' }}</div>
                             </div>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            <button type="button" class="btn-close procurement-processing-close" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
                             <div class="mb-3">
@@ -744,7 +789,7 @@
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-light procurement-processing-close">Cancel</button>
                             <button type="submit" class="btn btn-primary">
                                 <i class="feather-check-circle me-1"></i> Save Processing
                             </button>
@@ -755,3 +800,68 @@
         @endif
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        (function () {
+            const modal = document.getElementById('procurementProcessingModal');
+            if (!modal) return;
+
+            const cleanupBootstrapBackdrop = () => {
+                document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+            };
+
+            const openModal = () => {
+                cleanupBootstrapBackdrop();
+                document.body.classList.add('procurement-processing-modal-open');
+                modal.classList.add('show');
+                modal.style.display = 'block';
+                modal.removeAttribute('aria-hidden');
+                modal.setAttribute('aria-modal', 'true');
+                modal.setAttribute('role', 'dialog');
+
+                setTimeout(() => {
+                    modal.querySelector('input[name="goods_receipt_reference"], .btn-close')?.focus();
+                }, 0);
+            };
+
+            const closeModal = () => {
+                modal.classList.remove('show');
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+                modal.removeAttribute('aria-modal');
+                modal.removeAttribute('role');
+                document.body.classList.remove('procurement-processing-modal-open');
+                cleanupBootstrapBackdrop();
+            };
+
+            document.querySelectorAll('.procurement-processing-open').forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    openModal();
+                });
+            });
+
+            modal.querySelectorAll('.procurement-processing-close').forEach((button) => {
+                button.addEventListener('click', closeModal);
+            });
+
+            modal.addEventListener('mousedown', (event) => {
+                if (event.target === modal) closeModal();
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && modal.classList.contains('show')) {
+                    closeModal();
+                }
+            });
+
+            @if ($errors->has('goods_receipt_reference') || $errors->has('sap_52_series_reference') || $errors->has('procurement_processing_notes'))
+                openModal();
+            @endif
+        })();
+    </script>
+@endpush
