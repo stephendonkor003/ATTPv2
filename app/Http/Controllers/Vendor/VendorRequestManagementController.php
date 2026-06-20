@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
+use App\Mail\VendorPurchaseRequestRevisionRequestedMail;
 use App\Mail\VendorRequestResponse;
 use App\Models\VendorDocument;
 use App\Models\VendorInformationRequest;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class VendorRequestManagementController extends Controller
 {
@@ -115,8 +117,13 @@ class VendorRequestManagementController extends Controller
     public function purchaseRequestsRespond(Request $request, VendorPurchaseRequest $purchaseRequest)
     {
         $validated = $request->validate([
-            'status' => 'required|in:submitted,in_review,approved,rejected,converted,completed',
-            'admin_response' => 'nullable|string|max:5000',
+            'status' => 'required|in:submitted,in_review,revision_requested,approved,rejected,converted,completed',
+            'admin_response' => [
+                Rule::requiredIf($request->input('status') === 'revision_requested'),
+                'nullable',
+                'string',
+                'max:5000',
+            ],
         ]);
 
         $purchaseRequest->update([
@@ -126,7 +133,21 @@ class VendorRequestManagementController extends Controller
             'reviewed_at' => now(),
         ]);
 
-        return back()->with('success', 'Vendor purchase request updated.');
+        if ($validated['status'] === 'revision_requested' && $purchaseRequest->user?->email) {
+            $purchaseRequest->loadMissing(['user', 'items', 'documents']);
+
+            Mail::to($purchaseRequest->user->email, $purchaseRequest->user->name)
+                ->queue(new VendorPurchaseRequestRevisionRequestedMail(
+                    $purchaseRequest,
+                    route('vendor.purchase-requests.edit', $purchaseRequest)
+                ));
+        }
+
+        $message = $validated['status'] === 'revision_requested'
+            ? 'Purchase request returned to vendor for correction.'
+            : 'Vendor purchase request updated.';
+
+        return back()->with('success', $message);
     }
 
     public function reportsIndex()

@@ -2907,6 +2907,10 @@ Route::middleware(['auth'])
             ->name('purchase-requests.create');
         Route::post('/purchase-requests', [VendorPurchaseRequestController::class, 'store'])
             ->name('purchase-requests.store');
+        Route::get('/purchase-requests/{purchaseRequest}/edit', [VendorPurchaseRequestController::class, 'edit'])
+            ->name('purchase-requests.edit');
+        Route::put('/purchase-requests/{purchaseRequest}', [VendorPurchaseRequestController::class, 'update'])
+            ->name('purchase-requests.update');
         Route::get('/purchase-requests/{purchaseRequest}', [VendorPurchaseRequestController::class, 'show'])
             ->name('purchase-requests.show');
         Route::get('/purchase-requests/{purchaseRequest}/documents/{document}', [VendorPurchaseRequestController::class, 'download'])

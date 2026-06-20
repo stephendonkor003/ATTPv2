@@ -305,8 +305,13 @@
                                     {{ $requestRecord->reference_no }} | {{ Str::headline($requestRecord->status) }}
                                 </div>
                             </div>
-                            <a href="{{ route('vendor.purchase-requests.show', $requestRecord) }}"
-                                class="btn btn-sm btn-vendor-outline">Open</a>
+                            @if ($requestRecord->status === 'revision_requested')
+                                <a href="{{ route('vendor.purchase-requests.edit', $requestRecord) }}"
+                                    class="btn btn-sm btn-vendor">Edit</a>
+                            @else
+                                <a href="{{ route('vendor.purchase-requests.show', $requestRecord) }}"
+                                    class="btn btn-sm btn-vendor-outline">Open</a>
+                            @endif
                         </div>
                     @empty
                         <div class="vendor-empty">

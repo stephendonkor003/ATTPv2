@@ -29,7 +29,7 @@
             'Total' => $stats['total'] ?? 0,
             'Submitted' => $stats['submitted'] ?? 0,
             'In Review' => $stats['in_review'] ?? 0,
-            'Processed' => $stats['approved'] ?? 0,
+            'Action Required' => $stats['revision_requested'] ?? 0,
         ] as $label => $value)
             <div class="col-md-3">
                 <div class="card vendor-card h-100">
@@ -90,9 +90,16 @@
                                     <td>{{ $requestRecord->needed_by?->format('M d, Y') ?? 'Not set' }}</td>
                                     <td><span class="status-pill">{{ ucwords(str_replace('_', ' ', $requestRecord->status)) }}</span></td>
                                     <td class="text-end">
-                                        <a href="{{ route('vendor.purchase-requests.show', $requestRecord) }}" class="btn btn-vendor-outline btn-sm">
-                                            View
-                                        </a>
+                                        <div class="d-inline-flex gap-2 flex-wrap justify-content-end">
+                                            @if ($requestRecord->status === 'revision_requested')
+                                                <a href="{{ route('vendor.purchase-requests.edit', $requestRecord) }}" class="btn btn-vendor btn-sm">
+                                                    Edit
+                                                </a>
+                                            @endif
+                                            <a href="{{ route('vendor.purchase-requests.show', $requestRecord) }}" class="btn btn-vendor-outline btn-sm">
+                                                View
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                             @endforeach

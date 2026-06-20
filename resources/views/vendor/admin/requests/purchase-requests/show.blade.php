@@ -133,24 +133,36 @@
                         <h6 class="mb-0 fw-semibold">Admin Review</h6>
                     </div>
                     <div class="card-body">
+                        <div class="alert alert-info small">
+                            Select <strong>Return to Vendor for Correction</strong> and add a response note to let the vendor edit and resubmit this request. The vendor will receive an email automatically.
+                        </div>
                         <form action="{{ route('vendors.requests.purchase-requests.respond', $purchaseRequest) }}" method="POST">
                             @csrf
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">Status</label>
                                 <select name="status" class="form-control" required>
-                                    @foreach (['submitted', 'in_review', 'approved', 'rejected', 'converted', 'completed'] as $status)
+                                    @foreach ([
+                                        'submitted' => 'Submitted',
+                                        'in_review' => 'In Review',
+                                        'revision_requested' => 'Return to Vendor for Correction',
+                                        'approved' => 'Approved',
+                                        'rejected' => 'Rejected',
+                                        'converted' => 'Converted',
+                                        'completed' => 'Completed',
+                                    ] as $status => $statusLabel)
                                         <option value="{{ $status }}" {{ $purchaseRequest->status === $status ? 'selected' : '' }}>
-                                            {{ \Illuminate\Support\Str::headline($status) }}
+                                            {{ $statusLabel }}
                                         </option>
                                     @endforeach
                                 </select>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">Response</label>
-                                <textarea name="admin_response" rows="6" class="form-control">{{ old('admin_response', $purchaseRequest->admin_response) }}</textarea>
+                                <textarea name="admin_response" rows="6" class="form-control"
+                                    placeholder="Required when returning the request to the vendor.">{{ old('admin_response', $purchaseRequest->admin_response) }}</textarea>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">
-                                <i class="feather-save me-1"></i> Save Review
+                                <i class="feather-send me-1"></i> Save Review
                             </button>
                         </form>
                     </div>

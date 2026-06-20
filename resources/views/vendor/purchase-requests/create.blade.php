@@ -202,9 +202,28 @@
 
 @section('content')
     @php
+        $purchaseRequest = $purchaseRequest ?? null;
+        $isEditing = isset($purchaseRequest);
         $storeRoute = route('vendor.purchase-requests.store');
+        $formAction = $formAction ?? $storeRoute;
+        $formMethod = $formMethod ?? null;
+        $submitButtonText = $submitButtonText ?? 'Submit Request';
         $indexRoute = route('vendor.purchase-requests.index');
         $hasProcurementSources = $procurements->isNotEmpty();
+        $selectedSubActivityId = old('sub_activity_id', $purchaseRequest->sub_activity_id ?? null);
+        $lineItemRows = collect(old('items', $isEditing
+            ? $purchaseRequest->items->map(fn ($item) => [
+                'item_name' => $item->item_name,
+                'description' => $item->description,
+                'quantity' => $item->quantity,
+                'unit_price' => $item->unit_price,
+                'delivery_date' => $item->delivery_date?->format('Y-m-d'),
+            ])->all()
+            : [[]]));
+
+        if ($lineItemRows->isEmpty()) {
+            $lineItemRows = collect([[]]);
+        }
     @endphp
 
     <div class="purchase-request-create">
@@ -212,7 +231,9 @@
             <div>
                 <div class="vendor-eyebrow">New Intake</div>
                 <h3 class="mb-1">{{ $pageTitle }}</h3>
-                <p class="text-muted mb-0">Create a purchase request for admin review.</p>
+                <p class="text-muted mb-0">
+                    {{ $isEditing ? 'Update the returned request and resubmit it for admin review.' : 'Create a purchase request for admin review.' }}
+                </p>
             </div>
             <a href="{{ $indexRoute }}" class="btn btn-vendor-outline">
                 <i class="feather-arrow-left me-1"></i> Back
@@ -229,10 +250,20 @@
             </div>
         @endunless
 
-        <form method="POST" action="{{ $storeRoute }}" enctype="multipart/form-data">
+        <form method="POST" action="{{ $formAction }}" enctype="multipart/form-data">
             @csrf
+            @if ($formMethod)
+                @method($formMethod)
+            @endif
             <div class="row g-4">
                 <div class="col-xl-8">
+                    @if ($isEditing && $purchaseRequest->admin_response)
+                        <div class="alert alert-warning">
+                            <strong>Admin correction note:</strong>
+                            <div class="mt-1">{{ $purchaseRequest->admin_response }}</div>
+                        </div>
+                    @endif
+
                     <section class="form-panel">
                         <div class="panel-head">
                             <div class="panel-title-wrap">
@@ -246,7 +277,7 @@
                         <div class="panel-body">
                             <div class="mb-3">
                                 <label class="form-label">Title</label>
-                                <input name="title" class="form-control" value="{{ old('title') }}"
+                                <input name="title" class="form-control" value="{{ old('title', $purchaseRequest->title ?? '') }}"
                                     placeholder="Enter request title" required>
                             </div>
 
@@ -265,7 +296,7 @@
                                                 $program?->name,
                                             ])->filter()->join(' / ');
                                         @endphp
-                                        <option value="{{ $procurement->id }}" @selected(old('sub_activity_id') === $procurement->id)>
+                                        <option value="{{ $procurement->id }}" @selected((string) $selectedSubActivityId === (string) $procurement->id)>
                                             {{ $procurementLabel ?: 'Assigned Procurement' }}
                                         </option>
                                     @endforeach
@@ -275,18 +306,19 @@
                             <div class="row g-3">
                                 <div class="col-md-4">
                                     <label class="form-label">Currency</label>
-                                    <input name="currency" class="form-control" value="{{ old('currency', 'USD') }}"
+                                    <input name="currency" class="form-control" value="{{ old('currency', $purchaseRequest->currency ?? 'USD') }}"
                                         maxlength="10" required>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">Date</label>
-                                    <input type="date" name="needed_by" class="form-control" value="{{ old('needed_by') }}">
+                                    <input type="date" name="needed_by" class="form-control"
+                                        value="{{ old('needed_by', $purchaseRequest?->needed_by?->format('Y-m-d') ?? '') }}">
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">Priority</label>
                                     <select name="priority" class="form-select" required>
                                         @foreach (['low' => 'Low', 'normal' => 'Normal', 'high' => 'High', 'urgent' => 'Urgent'] as $value => $label)
-                                            <option value="{{ $value }}" @selected(old('priority', 'normal') === $value)>{{ $label }}</option>
+                                            <option value="{{ $value }}" @selected(old('priority', $purchaseRequest->priority ?? 'normal') === $value)>{{ $label }}</option>
                                         @endforeach
                                     </select>
                                 </div>
@@ -295,7 +327,7 @@
                             <div class="mt-3">
                                 <label class="form-label">Description</label>
                                 <textarea name="description" class="form-control"
-                                    placeholder="Add any details the admin should know.">{{ old('description') }}</textarea>
+                                    placeholder="Add any details the admin should know.">{{ old('description', $purchaseRequest->description ?? '') }}</textarea>
                             </div>
                         </div>
                     </section>
@@ -316,7 +348,7 @@
 
                         <div class="panel-body">
                             <div class="line-items-wrap" id="lineItems">
-                                @for ($i = 0; $i < max(1, count(old('items', [0]))); $i++)
+                                @foreach ($lineItemRows as $i => $itemRow)
                                     <div class="line-item-row" data-line-item-row>
                                         <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
                                             <div class="fw-bold text-dark">Item {{ $i + 1 }}</div>
@@ -329,24 +361,24 @@
                                             <div class="col-md-4">
                                                 <label class="form-label">Item</label>
                                                 <input name="items[{{ $i }}][item_name]" class="form-control"
-                                                    value="{{ old("items.$i.item_name") }}" @required($i === 0)>
+                                                    value="{{ $itemRow['item_name'] ?? '' }}" @required($i === 0)>
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label">Qty</label>
                                                 <input type="number" step="0.01" min="0.01" name="items[{{ $i }}][quantity]"
-                                                    class="form-control" value="{{ old("items.$i.quantity", $i === 0 ? 1 : null) }}"
+                                                    class="form-control" value="{{ $itemRow['quantity'] ?? ($i === 0 ? 1 : null) }}"
                                                     data-line-quantity @required($i === 0)>
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label">Unit Price</label>
                                                 <input type="number" step="0.01" min="0.01" name="items[{{ $i }}][unit_price]"
-                                                    class="form-control" value="{{ old("items.$i.unit_price") }}"
+                                                    class="form-control" value="{{ $itemRow['unit_price'] ?? '' }}"
                                                     data-line-unit-price @required($i === 0)>
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label">Delivery Date</label>
                                                 <input type="date" name="items[{{ $i }}][delivery_date]" class="form-control"
-                                                    value="{{ old("items.$i.delivery_date") }}">
+                                                    value="{{ $itemRow['delivery_date'] ?? '' }}">
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label">Amount</label>
@@ -356,12 +388,12 @@
                                             <div class="col-12">
                                                 <label class="form-label">Description</label>
                                                 <input name="items[{{ $i }}][description]" class="form-control"
-                                                    value="{{ old("items.$i.description") }}"
+                                                    value="{{ $itemRow['description'] ?? '' }}"
                                                     placeholder="Optional item note">
                                             </div>
                                         </div>
                                     </div>
-                                @endfor
+                                @endforeach
                             </div>
 
                             <div class="total-strip">
@@ -387,6 +419,24 @@
                             </div>
                         </div>
                         <div class="panel-body">
+                            @if ($isEditing && $purchaseRequest->documents->isNotEmpty())
+                                <div class="mb-3">
+                                    <div class="form-label">Existing Documents</div>
+                                    <div class="d-grid gap-2">
+                                        @foreach ($purchaseRequest->documents as $document)
+                                            <label class="d-flex align-items-start gap-2 border rounded p-2 bg-light">
+                                                <input type="checkbox" name="remove_documents[]" value="{{ $document->id }}" class="mt-1">
+                                                <span>
+                                                    <span class="fw-semibold d-block">{{ $document->title }}</span>
+                                                    <span class="text-muted small">{{ $document->file_name }}</span>
+                                                </span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                    <div class="text-muted small mt-1">Check any old file that should be removed when you resubmit.</div>
+                                </div>
+                            @endif
+
                             <div class="document-rows" id="documentRows">
                                 <div class="document-row" data-document-row>
                                     <div>
@@ -410,7 +460,7 @@
                             <div class="panel-title-wrap">
                                 <span class="panel-icon"><i class="feather-send"></i></span>
                                 <div>
-                                    <h5 class="panel-title">Submit Request</h5>
+                                    <h5 class="panel-title">{{ $isEditing ? 'Resubmit Request' : 'Submit Request' }}</h5>
                                     <p class="panel-subtitle">Final submission</p>
                                 </div>
                             </div>
@@ -441,7 +491,7 @@
                             </div>
 
                             <button class="btn btn-vendor w-100 mt-4" type="submit" @disabled(! $hasProcurementSources)>
-                                <i class="feather-check-circle me-1"></i> Submit Request
+                                <i class="feather-check-circle me-1"></i> {{ $submitButtonText }}
                             </button>
                         </div>
                     </aside>

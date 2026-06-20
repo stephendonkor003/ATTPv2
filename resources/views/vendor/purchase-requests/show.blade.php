@@ -23,6 +23,17 @@
         <div class="alert alert-success">{{ session('success') }}</div>
     @endif
 
+    @if ($purchaseRequest->status === 'revision_requested')
+        <div class="alert alert-warning d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <div>
+                <strong>Action required:</strong> Admin returned this request for correction. Update the form and resubmit it for review.
+            </div>
+            <a href="{{ route('vendor.purchase-requests.edit', $purchaseRequest) }}" class="btn btn-vendor btn-sm">
+                <i class="feather-edit-2 me-1"></i> Edit and Resubmit
+            </a>
+        </div>
+    @endif
+
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="card vendor-card mb-4">
@@ -70,6 +81,14 @@
                         <div class="mt-4">
                             <div class="text-muted small">Business Justification</div>
                             <div class="vendor-readable">{{ $purchaseRequest->business_justification }}</div>
+                        </div>
+                    @endif
+
+                    @if ($purchaseRequest->status === 'revision_requested')
+                        <div class="mt-4">
+                            <a href="{{ route('vendor.purchase-requests.edit', $purchaseRequest) }}" class="btn btn-vendor">
+                                <i class="feather-edit-2 me-1"></i> Update Request
+                            </a>
                         </div>
                     @endif
                 </div>
