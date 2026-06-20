@@ -8,6 +8,7 @@ use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestAttachment;
+use App\Models\VendorPurchaseRequest;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,6 +20,16 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseRequestController extends Controller
 {
+    private const PURCHASE_REQUEST_STATUS_TABS = [
+        'submitted' => 'Submitted',
+        'in_review' => 'In Review',
+        'revision_requested' => 'Revision Requested',
+        'approved' => 'Approved',
+        'rejected' => 'Rejected',
+        'converted' => 'Converted',
+        'completed' => 'Completed',
+    ];
+
     public function index()
     {
         $canViewAll = Auth::user()?->can('finance.purchase_requests.view_all') === true;
@@ -32,6 +43,7 @@ class PurchaseRequestController extends Controller
             'governanceNode',
             'subActivity',
             'commitments',
+            'creator',
         ])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
@@ -40,16 +52,44 @@ class PurchaseRequestController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
+        $vendorPurchaseRequests = VendorPurchaseRequest::with([
+            'user',
+            'procurement',
+            'subActivity.activity.project.program',
+            'purchaseOrder',
+            'items',
+        ])
+            ->where('request_type', 'purchase_request')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $statusTabs = self::PURCHASE_REQUEST_STATUS_TABS;
+        $purchaseRequestRows = $this->purchaseRequestIndexRows($purchaseRequests, $vendorPurchaseRequests)
+            ->sortByDesc(fn ($row) => optional($row->created_at)->timestamp ?? 0)
+            ->values();
+        $purchaseRequestRowsByStatus = collect($statusTabs)
+            ->mapWithKeys(fn ($label, $status) => [
+                $status => $purchaseRequestRows->where('tab_status', $status)->values(),
+            ]);
+        $purchaseRequestStatusCounts = $purchaseRequestRowsByStatus
+            ->map(fn ($rows) => $rows->count());
+
         $canApprovePurchaseRequests = Auth::user()?->can('finance.purchase_requests.approve') === true;
         $canEditPurchaseRequests = Auth::user()?->can('finance.commitments.edit') === true;
         $canDeletePurchaseRequests = Auth::user()?->can('finance.commitments.delete') === true;
+        $canManageVendorRequests = Auth::user()?->can('vendor.requests.manage') === true;
 
         return view('finance.purchase-requests.index', compact(
             'purchaseRequests',
+            'purchaseRequestRows',
+            'purchaseRequestRowsByStatus',
+            'purchaseRequestStatusCounts',
+            'statusTabs',
             'canViewAll',
             'canApprovePurchaseRequests',
             'canEditPurchaseRequests',
-            'canDeletePurchaseRequests'
+            'canDeletePurchaseRequests',
+            'canManageVendorRequests'
         ));
     }
 
@@ -604,6 +644,93 @@ class PurchaseRequestController extends Controller
             ->whereNotIn('status', ['cancelled'])
             ->latest()
             ->first();
+    }
+
+    private function purchaseRequestIndexRows($purchaseRequests, $vendorPurchaseRequests)
+    {
+        $financeRows = $purchaseRequests->map(function (PurchaseRequest $purchaseRequest) {
+            $status = $purchaseRequest->status ?: 'draft';
+
+            return (object) [
+                'key' => 'finance-' . $purchaseRequest->id,
+                'source' => 'finance',
+                'source_label' => 'Finance',
+                'record' => $purchaseRequest,
+                'reference_no' => $purchaseRequest->reference_no,
+                'requestor_name' => $purchaseRequest->creator?->name ?: 'Internal',
+                'requestor_email' => $purchaseRequest->creator?->email,
+                'title' => $purchaseRequest->description ?: 'Finance purchase request',
+                'program' => $purchaseRequest->programFunding?->program?->name
+                    ?: $purchaseRequest->programFunding?->program_name
+                    ?: 'N/A',
+                'governance_node' => $purchaseRequest->governanceNode?->name,
+                'sub_activity' => $purchaseRequest->subActivity?->name ?: 'N/A',
+                'start_year' => $purchaseRequest->start_year,
+                'commitment_date' => $purchaseRequest->commitment_date,
+                'delivery_date' => $purchaseRequest->delivery_date,
+                'currency' => $purchaseRequest->resolved_currency,
+                'total_amount' => $purchaseRequest->total_amount,
+                'priority' => null,
+                'status' => $status,
+                'tab_status' => $this->purchaseRequestTabStatus($status),
+                'created_at' => $purchaseRequest->created_at,
+                'commitment_statuses' => $purchaseRequest->commitments->pluck('status'),
+            ];
+        });
+
+        $vendorRows = $vendorPurchaseRequests->map(function (VendorPurchaseRequest $purchaseRequest) {
+            $status = $purchaseRequest->status ?: 'submitted';
+            $subActivity = $purchaseRequest->subActivity;
+            $activity = $subActivity?->activity;
+            $project = $activity?->project;
+            $program = $project?->program;
+
+            return (object) [
+                'key' => 'vendor-' . $purchaseRequest->id,
+                'source' => 'vendor',
+                'source_label' => 'Vendor',
+                'record' => $purchaseRequest,
+                'reference_no' => $purchaseRequest->reference_no,
+                'requestor_name' => $purchaseRequest->user?->name ?: 'Vendor',
+                'requestor_email' => $purchaseRequest->user?->email,
+                'title' => $purchaseRequest->title,
+                'program' => $program?->name ?: 'Vendor Procurement',
+                'governance_node' => null,
+                'sub_activity' => $subActivity?->name
+                    ?: $purchaseRequest->procurement?->title
+                    ?: $purchaseRequest->purchaseOrder?->reference_no
+                    ?: 'N/A',
+                'start_year' => $purchaseRequest->needed_by?->format('Y')
+                    ?: $purchaseRequest->created_at?->format('Y'),
+                'commitment_date' => null,
+                'delivery_date' => $purchaseRequest->needed_by,
+                'currency' => $purchaseRequest->currency ?: 'USD',
+                'total_amount' => $purchaseRequest->requested_amount,
+                'priority' => $purchaseRequest->priority,
+                'status' => $status,
+                'tab_status' => $this->purchaseRequestTabStatus($status),
+                'created_at' => $purchaseRequest->created_at,
+                'commitment_statuses' => collect(),
+            ];
+        });
+
+        return $financeRows->merge($vendorRows);
+    }
+
+    private function purchaseRequestTabStatus(?string $status): string
+    {
+        $status = strtolower(trim((string) ($status ?: 'submitted')));
+
+        return match ($status) {
+            'draft', 'pending', 'submitted' => 'submitted',
+            'review', 'in_review' => 'in_review',
+            'revision_requested', 'returned', 'returned_to_vendor' => 'revision_requested',
+            'approved' => 'approved',
+            'rejected', 'cancelled', 'canceled' => 'rejected',
+            'converted' => 'converted',
+            'completed', 'closed', 'paid' => 'completed',
+            default => array_key_exists($status, self::PURCHASE_REQUEST_STATUS_TABS) ? $status : 'submitted',
+        };
     }
 
     public function approve(PurchaseRequest $purchaseRequest)

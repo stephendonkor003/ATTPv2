@@ -4,11 +4,10 @@ namespace App\Mail;
 
 use App\Models\VendorPurchaseRequest;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class VendorPurchaseRequestRevisionRequestedMail extends Mailable implements ShouldQueue
+class VendorPurchaseRequestRevisionRequestedMail extends Mailable
 {
     use Queueable, SerializesModels;
 
@@ -16,7 +15,6 @@ class VendorPurchaseRequestRevisionRequestedMail extends Mailable implements Sho
         public VendorPurchaseRequest $purchaseRequest,
         public string $editUrl
     ) {
-        $this->onQueue('mail');
     }
 
     public function build()

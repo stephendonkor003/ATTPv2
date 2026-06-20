@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Mail\VendorPurchaseRequestRevisionRequestedMail;
 use App\Mail\VendorRequestResponse;
 use App\Models\VendorDocument;
 use App\Models\VendorInformationRequest;
 use App\Models\VendorMessage;
 use App\Models\VendorPurchaseRequest;
 use App\Models\VendorReport;
+use App\Services\VendorPurchaseRequestRevisionNotificationService;
 use App\Support\VendorAdminAlerts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -133,14 +133,8 @@ class VendorRequestManagementController extends Controller
             'reviewed_at' => now(),
         ]);
 
-        if ($validated['status'] === 'revision_requested' && $purchaseRequest->user?->email) {
-            $purchaseRequest->loadMissing(['user', 'items', 'documents']);
-
-            Mail::to($purchaseRequest->user->email, $purchaseRequest->user->name)
-                ->queue(new VendorPurchaseRequestRevisionRequestedMail(
-                    $purchaseRequest,
-                    route('vendor.purchase-requests.edit', $purchaseRequest)
-                ));
+        if ($validated['status'] === 'revision_requested') {
+            app(VendorPurchaseRequestRevisionNotificationService::class)->notify($purchaseRequest);
         }
 
         $message = $validated['status'] === 'revision_requested'
