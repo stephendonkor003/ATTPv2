@@ -393,10 +393,10 @@
     }
 
     .attp-admin-sidebar .sidebar-footer-card {
-        background: linear-gradient(135deg, rgba(2, 44, 34, 0.92), rgba(13, 148, 136, 0.62));
-        border: 1px solid rgba(167, 243, 208, 0.22);
+        background: #522B39 !important;
+        border: 1px solid rgba(255, 255, 255, 0.18);
         color: #ffffff;
-        box-shadow: 0 18px 34px rgba(2, 44, 34, 0.26);
+        box-shadow: 0 18px 34px rgba(82, 43, 57, 0.28);
     }
 
     .attp-admin-sidebar .sidebar-footer-card,
