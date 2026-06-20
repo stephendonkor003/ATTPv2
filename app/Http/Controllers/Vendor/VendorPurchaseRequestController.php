@@ -56,12 +56,10 @@ class VendorPurchaseRequestController extends Controller
             'title' => 'required|string|max:255',
             'procurement_id' => ['nullable', Rule::exists('procurements', 'id')],
             'sub_activity_id' => ['required', Rule::exists('myb_sub_activities', 'id')],
-            'requested_amount' => 'nullable|numeric|min:0',
             'currency' => 'required|string|max:10',
             'needed_by' => 'nullable|date',
             'priority' => 'required|in:low,normal,high,urgent',
             'description' => 'nullable|string|max:5000',
-            'business_justification' => 'required|string|max:5000',
             'items' => 'nullable|array',
             'items.*.item_name' => 'nullable|string|max:255',
             'items.*.description' => 'nullable|string|max:1000',
@@ -96,8 +94,11 @@ class VendorPurchaseRequestController extends Controller
             ->values();
 
         $total = $lineItems->sum('amount');
-        if ($total <= 0) {
-            $total = (float) ($data['requested_amount'] ?? 0);
+
+        if ($lineItems->isEmpty() || $total <= 0) {
+            return back()
+                ->withErrors(['items' => 'Add at least one line item with quantity and unit price.'])
+                ->withInput();
         }
 
         $vendorRequest = DB::transaction(function () use ($request, $user, $data, $lineItems, $total) {
@@ -115,21 +116,10 @@ class VendorPurchaseRequestController extends Controller
                 'priority' => $data['priority'],
                 'status' => 'submitted',
                 'description' => $data['description'] ?? null,
-                'business_justification' => $data['business_justification'],
+                'business_justification' => null,
             ]);
 
-            if ($lineItems->isEmpty()) {
-                $vendorRequest->items()->create([
-                    'item_name' => $data['title'],
-                    'description' => $data['description'] ?? null,
-                    'quantity' => 1,
-                    'unit_price' => $total,
-                    'amount' => $total,
-                    'delivery_date' => $data['needed_by'] ?? null,
-                ]);
-            } else {
-                $vendorRequest->items()->createMany($lineItems->all());
-            }
+            $vendorRequest->items()->createMany($lineItems->all());
 
             $this->storeDocuments($request, $user, $vendorRequest);
 

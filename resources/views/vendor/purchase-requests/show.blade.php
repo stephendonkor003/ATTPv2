@@ -66,10 +66,12 @@
                         </div>
                     @endif
 
-                    <div class="mt-4">
-                        <div class="text-muted small">Business Justification</div>
-                        <div class="vendor-readable">{{ $purchaseRequest->business_justification }}</div>
-                    </div>
+                    @if ($purchaseRequest->business_justification)
+                        <div class="mt-4">
+                            <div class="text-muted small">Business Justification</div>
+                            <div class="vendor-readable">{{ $purchaseRequest->business_justification }}</div>
+                        </div>
+                    @endif
                 </div>
             </div>
 

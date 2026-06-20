@@ -72,7 +72,7 @@
                                 <input name="currency" class="form-control" value="{{ old('currency', 'USD') }}" maxlength="10" required>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label fw-semibold">Needed By</label>
+                                <label class="form-label fw-semibold">Date</label>
                                 <input type="date" name="needed_by" class="form-control" value="{{ old('needed_by') }}">
                             </div>
                             <div class="col-md-4">
@@ -87,12 +87,8 @@
 
                         <div class="mt-3">
                             <label class="form-label fw-semibold">Description</label>
-                            <textarea name="description" class="form-control" rows="4">{{ old('description') }}</textarea>
-                        </div>
-
-                        <div class="mt-3">
-                            <label class="form-label fw-semibold">Business Justification</label>
-                            <textarea name="business_justification" class="form-control" rows="5" required>{{ old('business_justification') }}</textarea>
+                            <textarea name="description" class="form-control" rows="4"
+                                placeholder="Add any details the admin should know.">{{ old('description') }}</textarea>
                         </div>
                     </div>
                 </div>
@@ -111,27 +107,33 @@
 
                         <div id="lineItems">
                             @for ($i = 0; $i < 2; $i++)
-                                <div class="vendor-line-item">
+                                <div class="vendor-line-item" data-line-item-row>
                                     <div class="row g-3">
-                                        <div class="col-md-5">
+                                        <div class="col-md-4">
                                             <label class="form-label">Item</label>
                                             <input name="items[{{ $i }}][item_name]" class="form-control"
-                                                value="{{ old("items.$i.item_name") }}">
+                                                value="{{ old("items.$i.item_name") }}" @required($i === 0)>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label">Qty</label>
-                                            <input type="number" step="0.01" min="0" name="items[{{ $i }}][quantity]"
-                                                class="form-control" value="{{ old("items.$i.quantity", $i === 0 ? 1 : null) }}">
+                                            <input type="number" step="0.01" min="0.01" name="items[{{ $i }}][quantity]"
+                                                class="form-control" value="{{ old("items.$i.quantity", $i === 0 ? 1 : null) }}"
+                                                data-line-quantity @required($i === 0)>
                                         </div>
                                         <div class="col-md-2">
                                             <label class="form-label">Unit Price</label>
-                                            <input type="number" step="0.01" min="0" name="items[{{ $i }}][unit_price]"
-                                                class="form-control" value="{{ old("items.$i.unit_price") }}">
+                                            <input type="number" step="0.01" min="0.01" name="items[{{ $i }}][unit_price]"
+                                                class="form-control" value="{{ old("items.$i.unit_price") }}"
+                                                data-line-unit-price @required($i === 0)>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-2">
                                             <label class="form-label">Delivery Date</label>
                                             <input type="date" name="items[{{ $i }}][delivery_date]" class="form-control"
                                                 value="{{ old("items.$i.delivery_date") }}">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label">Amount</label>
+                                            <input type="text" class="form-control" value="0.00" data-line-amount readonly>
                                         </div>
                                         <div class="col-12">
                                             <label class="form-label">Description</label>
@@ -143,11 +145,11 @@
                             @endfor
                         </div>
 
-                        <div class="mt-3">
-                            <label class="form-label fw-semibold">Fallback Requested Amount</label>
-                            <input type="number" step="0.01" min="0" name="requested_amount" class="form-control"
-                                value="{{ old('requested_amount') }}">
-                            <small class="text-muted">Used only if no line item amount is entered.</small>
+                        <div class="d-flex justify-content-end mt-3">
+                            <div class="border rounded px-3 py-2 bg-light text-end">
+                                <div class="text-muted small fw-semibold">Calculated Total</div>
+                                <div class="fs-5 fw-bold" id="lineItemsTotal">0.00</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -188,23 +190,28 @@
             addButton?.addEventListener('click', function () {
                 const block = document.createElement('div');
                 block.className = 'vendor-line-item';
+                block.setAttribute('data-line-item-row', 'true');
                 block.innerHTML = `
                     <div class="row g-3">
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <label class="form-label">Item</label>
                             <input name="items[${nextIndex}][item_name]" class="form-control">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Qty</label>
-                            <input type="number" step="0.01" min="0" name="items[${nextIndex}][quantity]" class="form-control" value="1">
+                            <input type="number" step="0.01" min="0.01" name="items[${nextIndex}][quantity]" class="form-control" value="1" data-line-quantity>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Unit Price</label>
-                            <input type="number" step="0.01" min="0" name="items[${nextIndex}][unit_price]" class="form-control">
+                            <input type="number" step="0.01" min="0.01" name="items[${nextIndex}][unit_price]" class="form-control" data-line-unit-price>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">Delivery Date</label>
                             <input type="date" name="items[${nextIndex}][delivery_date]" class="form-control">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Amount</label>
+                            <input type="text" class="form-control" value="0.00" data-line-amount readonly>
                         </div>
                         <div class="col-12">
                             <label class="form-label">Description</label>
@@ -212,8 +219,48 @@
                         </div>
                     </div>`;
                 container.appendChild(block);
+                bindLineItem(block);
                 nextIndex += 1;
             });
+
+            const totalEl = document.getElementById('lineItemsTotal');
+
+            function money(value) {
+                return Number(value || 0).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+            }
+
+            function calculateTotals() {
+                let total = 0;
+
+                container.querySelectorAll('[data-line-item-row]').forEach((row) => {
+                    const quantity = Number(row.querySelector('[data-line-quantity]')?.value || 0);
+                    const unitPrice = Number(row.querySelector('[data-line-unit-price]')?.value || 0);
+                    const amount = Math.max(quantity, 0) * Math.max(unitPrice, 0);
+                    const amountEl = row.querySelector('[data-line-amount]');
+
+                    if (amountEl) {
+                        amountEl.value = money(amount);
+                    }
+
+                    total += amount;
+                });
+
+                if (totalEl) {
+                    totalEl.textContent = money(total);
+                }
+            }
+
+            function bindLineItem(row) {
+                row.querySelectorAll('[data-line-quantity], [data-line-unit-price]').forEach((input) => {
+                    input.addEventListener('input', calculateTotals);
+                });
+            }
+
+            container.querySelectorAll('[data-line-item-row]').forEach(bindLineItem);
+            calculateTotals();
         });
     </script>
 @endpush

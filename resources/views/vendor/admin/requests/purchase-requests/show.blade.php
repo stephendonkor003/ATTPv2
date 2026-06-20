@@ -82,10 +82,12 @@
                             <div class="border rounded p-3 bg-light">{{ $purchaseRequest->description ?: 'No description supplied.' }}</div>
                         </div>
 
-                        <div class="mt-3">
-                            <div class="text-muted small">Business Justification</div>
-                            <div class="border rounded p-3 bg-light">{{ $purchaseRequest->business_justification }}</div>
-                        </div>
+                        @if ($purchaseRequest->business_justification)
+                            <div class="mt-3">
+                                <div class="text-muted small">Business Justification</div>
+                                <div class="border rounded p-3 bg-light">{{ $purchaseRequest->business_justification }}</div>
+                            </div>
+                        @endif
                     </div>
                 </div>
 
