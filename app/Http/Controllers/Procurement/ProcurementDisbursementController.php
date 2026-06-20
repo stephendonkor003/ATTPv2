@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 
 class ProcurementDisbursementController extends Controller
@@ -206,11 +207,30 @@ class ProcurementDisbursementController extends Controller
                         'deliverable_date' => $evidence->deliverable_date?->format('Y-m-d'),
                         'notes' => $evidence->notes,
                         'documents' => collect($evidence->documents ?? [])
-                            ->map(fn ($document, $index) => [
-                                'name' => $document['name'] ?? 'Document',
-                                'display_name' => $document['display_name'] ?? null,
-                                'url' => route('procurement.purchase-orders.line-item-evidence.document', [$order, $evidence, $index]) . '?download=1',
-                            ])
+                            ->map(function ($document, $index) use ($order, $evidence) {
+                                $name = $document['name'] ?? 'Document';
+                                $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+                                $previewUrl = route('procurement.purchase-orders.line-item-evidence.document', [$order, $evidence, $index]);
+                                $publicPreviewUrl = URL::temporarySignedRoute(
+                                    'procurement.purchase-orders.line-item-evidence.public-preview',
+                                    now()->addMinutes(45),
+                                    [$order, $evidence, $index]
+                                );
+
+                                return [
+                                    'name' => $name,
+                                    'display_name' => $document['display_name'] ?? null,
+                                    'mime_type' => $document['mime_type'] ?? null,
+                                    'extension' => $extension,
+                                    'url' => $previewUrl,
+                                    'preview_url' => $previewUrl,
+                                    'download_url' => $previewUrl . '?download=1',
+                                    'public_preview_url' => $publicPreviewUrl,
+                                    'office_preview_url' => in_array($extension, ['doc', 'docx'], true)
+                                        ? 'https://view.officeapps.live.com/op/embed.aspx?src=' . rawurlencode($publicPreviewUrl)
+                                        : null,
+                                ];
+                            })
                             ->values()
                             ->all(),
                     ] : null,

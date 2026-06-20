@@ -300,13 +300,83 @@
             min-height: 420px;
             overflow: hidden;
             background: #f8fafc;
+            position: relative;
         }
 
-        .signature-preview iframe {
+        .signature-preview-stage {
+            min-height: 520px;
+            position: relative;
+        }
+
+        .signature-placement-layer {
+            cursor: crosshair;
+            inset: 0;
+            position: absolute;
+            touch-action: none;
+            z-index: 7;
+        }
+
+        .signature-preview-frame,
+        .signature-preview-image {
             border: 0;
             display: block;
-            height: 420px;
+            height: 520px;
             width: 100%;
+            pointer-events: none;
+        }
+
+        .signature-preview-image {
+            display: block;
+            height: auto;
+            max-height: 640px;
+            object-fit: contain;
+            background: #fff;
+        }
+
+        .signature-stamp {
+            align-items: center;
+            background: rgba(255, 255, 255, .86);
+            border: 2px dashed #047857;
+            border-radius: 10px;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, .16);
+            cursor: grab;
+            display: none;
+            justify-content: center;
+            min-height: 76px;
+            min-width: 220px;
+            padding: 8px 12px;
+            position: absolute;
+            touch-action: none;
+            user-select: none;
+            z-index: 8;
+        }
+
+        .signature-stamp.is-visible {
+            display: inline-flex;
+        }
+
+        .signature-stamp.is-dragging {
+            cursor: grabbing;
+        }
+
+        .signature-stamp img {
+            display: block;
+            max-height: 70px;
+            max-width: 260px;
+        }
+
+        .signature-position-hint {
+            background: rgba(6, 78, 59, .9);
+            border-radius: 999px;
+            bottom: 12px;
+            color: #fff;
+            font-size: .74rem;
+            font-weight: 700;
+            left: 50%;
+            padding: 7px 12px;
+            position: absolute;
+            transform: translateX(-50%);
+            z-index: 9;
         }
 
         .signature-pad-wrap {
@@ -708,6 +778,10 @@
             let activeSignaturePaymentCard = null;
             let activeSignaturePaymentIndex = null;
             let selectedSignatureDocument = null;
+            let signatureImageDataUrl = null;
+            let signaturePlacement = { x: 42, y: 42 };
+            let signatureStampDragging = false;
+            let signatureStampDragOffset = { x: 0, y: 0 };
             let signatureHasInk = false;
             let signatureDrawing = false;
             let currentPo = null;
@@ -1064,7 +1138,8 @@
                 return currentPo.line_items.flatMap((item) => {
                     const docs = Array.isArray(item.evidence?.documents) ? item.evidence.documents : [];
                     return docs.map((document, index) => {
-                        const url = String(document.url || '');
+                        const url = String(document.preview_url || document.url || '');
+                        const extension = String(document.extension || document.name?.split('.').pop() || '').toLowerCase();
                         return {
                             id: `${item.id}-${index}`,
                             item_id: item.id,
@@ -1072,8 +1147,14 @@
                             deliverable: item.deliverable_title || 'Deliverable evidence',
                             name: document.name || 'Evidence document',
                             display_name: document.display_name || document.name || 'Evidence document',
+                            extension,
+                            mime_type: document.mime_type || '',
                             url,
-                            preview_url: url.replace(/\?download=1$/i, '').replace(/&download=1$/i, ''),
+                            preview_url: document.office_preview_url || document.preview_url || url,
+                            download_url: document.download_url || `${url}${url.includes('?') ? '&' : '?'}download=1`,
+                            is_office: ['doc', 'docx'].includes(extension),
+                            is_pdf: extension === 'pdf' || String(document.mime_type || '').includes('pdf'),
+                            is_image: ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension) || String(document.mime_type || '').startsWith('image/'),
                         };
                     });
                 });
@@ -1098,6 +1179,8 @@
                 const ctx = signaturePad.getContext('2d');
                 ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
                 signatureHasInk = false;
+                signatureImageDataUrl = null;
+                refreshSignatureStamp();
             }
 
             function signaturePoint(event) {
@@ -1127,6 +1210,101 @@
                 ctx.lineTo(Math.min(rect.width - 24, 420), rect.height / 2 + 32);
                 ctx.stroke();
                 signatureHasInk = true;
+                signatureImageDataUrl = signaturePad.toDataURL('image/png');
+                refreshSignatureStamp();
+            }
+
+            function signaturePreviewStage() {
+                return document.getElementById('signaturePreviewStage');
+            }
+
+            function signatureStampElement() {
+                return document.getElementById('signatureStamp');
+            }
+
+            function clampSignaturePlacement(x, y) {
+                const stage = signaturePreviewStage();
+                const stamp = signatureStampElement();
+
+                if (!stage || !stamp) {
+                    return { x, y };
+                }
+
+                const maxX = Math.max(8, stage.clientWidth - stamp.offsetWidth - 8);
+                const maxY = Math.max(8, stage.clientHeight - stamp.offsetHeight - 8);
+
+                return {
+                    x: Math.min(Math.max(8, x), maxX),
+                    y: Math.min(Math.max(8, y), maxY),
+                };
+            }
+
+            function refreshSignatureStamp() {
+                const stamp = signatureStampElement();
+                if (!stamp) return;
+
+                if (!signatureImageDataUrl) {
+                    stamp.classList.remove('is-visible', 'is-dragging');
+                    stamp.innerHTML = '';
+                    return;
+                }
+
+                stamp.innerHTML = `<img src="${signatureImageDataUrl}" alt="Signature">`;
+                signaturePlacement = clampSignaturePlacement(signaturePlacement.x, signaturePlacement.y);
+                stamp.style.left = `${signaturePlacement.x}px`;
+                stamp.style.top = `${signaturePlacement.y}px`;
+                stamp.classList.add('is-visible');
+            }
+
+            function placeSignatureFromEvent(event) {
+                const stage = signaturePreviewStage();
+                const stamp = signatureStampElement();
+                if (!stage || !stamp || !signatureImageDataUrl) return;
+
+                const pointer = event.touches?.[0] || event;
+                const rect = stage.getBoundingClientRect();
+                signaturePlacement = clampSignaturePlacement(
+                    pointer.clientX - rect.left - (stamp.offsetWidth / 2),
+                    pointer.clientY - rect.top - (stamp.offsetHeight / 2)
+                );
+                refreshSignatureStamp();
+            }
+
+            function startSignatureStampDrag(event) {
+                const stamp = signatureStampElement();
+                if (!stamp || !signatureImageDataUrl) return;
+
+                event.preventDefault();
+                const pointer = event.touches?.[0] || event;
+                const rect = stamp.getBoundingClientRect();
+                signatureStampDragging = true;
+                signatureStampDragOffset = {
+                    x: pointer.clientX - rect.left,
+                    y: pointer.clientY - rect.top,
+                };
+                stamp.classList.add('is-dragging');
+            }
+
+            function moveSignatureStamp(event) {
+                if (!signatureStampDragging) return;
+
+                const stage = signaturePreviewStage();
+                if (!stage) return;
+
+                event.preventDefault();
+                const rect = stage.getBoundingClientRect();
+                signaturePlacement = clampSignaturePlacement(
+                    event.clientX - rect.left - signatureStampDragOffset.x,
+                    event.clientY - rect.top - signatureStampDragOffset.y
+                );
+                refreshSignatureStamp();
+            }
+
+            function stopSignatureStampDrag() {
+                if (!signatureStampDragging) return;
+
+                signatureStampDragging = false;
+                signatureStampElement()?.classList.remove('is-dragging');
             }
 
             function renderSignatureDocuments() {
@@ -1174,13 +1352,35 @@
                 if (!signaturePreview || !selectedSignatureDocument) return;
                 const previewUrl = selectedSignatureDocument.preview_url || selectedSignatureDocument.url || '';
 
-                signaturePreview.innerHTML = previewUrl
-                    ? `<iframe src="${escapeHtml(previewUrl)}" title="${escapeHtml(selectedSignatureDocument.display_name)}"></iframe>`
-                    : `
+                if (!previewUrl) {
+                    signaturePreview.innerHTML = `
                         <div class="h-100 d-flex align-items-center justify-content-center text-muted p-4 text-center">
                             Preview is not available for this document.
                         </div>
                     `;
+                    return;
+                }
+
+                const previewTitle = escapeHtml(selectedSignatureDocument.display_name);
+                const previewContent = selectedSignatureDocument.is_image
+                    ? `<img src="${escapeHtml(previewUrl)}" class="signature-preview-image" alt="${previewTitle}">`
+                    : `<iframe src="${escapeHtml(previewUrl)}" class="signature-preview-frame" title="${previewTitle}"></iframe>`;
+
+                signaturePreview.innerHTML = `
+                    <div class="signature-preview-stage" id="signaturePreviewStage">
+                        ${previewContent}
+                        <div class="signature-placement-layer" id="signaturePlacementLayer" title="Click to place the signature"></div>
+                        <div class="signature-stamp" id="signatureStamp"></div>
+                        <div class="signature-position-hint">Draw or type a signature, then click anywhere on the document to place it.</div>
+                    </div>
+                `;
+
+                document.getElementById('signaturePlacementLayer')?.addEventListener('pointerdown', (event) => {
+                    event.preventDefault();
+                    placeSignatureFromEvent(event);
+                });
+                signatureStampElement()?.addEventListener('pointerdown', startSignatureStampDrag);
+                refreshSignatureStamp();
             }
 
             function openSignatureModal(card, index) {
@@ -1188,6 +1388,9 @@
 
                 activeSignaturePaymentCard = card;
                 activeSignaturePaymentIndex = index;
+                signatureHasInk = false;
+                signatureImageDataUrl = null;
+                signaturePlacement = { x: 42, y: 42 };
                 document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove());
                 renderSignatureDocuments();
                 signatureModalEl.classList.add('show');
@@ -1258,11 +1461,20 @@
                     return;
                 }
 
+                if (!signatureImageDataUrl) {
+                    signatureImageDataUrl = signaturePad.toDataURL('image/png');
+                    refreshSignatureStamp();
+                }
+
                 const output = document.createElement('canvas');
                 output.width = 1200;
                 output.height = 820;
                 const ctx = output.getContext('2d');
                 const signedAt = new Date();
+                const stage = signaturePreviewStage();
+                const positionText = stage
+                    ? `${Math.round((signaturePlacement.x / Math.max(stage.clientWidth, 1)) * 100)}% from left, ${Math.round((signaturePlacement.y / Math.max(stage.clientHeight, 1)) * 100)}% from top`
+                    : 'Selected on document preview';
 
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, output.width, output.height);
@@ -1285,6 +1497,7 @@
                     ['Purchase Order', currentPo?.reference_no || 'N/A'],
                     ['Signed By', `${signer.name || 'User'}${signer.email ? ' <' + signer.email + '>' : ''}`],
                     ['Signed At', signedAt.toLocaleString()],
+                    ['Signature Position', positionText],
                 ];
 
                 let y = 205;
@@ -1320,7 +1533,7 @@
 
                     output.toBlob(callback, 'image/png', 0.95);
                 };
-                signatureImage.src = signaturePad.toDataURL('image/png');
+                signatureImage.src = signatureImageDataUrl;
             }
 
             function addSignedDocumentRow(card, index, documentName = '', required = false) {
@@ -1683,6 +1896,9 @@
                 signaturePad.addEventListener('pointerdown', (event) => {
                     event.preventDefault();
                     resizeSignaturePad();
+                    signatureHasInk = false;
+                    signatureImageDataUrl = null;
+                    refreshSignatureStamp();
                     const ctx = signaturePad.getContext('2d');
                     const point = signaturePoint(event);
                     signatureDrawing = true;
@@ -1700,11 +1916,18 @@
                 });
                 ['pointerup', 'pointerleave', 'pointercancel'].forEach((eventName) => {
                     signaturePad.addEventListener(eventName, () => {
+                        if (signatureDrawing && signatureHasInk) {
+                            signatureImageDataUrl = signaturePad.toDataURL('image/png');
+                            refreshSignatureStamp();
+                        }
                         signatureDrawing = false;
                     });
                 });
             }
 
+            document.addEventListener('pointermove', moveSignatureStamp);
+            document.addEventListener('pointerup', stopSignatureStampDrag);
+            document.addEventListener('pointercancel', stopSignatureStampDrag);
             signatureClearBtn?.addEventListener('click', clearSignaturePad);
             typedSignatureBtn?.addEventListener('click', drawTypedSignature);
             signatureApplyBtn?.addEventListener('click', () => {

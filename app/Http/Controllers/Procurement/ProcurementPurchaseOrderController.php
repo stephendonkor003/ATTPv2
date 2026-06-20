@@ -31,7 +31,8 @@ class ProcurementPurchaseOrderController extends Controller
 
     public function __construct()
     {
-        $this->middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_requests.view']);
+        $this->middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_requests.view'])
+            ->except('publicLineItemEvidenceDocumentPreview');
     }
 
     public function index()
@@ -861,6 +862,32 @@ class ProcurementPurchaseOrderController extends Controller
         if ($request->boolean('download')) {
             return $privateDisk->download($file['path'], $fileName, $headers);
         }
+
+        return $privateDisk->response($file['path'], $fileName, $headers);
+    }
+
+    public function publicLineItemEvidenceDocumentPreview(
+        Request $request,
+        ProcurementPurchaseOrder $purchaseOrder,
+        ProcurementPurchaseOrderItemEvidence $evidence,
+        int $document
+    ) {
+        abort_unless((string) $evidence->purchase_order_id === (string) $purchaseOrder->id, 404);
+
+        $documents = $evidence->documents ?? [];
+        $file = $documents[$document] ?? null;
+        abort_unless(is_array($file) && ! empty($file['path']), 404, 'Evidence document not found.');
+
+        $privateDisk = Storage::disk('local');
+        abort_unless($privateDisk->exists($file['path']), 404, 'Evidence document file missing on disk.');
+
+        $headers = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        $fileName = $file['name'] ?? basename($file['path']);
 
         return $privateDisk->response($file['path'], $fileName, $headers);
     }

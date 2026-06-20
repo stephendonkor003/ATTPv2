@@ -1704,6 +1704,13 @@ Route::middleware(['auth', 'not.funding.partner'])
     use App\Http\Controllers\Procurement\ProcurementPurchaseOrderController;
     use App\Http\Controllers\Procurement\ProcurementDisbursementController;
 
+Route::get('procurement/purchase-orders/{purchaseOrder}/line-item-evidence/{evidence}/documents/{document}/preview',
+    [ProcurementPurchaseOrderController::class, 'publicLineItemEvidenceDocumentPreview']
+)
+    ->middleware('signed')
+    ->whereNumber('document')
+    ->name('procurement.purchase-orders.line-item-evidence.public-preview');
+
 Route::middleware(['auth', 'not.funding.partner'])
     ->prefix('procurement-status')
     ->name('statusProcurement.')
