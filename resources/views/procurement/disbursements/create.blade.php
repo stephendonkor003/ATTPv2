@@ -219,6 +219,11 @@
             text-transform: uppercase;
         }
 
+        .disb-create .signed-document-row.is-generated {
+            border-color: #99f6e4;
+            background: #f0fdfa;
+        }
+
         #lineItemEvidenceModal {
             z-index: 1095;
         }
@@ -237,6 +242,93 @@
             border-radius: 14px;
             box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
             overflow: hidden;
+        }
+
+        #digitalSignatureModal {
+            z-index: 1105;
+        }
+
+        #digitalSignatureModal.show {
+            background: rgba(15, 23, 42, .54);
+            display: block;
+        }
+
+        #digitalSignatureModal .modal-dialog {
+            max-width: min(1180px, calc(100vw - 28px));
+        }
+
+        #digitalSignatureModal .modal-content {
+            border: 0;
+            border-radius: 14px;
+            box-shadow: 0 30px 86px rgba(15, 23, 42, .32);
+            overflow: hidden;
+        }
+
+        .signature-workspace {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+        }
+
+        .signature-doc-list {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            max-height: 560px;
+            overflow: auto;
+        }
+
+        .signature-doc-option {
+            border: 0;
+            border-bottom: 1px solid #eef2f7;
+            background: #fff;
+            color: #334155;
+            display: block;
+            padding: 12px 14px;
+            text-align: left;
+            width: 100%;
+        }
+
+        .signature-doc-option:hover,
+        .signature-doc-option.is-active {
+            background: #ecfdf5;
+            color: #064e3b;
+        }
+
+        .signature-preview {
+            border: 1px solid #dbe4ef;
+            border-radius: 12px;
+            min-height: 420px;
+            overflow: hidden;
+            background: #f8fafc;
+        }
+
+        .signature-preview iframe {
+            border: 0;
+            display: block;
+            height: 420px;
+            width: 100%;
+        }
+
+        .signature-pad-wrap {
+            border: 1px solid #dbe4ef;
+            border-radius: 12px;
+            background: #fff;
+            padding: 12px;
+        }
+
+        #signaturePad {
+            border: 1px dashed #94a3b8;
+            border-radius: 10px;
+            cursor: crosshair;
+            display: block;
+            height: 160px;
+            width: 100%;
+        }
+
+        @media (max-width: 991.98px) {
+            .signature-workspace {
+                grid-template-columns: 1fr;
+            }
         }
 
         .evidence-modal-summary {
@@ -510,6 +602,65 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="modal fade" id="digitalSignatureModal" tabindex="-1" aria-labelledby="digitalSignatureTitle" aria-hidden="true">
+                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <div>
+                                    <h5 class="modal-title mb-1" id="digitalSignatureTitle">Digital Signature Workspace</h5>
+                                    <div class="small text-muted" id="digitalSignatureSubtitle">Select an evidence document, sign, and attach it to this payment row.</div>
+                                </div>
+                                <button type="button" class="btn-close digital-signature-close" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="signature-workspace">
+                                    <aside>
+                                        <div class="fw-semibold mb-2">Evidence Documents</div>
+                                        <div class="signature-doc-list" id="signatureEvidenceDocuments"></div>
+                                    </aside>
+                                    <section class="min-w-0">
+                                        <div class="signature-preview mb-3" id="signaturePreview">
+                                            <div class="h-100 d-flex align-items-center justify-content-center text-muted p-4 text-center">
+                                                Select an evidence document to preview it here.
+                                            </div>
+                                        </div>
+                                        <div class="row g-3">
+                                            <div class="col-lg-7">
+                                                <div class="signature-pad-wrap">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <label class="form-label fw-semibold mb-0">Draw Signature</label>
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="signatureClearBtn">
+                                                            <i class="feather-refresh-cw me-1"></i> Clear
+                                                        </button>
+                                                    </div>
+                                                    <canvas id="signaturePad"></canvas>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-5">
+                                                <label class="form-label fw-semibold">Typed Signature</label>
+                                                <input type="text" class="form-control mb-2" id="typedSignatureInput"
+                                                    placeholder="Type signer name">
+                                                <button type="button" class="btn btn-outline-primary w-100 mb-3" id="typedSignatureBtn">
+                                                    <i class="feather-edit-3 me-1"></i> Use Typed Signature
+                                                </button>
+                                                <div class="alert alert-light border small mb-0">
+                                                    The signed record will be attached under Signed Payment Documents as a PNG file and stored with the disbursement.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light digital-signature-close">Cancel</button>
+                                <button type="button" class="btn btn-primary" id="signatureApplyBtn">
+                                    <i class="feather-check-circle me-1"></i> Attach Signed Copy
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </form>
         @endif
     </div>
@@ -524,6 +675,10 @@
             const paymentMethods = @json($paymentMethods);
             const statusOptions = @json($statusOptions);
             const paidStatuses = @json(\App\Models\ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+            const signer = @json([
+                'name' => auth()->user()?->name,
+                'email' => auth()->user()?->email,
+            ]);
 
             const select = document.getElementById('purchaseOrderSelect');
             const poPanel = document.getElementById('poDetailsPanel');
@@ -541,7 +696,20 @@
             const evidenceModalSubtitle = document.getElementById('lineItemEvidenceSubtitle');
             const evidenceModalDeliverable = document.getElementById('lineItemEvidenceDeliverable');
             const evidenceDoneBtn = document.getElementById('lineItemEvidenceDoneBtn');
+            const signatureModalEl = document.getElementById('digitalSignatureModal');
+            const signatureDocumentList = document.getElementById('signatureEvidenceDocuments');
+            const signaturePreview = document.getElementById('signaturePreview');
+            const signaturePad = document.getElementById('signaturePad');
+            const signatureClearBtn = document.getElementById('signatureClearBtn');
+            const signatureApplyBtn = document.getElementById('signatureApplyBtn');
+            const typedSignatureInput = document.getElementById('typedSignatureInput');
+            const typedSignatureBtn = document.getElementById('typedSignatureBtn');
             let activeEvidenceFieldset = null;
+            let activeSignaturePaymentCard = null;
+            let activeSignaturePaymentIndex = null;
+            let selectedSignatureDocument = null;
+            let signatureHasInk = false;
+            let signatureDrawing = false;
             let currentPo = null;
             let oldPaymentsApplied = false;
 
@@ -890,6 +1058,271 @@
                 if (batchRemaining) batchRemaining.textContent = `${currency} ${fmt(Math.max(poBalance - total, 0))}`;
             }
 
+            function evidenceDocumentsForSigning() {
+                if (!currentPo || !Array.isArray(currentPo.line_items)) return [];
+
+                return currentPo.line_items.flatMap((item) => {
+                    const docs = Array.isArray(item.evidence?.documents) ? item.evidence.documents : [];
+                    return docs.map((document, index) => {
+                        const url = String(document.url || '');
+                        return {
+                            id: `${item.id}-${index}`,
+                            item_id: item.id,
+                            item_label: item.resource || item.category || 'Line item',
+                            deliverable: item.deliverable_title || 'Deliverable evidence',
+                            name: document.name || 'Evidence document',
+                            display_name: document.display_name || document.name || 'Evidence document',
+                            url,
+                            preview_url: url.replace(/\?download=1$/i, '').replace(/&download=1$/i, ''),
+                        };
+                    });
+                });
+            }
+
+            function resizeSignaturePad() {
+                if (!signaturePad) return;
+                const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                const rect = signaturePad.getBoundingClientRect();
+                signaturePad.width = Math.max(1, Math.floor(rect.width * ratio));
+                signaturePad.height = Math.max(1, Math.floor(rect.height * ratio));
+                const ctx = signaturePad.getContext('2d');
+                ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = 2.6;
+                ctx.strokeStyle = '#0f172a';
+            }
+
+            function clearSignaturePad() {
+                if (!signaturePad) return;
+                const ctx = signaturePad.getContext('2d');
+                ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
+                signatureHasInk = false;
+            }
+
+            function signaturePoint(event) {
+                const rect = signaturePad.getBoundingClientRect();
+                const pointer = event.touches?.[0] || event;
+                return {
+                    x: pointer.clientX - rect.left,
+                    y: pointer.clientY - rect.top,
+                };
+            }
+
+            function drawTypedSignature() {
+                if (!signaturePad) return;
+                const name = (typedSignatureInput?.value || signer.name || '').trim();
+                if (name === '') return;
+
+                clearSignaturePad();
+                const ctx = signaturePad.getContext('2d');
+                const rect = signaturePad.getBoundingClientRect();
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '42px "Segoe Script", "Brush Script MT", cursive';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(name, 24, rect.height / 2);
+                ctx.strokeStyle = 'rgba(15, 23, 42, .35)';
+                ctx.beginPath();
+                ctx.moveTo(24, rect.height / 2 + 32);
+                ctx.lineTo(Math.min(rect.width - 24, 420), rect.height / 2 + 32);
+                ctx.stroke();
+                signatureHasInk = true;
+            }
+
+            function renderSignatureDocuments() {
+                if (!signatureDocumentList) return;
+                const documents = evidenceDocumentsForSigning();
+
+                if (documents.length === 0) {
+                    signatureDocumentList.innerHTML = `
+                        <div class="p-3 text-muted small">
+                            No existing evidence documents are attached to this purchase order yet.
+                        </div>
+                    `;
+                    selectedSignatureDocument = null;
+                    if (signaturePreview) {
+                        signaturePreview.innerHTML = `
+                            <div class="h-100 d-flex align-items-center justify-content-center text-muted p-4 text-center">
+                                Add evidence documents first, then return here to sign them.
+                            </div>
+                        `;
+                    }
+                    return;
+                }
+
+                selectedSignatureDocument = documents[0];
+                signatureDocumentList.innerHTML = documents.map((document, index) => `
+                    <button type="button" class="signature-doc-option ${index === 0 ? 'is-active' : ''}" data-signature-doc-id="${escapeHtml(document.id)}">
+                        <div class="fw-semibold">${escapeHtml(document.display_name)}</div>
+                        <div class="small text-muted">${escapeHtml(document.item_label)} | ${escapeHtml(document.deliverable)}</div>
+                    </button>
+                `).join('');
+
+                signatureDocumentList.querySelectorAll('.signature-doc-option').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        signatureDocumentList.querySelectorAll('.signature-doc-option').forEach((item) => item.classList.remove('is-active'));
+                        button.classList.add('is-active');
+                        selectedSignatureDocument = documents.find((document) => document.id === button.dataset.signatureDocId) || documents[0];
+                        renderSignaturePreview();
+                    });
+                });
+
+                renderSignaturePreview();
+            }
+
+            function renderSignaturePreview() {
+                if (!signaturePreview || !selectedSignatureDocument) return;
+                const previewUrl = selectedSignatureDocument.preview_url || selectedSignatureDocument.url || '';
+
+                signaturePreview.innerHTML = previewUrl
+                    ? `<iframe src="${escapeHtml(previewUrl)}" title="${escapeHtml(selectedSignatureDocument.display_name)}"></iframe>`
+                    : `
+                        <div class="h-100 d-flex align-items-center justify-content-center text-muted p-4 text-center">
+                            Preview is not available for this document.
+                        </div>
+                    `;
+            }
+
+            function openSignatureModal(card, index) {
+                if (!signatureModalEl) return;
+
+                activeSignaturePaymentCard = card;
+                activeSignaturePaymentIndex = index;
+                document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove());
+                renderSignatureDocuments();
+                signatureModalEl.classList.add('show');
+                signatureModalEl.style.display = 'block';
+                signatureModalEl.removeAttribute('aria-hidden');
+                signatureModalEl.setAttribute('aria-modal', 'true');
+                signatureModalEl.setAttribute('role', 'dialog');
+                document.body.classList.add('line-evidence-modal-open');
+                setTimeout(() => {
+                    resizeSignaturePad();
+                    clearSignaturePad();
+                    signatureDocumentList?.querySelector('.signature-doc-option')?.focus();
+                }, 0);
+            }
+
+            function closeSignatureModal() {
+                if (!signatureModalEl) return;
+                signatureModalEl.classList.remove('show');
+                signatureModalEl.style.display = 'none';
+                signatureModalEl.setAttribute('aria-hidden', 'true');
+                signatureModalEl.removeAttribute('aria-modal');
+                signatureModalEl.removeAttribute('role');
+                document.body.classList.remove('line-evidence-modal-open');
+                activeSignaturePaymentCard = null;
+                activeSignaturePaymentIndex = null;
+                selectedSignatureDocument = null;
+            }
+
+            function safeFileName(value) {
+                return String(value || 'signed-document')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .replace(/^-+|-+$/g, '')
+                    .slice(0, 80) || 'signed-document';
+            }
+
+            function attachGeneratedSignedFile(file, document) {
+                if (!activeSignaturePaymentCard || !activeSignaturePaymentIndex) return;
+
+                let row = Array.from(activeSignaturePaymentCard.querySelectorAll('.signed-document-row'))
+                    .find((candidate) => {
+                        const fileInput = candidate.querySelector('input[type="file"]');
+                        const nameInput = candidate.querySelector('input[type="text"]');
+                        return fileInput && fileInput.files.length === 0 && String(nameInput?.value || '').trim() === '';
+                    });
+
+                if (!row) {
+                    addSignedDocumentRow(activeSignaturePaymentCard, activeSignaturePaymentIndex);
+                    const rows = activeSignaturePaymentCard.querySelectorAll('.signed-document-row');
+                    row = rows[rows.length - 1];
+                }
+
+                const nameInput = row.querySelector('input[type="text"]');
+                const fileInput = row.querySelector('input[type="file"]');
+                const transfer = new DataTransfer();
+                transfer.items.add(file);
+                fileInput.files = transfer.files;
+                if (nameInput) {
+                    nameInput.value = `Digitally signed - ${document.display_name}`;
+                }
+                row.classList.add('is-generated');
+                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            function buildSignatureRecordBlob(callback) {
+                if (!selectedSignatureDocument || !signaturePad || !signatureHasInk) {
+                    alert('Select an evidence document and add a signature first.');
+                    return;
+                }
+
+                const output = document.createElement('canvas');
+                output.width = 1200;
+                output.height = 820;
+                const ctx = output.getContext('2d');
+                const signedAt = new Date();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, output.width, output.height);
+                ctx.fillStyle = '#064e3b';
+                ctx.fillRect(0, 0, output.width, 110);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 34px Arial, sans-serif';
+                ctx.fillText('ATTP Digital Signature Record', 52, 64);
+                ctx.font = '18px Arial, sans-serif';
+                ctx.fillText('Signed payment document generated from deliverable evidence', 52, 92);
+
+                ctx.fillStyle = '#0f172a';
+                ctx.font = 'bold 22px Arial, sans-serif';
+                ctx.fillText('Source Document', 52, 165);
+                ctx.font = '18px Arial, sans-serif';
+                const details = [
+                    ['Document', selectedSignatureDocument.display_name],
+                    ['Line Item', selectedSignatureDocument.item_label],
+                    ['Deliverable', selectedSignatureDocument.deliverable],
+                    ['Purchase Order', currentPo?.reference_no || 'N/A'],
+                    ['Signed By', `${signer.name || 'User'}${signer.email ? ' <' + signer.email + '>' : ''}`],
+                    ['Signed At', signedAt.toLocaleString()],
+                ];
+
+                let y = 205;
+                details.forEach(([label, value]) => {
+                    ctx.fillStyle = '#64748b';
+                    ctx.font = 'bold 16px Arial, sans-serif';
+                    ctx.fillText(label, 52, y);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = '18px Arial, sans-serif';
+                    ctx.fillText(String(value || 'N/A').slice(0, 94), 220, y);
+                    y += 38;
+                });
+
+                ctx.strokeStyle = '#cbd5e1';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(52, 470, 1096, 250);
+                ctx.fillStyle = '#64748b';
+                ctx.font = 'bold 16px Arial, sans-serif';
+                ctx.fillText('Signature', 72, 505);
+
+                const signatureImage = new Image();
+                signatureImage.onload = () => {
+                    ctx.drawImage(signatureImage, 82, 535, 500, 130);
+                    ctx.strokeStyle = '#94a3b8';
+                    ctx.beginPath();
+                    ctx.moveTo(82, 685);
+                    ctx.lineTo(600, 685);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#475569';
+                    ctx.font = '14px Arial, sans-serif';
+                    ctx.fillText('This record was generated inside the ATTP disbursement workflow and attached as a signed payment document.', 52, 770);
+
+                    output.toBlob(callback, 'image/png', 0.95);
+                };
+                signatureImage.src = signaturePad.toDataURL('image/png');
+            }
+
             function addSignedDocumentRow(card, index, documentName = '', required = false) {
                 const list = card.querySelector('.signed-document-list');
                 if (!list) return;
@@ -901,7 +1334,7 @@
                         <label class="signed-document-label">Document Name</label>
                         <input type="text"
                             name="payments[${index}][signed_document_names][]"
-                            class="form-control"
+                            class="form-control signed-document-name"
                             maxlength="255"
                             value="${escapeHtml(documentName)}"
                             placeholder="Signed approval, cheque copy, bank advice">
@@ -910,7 +1343,7 @@
                         <label class="signed-document-label">Signed File <span class="text-danger">*</span></label>
                         <input type="file"
                             name="payments[${index}][signed_documents][]"
-                            class="form-control"
+                            class="form-control signed-document-file"
                             accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip"
                             ${required ? 'required' : ''}>
                     </div>
@@ -940,6 +1373,7 @@
 
                 const card = document.createElement('div');
                 card.className = 'payment-line-card';
+                card.dataset.paymentIndex = index;
                 card.innerHTML = `
                     <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
                         <div class="d-flex align-items-center gap-2">
@@ -1007,6 +1441,9 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary signed-document-add">
                                     <i class="feather-plus me-1"></i> Add Document
                                 </button>
+                                <button type="button" class="btn btn-sm btn-outline-success signed-document-sign">
+                                    <i class="feather-pen-tool me-1"></i> Sign Evidence
+                                </button>
                             </div>
                             <div class="signed-document-list"></div>
                         </div>
@@ -1032,6 +1469,9 @@
                 });
                 card.querySelector('.signed-document-add')?.addEventListener('click', () => {
                     addSignedDocumentRow(card, index);
+                });
+                card.querySelector('.signed-document-sign')?.addEventListener('click', () => {
+                    openSignatureModal(card, index);
                 });
 
                 paymentLines.appendChild(card);
@@ -1238,8 +1678,61 @@
             evidenceModalEl?.addEventListener('mousedown', (event) => {
                 if (event.target === evidenceModalEl) closeEvidenceModal();
             });
+
+            if (signaturePad) {
+                signaturePad.addEventListener('pointerdown', (event) => {
+                    event.preventDefault();
+                    resizeSignaturePad();
+                    const ctx = signaturePad.getContext('2d');
+                    const point = signaturePoint(event);
+                    signatureDrawing = true;
+                    ctx.beginPath();
+                    ctx.moveTo(point.x, point.y);
+                });
+                signaturePad.addEventListener('pointermove', (event) => {
+                    if (!signatureDrawing) return;
+                    event.preventDefault();
+                    const ctx = signaturePad.getContext('2d');
+                    const point = signaturePoint(event);
+                    ctx.lineTo(point.x, point.y);
+                    ctx.stroke();
+                    signatureHasInk = true;
+                });
+                ['pointerup', 'pointerleave', 'pointercancel'].forEach((eventName) => {
+                    signaturePad.addEventListener(eventName, () => {
+                        signatureDrawing = false;
+                    });
+                });
+            }
+
+            signatureClearBtn?.addEventListener('click', clearSignaturePad);
+            typedSignatureBtn?.addEventListener('click', drawTypedSignature);
+            signatureApplyBtn?.addEventListener('click', () => {
+                buildSignatureRecordBlob((blob) => {
+                    if (!blob || !selectedSignatureDocument) return;
+                    const file = new File(
+                        [blob],
+                        `digitally-signed-${safeFileName(selectedSignatureDocument.display_name)}.png`,
+                        { type: 'image/png' }
+                    );
+                    attachGeneratedSignedFile(file, selectedSignatureDocument);
+                    closeSignatureModal();
+                });
+            });
+            document.querySelectorAll('.digital-signature-close').forEach((button) => {
+                button.addEventListener('click', closeSignatureModal);
+            });
+            signatureModalEl?.addEventListener('mousedown', (event) => {
+                if (event.target === signatureModalEl) closeSignatureModal();
+            });
+            window.addEventListener('resize', () => {
+                if (signatureModalEl?.classList.contains('show')) {
+                    resizeSignaturePad();
+                }
+            });
             document.addEventListener('keydown', (event) => {
                 if (event.key === 'Escape' && evidenceModalEl?.classList.contains('show')) closeEvidenceModal();
+                if (event.key === 'Escape' && signatureModalEl?.classList.contains('show')) closeSignatureModal();
             });
 
             if (select.value) update();
