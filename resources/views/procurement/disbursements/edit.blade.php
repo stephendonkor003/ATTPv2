@@ -109,6 +109,30 @@
             width: 28px;
         }
 
+        .disb-edit .signed-document-row {
+            align-items: end;
+            background: #fff;
+            border: 1px solid #e3eaf4;
+            border-radius: 10px;
+            display: grid;
+            gap: 8px;
+            grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.25fr) auto;
+            padding: 10px;
+        }
+
+        .disb-edit .signed-document-row + .signed-document-row {
+            margin-top: 8px;
+        }
+
+        .disb-edit .signed-document-label {
+            color: #667085;
+            display: block;
+            font-size: .72rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+
         .disb-edit .line-balance-table {
             border: 1px solid #e2e8f0;
             border-radius: 12px;
@@ -141,6 +165,10 @@
             .disb-edit .stat-grid {
                 grid-template-columns: 1fr;
             }
+
+            .disb-edit .signed-document-row {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 @endpush
@@ -149,7 +177,18 @@
     @php
         $currency = $purchaseOrder->resolved_currency ?? $disbursement->resolved_currency ?? 'USD';
         $money = fn ($value) => trim($currency . ' ' . number_format((float) $value, 2));
-        $submittedPaymentRows = array_values(old('payments', $paymentRows ?? []));
+        $existingPaymentRowsById = collect($paymentRows ?? [])->keyBy(fn ($row) => (string) ($row['id'] ?? ''));
+        $submittedPaymentRows = collect(old('payments', $paymentRows ?? []))
+            ->map(function ($row) use ($existingPaymentRowsById) {
+                $id = (string) ($row['id'] ?? '');
+                if ($id !== '' && ! isset($row['signed_documents'])) {
+                    $row['signed_documents'] = $existingPaymentRowsById->get($id)['signed_documents'] ?? [];
+                }
+
+                return $row;
+            })
+            ->values()
+            ->all();
         $submittedDeletePaymentIds = array_values(old('delete_payment_ids', []));
         $paidStatuses = \App\Models\ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES;
         $statusBadgeClasses = [
@@ -229,7 +268,7 @@
             </div>
         </div>
 
-        <form method="POST" action="{{ route('procurement.disbursements.update', $disbursement) }}" id="disbursementEditForm">
+        <form method="POST" action="{{ route('procurement.disbursements.update', $disbursement) }}" enctype="multipart/form-data" id="disbursementEditForm">
             @csrf
             @method('PUT')
 
@@ -429,6 +468,54 @@
                 if (batchRemaining) batchRemaining.textContent = fmt(Math.max(editablePoBalance - total, 0));
             }
 
+            function addSignedDocumentRow(card, index, documentName = '') {
+                const list = card.querySelector('.signed-document-list');
+                if (!list) return;
+
+                const row = document.createElement('div');
+                row.className = 'signed-document-row';
+                row.innerHTML = `
+                    <div>
+                        <label class="signed-document-label">Document Name</label>
+                        <input type="text"
+                            name="payments[${index}][signed_document_names][]"
+                            class="form-control"
+                            maxlength="255"
+                            value="${escapeHtml(documentName)}"
+                            placeholder="Signed approval, cheque copy, bank advice">
+                    </div>
+                    <div>
+                        <label class="signed-document-label">Signed File</label>
+                        <input type="file"
+                            name="payments[${index}][signed_documents][]"
+                            class="form-control"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip">
+                    </div>
+                    <button type="button" class="btn btn-outline-danger signed-document-remove" aria-label="Remove signed document row">
+                        <i class="feather-trash-2"></i>
+                    </button>
+                `;
+
+                row.querySelector('.signed-document-remove')?.addEventListener('click', () => row.remove());
+                list.appendChild(row);
+            }
+
+            function existingSignedDocumentsHtml(documents = []) {
+                if (!Array.isArray(documents) || documents.length === 0) {
+                    return '<div class="small text-muted">No signed payment documents have been uploaded yet.</div>';
+                }
+
+                return `
+                    <div class="d-flex flex-wrap gap-1">
+                        ${documents.map((document) => `
+                            <a href="${escapeHtml(document.url || '#')}" class="badge bg-light text-dark border" title="${escapeHtml(document.name || 'Document')}">
+                                ${escapeHtml(document.display_name || document.name || 'Document')}
+                            </a>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
             function addDeletedPaymentId(id) {
                 if (!id || !deletedPaymentRows) return;
                 if (Array.from(deletedPaymentRows.querySelectorAll('input')).some((input) => input.value === String(id))) return;
@@ -508,6 +595,21 @@
                             <label class="form-label fw-semibold">Notes</label>
                             <textarea name="payments[${index}][notes]" rows="2" class="form-control" maxlength="2000">${escapeHtml(defaults.notes || '')}</textarea>
                         </div>
+                        <div class="col-12">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-2">
+                                <div>
+                                    <label class="form-label fw-semibold mb-0">Signed Payment Documents</label>
+                                    <div class="small text-muted">Existing files remain attached. Add new signed documents below when needed.</div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary signed-document-add">
+                                    <i class="feather-plus me-1"></i> Add Document
+                                </button>
+                            </div>
+                            <div class="mb-2">
+                                ${existingSignedDocumentsHtml(defaults.signed_documents || [])}
+                            </div>
+                            <div class="signed-document-list"></div>
+                        </div>
                     </div>
                 `;
 
@@ -529,8 +631,15 @@
                     Array.from(paymentLines.querySelectorAll('.payment-line-card')).forEach(updatePaymentCardLimit);
                     updatePaymentRows();
                 });
+                card.querySelector('.signed-document-add')?.addEventListener('click', () => {
+                    addSignedDocumentRow(card, index);
+                });
 
                 paymentLines.appendChild(card);
+                const submittedNames = Array.isArray(defaults.signed_document_names)
+                    ? defaults.signed_document_names.filter((name) => String(name || '').trim() !== '')
+                    : [];
+                submittedNames.forEach((name) => addSignedDocumentRow(card, index, name));
                 updatePaymentCardLimit(card);
                 updatePaymentRows();
             }

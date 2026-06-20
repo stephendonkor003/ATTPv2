@@ -8,6 +8,9 @@ use Illuminate\Support\Str;
 
 class ProcurementDisbursement extends BaseModel
 {
+    public const PROCUREMENT_STATUS_PENDING = 'pending_procurement_review';
+    public const PROCUREMENT_STATUS_COMPLETED = 'goods_receipt_recorded';
+
     protected $table = 'procurement_disbursements';
 
     protected $fillable = [
@@ -35,12 +38,26 @@ class ProcurementDisbursement extends BaseModel
         'paid_at',
         'created_by',
         'notes',
+        'signed_documents',
+        'procurement_processing_status',
+        'procurement_notified_at',
+        'goods_receipt_reference',
+        'goods_receipt_generated_at',
+        'goods_receipt_generated_by',
+        'sap_52_series_reference',
+        'sap_52_series_entered_at',
+        'sap_52_series_entered_by',
+        'procurement_processing_notes',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'paid_at' => 'datetime',
         'recipient_confirmed_at' => 'datetime',
+        'signed_documents' => 'array',
+        'procurement_notified_at' => 'datetime',
+        'goods_receipt_generated_at' => 'datetime',
+        'sap_52_series_entered_at' => 'datetime',
     ];
 
     public function purchaseOrder(): BelongsTo
@@ -59,6 +76,26 @@ class ProcurementDisbursement extends BaseModel
         return $this->purchaseOrder?->resolved_currency
             ?: $this->currency
             ?: 'USD';
+    }
+
+    public function getProcurementProcessingStatusLabelAttribute(): string
+    {
+        return match ($this->procurement_processing_status ?: self::PROCUREMENT_STATUS_PENDING) {
+            self::PROCUREMENT_STATUS_COMPLETED => 'Goods Receipt Recorded',
+            default => 'Pending Procurement Review',
+        };
+    }
+
+    public function isProcurementProcessingComplete(): bool
+    {
+        return ($this->procurement_processing_status === self::PROCUREMENT_STATUS_COMPLETED)
+            || filled($this->goods_receipt_reference)
+            || filled($this->sap_52_series_reference);
+    }
+
+    public function isAwaitingProcurementProcessing(): bool
+    {
+        return ! $this->isProcurementProcessingComplete();
     }
 
     public function purchaseRequestItem(): BelongsTo

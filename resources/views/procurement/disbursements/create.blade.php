@@ -192,7 +192,8 @@
             display: none;
         }
 
-        .disb-create .evidence-document-row {
+        .disb-create .evidence-document-row,
+        .disb-create .signed-document-row {
             align-items: end;
             background: #fff;
             border: 1px solid #e3eaf4;
@@ -203,11 +204,13 @@
             padding: 10px;
         }
 
-        .disb-create .evidence-document-row + .evidence-document-row {
+        .disb-create .evidence-document-row + .evidence-document-row,
+        .disb-create .signed-document-row + .signed-document-row {
             margin-top: 8px;
         }
 
-        .disb-create .evidence-document-label {
+        .disb-create .evidence-document-label,
+        .disb-create .signed-document-label {
             color: #667085;
             display: block;
             font-size: .72rem;
@@ -249,7 +252,8 @@
         }
 
         @media (max-width: 575.98px) {
-            .disb-create .evidence-document-row {
+            .disb-create .evidence-document-row,
+            .disb-create .signed-document-row {
                 grid-template-columns: 1fr;
             }
         }
@@ -886,6 +890,45 @@
                 if (batchRemaining) batchRemaining.textContent = `${currency} ${fmt(Math.max(poBalance - total, 0))}`;
             }
 
+            function addSignedDocumentRow(card, index, documentName = '', required = false) {
+                const list = card.querySelector('.signed-document-list');
+                if (!list) return;
+
+                const row = document.createElement('div');
+                row.className = 'signed-document-row';
+                row.innerHTML = `
+                    <div>
+                        <label class="signed-document-label">Document Name</label>
+                        <input type="text"
+                            name="payments[${index}][signed_document_names][]"
+                            class="form-control"
+                            maxlength="255"
+                            value="${escapeHtml(documentName)}"
+                            placeholder="Signed approval, cheque copy, bank advice">
+                    </div>
+                    <div>
+                        <label class="signed-document-label">Signed File <span class="text-danger">*</span></label>
+                        <input type="file"
+                            name="payments[${index}][signed_documents][]"
+                            class="form-control"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip"
+                            ${required ? 'required' : ''}>
+                    </div>
+                    <button type="button" class="btn btn-outline-danger signed-document-remove" aria-label="Remove signed document row">
+                        <i class="feather-trash-2"></i>
+                    </button>
+                `;
+
+                row.querySelector('.signed-document-remove')?.addEventListener('click', () => {
+                    row.remove();
+                    if (list.querySelectorAll('.signed-document-row').length === 0) {
+                        addSignedDocumentRow(card, index, '', true);
+                    }
+                });
+
+                list.appendChild(row);
+            }
+
             function addPaymentRow(defaults = {}) {
                 if (!paymentLines || !currentPo) return;
 
@@ -955,6 +998,18 @@
                             <label class="form-label fw-semibold">Notes</label>
                             <textarea name="payments[${index}][notes]" rows="2" class="form-control" maxlength="2000">${escapeHtml(defaults.notes || '')}</textarea>
                         </div>
+                        <div class="col-12">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-2">
+                                <div>
+                                    <label class="form-label fw-semibold mb-0">Signed Payment Documents <span class="text-danger">*</span></label>
+                                    <div class="small text-muted">Upload signed approvals, bank advice, cheque copies, or payment authorisation files.</div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary signed-document-add">
+                                    <i class="feather-plus me-1"></i> Add Document
+                                </button>
+                            </div>
+                            <div class="signed-document-list"></div>
+                        </div>
                     </div>
                 `;
 
@@ -975,8 +1030,20 @@
                     Array.from(paymentLines.querySelectorAll('.payment-line-card')).forEach(updatePaymentCardLimit);
                     updatePaymentRows();
                 });
+                card.querySelector('.signed-document-add')?.addEventListener('click', () => {
+                    addSignedDocumentRow(card, index);
+                });
 
                 paymentLines.appendChild(card);
+                const submittedNames = Array.isArray(defaults.signed_document_names)
+                    ? defaults.signed_document_names.filter((name) => String(name || '').trim() !== '')
+                    : [];
+
+                if (submittedNames.length > 0) {
+                    submittedNames.forEach((name, rowIndex) => addSignedDocumentRow(card, index, name, rowIndex === 0));
+                } else {
+                    addSignedDocumentRow(card, index, '', true);
+                }
                 updatePaymentCardLimit(card);
                 updatePaymentRows();
             }

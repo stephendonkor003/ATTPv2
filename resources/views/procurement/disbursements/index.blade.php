@@ -159,11 +159,15 @@
                             <th class="text-center">Amount</th>
                             <th class="text-center">Paid At</th>
                             <th class="text-center">Status</th>
+                            <th class="text-center">Procurement</th>
                             <th class="text-center" width="230">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($disbursements as $disbursement)
+                            @php
+                                $procurementComplete = $disbursement->isProcurementProcessingComplete();
+                            @endphp
                             <tr>
                                 <td class="ps-4 fw-semibold">{{ $disbursement->reference_no ?? 'N/A' }}</td>
                                 <td>
@@ -197,11 +201,25 @@
                                     </span>
                                 </td>
                                 <td class="text-center">
+                                    <span class="badge {{ $procurementComplete ? 'bg-success' : 'bg-warning text-dark' }}">
+                                        {{ $disbursement->procurement_processing_status_label }}
+                                    </span>
+                                    @if ($disbursement->goods_receipt_reference)
+                                        <div class="small text-muted mt-1">{{ $disbursement->goods_receipt_reference }}</div>
+                                    @endif
+                                </td>
+                                <td class="text-center">
                                     <div class="d-flex flex-wrap justify-content-center gap-1">
                                         <a href="{{ route('procurement.disbursements.show', $disbursement) }}"
                                             class="btn btn-sm btn-outline-primary">
                                             View
                                         </a>
+                                        @if ($canHandleProcurementProcessing && $disbursement->isAwaitingProcurementProcessing())
+                                            <a href="{{ route('procurement.disbursements.show', $disbursement) }}#procurementProcessingPanel"
+                                                class="btn btn-sm btn-outline-success">
+                                                Input SAP 52
+                                            </a>
+                                        @endif
                                         @if ($canEditDisbursements)
                                             <a href="{{ route('procurement.disbursements.edit', $disbursement) }}"
                                                 class="btn btn-sm btn-outline-warning">

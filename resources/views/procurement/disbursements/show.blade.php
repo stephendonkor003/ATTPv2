@@ -256,6 +256,9 @@
             ?? 'N/A';
         $vendorName = $purchaseOrder?->vendor?->name ?? $disbursement->vendor?->name ?? 'Vendor';
         $vendorEmail = $purchaseOrder?->vendor?->email ?? $disbursement->vendor?->email ?? 'N/A';
+        $signedDocuments = collect($disbursement->signed_documents ?? [])->filter(fn ($document) => is_array($document))->values();
+        $procurementProcessingComplete = $disbursement->isProcurementProcessingComplete();
+        $procurementProcessingClass = $procurementProcessingComplete ? 'bg-success' : 'bg-warning text-dark';
     @endphp
 
     <div class="nxl-container disb-show">
@@ -321,6 +324,11 @@
                 <div class="tile-label">Paid Line Items</div>
                 <div class="tile-value">{{ $paidLineItems->count() }}</div>
                 <span class="tile-note">{{ $money($paidLineItemsTotal) }} confirmed/paid</span>
+            </div>
+            <div class="summary-tile">
+                <div class="tile-label">Procurement</div>
+                <div class="tile-value">{{ $disbursement->procurement_processing_status_label }}</div>
+                <span class="tile-note">{{ $disbursement->goods_receipt_reference ?: 'Goods receipt pending' }}</span>
             </div>
         </div>
 
@@ -495,6 +503,85 @@
             </div>
         </div>
 
+        <div class="row g-4 mt-1">
+            <div class="col-xl-5">
+                <div class="card content-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                            <div>
+                                <div class="section-label mb-1">Signed Payment Documents</div>
+                                <h5 class="fw-bold mb-0">{{ number_format($signedDocuments->count()) }} attached</h5>
+                            </div>
+                            <span class="badge bg-light text-dark border">{{ $signedDocuments->count() ? 'Uploaded' : 'Missing' }}</span>
+                        </div>
+
+                        @if ($signedDocuments->isEmpty())
+                            <div class="alert alert-light border mb-0">
+                                No signed payment documents have been uploaded for this receipt.
+                            </div>
+                        @else
+                            <div class="d-grid gap-2">
+                                @foreach ($signedDocuments as $documentIndex => $document)
+                                    <a href="{{ route('procurement.disbursements.signed-document', [$disbursement, $documentIndex]) }}?download=1"
+                                        class="d-flex justify-content-between align-items-center gap-2 border rounded px-3 py-2 text-decoration-none">
+                                        <span class="fw-semibold text-dark">
+                                            {{ $document['display_name'] ?? $document['name'] ?? 'Signed document' }}
+                                        </span>
+                                        <span class="badge bg-primary">
+                                            <i class="feather-download me-1"></i> Download
+                                        </span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-7">
+                <div class="card content-card h-100" id="procurementProcessingPanel">
+                    <div class="card-body">
+                        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-2 mb-3">
+                            <div>
+                                <div class="section-label mb-1">Procurement Processing</div>
+                                <h5 class="fw-bold mb-1">Goods Receipt and SAP 52 Series</h5>
+                                <div class="text-muted small">Complete this after finance records the signed payment/disbursement.</div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge {{ $procurementProcessingClass }} px-3 py-2">
+                                    {{ $disbursement->procurement_processing_status_label }}
+                                </span>
+                                @if ($canHandleProcurementProcessing && $disbursement->isAwaitingProcurementProcessing())
+                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#procurementProcessingModal">
+                                        <i class="feather-edit-3 me-1"></i> Input SAP 52
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+
+                        <table class="table table-sm reference-list">
+                            <tr>
+                                <th>Goods Receipt</th>
+                                <td>{{ $disbursement->goods_receipt_reference ?: 'Pending' }}</td>
+                            </tr>
+                            <tr>
+                                <th>SAP 52 Series</th>
+                                <td>{{ $disbursement->sap_52_series_reference ?: 'Pending' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Recorded At</th>
+                                <td>{{ $disbursement->goods_receipt_generated_at?->format('d M Y H:i') ?? 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Notes</th>
+                                <td>{{ $disbursement->procurement_processing_notes ?: 'N/A' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="card content-card paid-lines-card mt-4">
             <div class="card-body">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-2 mb-3">
@@ -624,6 +711,45 @@
                 <div class="card-body">
                     <div class="section-label mb-2">Receipt Notes</div>
                     <div>{{ $disbursement->notes }}</div>
+                </div>
+            </div>
+        @endif
+
+        @if ($canHandleProcurementProcessing && $disbursement->isAwaitingProcurementProcessing())
+            <div class="modal fade" id="procurementProcessingModal" tabindex="-1" aria-labelledby="procurementProcessingTitle" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <form method="POST" action="{{ route('procurement.disbursements.procurement-processing.store', $disbursement) }}" class="modal-content">
+                        @csrf
+                        <div class="modal-header">
+                            <div>
+                                <h5 class="modal-title" id="procurementProcessingTitle">Record Procurement Processing</h5>
+                                <div class="small text-muted">{{ $disbursement->reference_no ?? 'Payment receipt' }}</div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Goods Receipt Reference <span class="text-danger">*</span></label>
+                                <input type="text" name="goods_receipt_reference" class="form-control" maxlength="255"
+                                    value="{{ old('goods_receipt_reference', $disbursement->goods_receipt_reference) }}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">SAP 52 Series Reference <span class="text-danger">*</span></label>
+                                <input type="text" name="sap_52_series_reference" class="form-control" maxlength="255"
+                                    value="{{ old('sap_52_series_reference', $disbursement->sap_52_series_reference) }}" required>
+                            </div>
+                            <div>
+                                <label class="form-label fw-semibold">Processing Notes</label>
+                                <textarea name="procurement_processing_notes" rows="3" class="form-control" maxlength="3000">{{ old('procurement_processing_notes', $disbursement->procurement_processing_notes) }}</textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="feather-check-circle me-1"></i> Save Processing
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         @endif

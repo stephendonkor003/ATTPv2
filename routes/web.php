@@ -1820,6 +1820,11 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
             ->name('update');
         Route::delete('{disbursement}', [ProcurementDisbursementController::class, 'destroy'])
             ->name('destroy');
+        Route::post('{disbursement}/procurement-processing', [ProcurementDisbursementController::class, 'storeProcurementProcessing'])
+            ->name('procurement-processing.store');
+        Route::get('{disbursement}/signed-documents/{document}', [ProcurementDisbursementController::class, 'downloadSignedDocument'])
+            ->whereNumber('document')
+            ->name('signed-document');
         Route::get('{disbursement}', [ProcurementDisbursementController::class, 'show'])
             ->name('show');
         Route::get('{disbursement}/pdf', [ProcurementDisbursementController::class, 'pdf'])

@@ -11,10 +11,12 @@ use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\PurchaseRequestItem;
+use App\Services\ProcurementDisbursementHandoffNotificationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class ProcurementDisbursementController extends Controller
@@ -96,10 +98,12 @@ class ProcurementDisbursementController extends Controller
             ->paginate(12);
 
         $canEditDisbursements = $this->canEditDisbursements();
+        $canHandleProcurementProcessing = $this->canHandleProcurementProcessing();
 
         return view('procurement.disbursements.index', compact(
             'disbursements',
             'canEditDisbursements',
+            'canHandleProcurementProcessing',
             'disbursementSummary',
             'latestDisbursement'
         ));
@@ -275,6 +279,10 @@ class ProcurementDisbursementController extends Controller
             'payments.*.status' => ['nullable', 'string', 'in:' . implode(',', array_keys($this->disbursementStatusOptions()))],
             'payments.*.paid_at' => ['required', 'date'],
             'payments.*.notes' => ['nullable', 'string', 'max:2000'],
+            'payments.*.signed_document_names' => ['nullable', 'array', 'max:20'],
+            'payments.*.signed_document_names.*' => ['nullable', 'string', 'max:255'],
+            'payments.*.signed_documents' => ['required', 'array', 'min:1', 'max:20'],
+            'payments.*.signed_documents.*' => ['required', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
             'item_evidence' => ['nullable', 'array'],
             'item_evidence.*.is_met' => ['nullable', 'boolean'],
             'item_evidence.*.deliverable_date' => ['nullable', 'date'],
@@ -284,6 +292,8 @@ class ProcurementDisbursementController extends Controller
             'item_evidence.*.documents' => ['nullable', 'array', 'max:20'],
             'item_evidence.*.documents.*' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
         ], [
+            'payments.*.signed_documents.required' => 'Upload at least one signed payment document for each payment row.',
+            'payments.*.signed_documents.*.mimes' => 'Signed payment documents must be a PDF, Office document, image, or ZIP file.',
             'item_evidence.*.documents.*.mimes' => 'Line item evidence must be a PDF, Office document, image, or ZIP file.',
         ]);
 
@@ -315,9 +325,10 @@ class ProcurementDisbursementController extends Controller
 
         $disbursements = collect();
 
-        DB::transaction(function () use ($purchaseOrder, $paymentRows, &$disbursements) {
+        DB::transaction(function () use ($purchaseOrder, $paymentRows, $request, &$disbursements) {
             foreach ($paymentRows as $paymentRow) {
                 $disbursement = ProcurementDisbursement::create($this->disbursementPayloadForPaymentRow($purchaseOrder, $paymentRow));
+                $this->storeSignedPaymentDocuments($request, $disbursement, (string) ($paymentRow['input_key'] ?? $paymentRow['index']));
                 $disbursements->push($disbursement);
             }
 
@@ -337,7 +348,9 @@ class ProcurementDisbursementController extends Controller
             ]);
         });
 
-        $disbursements->each(fn (ProcurementDisbursement $row) => $this->sendReceipt($row));
+        $disbursements->each(fn (ProcurementDisbursement $row) => $this->sendReceipt($row->fresh()));
+        $handoffNotifier = app(ProcurementDisbursementHandoffNotificationService::class);
+        $disbursements->each(fn (ProcurementDisbursement $row) => $handoffNotifier->notify($row->fresh()));
 
         $message = $disbursements->count() === 1
             ? 'Disbursement recorded and receipt sent.'
@@ -385,8 +398,9 @@ class ProcurementDisbursementController extends Controller
             'governanceNode',
         ]);
         $canEditDisbursements = $this->canEditDisbursements();
+        $canHandleProcurementProcessing = $this->canHandleProcurementProcessing();
 
-        return view('procurement.disbursements.show', compact('disbursement', 'canEditDisbursements'));
+        return view('procurement.disbursements.show', compact('disbursement', 'canEditDisbursements', 'canHandleProcurementProcessing'));
     }
 
     public function edit(ProcurementDisbursement $disbursement)
@@ -491,8 +505,14 @@ class ProcurementDisbursementController extends Controller
             'payments.*.status' => ['required', 'string', 'in:' . implode(',', array_keys($this->disbursementStatusOptions()))],
             'payments.*.paid_at' => ['required', 'date'],
             'payments.*.notes' => ['nullable', 'string', 'max:2000'],
+            'payments.*.signed_document_names' => ['nullable', 'array', 'max:20'],
+            'payments.*.signed_document_names.*' => ['nullable', 'string', 'max:255'],
+            'payments.*.signed_documents' => ['nullable', 'array', 'max:20'],
+            'payments.*.signed_documents.*' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
             'delete_payment_ids' => ['nullable', 'array'],
             'delete_payment_ids.*' => ['nullable', 'exists:procurement_disbursements,id'],
+        ], [
+            'payments.*.signed_documents.*.mimes' => 'Signed payment documents must be a PDF, Office document, image, or ZIP file.',
         ]);
 
         $editableDisbursements = $purchaseOrder->disbursements->values();
@@ -512,7 +532,7 @@ class ProcurementDisbursementController extends Controller
             ]);
         }
 
-        $paymentInput = array_values($data['payments'] ?? []);
+        $paymentInput = $data['payments'] ?? [];
         if (empty($paymentInput) && $deleteIds->isEmpty()) {
             throw ValidationException::withMessages([
                 'payments' => 'Add at least one payment line or remove an existing payment.',
@@ -556,6 +576,7 @@ class ProcurementDisbursementController extends Controller
             $deleteIds,
             $paymentRows,
             $before,
+            $request,
             &$updatedDisbursements,
             &$createdDisbursements
         ) {
@@ -574,9 +595,12 @@ class ProcurementDisbursementController extends Controller
 
                 if ($existing) {
                     $existing->update($payload);
+                    $this->storeSignedPaymentDocuments($request, $existing, (string) ($paymentRow['input_key'] ?? $paymentRow['index']));
                     $updatedDisbursements->push($existing->fresh());
                 } else {
-                    $createdDisbursements->push(ProcurementDisbursement::create($payload));
+                    $newDisbursement = ProcurementDisbursement::create($payload);
+                    $this->storeSignedPaymentDocuments($request, $newDisbursement, (string) ($paymentRow['input_key'] ?? $paymentRow['index']));
+                    $createdDisbursements->push($newDisbursement);
                 }
             }
 
@@ -615,7 +639,11 @@ class ProcurementDisbursementController extends Controller
             ]);
         });
 
-        $createdDisbursements->each(fn (ProcurementDisbursement $row) => $this->sendReceipt($row));
+        $createdDisbursements->each(fn (ProcurementDisbursement $row) => $this->sendReceipt($row->fresh()));
+        $handoffNotifier = app(ProcurementDisbursementHandoffNotificationService::class);
+        $createdDisbursements
+            ->merge($updatedDisbursements->filter(fn (ProcurementDisbursement $row) => ! $row->procurement_notified_at))
+            ->each(fn (ProcurementDisbursement $row) => $handoffNotifier->notify($row->fresh()));
 
         $freshDisbursement = ProcurementDisbursement::find($disbursement->id);
         $redirectRoute = $freshDisbursement
@@ -624,6 +652,86 @@ class ProcurementDisbursementController extends Controller
 
         return redirect($redirectRoute)
             ->with('success', 'Disbursement payment lines updated.');
+    }
+
+    public function storeProcurementProcessing(Request $request, ProcurementDisbursement $disbursement)
+    {
+        $this->assertDisbursementInScope($disbursement);
+
+        if (! $this->canHandleProcurementProcessing()) {
+            abort(403, 'Only procurement officers or administrators can complete this processing step.');
+        }
+
+        $data = $request->validate([
+            'goods_receipt_reference' => ['required', 'string', 'max:255'],
+            'sap_52_series_reference' => ['required', 'string', 'max:255'],
+            'procurement_processing_notes' => ['nullable', 'string', 'max:3000'],
+        ]);
+
+        $before = $disbursement->only([
+            'procurement_processing_status',
+            'goods_receipt_reference',
+            'sap_52_series_reference',
+            'procurement_processing_notes',
+        ]);
+
+        $disbursement->update([
+            'procurement_processing_status' => ProcurementDisbursement::PROCUREMENT_STATUS_COMPLETED,
+            'goods_receipt_reference' => $data['goods_receipt_reference'],
+            'goods_receipt_generated_at' => now(),
+            'goods_receipt_generated_by' => auth()->id(),
+            'sap_52_series_reference' => $data['sap_52_series_reference'],
+            'sap_52_series_entered_at' => now(),
+            'sap_52_series_entered_by' => auth()->id(),
+            'procurement_processing_notes' => $data['procurement_processing_notes'] ?? null,
+        ]);
+
+        ProcurementAuditLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'Recorded goods receipt and SAP 52 series',
+            'procurement_id' => $disbursement->procurement_id,
+            'metadata' => [
+                'purchase_order_id' => $disbursement->purchase_order_id,
+                'disbursement_id' => $disbursement->id,
+                'receipt_reference' => $disbursement->reference_no,
+                'before' => $before,
+                'after' => $disbursement->fresh()->only([
+                    'procurement_processing_status',
+                    'goods_receipt_reference',
+                    'sap_52_series_reference',
+                    'procurement_processing_notes',
+                ]),
+            ],
+            'created_at' => now(),
+        ]);
+
+        return back()->with('success', 'Goods receipt and SAP 52 series reference recorded.');
+    }
+
+    public function downloadSignedDocument(Request $request, ProcurementDisbursement $disbursement, int $document)
+    {
+        $this->assertDisbursementInScope($disbursement);
+
+        $documents = $disbursement->signed_documents ?? [];
+        $file = $documents[$document] ?? null;
+        abort_unless(is_array($file) && ! empty($file['path']), 404, 'Signed document not found.');
+
+        $privateDisk = Storage::disk('local');
+        abort_unless($privateDisk->exists($file['path']), 404, 'Signed document file missing on disk.');
+
+        $headers = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        $fileName = $file['name'] ?? basename($file['path']);
+
+        if ($request->boolean('download')) {
+            return $privateDisk->download($file['path'], $fileName, $headers);
+        }
+
+        return $privateDisk->response($file['path'], $fileName, $headers);
     }
 
     public function destroy(ProcurementDisbursement $disbursement)
@@ -1040,6 +1148,15 @@ class ProcurementDisbursementController extends Controller
                 'status' => $row->status ?: 'completed',
                 'paid_at' => $row->paid_at?->format('Y-m-d') ?? now()->format('Y-m-d'),
                 'notes' => $row->notes,
+                'signed_documents' => collect($row->signed_documents ?? [])
+                    ->filter(fn ($document) => is_array($document))
+                    ->map(fn ($document, $index) => [
+                        'name' => $document['name'] ?? 'Document',
+                        'display_name' => $document['display_name'] ?? null,
+                        'url' => route('procurement.disbursements.signed-document', [$row, $index]) . '?download=1',
+                    ])
+                    ->values()
+                    ->all(),
             ])
             ->values()
             ->all();
@@ -1124,6 +1241,7 @@ class ProcurementDisbursementController extends Controller
 
             $normalized[] = [
                 'index' => $index,
+                'input_key' => (string) $index,
                 'id' => $existingId !== '' ? $existingId : null,
                 'reference_no' => $referenceNo !== '' ? $referenceNo : null,
                 'purchase_request_item_id' => $lineItemId,
@@ -1224,6 +1342,7 @@ class ProcurementDisbursementController extends Controller
             'status'             => $paymentRow['status'],
             'paid_at'            => $paymentRow['paid_at'],
             'notes'              => $paymentRow['notes'],
+            'procurement_processing_status' => $existing?->procurement_processing_status ?: ProcurementDisbursement::PROCUREMENT_STATUS_PENDING,
         ];
 
         if (! $existing) {
@@ -1266,6 +1385,24 @@ class ProcurementDisbursementController extends Controller
         $user = auth()->user();
 
         return (bool) ($user && ($user->isAdmin() || $user->isSuperAdmin()));
+    }
+
+    private function canHandleProcurementProcessing(): bool
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->isAdmin() || $user->isSuperAdmin()) {
+            return true;
+        }
+
+        if (method_exists($user, 'hasPermission') && $user->hasPermission('finance.purchase_orders.create')) {
+            return true;
+        }
+
+        return str_contains(strtolower((string) ($user->role?->name ?? '')), 'procurement');
     }
 
     private function authorizeDisbursementEdit(): void
@@ -1393,6 +1530,48 @@ class ProcurementDisbursementController extends Controller
                 ]
             );
         }
+    }
+
+    private function storeSignedPaymentDocuments(Request $request, ProcurementDisbursement $disbursement, ?string $inputKey): void
+    {
+        if ($inputKey === null || $inputKey === '') {
+            return;
+        }
+
+        $paymentFiles = $request->file('payments', []);
+        $paymentInputs = $request->input('payments', []);
+        $files = $paymentFiles[$inputKey]['signed_documents'] ?? [];
+        $names = $paymentInputs[$inputKey]['signed_document_names'] ?? [];
+
+        if (! is_array($files) || empty($files)) {
+            return;
+        }
+
+        $documents = collect($disbursement->signed_documents ?? [])
+            ->filter(fn ($document) => is_array($document))
+            ->values()
+            ->all();
+
+        foreach ($files as $index => $file) {
+            if (! $file || ! $file->isValid()) {
+                continue;
+            }
+
+            $displayName = trim((string) ($names[$index] ?? ''));
+            $path = $file->store("procurement_disbursements/{$disbursement->id}/signed-documents");
+
+            $documents[] = [
+                'path' => $path,
+                'name' => $file->getClientOriginalName(),
+                'display_name' => $displayName !== '' ? $displayName : null,
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+                'uploaded_by' => auth()->id(),
+                'uploaded_at' => now()->toIso8601String(),
+            ];
+        }
+
+        $disbursement->forceFill(['signed_documents' => $documents])->save();
     }
 
     private function sendReceipt(ProcurementDisbursement $disbursement): void
