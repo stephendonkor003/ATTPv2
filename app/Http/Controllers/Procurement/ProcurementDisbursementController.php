@@ -12,12 +12,14 @@ use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\PurchaseRequestItem;
 use App\Services\ProcurementDisbursementHandoffNotificationService;
+use App\Services\SignedDisbursementDocumentService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class ProcurementDisbursementController extends Controller
@@ -316,6 +318,8 @@ class ProcurementDisbursementController extends Controller
             'payments.*.notes' => ['nullable', 'string', 'max:2000'],
             'payments.*.signed_document_names' => ['nullable', 'array', 'max:20'],
             'payments.*.signed_document_names.*' => ['nullable', 'string', 'max:255'],
+            'payments.*.signed_document_meta' => ['nullable', 'array', 'max:20'],
+            'payments.*.signed_document_meta.*' => ['nullable', 'string', 'max:5000'],
             'payments.*.signed_documents' => ['required', 'array', 'min:1', 'max:20'],
             'payments.*.signed_documents.*' => ['required', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
             'item_evidence' => ['nullable', 'array'],
@@ -542,6 +546,8 @@ class ProcurementDisbursementController extends Controller
             'payments.*.notes' => ['nullable', 'string', 'max:2000'],
             'payments.*.signed_document_names' => ['nullable', 'array', 'max:20'],
             'payments.*.signed_document_names.*' => ['nullable', 'string', 'max:255'],
+            'payments.*.signed_document_meta' => ['nullable', 'array', 'max:20'],
+            'payments.*.signed_document_meta.*' => ['nullable', 'string', 'max:5000'],
             'payments.*.signed_documents' => ['nullable', 'array', 'max:20'],
             'payments.*.signed_documents.*' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip', 'max:20480'],
             'delete_payment_ids' => ['nullable', 'array'],
@@ -747,26 +753,16 @@ class ProcurementDisbursementController extends Controller
     {
         $this->assertDisbursementInScope($disbursement);
 
-        $documents = $disbursement->signed_documents ?? [];
-        $file = $documents[$document] ?? null;
-        abort_unless(is_array($file) && ! empty($file['path']), 404, 'Signed document not found.');
+        return app(SignedDisbursementDocumentService::class)
+            ->response($disbursement, $document, $request->boolean('download'));
+    }
 
-        $privateDisk = Storage::disk('local');
-        abort_unless($privateDisk->exists($file['path']), 404, 'Signed document file missing on disk.');
+    public function downloadSignedDocumentPdf(Request $request, ProcurementDisbursement $disbursement, int $document)
+    {
+        $this->assertDisbursementInScope($disbursement);
 
-        $headers = [
-            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
-            'Pragma' => 'no-cache',
-            'X-Content-Type-Options' => 'nosniff',
-        ];
-
-        $fileName = $file['name'] ?? basename($file['path']);
-
-        if ($request->boolean('download')) {
-            return $privateDisk->download($file['path'], $fileName, $headers);
-        }
-
-        return $privateDisk->response($file['path'], $fileName, $headers);
+        return app(SignedDisbursementDocumentService::class)
+            ->response($disbursement, $document, $request->boolean('download'), true);
     }
 
     public function destroy(ProcurementDisbursement $disbursement)
@@ -1607,6 +1603,7 @@ class ProcurementDisbursementController extends Controller
         $paymentInputs = $request->input('payments', []);
         $files = $paymentFiles[$inputKey]['signed_documents'] ?? [];
         $names = $paymentInputs[$inputKey]['signed_document_names'] ?? [];
+        $metaInputs = $paymentInputs[$inputKey]['signed_document_meta'] ?? [];
 
         if (! is_array($files) || empty($files)) {
             return;
@@ -1616,6 +1613,7 @@ class ProcurementDisbursementController extends Controller
             ->filter(fn ($document) => is_array($document))
             ->values()
             ->all();
+        $newDocumentIndexes = [];
 
         foreach ($files as $index => $file) {
             if (! $file || ! $file->isValid()) {
@@ -1623,9 +1621,10 @@ class ProcurementDisbursementController extends Controller
             }
 
             $displayName = trim((string) ($names[$index] ?? ''));
+            $metadata = $this->decodeSignedDocumentMetadata($metaInputs[$index] ?? null);
             $path = $file->store("procurement_disbursements/{$disbursement->id}/signed-documents");
 
-            $documents[] = [
+            $document = [
                 'path' => $path,
                 'name' => $file->getClientOriginalName(),
                 'display_name' => $displayName !== '' ? $displayName : null,
@@ -1634,9 +1633,70 @@ class ProcurementDisbursementController extends Controller
                 'uploaded_by' => auth()->id(),
                 'uploaded_at' => now()->toIso8601String(),
             ];
+
+            if ($metadata !== []) {
+                $document = array_merge($document, $metadata, [
+                    'is_digital_signature' => (bool) ($metadata['is_digital_signature'] ?? true),
+                ]);
+            }
+
+            if (empty($document['digital_signature_code'])) {
+                $document['digital_signature_code'] = $this->generateSignedDocumentCode($disbursement);
+            }
+
+            $newDocumentIndexes[] = count($documents);
+            $documents[] = $document;
         }
 
         $disbursement->forceFill(['signed_documents' => $documents])->save();
+
+        $service = app(SignedDisbursementDocumentService::class);
+        foreach ($newDocumentIndexes as $documentIndex) {
+            $service->ensurePdf($disbursement->fresh(), $documentIndex);
+        }
+    }
+
+    private function decodeSignedDocumentMetadata(mixed $value): array
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        $allowed = [
+            'is_digital_signature',
+            'digital_signature_code',
+            'source_document_name',
+            'source_item_label',
+            'source_deliverable',
+            'source_purchase_order',
+            'signed_by_name',
+            'signed_by_email',
+            'signed_at',
+            'signature_position',
+        ];
+
+        return collect($decoded)
+            ->only($allowed)
+            ->map(fn ($item) => is_bool($item) ? $item : trim((string) $item))
+            ->filter(fn ($item) => is_bool($item) || $item !== '')
+            ->all();
+    }
+
+    private function generateSignedDocumentCode(ProcurementDisbursement $disbursement): string
+    {
+        $datePart = now()->format('Ymd');
+        $receiptPart = (string) Str::of($disbursement->reference_no ?: 'ATTP')
+            ->replaceMatches('/[^A-Za-z0-9]+/', '')
+            ->upper()
+            ->substr(-8);
+        $receiptPart = $receiptPart !== '' ? $receiptPart : 'ATTP';
+
+        return 'ATTP-SD-' . $datePart . '-' . $receiptPart . '-' . Str::upper(Str::random(6));
     }
 
     private function sendReceipt(ProcurementDisbursement $disbursement): void

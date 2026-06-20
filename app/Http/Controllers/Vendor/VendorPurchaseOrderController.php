@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\ProcurementPurchaseOrderItemEvidence;
 use App\Models\PurchaseRequestItem;
 use App\Models\User;
+use App\Services\SignedDisbursementDocumentService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -226,6 +228,34 @@ class VendorPurchaseOrderController extends Controller
         return $privateDisk->response($file['path'], $fileName, $headers);
     }
 
+    public function downloadSignedDisbursementDocument(
+        Request $request,
+        ProcurementPurchaseOrder $purchaseOrder,
+        ProcurementDisbursement $disbursement,
+        int $document
+    ) {
+        $vendor = $this->vendor($request);
+        $this->assertPurchaseOrderOwnership($purchaseOrder, $vendor);
+        $this->assertDisbursementBelongsToPurchaseOrder($purchaseOrder, $disbursement);
+
+        return app(SignedDisbursementDocumentService::class)
+            ->response($disbursement, $document, $request->boolean('download'));
+    }
+
+    public function downloadSignedDisbursementDocumentPdf(
+        Request $request,
+        ProcurementPurchaseOrder $purchaseOrder,
+        ProcurementDisbursement $disbursement,
+        int $document
+    ) {
+        $vendor = $this->vendor($request);
+        $this->assertPurchaseOrderOwnership($purchaseOrder, $vendor);
+        $this->assertDisbursementBelongsToPurchaseOrder($purchaseOrder, $disbursement);
+
+        return app(SignedDisbursementDocumentService::class)
+            ->response($disbursement, $document, $request->boolean('download'), true);
+    }
+
     private function vendor(Request $request): User
     {
         $user = $request->user();
@@ -241,6 +271,11 @@ class VendorPurchaseOrderController extends Controller
         abort_unless((string) $purchaseOrder->vendor_id === (string) $vendor->id, 403, 'You do not have access to this purchase order.');
     }
 
+    private function assertDisbursementBelongsToPurchaseOrder(ProcurementPurchaseOrder $purchaseOrder, ProcurementDisbursement $disbursement): void
+    {
+        abort_unless((string) $disbursement->purchase_order_id === (string) $purchaseOrder->id, 404, 'Signed document not found.');
+    }
+
     private function loadPurchaseOrderDetail(ProcurementPurchaseOrder $purchaseOrder): void
     {
         $purchaseOrder->load([
@@ -250,6 +285,9 @@ class VendorPurchaseOrderController extends Controller
             'negotiation',
             'invoice',
             'deliverables',
+            'disbursements.purchaseRequestItem.resource',
+            'disbursements.purchaseRequestItem.resourceCategory',
+            'disbursements.deliverable',
             'lineItemEvidence.deliverable',
             'disbursements',
             'purchaseRequest.items.resourceCategory',

@@ -567,15 +567,35 @@
                         @else
                             <div class="d-grid gap-2">
                                 @foreach ($signedDocuments as $documentIndex => $document)
-                                    <a href="{{ route('procurement.disbursements.signed-document', [$disbursement, $documentIndex]) }}?download=1"
-                                        class="d-flex justify-content-between align-items-center gap-2 border rounded px-3 py-2 text-decoration-none">
-                                        <span class="fw-semibold text-dark">
-                                            {{ $document['display_name'] ?? $document['name'] ?? 'Signed document' }}
-                                        </span>
-                                        <span class="badge bg-primary">
-                                            <i class="feather-download me-1"></i> Download
-                                        </span>
-                                    </a>
+                                    <div class="border rounded px-3 py-2">
+                                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                                            <div>
+                                                <div class="fw-semibold text-dark">
+                                                    {{ $document['display_name'] ?? $document['name'] ?? 'Signed document' }}
+                                                </div>
+                                                @if (! empty($document['signed_at']))
+                                                    <div class="small text-muted">Signed {{ \Illuminate\Support\Carbon::parse($document['signed_at'])->format('d M Y H:i') }}</div>
+                                                @endif
+                                                @if (! empty($document['digital_signature_code']))
+                                                    <div class="small text-muted">Code: <span class="fw-semibold">{{ $document['digital_signature_code'] }}</span></div>
+                                                @endif
+                                            </div>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                <a href="{{ route('procurement.disbursements.signed-document', [$disbursement, $documentIndex]) }}"
+                                                    class="btn btn-sm btn-outline-secondary">
+                                                    <i class="feather-eye me-1"></i> View
+                                                </a>
+                                                <a href="{{ route('procurement.disbursements.signed-document.pdf', [$disbursement, $documentIndex]) }}?download=1"
+                                                    class="btn btn-sm btn-primary">
+                                                    <i class="feather-file-text me-1"></i> PDF
+                                                </a>
+                                                <a href="{{ route('procurement.disbursements.signed-document', [$disbursement, $documentIndex]) }}?download=1"
+                                                    class="btn btn-sm btn-outline-primary">
+                                                    <i class="feather-download me-1"></i> File
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
                                 @endforeach
                             </div>
                         @endif

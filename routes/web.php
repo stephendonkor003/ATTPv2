@@ -1835,6 +1835,9 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
         Route::get('{disbursement}/signed-documents/{document}', [ProcurementDisbursementController::class, 'downloadSignedDocument'])
             ->whereNumber('document')
             ->name('signed-document');
+        Route::get('{disbursement}/signed-documents/{document}/pdf', [ProcurementDisbursementController::class, 'downloadSignedDocumentPdf'])
+            ->whereNumber('document')
+            ->name('signed-document.pdf');
         Route::get('{disbursement}', [ProcurementDisbursementController::class, 'show'])
             ->name('show');
         Route::get('{disbursement}/pdf', [ProcurementDisbursementController::class, 'pdf'])
@@ -2926,6 +2929,12 @@ Route::middleware(['auth'])
             ->name('purchase-orders.pdf');
         Route::get('/purchase-orders/{purchaseOrder}/download', [VendorPurchaseOrderController::class, 'download'])
             ->name('purchase-orders.download');
+        Route::get('/purchase-orders/{purchaseOrder}/disbursements/{disbursement}/signed-documents/{document}', [VendorPurchaseOrderController::class, 'downloadSignedDisbursementDocument'])
+            ->whereNumber('document')
+            ->name('purchase-orders.disbursements.signed-documents.download');
+        Route::get('/purchase-orders/{purchaseOrder}/disbursements/{disbursement}/signed-documents/{document}/pdf', [VendorPurchaseOrderController::class, 'downloadSignedDisbursementDocumentPdf'])
+            ->whereNumber('document')
+            ->name('purchase-orders.disbursements.signed-documents.pdf');
         Route::get('/purchase-orders/{purchaseOrder}', [VendorPurchaseOrderController::class, 'show'])
             ->name('purchase-orders.show');
         Route::post('/purchase-orders/{purchaseOrder}/items/{item}/evidence', [VendorPurchaseOrderController::class, 'storeEvidence'])

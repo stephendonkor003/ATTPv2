@@ -11,6 +11,18 @@
         $evidenceByItem = $purchaseOrder->lineItemEvidence->keyBy('purchase_request_item_id');
         $currency = $purchaseOrder->resolved_currency;
         $isCancelled = strtolower((string) $purchaseOrder->status) === 'cancelled';
+        $signedPaymentDocuments = $purchaseOrder->disbursements
+            ->flatMap(function ($disbursement) {
+                return collect($disbursement->signed_documents ?? [])
+                    ->filter(fn ($document) => is_array($document) && ! empty($document['path']))
+                    ->values()
+                    ->map(fn ($document, $documentIndex) => [
+                        'disbursement' => $disbursement,
+                        'document' => $document,
+                        'documentIndex' => $documentIndex,
+                    ]);
+            })
+            ->values();
     @endphp
 
     <div class="vendor-page-head">
@@ -90,6 +102,69 @@
                     @endif
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="card vendor-card mb-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <div>
+                    <div class="vendor-eyebrow">Signed Payment Documents</div>
+                    <h5 class="mb-0">{{ number_format($signedPaymentDocuments->count()) }} signed {{ $signedPaymentDocuments->count() === 1 ? 'file' : 'files' }}</h5>
+                </div>
+                <span class="badge-soft">Available after ATTP records payment</span>
+            </div>
+
+            @if ($signedPaymentDocuments->isEmpty())
+                <div class="vendor-empty py-3">
+                    <div class="vendor-empty-icon"><i class="feather-file-text"></i></div>
+                    <h5>No signed payment documents yet</h5>
+                    <p class="text-muted mb-0">Signed disbursement documents will appear here once ATTP completes the payment record.</p>
+                </div>
+            @else
+                <div class="vstack gap-2">
+                    @foreach ($signedPaymentDocuments as $signedPaymentDocument)
+                        @php
+                            $receipt = $signedPaymentDocument['disbursement'];
+                            $document = $signedPaymentDocument['document'];
+                            $documentIndex = $signedPaymentDocument['documentIndex'];
+                        @endphp
+                        <div class="border rounded-3 p-3">
+                            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+                                <div>
+                                    <div class="fw-bold">{{ $document['display_name'] ?? $document['name'] ?? 'Signed document' }}</div>
+                                    <div class="text-muted small">
+                                        Receipt {{ $receipt->reference_no ?? 'N/A' }}
+                                        @if (! empty($document['signed_at']))
+                                            | Signed {{ \Illuminate\Support\Carbon::parse($document['signed_at'])->format('M d, Y H:i') }}
+                                        @endif
+                                    </div>
+                                    @if (! empty($document['source_document_name']))
+                                        <div class="text-muted small">Source: {{ $document['source_document_name'] }}</div>
+                                    @endif
+                                    @if (! empty($document['digital_signature_code']))
+                                        <div class="text-muted small">Digital Code: <span class="fw-semibold">{{ $document['digital_signature_code'] }}</span></div>
+                                    @endif
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <a href="{{ route('vendor.purchase-orders.disbursements.signed-documents.download', [$purchaseOrder, $receipt, $documentIndex]) }}"
+                                        class="btn btn-vendor-outline btn-sm">
+                                        <i class="feather-eye me-1"></i> View
+                                    </a>
+                                    <a href="{{ route('vendor.purchase-orders.disbursements.signed-documents.pdf', [$purchaseOrder, $receipt, $documentIndex]) }}?download=1"
+                                        class="btn btn-vendor btn-sm">
+                                        <i class="feather-file-text me-1"></i> Download PDF
+                                    </a>
+                                    <a href="{{ route('vendor.purchase-orders.disbursements.signed-documents.download', [$purchaseOrder, $receipt, $documentIndex]) }}?download=1"
+                                        class="btn btn-vendor-outline btn-sm">
+                                        <i class="feather-download me-1"></i> Original
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         </div>
     </div>
 

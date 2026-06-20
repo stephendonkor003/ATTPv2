@@ -390,6 +390,17 @@
             white-space: nowrap;
         }
 
+        .signature-stamp-code {
+            color: #334155;
+            font-size: .62rem;
+            font-weight: 800;
+            letter-spacing: .04em;
+            line-height: 1.2;
+            text-align: center;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
         .signature-position-hint {
             background: rgba(6, 78, 59, .9);
             border-radius: 999px;
@@ -824,6 +835,7 @@
             let selectedSignatureDocument = null;
             let signatureImageDataUrl = null;
             let signatureTimestamp = null;
+            let signatureVerificationCode = null;
             let signaturePlacement = { x: 42, y: 42 };
             let signatureStampDragging = false;
             let signatureStampDragOffset = { x: 0, y: 0 };
@@ -846,6 +858,22 @@
                     hour: '2-digit',
                     minute: '2-digit',
                 });
+            };
+
+            const ensureSignatureVerificationCode = () => {
+                if (signatureVerificationCode) {
+                    return signatureVerificationCode;
+                }
+
+                const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                const poPart = String(currentPo?.reference_no || 'ATTP')
+                    .replace(/[^a-z0-9]+/gi, '')
+                    .toUpperCase()
+                    .slice(-8) || 'ATTP';
+                const randomPart = Math.random().toString(36).slice(2, 8).toUpperCase();
+                signatureVerificationCode = `ATTP-DS-${datePart}-${poPart}-${randomPart}`;
+
+                return signatureVerificationCode;
             };
 
             const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
@@ -1249,6 +1277,7 @@
                 signatureHasInk = false;
                 signatureImageDataUrl = null;
                 signatureTimestamp = null;
+                signatureVerificationCode = null;
                 if (signatureUploadInput) signatureUploadInput.value = '';
                 refreshSignatureStamp();
             }
@@ -1281,6 +1310,7 @@
                 ctx.stroke();
                 signatureHasInk = true;
                 signatureTimestamp = new Date();
+                ensureSignatureVerificationCode();
                 signatureImageDataUrl = signaturePad.toDataURL('image/png');
                 refreshSignatureStamp();
             }
@@ -1310,6 +1340,7 @@
                     ctx.drawImage(image, x, y, width, height);
                     signatureHasInk = true;
                     signatureTimestamp = new Date();
+                    ensureSignatureVerificationCode();
                     signatureImageDataUrl = signaturePad.toDataURL('image/png');
                     refreshSignatureStamp();
                 };
@@ -1372,9 +1403,11 @@
                 }
 
                 const signedAt = signatureTimestamp ? formatSignatureTimestamp(signatureTimestamp) : formatSignatureTimestamp(new Date());
+                const verificationCode = ensureSignatureVerificationCode();
                 stamp.innerHTML = `
                     <img src="${signatureImageDataUrl}" alt="Signature">
                     <div class="signature-stamp-time">Signed ${escapeHtml(signedAt)}</div>
+                    <div class="signature-stamp-code">${escapeHtml(verificationCode)}</div>
                 `;
                 signaturePlacement = clampSignaturePlacement(signaturePlacement.x, signaturePlacement.y);
                 stamp.style.left = `${signaturePlacement.x}px`;
@@ -1518,6 +1551,7 @@
                 signatureHasInk = false;
                 signatureImageDataUrl = null;
                 signatureTimestamp = null;
+                signatureVerificationCode = null;
                 signaturePlacement = { x: 42, y: 42 };
                 document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove());
                 renderSignatureDocuments();
@@ -1573,14 +1607,39 @@
 
                 const nameInput = row.querySelector('input[type="text"]');
                 const fileInput = row.querySelector('input[type="file"]');
+                const metaInput = row.querySelector('.signed-document-meta');
                 const transfer = new DataTransfer();
                 transfer.items.add(file);
                 fileInput.files = transfer.files;
                 if (nameInput) {
                     nameInput.value = `Digitally signed - ${document.display_name}`;
                 }
+                if (metaInput) {
+                    metaInput.value = JSON.stringify(signatureMetadataForDocument(document));
+                }
                 row.classList.add('is-generated');
                 fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            function signatureMetadataForDocument(document) {
+                const stage = signaturePreviewStage();
+                const signedAt = signatureTimestamp || new Date();
+                const positionText = stage
+                    ? `${Math.round((signaturePlacement.x / Math.max(stage.clientWidth, 1)) * 100)}% from left, ${Math.round((signaturePlacement.y / Math.max(stage.clientHeight, 1)) * 100)}% from top`
+                    : 'Recorded in signature workspace';
+
+                return {
+                    is_digital_signature: true,
+                    digital_signature_code: ensureSignatureVerificationCode(),
+                    source_document_name: document?.display_name || document?.name || 'Evidence document',
+                    source_item_label: document?.item_label || '',
+                    source_deliverable: document?.deliverable || '',
+                    source_purchase_order: currentPo?.reference_no || '',
+                    signed_by_name: signer.name || 'User',
+                    signed_by_email: signer.email || '',
+                    signed_at: signedAt.toISOString(),
+                    signature_position: positionText,
+                };
             }
 
             function buildSignatureRecordBlob(callback) {
@@ -1592,13 +1651,15 @@
                 if (!signatureImageDataUrl) {
                     signatureImageDataUrl = signaturePad.toDataURL('image/png');
                     signatureTimestamp = signatureTimestamp || new Date();
+                    ensureSignatureVerificationCode();
                     refreshSignatureStamp();
                 }
                 signatureTimestamp = signatureTimestamp || new Date();
+                const verificationCode = ensureSignatureVerificationCode();
 
                 const output = document.createElement('canvas');
                 output.width = 1200;
-                output.height = 820;
+                output.height = 940;
                 const ctx = output.getContext('2d');
                 const signedAt = signatureTimestamp;
                 const signedAtText = formatSignatureTimestamp(signedAt);
@@ -1628,6 +1689,7 @@
                     ['Purchase Order', currentPo?.reference_no || 'N/A'],
                     ['Signed By', `${signer.name || 'User'}${signer.email ? ' <' + signer.email + '>' : ''}`],
                     ['Signed At', signedAtText],
+                    ['Verification Code', verificationCode],
                     ['Signature Position', positionText],
                 ];
 
@@ -1644,27 +1706,29 @@
 
                 ctx.strokeStyle = '#cbd5e1';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(52, 470, 1096, 250);
+                ctx.strokeRect(52, 525, 1096, 285);
                 ctx.fillStyle = '#64748b';
                 ctx.font = 'bold 16px Arial, sans-serif';
-                ctx.fillText('Signature', 72, 505);
+                ctx.fillText('Signature', 72, 560);
 
                 const signatureImage = new Image();
                 signatureImage.onload = () => {
-                    ctx.drawImage(signatureImage, 82, 535, 500, 130);
+                    ctx.drawImage(signatureImage, 82, 590, 500, 130);
                     ctx.strokeStyle = '#94a3b8';
                     ctx.beginPath();
-                    ctx.moveTo(82, 685);
-                    ctx.lineTo(600, 685);
+                    ctx.moveTo(82, 740);
+                    ctx.lineTo(600, 740);
                     ctx.stroke();
 
                     ctx.fillStyle = '#064e3b';
                     ctx.font = 'bold 18px Arial, sans-serif';
-                    ctx.fillText(`Signed ${signedAtText}`, 82, 715);
+                    ctx.fillText(`Signed ${signedAtText}`, 82, 770);
+                    ctx.font = 'bold 16px Arial, sans-serif';
+                    ctx.fillText(`Verification Code: ${verificationCode}`, 82, 798);
 
                     ctx.fillStyle = '#475569';
                     ctx.font = '14px Arial, sans-serif';
-                    ctx.fillText('This record was generated inside the ATTP disbursement workflow and attached as a signed payment document.', 52, 770);
+                    ctx.fillText('This record was generated inside the ATTP disbursement workflow and attached as a signed payment document.', 52, 890);
 
                     output.toBlob(callback, 'image/png', 0.95);
                 };
@@ -1694,6 +1758,9 @@
                             class="form-control signed-document-file"
                             accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip"
                             ${required ? 'required' : ''}>
+                        <input type="hidden"
+                            name="payments[${index}][signed_document_meta][]"
+                            class="signed-document-meta">
                     </div>
                     <button type="button" class="btn btn-outline-danger signed-document-remove" aria-label="Remove signed document row">
                         <i class="feather-trash-2"></i>
@@ -2034,6 +2101,7 @@
                     signatureHasInk = false;
                     signatureImageDataUrl = null;
                     signatureTimestamp = null;
+                    signatureVerificationCode = null;
                     if (signatureUploadInput) signatureUploadInput.value = '';
                     refreshSignatureStamp();
                     const ctx = signaturePad.getContext('2d');
@@ -2055,6 +2123,7 @@
                     signaturePad.addEventListener(eventName, () => {
                         if (signatureDrawing && signatureHasInk) {
                             signatureTimestamp = signatureTimestamp || new Date();
+                            ensureSignatureVerificationCode();
                             signatureImageDataUrl = signaturePad.toDataURL('image/png');
                             refreshSignatureStamp();
                         }
