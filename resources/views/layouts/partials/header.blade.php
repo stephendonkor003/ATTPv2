@@ -9,31 +9,46 @@
         gap: 6px;
         min-height: 34px;
         padding: 7px 10px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid rgba(167, 243, 208, 0.45);
         border-radius: 8px;
-        background: #fff;
-        color: #111827;
+        background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+        color: #ffffff;
         font-size: 12px;
         font-weight: 600;
         line-height: 1.2;
         white-space: nowrap;
-        box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
+        box-shadow: 0 8px 18px rgba(4, 120, 87, 0.18);
     }
 
     .attp-chip.muted {
-        color: #4b5563;
+        color: #ffffff;
         font-weight: 500;
     }
 
     .attp-chip .label {
-        color: #6b7280;
+        color: rgba(255, 255, 255, 0.82);
         font-weight: 600;
     }
 
     .attp-chip.brand {
-        background: #0f172a;
-        border-color: #0f172a;
+        background: linear-gradient(135deg, #064e3b 0%, #047857 100%);
+        border-color: rgba(167, 243, 208, 0.5);
         color: #fff;
+    }
+
+    .attp-header-strip .attp-chip i {
+        color: #ffffff;
+    }
+
+    .nxl-header .nxl-navigation-toggle a,
+    .nxl-header .nxl-lavel-mega-menu-toggle a,
+    .nxl-header .nxl-head-mobile-toggler {
+        color: #047857 !important;
+    }
+
+    .nxl-header .nxl-navigation-toggle a:hover,
+    .nxl-header .nxl-lavel-mega-menu-toggle a:hover {
+        color: #065f46 !important;
     }
 
     @media (max-width: 1399.98px) {
