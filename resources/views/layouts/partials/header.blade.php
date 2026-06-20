@@ -20,6 +20,14 @@
         box-shadow: 0 8px 18px rgba(4, 120, 87, 0.18);
     }
 
+    .attp-header-strip .attp-chip,
+    .attp-header-strip .attp-chip.brand,
+    .attp-header-strip .attp-chip.muted {
+        background: #047857 !important;
+        border-color: #047857 !important;
+        color: #ffffff !important;
+    }
+
     .attp-chip.muted {
         color: #ffffff;
         font-weight: 500;
