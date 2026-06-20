@@ -6,6 +6,7 @@
     @php
         $storeRoute = route('vendor.purchase-requests.store');
         $indexRoute = route('vendor.purchase-requests.index');
+        $hasProcurementSources = $procurements->isNotEmpty();
     @endphp
 
     <div class="vendor-page-head">
@@ -23,6 +24,12 @@
         <div class="alert alert-danger">{{ $errors->first() }}</div>
     @endif
 
+    @unless ($hasProcurementSources)
+        <div class="alert alert-warning">
+            No procurement funding sources have been assigned to your vendor account yet. Please contact the administrator before submitting a request.
+        </div>
+    @endunless
+
     <form method="POST" action="{{ $storeRoute }}" enctype="multipart/form-data">
         @csrf
         <div class="row g-4">
@@ -38,11 +45,21 @@
                         <div class="row g-3">
                             <div class="col-md-12">
                                 <label class="form-label fw-semibold">Related Procurement</label>
-                                <select name="procurement_id" class="form-select">
-                                    <option value="">General / not tied to a procurement</option>
+                                <select name="sub_activity_id" class="form-select" required @disabled(! $hasProcurementSources)>
+                                    <option value="">-- Select Related Procurement --</option>
                                     @foreach ($procurements as $procurement)
-                                        <option value="{{ $procurement->id }}" @selected(old('procurement_id') === $procurement->id)>
-                                            {{ $procurement->reference_no ?? 'N/A' }} - {{ $procurement->title }}
+                                        @php
+                                            $activity = $procurement->activity;
+                                            $project = $activity?->project;
+                                            $program = $project?->program;
+                                            $procurementLabel = collect([
+                                                $procurement->name,
+                                                $project?->name,
+                                                $program?->name,
+                                            ])->filter()->join(' / ');
+                                        @endphp
+                                        <option value="{{ $procurement->id }}" @selected(old('sub_activity_id') === $procurement->id)>
+                                            {{ $procurementLabel ?: 'Assigned Procurement' }}
                                         </option>
                                     @endforeach
                                 </select>
@@ -151,7 +168,7 @@
                         <div class="vendor-flow-step active">1. Vendor submits request</div>
                         <div class="vendor-flow-step">2. Admin reviews and responds</div>
                         <div class="vendor-flow-step">3. Finance processes internally</div>
-                        <button class="btn btn-vendor w-100 mt-3" type="submit">
+                        <button class="btn btn-vendor w-100 mt-3" type="submit" @disabled(! $hasProcurementSources)>
                             Submit Request
                         </button>
                     </div>

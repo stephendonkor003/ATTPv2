@@ -53,8 +53,15 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <div class="text-muted small">Procurement</div>
-                                <div class="fw-semibold">{{ $purchaseRequest->procurement->title ?? 'N/A' }}</div>
+                                <div class="text-muted small">Funding Source</div>
+                                <div class="fw-semibold">
+                                    {{ $purchaseRequest->subActivity?->name ?? $purchaseRequest->procurement?->title ?? 'N/A' }}
+                                </div>
+                                @if ($purchaseRequest->subActivity?->activity?->project)
+                                    <div class="text-muted small">
+                                        {{ $purchaseRequest->subActivity->activity->project->name }}
+                                    </div>
+                                @endif
                             </div>
                             <div class="col-md-6">
                                 <div class="text-muted small">Purchase Order</div>

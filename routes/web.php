@@ -2719,6 +2719,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:vendor.manage'])
         Route::post('/', [VendorManagementController::class, 'store'])->name('store');
         Route::get('/template', [VendorManagementController::class, 'template'])->name('template');
         Route::post('/import', [VendorManagementController::class, 'import'])->name('import');
+        Route::get('/{vendor}', [VendorManagementController::class, 'show'])->whereUuid('vendor')->name('show');
         Route::get('/{vendor}/edit', [VendorManagementController::class, 'edit'])->name('edit');
         Route::put('/{vendor}', [VendorManagementController::class, 'update'])->name('update');
         Route::put('/{vendor}/disable', [VendorManagementController::class, 'disable'])->name('disable');
@@ -2766,6 +2767,8 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:vendor.requests.ma
             ->name('reports.respond');
         Route::get('/documents/{document}', [VendorRequestManagementController::class, 'downloadDocument'])
             ->name('documents.download');
+        Route::post('/alerts/{type}/{source}/read', [VendorRequestManagementController::class, 'markAlertRead'])
+            ->name('alerts.read');
 
         Route::get('/information', [VendorRequestManagementController::class, 'informationIndex'])
             ->name('information.index');

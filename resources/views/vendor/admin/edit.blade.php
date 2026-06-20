@@ -93,6 +93,13 @@
                             </div>
                             <small class="text-muted">Use disable/blacklist actions from the vendor list.</small>
                         </div>
+
+                        <div class="col-12">
+                            @include('vendor.admin.partials.funding-assignments', [
+                                'vendorFundingPrograms' => $vendorFundingPrograms,
+                                'vendorFundingAssignments' => $vendorFundingAssignments,
+                            ])
+                        </div>
                     </div>
                 </div>
 

@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -151,6 +153,23 @@ class User extends Authenticatable
     public function vendorThinkTankMembership()
     {
         return $this->hasOne(ConsortiumThinkTank::class, 'vendor_user_id');
+    }
+
+    public function vendorSubActivityAssignments(): HasMany
+    {
+        return $this->hasMany(VendorSubActivityAssignment::class, 'vendor_id');
+    }
+
+    public function vendorSubActivities(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            SubActivity::class,
+            'vendor_sub_activity_assignments',
+            'vendor_id',
+            'sub_activity_id'
+        )
+            ->withPivot(['program_id', 'project_id', 'activity_id'])
+            ->withTimestamps();
     }
 
     /**

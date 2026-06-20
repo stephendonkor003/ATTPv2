@@ -77,7 +77,12 @@
                                         <small class="text-muted">{{ ucfirst($requestRecord->priority) }} priority</small>
                                     </td>
                                     <td>
-                                        <div>{{ $requestRecord->procurement?->title ?? $requestRecord->purchaseOrder?->reference_no ?? 'General request' }}</div>
+                                        <div>
+                                            {{ $requestRecord->subActivity?->name
+                                                ?? $requestRecord->procurement?->title
+                                                ?? $requestRecord->purchaseOrder?->reference_no
+                                                ?? 'General request' }}
+                                        </div>
                                     </td>
                                     <td class="text-end">
                                         {{ $requestRecord->currency }} {{ number_format((float) $requestRecord->requested_amount, 2) }}

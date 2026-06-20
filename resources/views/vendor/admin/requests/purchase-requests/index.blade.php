@@ -37,6 +37,7 @@
                             <th class="ps-4">Reference</th>
                             <th>Vendor</th>
                             <th>Title</th>
+                            <th>Funding Source</th>
                             <th>Amount</th>
                             <th>Priority</th>
                             <th>Status</th>
@@ -53,6 +54,7 @@
                                     <div class="text-muted small">{{ $requestRecord->user->email ?? 'N/A' }}</div>
                                 </td>
                                 <td>{{ $requestRecord->title }}</td>
+                                <td>{{ $requestRecord->subActivity?->name ?? $requestRecord->procurement?->title ?? 'N/A' }}</td>
                                 <td>
                                     {{ $requestRecord->currency }}
                                     {{ number_format((float) $requestRecord->requested_amount, 2) }}

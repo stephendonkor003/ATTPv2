@@ -33,7 +33,7 @@ class VendorDisbursementController extends Controller
             abort(403, 'You do not have access to this payment record.');
         }
 
-        $disbursement->load(['purchaseOrder', 'procurement', 'subActivity', 'vendor']);
+        $this->loadPaymentReceiptRelations($disbursement);
 
         return view('vendor.payments.show', [
             'disbursement' => $disbursement,
@@ -49,7 +49,7 @@ class VendorDisbursementController extends Controller
             abort(403, 'You do not have access to this payment record.');
         }
 
-        $disbursement->load(['purchaseOrder', 'procurement', 'subActivity', 'vendor']);
+        $this->loadPaymentReceiptRelations($disbursement);
 
         $pdf = Pdf::loadView('procurement.disbursements.pdf', [
             'disbursement' => $disbursement,
@@ -67,7 +67,7 @@ class VendorDisbursementController extends Controller
             abort(403, 'You do not have access to this payment record.');
         }
 
-        $disbursement->load(['purchaseOrder', 'procurement', 'subActivity', 'vendor']);
+        $this->loadPaymentReceiptRelations($disbursement);
 
         $pdf = Pdf::loadView('procurement.disbursements.pdf', [
             'disbursement' => $disbursement,
@@ -89,5 +89,19 @@ class VendorDisbursementController extends Controller
         if ($user->is_disabled) {
             abort(403, 'Your vendor account has been disabled. Please contact the administrator.');
         }
+    }
+
+    private function loadPaymentReceiptRelations(ProcurementDisbursement $disbursement): void
+    {
+        $disbursement->load([
+            'purchaseOrder',
+            'purchaseRequestItem.resourceCategory',
+            'purchaseRequestItem.resource',
+            'purchaseRequestItem.deliverable.procurement',
+            'deliverable.procurement',
+            'procurement',
+            'subActivity',
+            'vendor',
+        ]);
     }
 }

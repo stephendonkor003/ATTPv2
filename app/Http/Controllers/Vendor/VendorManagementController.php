@@ -6,6 +6,8 @@ use App\Exports\VendorTemplateExport;
 use App\Http\Controllers\Controller;
 use App\Imports\VendorImport;
 use App\Mail\VendorAccountCreated;
+use App\Models\Program;
+use App\Models\SubActivity;
 use App\Models\User;
 use App\Models\VendorCategory;
 use Illuminate\Http\Request;
@@ -14,6 +16,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Validators\ValidationException as ExcelValidationException;
 use Throwable;
@@ -28,6 +31,7 @@ class VendorManagementController extends Controller
     public function index()
     {
         $vendors = User::where('user_type', 'vendor')
+            ->withCount('vendorSubActivityAssignments')
             ->orderByDesc('created_at')
             ->get();
 
@@ -51,6 +55,8 @@ class VendorManagementController extends Controller
             'pageSubtitle' => 'Create a vendor portal account without assigning a system role.',
             'backButtonText' => 'Back to Vendors',
             'submitButtonText' => 'Create Vendor',
+            'vendorFundingPrograms' => $this->vendorFundingPrograms(),
+            'vendorFundingAssignments' => collect(),
         ]);
     }
 
@@ -66,7 +72,9 @@ class VendorManagementController extends Controller
                 Rule::exists('vendor_categories', 'name')->where(fn ($query) => $query->where('is_active', true)),
             ],
             'convert_existing_vendor' => ['nullable', 'boolean'],
+            ...$this->vendorAssignmentValidationRules(),
         ]);
+        $assignmentRows = $this->vendorAssignmentRows($request);
 
         $existingUser = $this->findUserByEmail($validated['email']);
 
@@ -103,6 +111,7 @@ class VendorManagementController extends Controller
                 'member_state_id' => null,
                 'vendor_category' => $validated['vendor_category'] ?? null,
             ]);
+            $this->syncVendorAssignments($existingUser, $assignmentRows);
 
             return redirect()
                 ->route('vendors.index')
@@ -122,6 +131,7 @@ class VendorManagementController extends Controller
             'vendor_category' => $validated['vendor_category'] ?? null,
             'must_change_password' => true,
         ]);
+        $this->syncVendorAssignments($vendor, $assignmentRows);
 
         $mailSent = $this->sendVendorMailSafely($vendor, $plainPassword);
 
@@ -140,12 +150,20 @@ class VendorManagementController extends Controller
     public function edit(User $vendor)
     {
         $this->assertVendor($vendor);
+        $vendor->load('vendorSubActivityAssignments.subActivity.activity.project.program');
 
         $categories = \App\Models\VendorCategory::where('is_active', true)
             ->orderBy('name')
             ->pluck('name');
+        $vendorFundingPrograms = $this->vendorFundingPrograms();
+        $vendorFundingAssignments = $this->vendorFundingAssignmentsForForm($vendor);
 
-        return view('vendor.admin.edit', compact('vendor', 'categories'));
+        return view('vendor.admin.edit', compact(
+            'vendor',
+            'categories',
+            'vendorFundingPrograms',
+            'vendorFundingAssignments'
+        ));
     }
 
     public function update(Request $request, User $vendor)
@@ -156,7 +174,9 @@ class VendorManagementController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $vendor->id,
             'vendor_category' => 'nullable|string|max:255',
+            ...$this->vendorAssignmentValidationRules(),
         ]);
+        $assignmentRows = $this->vendorAssignmentRows($request);
 
         if (!empty($validated['vendor_category'])) {
             $exists = \App\Models\VendorCategory::where('name', $validated['vendor_category'])->exists();
@@ -172,10 +192,24 @@ class VendorManagementController extends Controller
             'email' => $validated['email'],
             'vendor_category' => !empty($validated['vendor_category']) ? $validated['vendor_category'] : null,
         ]);
+        $this->syncVendorAssignments($vendor, $assignmentRows);
 
         return redirect()
             ->route('vendors.index')
             ->with('success', 'Vendor updated successfully.');
+    }
+
+    public function show(User $vendor)
+    {
+        $this->assertVendor($vendor);
+        $vendor->load([
+            'vendorSubActivityAssignments.program',
+            'vendorSubActivityAssignments.project',
+            'vendorSubActivityAssignments.activity',
+            'vendorSubActivityAssignments.subActivity.activity.project.program',
+        ]);
+
+        return view('vendor.admin.show', compact('vendor'));
     }
 
     public function import(Request $request)
@@ -263,6 +297,114 @@ class VendorManagementController extends Controller
         if ($vendor->user_type !== 'vendor') {
             abort(404);
         }
+    }
+
+    private function vendorAssignmentValidationRules(): array
+    {
+        return [
+            'assignments' => ['nullable', 'array'],
+            'assignments.*.program_id' => ['nullable', 'uuid', Rule::exists('myb_programs', 'id')],
+            'assignments.*.project_id' => ['nullable', 'uuid', Rule::exists('myb_projects', 'id')],
+            'assignments.*.activity_id' => ['nullable', 'uuid', Rule::exists('myb_activities', 'id')],
+            'assignments.*.sub_activity_id' => ['nullable', 'uuid', Rule::exists('myb_sub_activities', 'id')],
+        ];
+    }
+
+    private function vendorAssignmentRows(Request $request): array
+    {
+        $rows = collect($request->input('assignments', []))
+            ->filter(fn ($row) => filled($row['sub_activity_id'] ?? null))
+            ->values();
+
+        if ($rows->isEmpty()) {
+            throw ValidationException::withMessages([
+                'assignments' => 'Select at least one funding source for this vendor.',
+            ]);
+        }
+
+        $subActivities = SubActivity::with('activity.project')
+            ->whereIn('id', $rows->pluck('sub_activity_id')->unique()->all())
+            ->get()
+            ->keyBy('id');
+        $normalized = [];
+
+        foreach ($rows as $index => $row) {
+            $subActivity = $subActivities->get($row['sub_activity_id']);
+            $activity = $subActivity?->activity;
+            $project = $activity?->project;
+            $programId = $project?->program_id;
+
+            if (! $subActivity || ! $activity || ! $project || ! $programId) {
+                throw ValidationException::withMessages([
+                    "assignments.{$index}.sub_activity_id" => 'The selected funding source is incomplete. Please choose another source.',
+                ]);
+            }
+
+            if (filled($row['activity_id'] ?? null) && (string) $row['activity_id'] !== (string) $activity->id) {
+                throw ValidationException::withMessages([
+                    "assignments.{$index}.activity_id" => 'The selected activity does not match the funding source.',
+                ]);
+            }
+
+            if (filled($row['project_id'] ?? null) && (string) $row['project_id'] !== (string) $project->id) {
+                throw ValidationException::withMessages([
+                    "assignments.{$index}.project_id" => 'The selected project does not match the funding source.',
+                ]);
+            }
+
+            if (filled($row['program_id'] ?? null) && (string) $row['program_id'] !== (string) $programId) {
+                throw ValidationException::withMessages([
+                    "assignments.{$index}.program_id" => 'The selected program does not match the funding source.',
+                ]);
+            }
+
+            $normalized[$subActivity->id] = [
+                'program_id' => $programId,
+                'project_id' => $project->id,
+                'activity_id' => $activity->id,
+                'sub_activity_id' => $subActivity->id,
+            ];
+        }
+
+        return array_values($normalized);
+    }
+
+    private function syncVendorAssignments(User $vendor, array $assignmentRows): void
+    {
+        $vendor->vendorSubActivityAssignments()->delete();
+        $vendor->vendorSubActivityAssignments()->createMany($assignmentRows);
+    }
+
+    private function vendorFundingPrograms()
+    {
+        return Program::with([
+            'projects' => fn ($query) => $query->orderBy('name'),
+            'projects.activities' => fn ($query) => $query->orderBy('name'),
+            'projects.activities.subActivities' => fn ($query) => $query->orderBy('name'),
+        ])
+            ->whereHas('projects.activities.subActivities')
+            ->orderBy('name')
+            ->get();
+    }
+
+    private function vendorFundingAssignmentsForForm(User $vendor)
+    {
+        return $vendor->vendorSubActivityAssignments
+            ->map(function ($assignment) {
+                $subActivity = $assignment->subActivity;
+                $activity = $assignment->activity ?: $subActivity?->activity;
+                $project = $assignment->project ?: $activity?->project;
+                $program = $assignment->program ?: $project?->program;
+
+                return [
+                    'program_id' => $program?->id,
+                    'project_id' => $project?->id,
+                    'activity_id' => $activity?->id,
+                    'sub_activity_id' => $subActivity?->id,
+                ];
+            })
+            ->filter(fn ($assignment) => filled($assignment['sub_activity_id'] ?? null))
+            ->values();
     }
 
     private function findUserByEmail(string $email): ?User

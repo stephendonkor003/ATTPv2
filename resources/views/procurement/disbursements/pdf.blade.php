@@ -93,6 +93,11 @@
         </style>
     </head>
     <body>
+        @php
+            $vendor = $disbursement->vendor;
+            $mobileMoney = trim(($vendor?->payment_mobile_provider ?: '') . ($vendor?->payment_mobile_number ? ' / ' . $vendor->payment_mobile_number : ''));
+        @endphp
+
         <div class="header">
             <table>
                 <tr>
@@ -152,11 +157,53 @@
             <table>
                 <tr>
                     <td class="label">Vendor Name</td>
-                    <td class="value">{{ $disbursement->vendor?->name ?? 'Vendor' }}</td>
+                    <td class="value">{{ $vendor?->name ?? 'Vendor' }}</td>
                 </tr>
                 <tr>
                     <td class="label">Vendor Email</td>
-                    <td class="value">{{ $disbursement->vendor?->email ?? 'N/A' }}</td>
+                    <td class="value">{{ $vendor?->email ?? 'N/A' }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Vendor Payment Records</div>
+            <table>
+                <tr>
+                    <td class="label">Preferred Method</td>
+                    <td class="value">{{ $vendor?->payment_method_preference ?? 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Bank Name</td>
+                    <td class="value">{{ $vendor?->payment_bank_name ?? 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Account Name</td>
+                    <td class="value">{{ $vendor?->payment_account_name ?? 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Account Number</td>
+                    <td class="value">{{ $vendor?->payment_account_number ?? 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">SWIFT Code</td>
+                    <td class="value">{{ $vendor?->payment_swift_code ?? 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">IBAN</td>
+                    <td class="value">{{ $vendor?->payment_iban ?? 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Mobile Money</td>
+                    <td class="value">{{ $mobileMoney !== '' ? $mobileMoney : 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Tax ID</td>
+                    <td class="value">{{ $vendor?->payment_tax_id ?? 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Payment Address</td>
+                    <td class="value">{{ $vendor?->payment_address ?? 'N/A' }}</td>
                 </tr>
             </table>
         </div>
@@ -173,6 +220,10 @@
                 <tr>
                     <td class="label">Payment Method</td>
                     <td class="value">{{ $disbursement->payment_method ?? 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Transfer Reference</td>
+                    <td class="value">{{ $disbursement->transfer_reference ?? 'N/A' }}</td>
                 </tr>
                 <tr>
                     <td class="label">Notes</td>

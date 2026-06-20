@@ -9,6 +9,7 @@ use App\Models\VendorInformationRequest;
 use App\Models\VendorMessage;
 use App\Models\VendorPurchaseRequest;
 use App\Models\VendorReport;
+use App\Support\VendorAdminAlerts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
@@ -97,7 +98,7 @@ class VendorRequestManagementController extends Controller
 
     public function purchaseRequestsIndex()
     {
-        $requests = VendorPurchaseRequest::with(['user', 'procurement', 'purchaseOrder'])
+        $requests = VendorPurchaseRequest::with(['user', 'procurement', 'subActivity.activity.project.program', 'purchaseOrder'])
             ->latest()
             ->get();
 
@@ -106,7 +107,7 @@ class VendorRequestManagementController extends Controller
 
     public function purchaseRequestsShow(VendorPurchaseRequest $purchaseRequest)
     {
-        $purchaseRequest->load(['user', 'procurement', 'purchaseOrder', 'items', 'documents']);
+        $purchaseRequest->load(['user', 'procurement', 'subActivity.activity.project.program', 'purchaseOrder', 'items', 'documents']);
 
         return view('vendor.admin.requests.purchase-requests.show', compact('purchaseRequest'));
     }
@@ -159,6 +160,13 @@ class VendorRequestManagementController extends Controller
         ]);
 
         return back()->with('success', 'Vendor report review saved.');
+    }
+
+    public function markAlertRead(Request $request, string $type, string $source)
+    {
+        VendorAdminAlerts::markRead($request->user(), $type, $source);
+
+        return response()->json(['ok' => true]);
     }
 
     public function downloadDocument(VendorDocument $document)

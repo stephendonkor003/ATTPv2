@@ -3,8 +3,7 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\FormSubmission;
-use App\Models\ProcurementPurchaseOrder;
+use App\Models\SubActivity;
 use App\Models\User;
 use App\Models\VendorDocument;
 use App\Models\VendorPurchaseRequest;
@@ -19,7 +18,7 @@ class VendorPurchaseRequestController extends Controller
     {
         $user = $this->vendor($request);
 
-        $requests = VendorPurchaseRequest::with(['procurement', 'purchaseOrder', 'items'])
+        $requests = VendorPurchaseRequest::with(['procurement', 'subActivity.activity.project.program', 'purchaseOrder', 'items'])
             ->where('user_id', $user->id)
             ->where('request_type', 'purchase_request')
             ->latest()
@@ -56,6 +55,7 @@ class VendorPurchaseRequestController extends Controller
         $data = $request->validate([
             'title' => 'required|string|max:255',
             'procurement_id' => ['nullable', Rule::exists('procurements', 'id')],
+            'sub_activity_id' => ['required', Rule::exists('myb_sub_activities', 'id')],
             'requested_amount' => 'nullable|numeric|min:0',
             'currency' => 'required|string|max:10',
             'needed_by' => 'nullable|date',
@@ -71,9 +71,11 @@ class VendorPurchaseRequestController extends Controller
             'documents.*' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,jpeg,png,zip|max:20480',
         ]);
 
-        $allowedProcurements = $this->vendorProcurements($user)->pluck('id')->all();
-        if (!empty($data['procurement_id']) && !in_array($data['procurement_id'], $allowedProcurements, true)) {
-            return back()->withErrors(['procurement_id' => 'You do not have access to this procurement.'])->withInput();
+        $allowedFundingSources = $this->vendorProcurements($user)->pluck('id')->all();
+        if (! in_array($data['sub_activity_id'], $allowedFundingSources, true)) {
+            return back()->withErrors([
+                'sub_activity_id' => 'You do not have access to this procurement funding source.',
+            ])->withInput();
         }
 
         $lineItems = collect($data['items'] ?? [])
@@ -102,6 +104,7 @@ class VendorPurchaseRequestController extends Controller
             $vendorRequest = VendorPurchaseRequest::create([
                 'user_id' => $user->id,
                 'procurement_id' => $data['procurement_id'] ?? null,
+                'sub_activity_id' => $data['sub_activity_id'],
                 'purchase_order_id' => null,
                 'reference_no' => VendorPurchaseRequest::generateReference(),
                 'request_type' => 'purchase_request',
@@ -143,7 +146,7 @@ class VendorPurchaseRequestController extends Controller
         $user = $this->vendor($request);
         abort_unless((string) $purchaseRequest->user_id === (string) $user->id, 403);
 
-        $purchaseRequest->load(['procurement', 'purchaseOrder', 'items', 'documents']);
+        $purchaseRequest->load(['procurement', 'subActivity.activity.project.program', 'purchaseOrder', 'items', 'documents']);
 
         return view('vendor.purchase-requests.show', compact('purchaseRequest'));
     }
@@ -170,13 +173,10 @@ class VendorPurchaseRequestController extends Controller
 
     private function vendorProcurements(User $user)
     {
-        $submissionProcurementIds = FormSubmission::where('submitted_by', $user->id)
-            ->pluck('procurement_id');
-        $poProcurementIds = ProcurementPurchaseOrder::where('vendor_id', $user->id)
-            ->pluck('procurement_id');
-
-        return \App\Models\Procurement::whereIn('id', $submissionProcurementIds->merge($poProcurementIds)->filter()->unique())
-            ->orderByDesc('created_at')
+        return SubActivity::query()
+            ->with(['activity.project.program'])
+            ->whereIn('id', $user->vendorSubActivityAssignments()->pluck('sub_activity_id'))
+            ->orderBy('name')
             ->get();
     }
 

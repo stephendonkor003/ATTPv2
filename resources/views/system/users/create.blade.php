@@ -257,6 +257,15 @@
                                 </small>
                             </div>
 
+                            @if ($vendorCreateOnly)
+                                <div class="col-12">
+                                    @include('vendor.admin.partials.funding-assignments', [
+                                        'vendorFundingPrograms' => $vendorFundingPrograms ?? collect(),
+                                        'vendorFundingAssignments' => $vendorFundingAssignments ?? collect(),
+                                    ])
+                                </div>
+                            @endif
+
                             {{-- MEMBER STATE --}}
                             <div class="col-md-6 mb-3" id="member-state-group"
                                 style="{{ $isMemberStateType ? '' : 'display: none;' }}">

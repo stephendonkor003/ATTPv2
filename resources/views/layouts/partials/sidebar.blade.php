@@ -75,6 +75,9 @@
         && collect($thinkTankFinancePermissions)->contains(
             fn($permission) => $sidebarUser->can($permission)
         );
+    $vendorSidebarAlerts = $sidebarUser && $sidebarUser->can('vendor.requests.manage') && Route::has('vendors.requests.alerts.read')
+        ? \App\Support\VendorAdminAlerts::forUser($sidebarUser)
+        : [];
 @endphp
 
 <style>
@@ -146,7 +149,137 @@
         color: rgba(248, 250, 252, 0.78);
     }
 
+    .vendor-sidebar-alerts {
+        padding: 12px 16px 0;
+        position: relative;
+    }
+
+    .vendor-alert-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        position: relative;
+        z-index: 20;
+    }
+
+    .vendor-alert-tile {
+        position: relative;
+    }
+
+    .vendor-alert-button {
+        width: 100%;
+        height: 38px;
+        border: 1px solid rgba(100, 116, 139, 0.24);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        color: #0f172a;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
+    }
+
+    .vendor-alert-button:hover,
+    .vendor-alert-button:focus {
+        border-color: rgba(14, 165, 233, 0.62);
+        color: #0284c7;
+        outline: none;
+    }
+
+    .vendor-alert-badge {
+        min-width: 17px;
+        height: 17px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #dc2626;
+        color: #fff;
+        font-size: 0.64rem;
+        font-weight: 800;
+        line-height: 17px;
+        position: absolute;
+        top: -6px;
+        right: -4px;
+    }
+
+    .vendor-alert-badge.is-zero {
+        display: none;
+    }
+
+    .vendor-alert-popover {
+        position: absolute;
+        left: 0;
+        top: calc(100% + 8px);
+        width: min(330px, calc(100vw - 32px));
+        max-height: 360px;
+        overflow-y: auto;
+        border: 1px solid #dbe4ef;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 22px 46px rgba(15, 23, 42, 0.24);
+        display: none;
+        z-index: 80;
+    }
+
+    .vendor-alert-tile:hover .vendor-alert-popover,
+    .vendor-alert-tile:focus-within .vendor-alert-popover {
+        display: block;
+    }
+
+    .vendor-alert-tile:nth-child(n+3) .vendor-alert-popover {
+        left: auto;
+        right: 0;
+    }
+
+    .vendor-alert-popover-header {
+        padding: 12px 14px;
+        border-bottom: 1px solid #e2e8f0;
+        font-weight: 800;
+        color: #0f172a;
+        background: #f8fafc;
+    }
+
+    .vendor-alert-item {
+        display: block;
+        padding: 11px 14px;
+        color: #334155;
+        border-bottom: 1px solid #eef2f7;
+        text-decoration: none;
+    }
+
+    .vendor-alert-item:hover {
+        background: #f0f9ff;
+        color: #0f172a;
+    }
+
+    .vendor-alert-item.is-unread {
+        border-left: 3px solid #0ea5e9;
+        background: #f8fafc;
+    }
+
+    .vendor-alert-item-title {
+        color: #0f172a;
+        font-size: 0.82rem;
+        font-weight: 800;
+        line-height: 1.25;
+    }
+
+    .vendor-alert-item-meta {
+        color: #64748b;
+        font-size: 0.72rem;
+        line-height: 1.4;
+        margin-top: 4px;
+    }
+
+    .vendor-alert-empty {
+        padding: 14px;
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+
     .admin-sidebar-search-item {
+        margin-top: 12px;
         padding: 0 16px 12px;
     }
 
@@ -348,6 +481,49 @@
                             <span class="nxl-micon"><i class="feather-package"></i></span>
                             <span class="nxl-mtext">Commodities</span>
                         </a>
+                    </li>
+                @endif
+
+                @if (!empty($vendorSidebarAlerts))
+                    <li class="nxl-item vendor-sidebar-alerts" data-sidebar-search-fixed="true">
+                        <div class="vendor-alert-strip" data-vendor-alert-strip>
+                            @foreach ($vendorSidebarAlerts as $alertBucket)
+                                <div class="vendor-alert-tile">
+                                    <button type="button" class="vendor-alert-button" title="{{ $alertBucket['label'] }}"
+                                        aria-label="{{ $alertBucket['label'] }}">
+                                        <i class="{{ $alertBucket['icon'] }}"></i>
+                                        <span class="vendor-alert-badge {{ (int) $alertBucket['unread_count'] === 0 ? 'is-zero' : '' }}"
+                                            data-vendor-alert-badge="{{ $alertBucket['type'] }}">
+                                            {{ number_format((int) $alertBucket['unread_count']) }}
+                                        </span>
+                                    </button>
+                                    <div class="vendor-alert-popover">
+                                        <div class="vendor-alert-popover-header">
+                                            {{ $alertBucket['label'] }}
+                                        </div>
+                                        @forelse ($alertBucket['items'] as $alertItem)
+                                            <a href="{{ $alertItem['url'] }}"
+                                                class="vendor-alert-item {{ $alertItem['is_read'] ? '' : 'is-unread' }}"
+                                                data-vendor-alert-item
+                                                data-vendor-alert-type="{{ $alertItem['type'] }}"
+                                                data-vendor-alert-read="{{ $alertItem['is_read'] ? '1' : '0' }}"
+                                                data-vendor-alert-mark-url="{{ $alertItem['mark_url'] }}">
+                                                <div class="vendor-alert-item-title">{{ $alertItem['vendor'] }}</div>
+                                                <div class="vendor-alert-item-meta">
+                                                    {{ $alertItem['title'] }}
+                                                    @if ($alertItem['amount'])
+                                                        <span class="fw-semibold"> | {{ $alertItem['amount'] }}</span>
+                                                    @endif
+                                                </div>
+                                                <div class="vendor-alert-item-meta">{{ $alertItem['date'] }}</div>
+                                            </a>
+                                        @empty
+                                            <div class="vendor-alert-empty">No records yet.</div>
+                                        @endforelse
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
                     </li>
                 @endif
 
@@ -1696,6 +1872,51 @@
         };
         rotate();
         setInterval(rotate, 5000);
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        document.querySelectorAll('[data-vendor-alert-item]').forEach((alertLink) => {
+            alertLink.addEventListener('click', (event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+
+                const markUrl = alertLink.dataset.vendorAlertMarkUrl;
+                if (!markUrl || markUrl === '#') {
+                    return;
+                }
+
+                event.preventDefault();
+                const destination = alertLink.href;
+                const alertType = alertLink.dataset.vendorAlertType;
+                const wasUnread = alertLink.dataset.vendorAlertRead !== '1';
+
+                fetch(markUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                }).finally(() => {
+                    if (wasUnread) {
+                        alertLink.dataset.vendorAlertRead = '1';
+                        alertLink.classList.remove('is-unread');
+                        const badge = Array.from(document.querySelectorAll('[data-vendor-alert-badge]'))
+                            .find((candidate) => candidate.dataset.vendorAlertBadge === alertType);
+
+                        if (badge) {
+                            const current = Number((badge.textContent || '0').replace(/[^\d]/g, '')) || 0;
+                            const next = Math.max(current - 1, 0);
+                            badge.textContent = String(next);
+                            badge.classList.toggle('is-zero', next === 0);
+                        }
+                    }
+
+                    window.location.href = destination;
+                });
+            });
+        });
 
         const navList = document.querySelector('.nxl-navbar');
         const searchInput = document.getElementById('admin-sidebar-menu-search');

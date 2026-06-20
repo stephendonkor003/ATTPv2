@@ -45,7 +45,9 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <div class="text-muted small">Related Procurement</div>
-                            <div class="fw-semibold">{{ $purchaseRequest->procurement?->title ?? 'Not linked' }}</div>
+                            <div class="fw-semibold">
+                                {{ $purchaseRequest->subActivity?->name ?? $purchaseRequest->procurement?->title ?? 'Not linked' }}
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <div class="text-muted small">Needed By</div>

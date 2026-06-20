@@ -107,6 +107,7 @@
                             <th class="ps-4">Vendor</th>
                             <th>Email</th>
                             <th>Category</th>
+                            <th>Funding Sources</th>
                             <th>Status</th>
                             <th>Created</th>
                             <th class="text-center" width="220">Actions</th>
@@ -121,6 +122,11 @@
                                 <td>{{ $vendor->email }}</td>
                                 <td>{{ $vendor->vendor_category ?? '—' }}</td>
                                 <td>
+                                    <span class="badge bg-info-subtle text-info">
+                                        {{ number_format((int) ($vendor->vendor_sub_activity_assignments_count ?? 0)) }}
+                                    </span>
+                                </td>
+                                <td>
                                     @if ($vendor->is_blacklisted)
                                         <span class="badge bg-danger">Blacklisted</span>
                                     @elseif ($vendor->is_disabled)
@@ -132,6 +138,10 @@
                                 <td>{{ $vendor->created_at?->format('d M Y') ?? '—' }}</td>
                                 <td class="text-center">
                                     <div class="d-inline-flex gap-1">
+                                        <a href="{{ route('vendors.show', $vendor) }}" class="btn btn-sm btn-outline-secondary"
+                                            title="View Vendor">
+                                            <i class="feather-eye"></i>
+                                        </a>
                                         <a href="{{ route('vendors.edit', $vendor) }}" class="btn btn-sm btn-outline-primary"
                                             title="Edit Vendor">
                                             <i class="feather-edit"></i>

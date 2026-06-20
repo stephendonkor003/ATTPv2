@@ -11,6 +11,7 @@ class VendorPurchaseRequest extends BaseModel
     protected $fillable = [
         'user_id',
         'procurement_id',
+        'sub_activity_id',
         'purchase_order_id',
         'reference_no',
         'request_type',
@@ -41,6 +42,11 @@ class VendorPurchaseRequest extends BaseModel
     public function procurement(): BelongsTo
     {
         return $this->belongsTo(Procurement::class);
+    }
+
+    public function subActivity(): BelongsTo
+    {
+        return $this->belongsTo(SubActivity::class, 'sub_activity_id');
     }
 
     public function purchaseOrder(): BelongsTo
