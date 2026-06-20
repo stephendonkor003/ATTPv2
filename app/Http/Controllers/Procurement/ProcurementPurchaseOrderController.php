@@ -17,6 +17,7 @@ use App\Models\Resource;
 use App\Models\ResourceCategory;
 use App\Models\SubActivity;
 use App\Models\User;
+use App\Services\VendorPurchaseOrderNotificationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -488,6 +489,8 @@ class ProcurementPurchaseOrderController extends Controller
             return $purchaseOrder;
         });
 
+        app(VendorPurchaseOrderNotificationService::class)->notifyCreated($purchaseOrder->fresh());
+
         return redirect()
             ->route('procurement.purchase-orders.show', $purchaseOrder)
             ->with('success', 'Purchase order created from approved purchase request ' . $purchaseRequest->reference_no . '.');
@@ -646,6 +649,9 @@ class ProcurementPurchaseOrderController extends Controller
             $vendor = User::query()->find($procurement->awarded_vendor_id);
         }
 
+        $originalVendorId = $purchaseOrder->vendor_id;
+        $originalStatus = strtolower((string) $purchaseOrder->status);
+
         DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseOrder, $purchaseRequest, $request, $vendor) {
             $this->syncPurchaseRequestLineItems($request, $purchaseRequest);
 
@@ -691,6 +697,14 @@ class ProcurementPurchaseOrderController extends Controller
             $purchaseOrder->deliverables()->sync($deliverableIds->all());
             $this->storeLineItemEvidence($request, $purchaseOrder, $purchaseRequest, true);
         });
+
+        $purchaseOrder->refresh();
+        $vendorChanged = (string) $originalVendorId !== (string) $purchaseOrder->vendor_id;
+        $becameIssued = $originalStatus !== 'issued' && strtolower((string) $purchaseOrder->status) === 'issued';
+
+        if ($purchaseOrder->vendor_id && ($vendorChanged || $becameIssued)) {
+            app(VendorPurchaseOrderNotificationService::class)->notifyCreated($purchaseOrder);
+        }
 
         return redirect()
             ->route('procurement.purchase-orders.show', $purchaseOrder)

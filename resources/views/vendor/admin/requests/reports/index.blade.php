@@ -13,9 +13,11 @@
                 <p class="text-muted mb-0">Review progress, financial, completion, and deliverable reports from vendors.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <a href="{{ route('vendors.requests.purchase-requests.index') }}" class="btn btn-outline-secondary btn-sm">
-                    <i class="feather-shopping-bag me-1"></i> Purchase Requests
-                </a>
+                @can('finance.purchase_requests.view')
+                    <a href="{{ route('procurement.purchase-orders.index') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="feather-file-text me-1"></i> Purchase Orders
+                    </a>
+                @endcan
                 <a href="{{ route('vendors.requests.messages.index') }}" class="btn btn-outline-secondary btn-sm">
                     <i class="feather-message-square me-1"></i> Clarifications
                 </a>

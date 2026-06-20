@@ -14,6 +14,7 @@ use App\Support\VendorAdminAlerts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -100,6 +101,8 @@ class VendorRequestManagementController extends Controller
 
     public function purchaseRequestsIndex()
     {
+        return $this->redirectRetiredPurchaseRequests();
+
         $requests = VendorPurchaseRequest::with(['user', 'procurement', 'subActivity.activity.project.program', 'purchaseOrder'])
             ->latest()
             ->get();
@@ -109,6 +112,8 @@ class VendorRequestManagementController extends Controller
 
     public function purchaseRequestsShow(VendorPurchaseRequest $purchaseRequest)
     {
+        return $this->redirectRetiredPurchaseRequests();
+
         $purchaseRequest->load(['user', 'procurement', 'subActivity.activity.project.program', 'purchaseOrder', 'items', 'documents']);
 
         return view('vendor.admin.requests.purchase-requests.show', compact('purchaseRequest'));
@@ -116,6 +121,8 @@ class VendorRequestManagementController extends Controller
 
     public function purchaseRequestsRespond(Request $request, VendorPurchaseRequest $purchaseRequest)
     {
+        return $this->redirectRetiredPurchaseRequests();
+
         $validated = $request->validate([
             'status' => 'required|in:submitted,in_review,revision_requested,approved,rejected,converted,completed',
             'admin_response' => [
@@ -182,6 +189,17 @@ class VendorRequestManagementController extends Controller
         VendorAdminAlerts::markRead($request->user(), $type, $source);
 
         return response()->json(['ok' => true]);
+    }
+
+    private function redirectRetiredPurchaseRequests()
+    {
+        $route = Auth::user()?->can('finance.purchase_requests.view') && Route::has('procurement.purchase-orders.index')
+            ? 'procurement.purchase-orders.index'
+            : 'vendors.requests.reports.index';
+
+        return redirect()
+            ->route($route)
+            ->with('info', 'Vendor purchase requests have been retired. Vendors now upload deliverable evidence from assigned purchase orders.');
     }
 
     public function downloadDocument(VendorDocument $document)

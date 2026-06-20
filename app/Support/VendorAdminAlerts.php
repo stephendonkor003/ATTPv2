@@ -3,10 +3,10 @@
 namespace App\Support;
 
 use App\Models\ProcurementDisbursement;
+use App\Models\ProcurementPurchaseOrder;
 use App\Models\User;
 use App\Models\VendorAdminAlertRead;
 use App\Models\VendorMessage;
-use App\Models\VendorPurchaseRequest;
 use App\Models\VendorReport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Route;
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
 
 class VendorAdminAlerts
 {
-    public const TYPE_PURCHASE_REQUESTS = 'purchase_requests';
+    public const TYPE_PURCHASE_REQUESTS = 'purchase_orders';
     public const TYPE_REPORTS = 'reports';
     public const TYPE_PAYMENT_RECEIPTS = 'payment_receipts';
     public const TYPE_MESSAGES = 'messages';
@@ -42,18 +42,19 @@ class VendorAdminAlerts
         return [
             self::TYPE_PURCHASE_REQUESTS => self::bucket(
                 self::TYPE_PURCHASE_REQUESTS,
-                'Purchase requests',
-                'feather-bell',
-                VendorPurchaseRequest::with('user')
-                    ->where('request_type', 'purchase_request')
-                    ->latest(),
-                fn (VendorPurchaseRequest $request) => [
-                    'title' => $request->title ?: $request->reference_no,
-                    'vendor' => $request->user?->name ?? 'Vendor',
-                    'amount' => trim(($request->currency ?: 'USD') . ' ' . number_format((float) $request->requested_amount, 2)),
-                    'date' => $request->created_at?->format('d M Y H:i') ?? 'N/A',
-                    'url' => Route::has('vendors.requests.purchase-requests.show')
-                        ? route('vendors.requests.purchase-requests.show', $request)
+                'Purchase orders',
+                'feather-file-text',
+                ProcurementPurchaseOrder::with('vendor')
+                    ->whereNotNull('vendor_id')
+                    ->orderByDesc('issued_at')
+                    ->orderByDesc('created_at'),
+                fn (ProcurementPurchaseOrder $purchaseOrder) => [
+                    'title' => $purchaseOrder->po_title ?: $purchaseOrder->reference_no,
+                    'vendor' => $purchaseOrder->vendor?->name ?? 'Vendor',
+                    'amount' => trim(($purchaseOrder->resolved_currency ?: 'USD') . ' ' . number_format((float) $purchaseOrder->amount, 2)),
+                    'date' => ($purchaseOrder->issued_at ?: $purchaseOrder->created_at)?->format('d M Y H:i') ?? 'N/A',
+                    'url' => Route::has('procurement.purchase-orders.show')
+                        ? route('procurement.purchase-orders.show', $purchaseOrder)
                         : '#',
                 ],
                 $readIds[self::TYPE_PURCHASE_REQUESTS] ?? [],

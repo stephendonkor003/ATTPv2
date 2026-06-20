@@ -31,7 +31,7 @@
             <div>
                 <h4 class="fw-bold mb-1">Purchase Requests</h4>
                 <p class="text-muted mb-0">
-                    Finance purchase requests and vendor-submitted purchase requests grouped by workflow status.
+                    Internal finance purchase requests grouped by workflow status.
                 </p>
             </div>
             @can('finance.commitments.create')
@@ -92,7 +92,6 @@
                                     <thead class="table-light">
                                         <tr>
                                             <th>#</th>
-                                            <th>Source</th>
                                             <th>Reference</th>
                                             <th>Requestor</th>
                                             @if ($canViewAll)
@@ -134,11 +133,6 @@
                                             @endphp
                                             <tr>
                                                 <td>{{ $loop->iteration }}</td>
-                                                <td>
-                                                    <span class="badge {{ $isFinanceRow ? 'bg-primary' : 'bg-info text-dark' }}">
-                                                        {{ $row->source_label }}
-                                                    </span>
-                                                </td>
                                                 <td class="fw-semibold">{{ $row->reference_no }}</td>
                                                 <td>
                                                     <div class="fw-semibold">{{ $row->requestor_name }}</div>
@@ -171,96 +165,82 @@
                                                 </td>
                                                 <td>{{ $row->created_at?->format('Y-m-d') ?? 'N/A' }}</td>
                                                 <td class="text-end">
-                                                    @if ($isFinanceRow)
-                                                        <a href="{{ route('finance.purchase-requests.show', $pr) }}"
-                                                            class="btn btn-sm btn-outline-primary"
-                                                            title="View Purchase Request">
-                                                            <i class="feather-eye"></i>
+                                                    <a href="{{ route('finance.purchase-requests.show', $pr) }}"
+                                                        class="btn btn-sm btn-outline-primary"
+                                                        title="View Purchase Request">
+                                                        <i class="feather-eye"></i>
+                                                    </a>
+                                                    <a href="{{ route('finance.purchase-requests.download', $pr) }}"
+                                                        class="btn btn-sm btn-outline-secondary"
+                                                        title="Download PDF">
+                                                        <i class="feather-download"></i>
+                                                    </a>
+
+                                                    @if ($canEditThisPurchaseRequest)
+                                                        <a href="{{ route('finance.purchase-requests.edit', $pr) }}"
+                                                            class="btn btn-sm btn-outline-warning"
+                                                            title="Edit Purchase Request">
+                                                            <i class="feather-edit-2"></i>
                                                         </a>
-                                                        <a href="{{ route('finance.purchase-requests.download', $pr) }}"
-                                                            class="btn btn-sm btn-outline-secondary"
-                                                            title="Download PDF">
-                                                            <i class="feather-download"></i>
-                                                        </a>
+                                                    @endif
 
-                                                        @if ($canEditThisPurchaseRequest)
-                                                            <a href="{{ route('finance.purchase-requests.edit', $pr) }}"
-                                                                class="btn btn-sm btn-outline-warning"
-                                                                title="Edit Purchase Request">
-                                                                <i class="feather-edit-2"></i>
-                                                            </a>
-                                                        @endif
+                                                    @if ($canDeleteThisPurchaseRequest)
+                                                        <button type="button"
+                                                            class="btn btn-sm btn-outline-danger js-delete-pr"
+                                                            title="Delete Purchase Request"
+                                                            data-info-url="{{ route('finance.purchase-requests.destroy-info', $pr) }}"
+                                                            data-delete-url="{{ route('finance.purchase-requests.destroy', $pr) }}"
+                                                            data-force-delete-url="{{ route('finance.purchase-requests.force-destroy', $pr) }}">
+                                                            <i class="feather-trash-2"></i>
+                                                        </button>
+                                                    @endif
 
-                                                        @if ($canDeleteThisPurchaseRequest)
-                                                            <button type="button"
-                                                                class="btn btn-sm btn-outline-danger js-delete-pr"
-                                                                title="Delete Purchase Request"
-                                                                data-info-url="{{ route('finance.purchase-requests.destroy-info', $pr) }}"
-                                                                data-delete-url="{{ route('finance.purchase-requests.destroy', $pr) }}"
-                                                                data-force-delete-url="{{ route('finance.purchase-requests.force-destroy', $pr) }}">
-                                                                <i class="feather-trash-2"></i>
+                                                    @if ($canApprovePurchaseRequests && in_array($pr->status, $decidableStatuses, true))
+                                                        <form method="POST" action="{{ route('finance.purchase-requests.approve', $pr) }}" class="d-inline">
+                                                            @csrf
+                                                            <button type="submit" class="btn btn-sm btn-outline-success" title="Approve Purchase Request">
+                                                                <i class="feather-check"></i>
                                                             </button>
-                                                        @endif
+                                                        </form>
 
-                                                        @if ($canApprovePurchaseRequests && in_array($pr->status, $decidableStatuses, true))
-                                                            <form method="POST" action="{{ route('finance.purchase-requests.approve', $pr) }}" class="d-inline">
-                                                                @csrf
-                                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Approve Purchase Request">
-                                                                    <i class="feather-check"></i>
-                                                                </button>
-                                                            </form>
+                                                        <button type="button"
+                                                            class="btn btn-sm btn-outline-danger"
+                                                            title="Reject Purchase Request"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#rejectPurchaseRequestModal{{ $row->key }}">
+                                                            <i class="feather-x"></i>
+                                                        </button>
 
-                                                            <button type="button"
-                                                                class="btn btn-sm btn-outline-danger"
-                                                                title="Reject Purchase Request"
-                                                                data-bs-toggle="modal"
-                                                                data-bs-target="#rejectPurchaseRequestModal{{ $row->key }}">
-                                                                <i class="feather-x"></i>
-                                                            </button>
-
-                                                            <div class="modal fade" id="rejectPurchaseRequestModal{{ $row->key }}" tabindex="-1" aria-hidden="true">
-                                                                <div class="modal-dialog modal-dialog-centered">
-                                                                    <div class="modal-content text-start">
-                                                                        <form method="POST" action="{{ route('finance.purchase-requests.reject', $pr) }}">
-                                                                            @csrf
-                                                                            <div class="modal-header">
-                                                                                <h5 class="modal-title">Reject Purchase Request</h5>
-                                                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        <div class="modal fade" id="rejectPurchaseRequestModal{{ $row->key }}" tabindex="-1" aria-hidden="true">
+                                                            <div class="modal-dialog modal-dialog-centered">
+                                                                <div class="modal-content text-start">
+                                                                    <form method="POST" action="{{ route('finance.purchase-requests.reject', $pr) }}">
+                                                                        @csrf
+                                                                        <div class="modal-header">
+                                                                            <h5 class="modal-title">Reject Purchase Request</h5>
+                                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                                        </div>
+                                                                        <div class="modal-body">
+                                                                            <div class="mb-0">
+                                                                                <label class="form-label">Reason for rejection</label>
+                                                                                <textarea name="rejection_reason"
+                                                                                    class="form-control"
+                                                                                    rows="4"
+                                                                                    minlength="5"
+                                                                                    maxlength="1000"
+                                                                                    required>{{ old('rejection_reason') }}</textarea>
                                                                             </div>
-                                                                            <div class="modal-body">
-                                                                                <div class="mb-0">
-                                                                                    <label class="form-label">Reason for rejection</label>
-                                                                                    <textarea name="rejection_reason"
-                                                                                        class="form-control"
-                                                                                        rows="4"
-                                                                                        minlength="5"
-                                                                                        maxlength="1000"
-                                                                                        required>{{ old('rejection_reason') }}</textarea>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div class="modal-footer">
-                                                                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                                                <button type="submit" class="btn btn-danger">
-                                                                                    <i class="feather-x me-1"></i> Reject
-                                                                                </button>
-                                                                            </div>
-                                                                        </form>
-                                                                    </div>
+                                                                        </div>
+                                                                        <div class="modal-footer">
+                                                                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                                            <button type="submit" class="btn btn-danger">
+                                                                                <i class="feather-x me-1"></i> Reject
+                                                                            </button>
+                                                                        </div>
+                                                                    </form>
                                                                 </div>
                                                             </div>
-                                                        @endif
-                                                    @else
-                                                        @if ($canManageVendorRequests)
-                                                            <a href="{{ route('vendors.requests.purchase-requests.show', $pr) }}"
-                                                                class="btn btn-sm btn-outline-primary"
-                                                                title="Review Vendor Purchase Request">
-                                                                <i class="feather-eye me-1"></i> Review
-                                                            </a>
-                                                        @else
-                                                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled>
-                                                                Review
-                                                            </button>
-                                                        @endif
+                                                        </div>
                                                     @endif
                                                 </td>
                                             </tr>

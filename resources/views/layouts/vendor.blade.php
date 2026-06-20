@@ -426,8 +426,8 @@
             <a href="{{ route('vendor.submissions') }}" class="vendor-nav-link {{ request()->routeIs('vendor.submissions', 'vendor.applications.*') ? 'active' : '' }}">
                 <i class="feather-file-text"></i> My Submissions
             </a>
-            <a href="{{ route('vendor.purchase-requests.index') }}" class="vendor-nav-link {{ request()->routeIs('vendor.purchase-requests.*') ? 'active' : '' }}">
-                <i class="feather-shopping-bag"></i> Purchase Requests
+            <a href="{{ route('vendor.purchase-orders.index') }}" class="vendor-nav-link {{ request()->routeIs('vendor.purchase-orders.*') ? 'active' : '' }}">
+                <i class="feather-file-text"></i> Purchase Orders
             </a>
             <a href="{{ route('vendor.reports.index') }}" class="vendor-nav-link {{ request()->routeIs('vendor.reports.*') ? 'active' : '' }}">
                 <i class="feather-clipboard"></i> Reports
@@ -479,8 +479,8 @@
                     <div class="small text-muted">{{ now()->format('l, M d, Y') }}</div>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <a href="{{ route('vendor.purchase-requests.create') }}" class="btn btn-vendor btn-sm">
-                        <i class="feather-plus me-1"></i> New Request
+                    <a href="{{ route('vendor.purchase-orders.index') }}" class="btn btn-vendor btn-sm">
+                        <i class="feather-file-text me-1"></i> Purchase Orders
                     </a>
                     <a href="{{ route('vendor.procurements.index') }}" class="btn btn-vendor-outline btn-sm">
                         <i class="feather-search me-1"></i> Find Procurements

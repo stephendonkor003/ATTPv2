@@ -17,7 +17,7 @@
             <div class="vendor-eyebrow">Performance Dashboard</div>
             <h3 class="vendor-page-title">Welcome back, {{ auth()->user()->name ?? 'Vendor' }}</h3>
             <p class="text-muted mb-0">
-                {{ auth()->user()->vendor_category ?? 'Vendor' }} workspace for procurement requests, reports, documents, and payments.
+                {{ auth()->user()->vendor_category ?? 'Vendor' }} workspace for purchase orders, deliverable evidence, reports, and payments.
             </p>
         </div>
         <form method="GET" action="{{ route('vendor.dashboard') }}" class="d-flex align-items-end flex-wrap gap-2">
@@ -65,11 +65,11 @@
             <div class="card vendor-card h-100">
                 <div class="card-body vendor-metric">
                     <div>
-                        <div class="vendor-metric-label">Purchase Requests</div>
-                        <div class="vendor-metric-value">{{ $dashboardStats['purchase_requests'] }}</div>
-                        <div class="text-muted small">{{ $dashboardStats['pending_reviews'] }} item(s) waiting on review</div>
+                        <div class="vendor-metric-label">Purchase Orders</div>
+                        <div class="vendor-metric-value">{{ $dashboardStats['purchase_orders'] }}</div>
+                        <div class="text-muted small">{{ $dashboardStats['pending_reviews'] }} active item(s)</div>
                     </div>
-                    <span class="vendor-metric-icon"><i class="feather-shopping-bag"></i></span>
+                    <span class="vendor-metric-icon"><i class="feather-file-text"></i></span>
                 </div>
             </div>
         </div>
@@ -133,7 +133,7 @@
                     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
                         <div>
                             <div class="vendor-eyebrow">Activity Trend</div>
-                            <h5 class="mb-0">Submissions, Requests, Reports, and Documents</h5>
+                            <h5 class="mb-0">Submissions, Purchase Orders, Reports, and Documents</h5>
                         </div>
                         <div class="text-muted small">{{ $dashboardStats['reports'] }} report(s), {{ $dashboardStats['documents'] }} document(s)</div>
                     </div>
@@ -148,10 +148,10 @@
     <div class="row g-3 mb-4">
         <div class="col-xl-3 col-md-6">
             <div class="vendor-flow-step">
-                <span class="vendor-metric-icon mb-3"><i class="feather-plus-circle"></i></span>
-                <h6 class="fw-bold">Purchase Request</h6>
-                <p class="text-muted small mb-3">Submit a request with line items and supporting documents for admin processing.</p>
-                <a href="{{ route('vendor.purchase-requests.create') }}" class="btn btn-vendor btn-sm w-100">Create Request</a>
+                <span class="vendor-metric-icon mb-3"><i class="feather-file-text"></i></span>
+                <h6 class="fw-bold">Purchase Orders</h6>
+                <p class="text-muted small mb-3">Review assigned purchase orders and upload deliverable evidence documents.</p>
+                <a href="{{ route('vendor.purchase-orders.index') }}" class="btn btn-vendor btn-sm w-100">Open Purchase Orders</a>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
@@ -291,32 +291,27 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                         <div>
-                            <div class="vendor-eyebrow">Procurement Intake</div>
-                            <h5 class="mb-0">Latest Purchase Requests</h5>
+                            <div class="vendor-eyebrow">Assigned Orders</div>
+                            <h5 class="mb-0">Latest Purchase Orders</h5>
                         </div>
-                        <a href="{{ route('vendor.purchase-requests.index') }}" class="btn btn-vendor-outline btn-sm">View All</a>
+                        <a href="{{ route('vendor.purchase-orders.index') }}" class="btn btn-vendor-outline btn-sm">View All</a>
                     </div>
 
-                    @forelse ($purchaseRequests->take(5) as $requestRecord)
+                    @forelse ($purchaseOrders->take(5) as $purchaseOrder)
                         <div class="vendor-file-row d-flex justify-content-between align-items-center gap-3 mb-2">
                             <div class="min-w-0">
-                                <div class="fw-semibold text-truncate">{{ $requestRecord->title }}</div>
+                                <div class="fw-semibold text-truncate">{{ $purchaseOrder->po_title ?: 'Purchase Order' }}</div>
                                 <div class="text-muted small">
-                                    {{ $requestRecord->reference_no }} | {{ Str::headline($requestRecord->status) }}
+                                    {{ $purchaseOrder->reference_no }} | {{ Str::headline($purchaseOrder->status) }}
                                 </div>
                             </div>
-                            @if ($requestRecord->status === 'revision_requested')
-                                <a href="{{ route('vendor.purchase-requests.edit', $requestRecord) }}"
-                                    class="btn btn-sm btn-vendor">Edit</a>
-                            @else
-                                <a href="{{ route('vendor.purchase-requests.show', $requestRecord) }}"
-                                    class="btn btn-sm btn-vendor-outline">Open</a>
-                            @endif
+                            <a href="{{ route('vendor.purchase-orders.show', $purchaseOrder) }}"
+                                class="btn btn-sm btn-vendor-outline">Open</a>
                         </div>
                     @empty
                         <div class="vendor-empty">
-                            <span class="vendor-empty-icon mx-auto mb-3"><i class="feather-shopping-bag"></i></span>
-                            <p class="text-muted mb-0">No purchase requests in this period.</p>
+                            <span class="vendor-empty-icon mx-auto mb-3"><i class="feather-file-text"></i></span>
+                            <p class="text-muted mb-0">No purchase orders in this period.</p>
                         </div>
                     @endforelse
                 </div>
@@ -472,7 +467,7 @@
                                 backgroundColor: palette.green
                             },
                             {
-                                label: 'Requests',
+                                label: 'Purchase Orders',
                                 data: activityChart.requests,
                                 backgroundColor: palette.blue
                             },

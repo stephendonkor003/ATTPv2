@@ -15,7 +15,6 @@ use App\Models\User;
 use App\Models\VendorDocument;
 use App\Models\VendorInformationRequest;
 use App\Models\VendorMessage;
-use App\Models\VendorPurchaseRequest;
 use App\Models\VendorReport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -42,13 +41,16 @@ class VendorPortalController extends Controller
             $awardedProcurements,
         ] = $this->loadVendorOverview($user, $dateFrom, $dateTo);
 
-        $purchaseRequests = $this->applyDateRange(
-            VendorPurchaseRequest::with(['procurement', 'purchaseOrder'])
-                ->where('user_id', $user->id)
-                ->where('request_type', 'purchase_request'),
+        $purchaseOrders = $this->applyDateRange(
+            ProcurementPurchaseOrder::with([
+                'procurement',
+                'lineItemEvidence',
+                'purchaseRequest.items',
+                'budgetCommitment.purchaseRequest.items',
+            ])->where('vendor_id', $user->id),
             $dateFrom,
             $dateTo
-        )->latest()->get();
+        )->orderByDesc('issued_at')->latest()->get();
 
         $reports = $this->applyDateRange(
             VendorReport::with(['procurement', 'purchaseOrder'])
@@ -84,20 +86,20 @@ class VendorPortalController extends Controller
         $dashboardStats = [
             'applications' => $submissions->count(),
             'open_applications' => $openCount,
-            'purchase_requests' => $purchaseRequests->where('request_type', 'purchase_request')->count(),
+            'purchase_orders' => $purchaseOrders->count(),
             'reports' => $reports->count(),
             'documents' => $documents->count(),
             'invoice_amount' => (float) $invoices->sum(fn (ProcurementInvoice $invoice) => (float) $invoice->amount),
             'payments_received' => (float) $paidDisbursements->sum(fn (ProcurementDisbursement $payment) => (float) $payment->amount),
-            'pending_reviews' => $purchaseRequests->whereIn('status', ['submitted', 'in_review'])->count()
+            'pending_reviews' => $purchaseOrders->where('status', 'issued')->count()
                 + $reports->where('status', 'submitted')->count(),
         ];
 
         $statusChart = [
-            'labels' => ['Applications', 'Purchase Requests', 'Reports', 'Documents', 'Payments'],
+            'labels' => ['Applications', 'Purchase Orders', 'Reports', 'Documents', 'Payments'],
             'data' => [
                 $submissions->count(),
-                $purchaseRequests->where('request_type', 'purchase_request')->count(),
+                $purchaseOrders->count(),
                 $reports->count(),
                 $documents->count(),
                 $paidDisbursements->count(),
@@ -129,9 +131,9 @@ class VendorPortalController extends Controller
                 fn (FormSubmission $submission) => $submission->submitted_at ?: $submission->created_at
             ),
             'requests' => $this->monthlySeries(
-                $purchaseRequests,
+                $purchaseOrders,
                 $chartMonths,
-                fn (VendorPurchaseRequest $vendorRequest) => $vendorRequest->created_at
+                fn (ProcurementPurchaseOrder $purchaseOrder) => $purchaseOrder->issued_at ?: $purchaseOrder->created_at
             ),
             'reports' => $this->monthlySeries(
                 $reports,
@@ -145,7 +147,7 @@ class VendorPortalController extends Controller
             ),
         ];
 
-        $recentActivity = $this->recentActivity($submissions, $purchaseRequests, $reports, $documents, $paidDisbursements);
+        $recentActivity = $this->recentActivity($submissions, $purchaseOrders, $reports, $documents, $paidDisbursements);
         $thinkTankMember = ConsortiumThinkTank::with('consortium')
             ->where(function ($query) use ($user) {
                 $query->where('vendor_user_id', $user->id)
@@ -163,7 +165,7 @@ class VendorPortalController extends Controller
             'vendorProcurements' => $vendorProcurements,
             'notifications' => $notifications,
             'awardedProcurements' => $awardedProcurements,
-            'purchaseRequests' => $purchaseRequests,
+            'purchaseOrders' => $purchaseOrders,
             'reports' => $reports,
             'documents' => $documents,
             'invoices' => $invoices,
@@ -591,7 +593,7 @@ class VendorPortalController extends Controller
         })->all();
     }
 
-    private function recentActivity($submissions, $purchaseRequests, $reports, $documents, $paidDisbursements)
+    private function recentActivity($submissions, $purchaseOrders, $reports, $documents, $paidDisbursements)
     {
         return collect()
             ->merge($submissions->map(fn (FormSubmission $submission) => [
@@ -601,12 +603,12 @@ class VendorPortalController extends Controller
                 'date' => $submission->submitted_at ?: $submission->created_at,
                 'icon' => 'feather-file-text',
             ]))
-            ->merge($purchaseRequests->map(fn (VendorPurchaseRequest $request) => [
-                'type' => 'Purchase Request',
-                'title' => $request->title,
-                'detail' => $request->reference_no,
-                'date' => $request->created_at,
-                'icon' => 'feather-shopping-bag',
+            ->merge($purchaseOrders->map(fn (ProcurementPurchaseOrder $purchaseOrder) => [
+                'type' => 'Purchase Order',
+                'title' => $purchaseOrder->po_title ?: 'Purchase Order',
+                'detail' => $purchaseOrder->reference_no,
+                'date' => $purchaseOrder->issued_at ?: $purchaseOrder->created_at,
+                'icon' => 'feather-file-text',
             ]))
             ->merge($reports->map(fn (VendorReport $report) => [
                 'type' => 'Report',

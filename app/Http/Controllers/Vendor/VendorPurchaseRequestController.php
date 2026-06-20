@@ -17,6 +17,8 @@ class VendorPurchaseRequestController extends Controller
 {
     public function index(Request $request)
     {
+        return $this->redirectToPurchaseOrders();
+
         $user = $this->vendor($request);
 
         $requests = VendorPurchaseRequest::with(['procurement', 'subActivity.activity.project.program', 'purchaseOrder', 'items'])
@@ -42,6 +44,8 @@ class VendorPurchaseRequestController extends Controller
 
     public function create(Request $request)
     {
+        return $this->redirectToPurchaseOrders();
+
         $user = $this->vendor($request);
 
         return view('vendor.purchase-requests.create', [
@@ -52,6 +56,8 @@ class VendorPurchaseRequestController extends Controller
 
     public function store(Request $request)
     {
+        return $this->redirectToPurchaseOrders();
+
         $user = $this->vendor($request);
 
         $data = $request->validate([
@@ -137,6 +143,8 @@ class VendorPurchaseRequestController extends Controller
 
     public function edit(Request $request, VendorPurchaseRequest $purchaseRequest)
     {
+        return $this->redirectToPurchaseOrders();
+
         $user = $this->vendor($request);
         abort_unless((string) $purchaseRequest->user_id === (string) $user->id, 403);
         abort_unless($purchaseRequest->status === 'revision_requested', 403);
@@ -155,6 +163,8 @@ class VendorPurchaseRequestController extends Controller
 
     public function update(Request $request, VendorPurchaseRequest $purchaseRequest)
     {
+        return $this->redirectToPurchaseOrders();
+
         $user = $this->vendor($request);
         abort_unless((string) $purchaseRequest->user_id === (string) $user->id, 403);
         abort_unless($purchaseRequest->status === 'revision_requested', 403);
@@ -227,6 +237,8 @@ class VendorPurchaseRequestController extends Controller
 
     public function show(Request $request, VendorPurchaseRequest $purchaseRequest)
     {
+        return $this->redirectToPurchaseOrders();
+
         $user = $this->vendor($request);
         abort_unless((string) $purchaseRequest->user_id === (string) $user->id, 403);
 
@@ -237,6 +249,8 @@ class VendorPurchaseRequestController extends Controller
 
     public function download(Request $request, VendorPurchaseRequest $purchaseRequest, VendorDocument $document)
     {
+        return $this->redirectToPurchaseOrders();
+
         $user = $this->vendor($request);
         abort_unless((string) $purchaseRequest->user_id === (string) $user->id, 403);
         abort_unless((string) $document->user_id === (string) $user->id, 403);
@@ -253,6 +267,13 @@ class VendorPurchaseRequestController extends Controller
         abort_if($user->is_disabled || $user->is_blacklisted, 403);
 
         return $user;
+    }
+
+    private function redirectToPurchaseOrders()
+    {
+        return redirect()
+            ->route('vendor.purchase-orders.index')
+            ->with('info', 'Vendor purchase requests are no longer submitted from the portal. Open an assigned purchase order to upload deliverable evidence.');
     }
 
     private function vendorProcurements(User $user)

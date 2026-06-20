@@ -138,6 +138,7 @@ use App\Http\Controllers\Vendor\{
     VendorInvoiceController,
     VendorDisbursementController,
     VendorDeliverableController,
+    VendorPurchaseOrderController,
     VendorPurchaseRequestController,
     VendorReportController,
     VendorKnowledgeController,
@@ -2901,6 +2902,19 @@ Route::middleware(['auth'])
             ->name('clarifications');
         Route::get('/submissions', [VendorPortalController::class, 'submissions'])
             ->name('submissions');
+        Route::get('/purchase-orders', [VendorPurchaseOrderController::class, 'index'])
+            ->name('purchase-orders.index');
+        Route::get('/purchase-orders/{purchaseOrder}/pdf', [VendorPurchaseOrderController::class, 'pdf'])
+            ->name('purchase-orders.pdf');
+        Route::get('/purchase-orders/{purchaseOrder}/download', [VendorPurchaseOrderController::class, 'download'])
+            ->name('purchase-orders.download');
+        Route::get('/purchase-orders/{purchaseOrder}', [VendorPurchaseOrderController::class, 'show'])
+            ->name('purchase-orders.show');
+        Route::post('/purchase-orders/{purchaseOrder}/items/{item}/evidence', [VendorPurchaseOrderController::class, 'storeEvidence'])
+            ->name('purchase-orders.evidence.store');
+        Route::get('/purchase-orders/{purchaseOrder}/evidence/{evidence}/documents/{document}', [VendorPurchaseOrderController::class, 'downloadEvidenceDocument'])
+            ->whereNumber('document')
+            ->name('purchase-orders.evidence.documents.download');
         Route::get('/purchase-requests', [VendorPurchaseRequestController::class, 'index'])
             ->name('purchase-requests.index');
         Route::get('/purchase-requests/create', [VendorPurchaseRequestController::class, 'create'])
