@@ -393,9 +393,10 @@
     }
 
     .attp-admin-sidebar .sidebar-footer-card {
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: linear-gradient(135deg, rgba(2, 44, 34, 0.92), rgba(13, 148, 136, 0.62));
+        border: 1px solid rgba(167, 243, 208, 0.22);
         color: #ffffff;
+        box-shadow: 0 18px 34px rgba(2, 44, 34, 0.26);
     }
 
     .attp-admin-sidebar .sidebar-footer-card,
@@ -1885,9 +1886,9 @@
             <div class="card text-center mt-4 sidebar-footer-card">
                 <div class="card-body">
                     <i class="feather-clipboard fs-4 text-dark"></i>
-                    <h6 class="mt-4 text-dark fw-bolder">ATTP</h6>
+                    <h6 class="mt-4 text-dark fw-bolder">System Workspace</h6>
                     <p class="fs-11 my-3 text-dark">
-                        Manage ATTP procurement, finance, and think tank management workflows from one secure control center.
+                        Coordinate procurement, finance, think tank operations, reporting, and approvals across the platform.
                     </p>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
