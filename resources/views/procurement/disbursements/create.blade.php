@@ -743,6 +743,9 @@
                                                 <button type="button" class="btn btn-outline-primary w-100 mb-3" id="typedSignatureBtn">
                                                     <i class="feather-edit-3 me-1"></i> Use Typed Signature
                                                 </button>
+                                                <label class="form-label fw-semibold">Upload Signature</label>
+                                                <input type="file" class="form-control mb-3" id="signatureUploadInput"
+                                                    accept="image/png,image/jpeg,image/webp">
                                                 <div class="alert alert-light border small mb-0">
                                                     The signed record will be attached under Signed Payment Documents as a PNG file and stored with the disbursement.
                                                 </div>
@@ -803,6 +806,7 @@
             const signatureApplyBtn = document.getElementById('signatureApplyBtn');
             const typedSignatureInput = document.getElementById('typedSignatureInput');
             const typedSignatureBtn = document.getElementById('typedSignatureBtn');
+            const signatureUploadInput = document.getElementById('signatureUploadInput');
             let activeEvidenceFieldset = null;
             let activeSignaturePaymentCard = null;
             let activeSignaturePaymentIndex = null;
@@ -1221,6 +1225,7 @@
                 ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
                 signatureHasInk = false;
                 signatureImageDataUrl = null;
+                if (signatureUploadInput) signatureUploadInput.value = '';
                 refreshSignatureStamp();
             }
 
@@ -1253,6 +1258,50 @@
                 signatureHasInk = true;
                 signatureImageDataUrl = signaturePad.toDataURL('image/png');
                 refreshSignatureStamp();
+            }
+
+            function drawUploadedSignature(dataUrl) {
+                if (!signaturePad || !dataUrl) return;
+
+                resizeSignaturePad();
+                const image = new Image();
+                image.onload = () => {
+                    const ctx = signaturePad.getContext('2d');
+                    const rect = signaturePad.getBoundingClientRect();
+                    const padding = 14;
+                    const maxWidth = Math.max(1, rect.width - (padding * 2));
+                    const maxHeight = Math.max(1, rect.height - (padding * 2));
+                    const scale = Math.min(
+                        maxWidth / Math.max(image.naturalWidth, 1),
+                        maxHeight / Math.max(image.naturalHeight, 1),
+                        1
+                    );
+                    const width = image.naturalWidth * scale;
+                    const height = image.naturalHeight * scale;
+                    const x = (rect.width - width) / 2;
+                    const y = (rect.height - height) / 2;
+
+                    ctx.clearRect(0, 0, rect.width, rect.height);
+                    ctx.drawImage(image, x, y, width, height);
+                    signatureHasInk = true;
+                    signatureImageDataUrl = signaturePad.toDataURL('image/png');
+                    refreshSignatureStamp();
+                };
+                image.src = dataUrl;
+            }
+
+            function handleSignatureUpload(file) {
+                if (!file) return;
+
+                if (!String(file.type || '').startsWith('image/')) {
+                    alert('Upload a PNG, JPG, or WEBP signature image.');
+                    if (signatureUploadInput) signatureUploadInput.value = '';
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = () => drawUploadedSignature(String(reader.result || ''));
+                reader.readAsDataURL(file);
             }
 
             function signaturePreviewStage() {
@@ -1946,6 +1995,7 @@
                     resizeSignaturePad();
                     signatureHasInk = false;
                     signatureImageDataUrl = null;
+                    if (signatureUploadInput) signatureUploadInput.value = '';
                     refreshSignatureStamp();
                     const ctx = signaturePad.getContext('2d');
                     const point = signaturePoint(event);
@@ -1978,6 +2028,9 @@
             document.addEventListener('pointercancel', stopSignatureStampDrag);
             signatureClearBtn?.addEventListener('click', clearSignaturePad);
             typedSignatureBtn?.addEventListener('click', drawTypedSignature);
+            signatureUploadInput?.addEventListener('change', (event) => {
+                handleSignatureUpload(event.target.files?.[0]);
+            });
             signatureApplyBtn?.addEventListener('click', () => {
                 buildSignatureRecordBlob((blob) => {
                     if (!blob || !selectedSignatureDocument) return;
