@@ -41,6 +41,19 @@ class InjectWebsiteVisitTracker
             return false;
         }
 
+        if ($request->is(
+            'login',
+            'register',
+            'forgot-password',
+            'reset-password*',
+            'verify-email*',
+            'confirm-password',
+            'security/otp*',
+            'security/password*'
+        )) {
+            return false;
+        }
+
         if (! $response->isSuccessful()) {
             return false;
         }

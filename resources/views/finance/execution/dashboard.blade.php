@@ -7,7 +7,7 @@
             'allocation' => $totalAllocation ?? 0,
             'commitment' => $totalCommitment ?? 0,
             'disbursement' => $totalDisbursements ?? 0,
-            'remaining' => max(($totalAllocation ?? 0) - ($totalCommitment ?? 0), 0),
+            'remaining' => ($totalAllocation ?? 0) - ($totalCommitment ?? 0),
             'execution_rate' => $executionRate ?? 0,
             'disbursement_rate' => $disbursementRate ?? 0,
         ];
@@ -24,7 +24,7 @@
             }
             return $currencyCode . ' ' . number_format($value, 2);
         };
-        $percent = fn ($value, $decimals = 1) => number_format(min(100, max(0, (float) $value)), $decimals) . '%';
+        $percent = fn ($value, $decimals = 1) => number_format(max(0, (float) $value), $decimals) . '%';
         $scopeLabel = match ($scopeType ?? 'global') {
             'sector' => 'Sector: ' . ($scope?->name ?? 'N/A'),
             'program' => 'Program: ' . ($scope?->name ?? 'N/A'),
@@ -41,9 +41,9 @@
                 'tone' => 'teal',
             ],
             [
-                'label' => 'Committed',
+                'label' => 'Planned Commitments',
                 'value' => $compactMoney($totals['commitment'] ?? 0),
-                'meta' => $percent($totals['execution_rate'] ?? 0) . ' execution',
+                'meta' => $percent($totals['execution_rate'] ?? 0) . ' commitment rate',
                 'icon' => 'feather-lock',
                 'tone' => 'gold',
             ],
@@ -55,7 +55,7 @@
                 'tone' => 'green',
             ],
             [
-                'label' => 'Remaining Allocation',
+                'label' => 'Remaining Global Commitments',
                 'value' => $compactMoney($totals['remaining'] ?? 0),
                 'meta' => $money($totals['remaining'] ?? 0),
                 'icon' => 'feather-pie-chart',
@@ -457,11 +457,11 @@
             </div>
             <div class="execution-hero-metrics">
                 <div class="execution-mini">
-                    <span>Execution</span>
+                    <span>Commitment Rate</span>
                     <strong>{{ $percent($totals['execution_rate'] ?? 0, 1) }}</strong>
                 </div>
                 <div class="execution-mini">
-                    <span>Disbursement</span>
+                    <span>Disbursement Rate</span>
                     <strong>{{ $percent($totals['disbursement_rate'] ?? 0, 1) }}</strong>
                 </div>
                 <div class="execution-mini">
@@ -490,8 +490,8 @@
             <div class="execution-panel span-8">
                 <div class="execution-panel-head">
                     <div>
-                        <h6 class="execution-panel-title">Allocation, Commitment, Disbursement</h6>
-                        <p class="execution-panel-note">Annual execution trend</p>
+                        <h6 class="execution-panel-title">Global, Planned, and Disbursed</h6>
+                        <p class="execution-panel-note">Cumulative execution trend</p>
                     </div>
                 </div>
                 <div class="execution-chart"><canvas id="executionLineChart"></canvas></div>
@@ -501,7 +501,7 @@
                 <div class="execution-panel-head">
                     <div>
                         <h6 class="execution-panel-title">Execution Mix</h6>
-                        <p class="execution-panel-note">Disbursed, unpaid, and remaining</p>
+                        <p class="execution-panel-note">Disbursed, planned not paid, and remaining global commitments</p>
                     </div>
                 </div>
                 <div class="execution-chart"><canvas id="executionMixChart"></canvas></div>
@@ -511,7 +511,7 @@
                 <div class="execution-panel-head">
                     <div>
                         <h6 class="execution-panel-title">Rate Movement</h6>
-                        <p class="execution-panel-note">Execution and disbursement percentages</p>
+                        <p class="execution-panel-note">Planned and disbursed against global commitments</p>
                     </div>
                 </div>
                 <div class="execution-chart"><canvas id="executionRateChart"></canvas></div>
@@ -521,7 +521,7 @@
                 <div class="execution-panel-head">
                     <div>
                         <h6 class="execution-panel-title">Cumulative Momentum</h6>
-                        <p class="execution-panel-note">Running allocation, commitment, and payment flow</p>
+                        <p class="execution-panel-note">Running global, planned, and payment flow</p>
                     </div>
                 </div>
                 <div class="execution-chart"><canvas id="executionCumulativeChart"></canvas></div>
@@ -530,8 +530,8 @@
             <div class="execution-panel span-6">
                 <div class="execution-panel-head">
                     <div>
-                        <h6 class="execution-panel-title">Annual Financial Profile</h6>
-                        <p class="execution-panel-note">Grouped values by year</p>
+                        <h6 class="execution-panel-title">Cumulative Financial Profile</h6>
+                        <p class="execution-panel-note">Running totals by year</p>
                     </div>
                 </div>
                 <div class="execution-chart"><canvas id="executionAnnualProfileChart"></canvas></div>
@@ -541,7 +541,7 @@
                 <div class="execution-panel-head">
                     <div>
                         <h6 class="execution-panel-title">Variance Control</h6>
-                        <p class="execution-panel-note">Remaining allocation after commitments</p>
+                        <p class="execution-panel-note">Running remaining global commitments after planned commitments</p>
                     </div>
                 </div>
                 <div class="execution-chart"><canvas id="executionVarianceChart"></canvas></div>
@@ -561,7 +561,7 @@
                 <div class="execution-panel-head">
                     <div>
                         <h6 class="execution-panel-title">Exposure Concentration</h6>
-                        <p class="execution-panel-note">Commitment scale and variance pressure</p>
+                        <p class="execution-panel-note">Cumulative commitment scale and variance pressure</p>
                     </div>
                 </div>
                 <div class="execution-chart"><canvas id="executionBubbleChart"></canvas></div>
@@ -572,7 +572,7 @@
             <div class="execution-panel-head">
                 <div>
                     <h5 class="execution-panel-title">Execution Performance Breakdown</h5>
-                    <p class="execution-panel-note">Year-by-year allocation, commitment, disbursement, remaining balance, and capped rates</p>
+                    <p class="execution-panel-note">Year-by-year global commitments, planned commitments, disbursements, remaining balance, and rates</p>
                 </div>
             </div>
 
@@ -581,12 +581,12 @@
                     <thead>
                         <tr class="text-center">
                             <th>Year</th>
-                            <th class="text-end">Allocated Amount</th>
-                            <th class="text-end">Committed Amount</th>
+                            <th class="text-end">Global Commitments</th>
+                            <th class="text-end">Planned Commitments</th>
                             <th class="text-end">Disbursed Amount</th>
                             <th class="text-end">Remaining</th>
-                            <th class="text-center">Execution %</th>
-                            <th class="text-center">Disbursement %</th>
+                            <th class="text-center">Commitment Rate</th>
+                            <th class="text-center">Disbursement Rate</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -659,10 +659,25 @@
             const allocations = rows.map(row => Number(row.allocation || 0));
             const commitments = rows.map(row => Number(row.commitment || 0));
             const disbursements = rows.map(row => Number(row.disbursement || 0));
-            const remaining = rows.map(row => Number(row.remaining || 0));
-            const executionRates = rows.map(row => Math.min(100, Number(row.execution_rate || 0)));
-            const disbursementRates = rows.map(row => Math.min(100, Number(row.disbursement_rate || 0)));
-            const variance = rows.map(row => Math.max(Number(row.allocation || 0) - Number(row.commitment || 0), 0));
+            const runningTotal = values => {
+                let total = 0;
+                return values.map(value => {
+                    total += Number(value || 0);
+                    return Number(total.toFixed(2));
+                });
+            };
+            const cumulativeAllocation = runningTotal(allocations);
+            const cumulativeCommitment = runningTotal(commitments);
+            const cumulativeDisbursement = runningTotal(disbursements);
+            const cumulativeRemaining = cumulativeAllocation.map((value, index) => (
+                value - Number(cumulativeCommitment[index] || 0)
+            ));
+            const cumulativeExecutionRates = cumulativeAllocation.map((value, index) => (
+                value > 0 ? (Number(cumulativeCommitment[index] || 0) / value) * 100 : 0
+            ));
+            const cumulativeDisbursementRates = cumulativeAllocation.map((value, index) => (
+                value > 0 ? (Number(cumulativeDisbursement[index] || 0) / value) * 100 : 0
+            ));
             const unpaidCommitments = Math.max(Number(totals.commitment || 0) - Number(totals.disbursement || 0), 0);
             const mixValues = [
                 Math.max(Number(totals.disbursement || 0), 0),
@@ -716,8 +731,8 @@
                     labels,
                     datasets: [
                         {
-                            label: 'Allocation',
-                            data: allocations,
+                            label: 'Cumulative Global Commitments',
+                            data: cumulativeAllocation,
                             borderColor: '#2563eb',
                             backgroundColor: 'rgba(37,99,235,.12)',
                             fill: true,
@@ -725,8 +740,8 @@
                             borderWidth: 2
                         },
                         {
-                            label: 'Commitment',
-                            data: commitments,
+                            label: 'Cumulative Planned Commitments',
+                            data: cumulativeCommitment,
                             borderColor: '#b7791f',
                             backgroundColor: 'rgba(183,121,31,.12)',
                             fill: true,
@@ -734,8 +749,8 @@
                             borderWidth: 2
                         },
                         {
-                            label: 'Disbursement',
-                            data: disbursements,
+                            label: 'Cumulative Recorded Disbursements',
+                            data: cumulativeDisbursement,
                             borderColor: '#168a5b',
                             backgroundColor: 'rgba(22,138,91,.1)',
                             fill: false,
@@ -760,7 +775,7 @@
             makeChart('executionMixChart', {
                 type: 'doughnut',
                 data: {
-                    labels: ['Disbursed', 'Unpaid Commitments', 'Remaining Allocation'],
+                    labels: ['Disbursed', 'Unpaid Commitments', 'Remaining Global Commitments'],
                     datasets: [{
                         data: mixValues,
                         backgroundColor: ['#168a5b', '#d65a31', '#2563eb'],
@@ -782,8 +797,8 @@
                     labels,
                     datasets: [
                         {
-                            label: 'Execution %',
-                            data: executionRates,
+                            label: 'Commitment Rate',
+                            data: cumulativeExecutionRates,
                             percent: true,
                             borderColor: '#0f766e',
                             backgroundColor: 'rgba(15,118,110,.13)',
@@ -792,8 +807,8 @@
                             borderWidth: 2
                         },
                         {
-                            label: 'Disbursement %',
-                            data: disbursementRates,
+                            label: 'Disbursement Rate',
+                            data: cumulativeDisbursementRates,
                             percent: true,
                             borderColor: '#6d5bd0',
                             backgroundColor: 'rgba(109,91,208,.13)',
@@ -810,19 +825,11 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            max: 100,
                             ticks: { callback: value => `${value}%` }
                         }
                     }
                 }
             });
-
-            let runningAllocation = 0;
-            let runningCommitment = 0;
-            let runningDisbursement = 0;
-            const cumulativeAllocation = allocations.map(value => runningAllocation += value);
-            const cumulativeCommitment = commitments.map(value => runningCommitment += value);
-            const cumulativeDisbursement = disbursements.map(value => runningDisbursement += value);
 
             makeChart('executionCumulativeChart', {
                 type: 'line',
@@ -830,7 +837,7 @@
                     labels,
                     datasets: [
                         {
-                            label: 'Cumulative Allocation',
+                            label: 'Cumulative Global Commitments',
                             data: cumulativeAllocation,
                             borderColor: '#2563eb',
                             backgroundColor: 'rgba(37,99,235,.12)',
@@ -838,7 +845,7 @@
                             tension: .3
                         },
                         {
-                            label: 'Cumulative Commitment',
+                            label: 'Cumulative Planned Commitments',
                             data: cumulativeCommitment,
                             borderColor: '#b7791f',
                             backgroundColor: 'rgba(183,121,31,.12)',
@@ -846,7 +853,7 @@
                             tension: .3
                         },
                         {
-                            label: 'Cumulative Disbursement',
+                            label: 'Cumulative Recorded Disbursements',
                             data: cumulativeDisbursement,
                             borderColor: '#168a5b',
                             backgroundColor: 'rgba(22,138,91,.12)',
@@ -873,9 +880,9 @@
                 data: {
                     labels,
                     datasets: [
-                        { label: 'Allocation', data: allocations, backgroundColor: '#2563eb' },
-                        { label: 'Commitment', data: commitments, backgroundColor: '#b7791f' },
-                        { label: 'Disbursement', data: disbursements, backgroundColor: '#168a5b' }
+                        { label: 'Cumulative Global Commitments', data: cumulativeAllocation, backgroundColor: '#2563eb' },
+                        { label: 'Cumulative Planned Commitments', data: cumulativeCommitment, backgroundColor: '#b7791f' },
+                        { label: 'Cumulative Recorded Disbursements', data: cumulativeDisbursement, backgroundColor: '#168a5b' }
                     ]
                 },
                 options: {
@@ -896,9 +903,9 @@
                 data: {
                     labels,
                     datasets: [{
-                        label: 'Remaining Allocation',
-                        data: variance,
-                        backgroundColor: variance.map(value => value > 0 ? '#0f766e' : '#d65a31'),
+                        label: 'Remaining Global Commitments',
+                        data: cumulativeRemaining,
+                        backgroundColor: cumulativeRemaining.map(value => value > 0 ? '#0f766e' : '#d65a31'),
                         borderRadius: 6
                     }]
                 },
@@ -919,7 +926,7 @@
             makeChart('executionRadarChart', {
                 type: 'radar',
                 data: {
-                    labels: ['Budget Utilization', 'Timeliness', 'Consistency', 'Coverage', 'Risk Control'],
+                    labels: ['Commitment Rate', 'Timeliness', 'Consistency', 'Coverage', 'Risk Control'],
                     datasets: [{
                         label: 'Score',
                         data: [
@@ -953,10 +960,10 @@
                 data: {
                     datasets: [{
                         label: 'Year Exposure',
-                        data: rows.map(row => ({
-                            x: Number(row.execution_rate || 0),
-                            y: Number(row.commitment || 0),
-                            r: Math.max(5, Math.min(22, Math.sqrt(Math.max(Number(row.remaining || 0), 1)) / 900)),
+                        data: rows.map((row, index) => ({
+                            x: Number(cumulativeExecutionRates[index] || 0),
+                            y: Number(cumulativeCommitment[index] || 0),
+                            r: Math.max(5, Math.min(22, Math.sqrt(Math.max(Math.abs(Number(cumulativeRemaining[index] || 0)), 1)) / 900)),
                             year: row.year
                         })),
                         backgroundColor: 'rgba(214,90,49,.38)',
@@ -970,15 +977,14 @@
                         ...commonPlugins,
                         tooltip: {
                             callbacks: {
-                                label: context => `${context.raw.year}: ${context.raw.x.toFixed(1)}%, ${money(context.raw.y)}`
+                                label: context => `${context.raw.year}: ${context.raw.x.toFixed(1)}%, ${money(context.raw.y)} cumulative commitment`
                             }
                         }
                     },
                     scales: {
                         x: {
                             min: 0,
-                            max: 100,
-                            title: { display: true, text: 'Execution %' },
+                            title: { display: true, text: 'Commitment Rate' },
                             ticks: { callback: value => `${value}%` }
                         },
                         y: {

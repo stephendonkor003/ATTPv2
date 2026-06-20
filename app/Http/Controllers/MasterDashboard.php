@@ -180,10 +180,7 @@ class MasterDashboard extends Controller
             ->toArray();
 
         foreach ($years as $year) {
-            $commitmentByYear[$year] = round(max(
-                (float) ($commitmentByYear[$year] ?? 0),
-                (float) ($disbursementByYear[$year] ?? 0)
-            ), 2);
+            $commitmentByYear[$year] = round((float) ($commitmentByYear[$year] ?? 0), 2);
             $disbursementByYear[$year] = round((float) ($disbursementByYear[$year] ?? 0), 2);
         }
 
@@ -195,11 +192,11 @@ class MasterDashboard extends Controller
         $totalDisbursements = array_sum($disbursementByYear);
 
         $executionRate = $totalAllocation > 0
-            ? min(100, round(($totalCommitment / $totalAllocation) * 100, 2))
+            ? round(($totalCommitment / $totalAllocation) * 100, 2)
             : 0;
 
-        $disbursementRate = $totalCommitment > 0
-            ? min(100, round(($totalDisbursements / $totalCommitment) * 100, 2))
+        $disbursementRate = $totalAllocation > 0
+            ? round(($totalDisbursements / $totalAllocation) * 100, 2)
             : 0;
 
         $variance = $totalAllocation - $totalCommitment;
@@ -238,10 +235,10 @@ class MasterDashboard extends Controller
                 'commitment' => $commit,
                 'disbursement' => $disbursed,
                 'execution_rate' => $alloc > 0
-                    ? min(100, round(($commit / $alloc) * 100, 1))
+                    ? round(($commit / $alloc) * 100, 1)
                     : 0,
-                'disbursement_rate' => $commit > 0
-                    ? min(100, round(($disbursed / $commit) * 100, 1))
+                'disbursement_rate' => $alloc > 0
+                    ? round(($disbursed / $alloc) * 100, 1)
                     : 0,
             ];
         });
@@ -252,9 +249,9 @@ class MasterDashboard extends Controller
                 'allocation' => round((float) ($row['allocation'] ?? 0), 2),
                 'commitment' => round((float) ($row['commitment'] ?? 0), 2),
                 'disbursement' => round((float) ($row['disbursement'] ?? 0), 2),
-                'remaining' => round(max((float) ($row['allocation'] ?? 0) - (float) ($row['commitment'] ?? 0), 0), 2),
-                'execution_rate' => min(100, max(0, round((float) ($row['execution_rate'] ?? 0), 1))),
-                'disbursement_rate' => min(100, max(0, round((float) ($row['disbursement_rate'] ?? 0), 1))),
+                'remaining' => round((float) ($row['allocation'] ?? 0) - (float) ($row['commitment'] ?? 0), 2),
+                'execution_rate' => max(0, round((float) ($row['execution_rate'] ?? 0), 1)),
+                'disbursement_rate' => max(0, round((float) ($row['disbursement_rate'] ?? 0), 1)),
             ];
         })->values();
 
@@ -262,9 +259,9 @@ class MasterDashboard extends Controller
             'allocation' => round($totalAllocation, 2),
             'commitment' => round($totalCommitment, 2),
             'disbursement' => round($totalDisbursements, 2),
-            'remaining' => round(max($totalAllocation - $totalCommitment, 0), 2),
-            'execution_rate' => min(100, max(0, round($executionRate, 1))),
-            'disbursement_rate' => min(100, max(0, round($disbursementRate, 1))),
+            'remaining' => round($totalAllocation - $totalCommitment, 2),
+            'execution_rate' => max(0, round($executionRate, 1)),
+            'disbursement_rate' => max(0, round($disbursementRate, 1)),
         ];
 
         $peakCommitmentRow = $executionBreakdownRows

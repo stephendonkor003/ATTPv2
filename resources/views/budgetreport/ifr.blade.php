@@ -4,7 +4,7 @@
     @php
         $reportMeta = array_merge([
             'title' => 'IFR - Interim Financial Report',
-            'description' => 'Committed vs actual disbursements on sub-activities with insights and charts',
+            'description' => 'Global commitments from the budget structure, planned commitments from purchase requests, and fully paid disbursement trends',
             'form_route' => 'budget.reports.ifr',
             'pdf_route' => 'budget.reports.ifr.export.pdf',
             'excel_route' => 'budget.reports.ifr.export.excel',
@@ -151,8 +151,13 @@
                             </div>
                         </div>
                         <div class="text-end">
-                            <div class="fw-semibold">Total Committed: {{ $currency }} {{ number_format($totals['committed'] ?? 0, 2) }}</div>
-                            <div class="fw-semibold">Total Disbursed: {{ $currency }} {{ number_format($totals['disbursed'] ?? 0, 2) }}</div>
+                            <div class="fw-semibold">Global Commitments: {{ $currency }} {{ number_format($totals['global_commitment'] ?? $totals['committed'] ?? 0, 2) }}</div>
+                            <div class="fw-semibold">Planned Commitments: {{ $currency }} {{ number_format($totals['planned_commitment'] ?? 0, 2) }}</div>
+                            <div class="fw-semibold">Cumulative Disbursed: {{ $currency }} {{ number_format($totals['disbursed'] ?? 0, 2) }}</div>
+                            <div class="text-muted small">
+                                Commitment Rate: {{ number_format($totals['commitment_rate'] ?? 0, 2) }}%
+                                | Disbursement Rate: {{ number_format($totals['disbursement_rate'] ?? $totals['utilization'] ?? 0, 2) }}%
+                            </div>
                         </div>
                     </div>
 
@@ -162,18 +167,20 @@
                                 <tr>
                                     <th rowspan="2" style="min-width: 260px;">Project / Activity / Sub-Activity</th>
                                     <th rowspan="2">PR Reference No</th>
-                                    <th rowspan="2" class="text-end">Committed</th>
-                                    <th rowspan="2" class="text-end">Actual Disbursement</th>
+                                    <th rowspan="2" class="text-end">Global Commitments</th>
+                                    <th rowspan="2" class="text-end">Planned Commitments</th>
+                                    <th rowspan="2" class="text-end">Cumulative Disbursement</th>
                                     <th rowspan="2" class="text-end">Variance</th>
-                                    <th rowspan="2" class="text-end">Utilization %</th>
+                                    <th rowspan="2" class="text-end">Commitment Rate</th>
+                                    <th rowspan="2" class="text-end">Disbursement Rate</th>
                                     @foreach ($filters['year_range'] as $year)
                                         <th colspan="3" class="text-center">{{ $year }}</th>
                                     @endforeach
                                 </tr>
                                 <tr>
                                     @foreach ($filters['year_range'] as $year)
-                                        <th class="text-end">Committed</th>
-                                        <th class="text-end">Disbursed</th>
+                                        <th class="text-end">Global Commitments</th>
+                                        <th class="text-end">Cumulative Disbursed</th>
                                         <th class="text-end">Variance</th>
                                     @endforeach
                                 </tr>
@@ -182,12 +189,14 @@
                                 @foreach ($report as $projectRow)
                                     <tr class="project-row">
                                         <td colspan="2" class="project-label">{{ $projectRow['project']->name }}</td>
-                                        <td class="text-end">{{ number_format($projectRow['committed'], 2) }}</td>
+                                        <td class="text-end">{{ number_format($projectRow['global_commitment'] ?? $projectRow['committed'], 2) }}</td>
+                                        <td class="text-end">{{ number_format($projectRow['planned_commitment'] ?? 0, 2) }}</td>
                                         <td class="text-end">{{ number_format($projectRow['disbursed'], 2) }}</td>
                                         <td class="text-end {{ $projectRow['variance'] < 0 ? 'text-danger' : 'text-success' }}">
                                             {{ number_format($projectRow['variance'], 2) }}
                                         </td>
-                                        <td class="text-end">{{ number_format($projectRow['utilization'], 2) }}%</td>
+                                        <td class="text-end">{{ number_format($projectRow['commitment_rate'] ?? 0, 2) }}%</td>
+                                        <td class="text-end">{{ number_format($projectRow['disbursement_rate'] ?? $projectRow['utilization'], 2) }}%</td>
                                         @foreach ($filters['year_range'] as $year)
                                             <td class="text-end">{{ number_format($projectRow['yearly']['committed'][$year] ?? 0, 2) }}</td>
                                             <td class="text-end">{{ number_format($projectRow['yearly']['disbursed'][$year] ?? 0, 2) }}</td>
@@ -200,12 +209,14 @@
                                     @foreach ($projectRow['activities'] as $activityRow)
                                         <tr class="activity-row">
                                             <td colspan="2" class="activity-label">{{ $activityRow['activity']->name }}</td>
-                                            <td class="text-end">{{ number_format($activityRow['committed'], 2) }}</td>
+                                            <td class="text-end">{{ number_format($activityRow['global_commitment'] ?? $activityRow['committed'], 2) }}</td>
+                                            <td class="text-end">{{ number_format($activityRow['planned_commitment'] ?? 0, 2) }}</td>
                                             <td class="text-end">{{ number_format($activityRow['disbursed'], 2) }}</td>
                                             <td class="text-end {{ $activityRow['variance'] < 0 ? 'text-danger' : 'text-success' }}">
                                                 {{ number_format($activityRow['variance'], 2) }}
                                             </td>
-                                            <td class="text-end">{{ number_format($activityRow['utilization'], 2) }}%</td>
+                                            <td class="text-end">{{ number_format($activityRow['commitment_rate'] ?? 0, 2) }}%</td>
+                                            <td class="text-end">{{ number_format($activityRow['disbursement_rate'] ?? $activityRow['utilization'], 2) }}%</td>
                                             @foreach ($filters['year_range'] as $year)
                                                 <td class="text-end">{{ number_format($activityRow['yearly']['committed'][$year] ?? 0, 2) }}</td>
                                                 <td class="text-end">{{ number_format($activityRow['yearly']['disbursed'][$year] ?? 0, 2) }}</td>
@@ -219,12 +230,14 @@
                                             <tr class="sub-row">
                                                 <td>{{ $subRow['subActivity']->name }}</td>
                                                 <td title="{{ $subRow['references_full'] ?? '' }}">{{ $subRow['references'] }}</td>
-                                                <td class="text-end">{{ number_format($subRow['committed'], 2) }}</td>
+                                                <td class="text-end">{{ number_format($subRow['global_commitment'] ?? $subRow['committed'], 2) }}</td>
+                                                <td class="text-end">{{ number_format($subRow['planned_commitment'] ?? 0, 2) }}</td>
                                                 <td class="text-end">{{ number_format($subRow['disbursed'], 2) }}</td>
                                                 <td class="text-end {{ $subRow['variance'] < 0 ? 'text-danger' : 'text-success' }}">
                                                     {{ number_format($subRow['variance'], 2) }}
                                                 </td>
-                                                <td class="text-end">{{ number_format($subRow['utilization'], 2) }}%</td>
+                                                <td class="text-end">{{ number_format($subRow['commitment_rate'] ?? 0, 2) }}%</td>
+                                                <td class="text-end">{{ number_format($subRow['disbursement_rate'] ?? $subRow['utilization'], 2) }}%</td>
                                                 @foreach ($filters['year_range'] as $year)
                                                     <td class="text-end">{{ number_format($subRow['yearly']['committed'][$year] ?? 0, 2) }}</td>
                                                     <td class="text-end">{{ number_format($subRow['yearly']['disbursed'][$year] ?? 0, 2) }}</td>
@@ -250,13 +263,13 @@
                     <div class="row g-4">
                         <div class="col-lg-4">
                             <div class="border rounded p-3 h-100">
-                                <div class="fw-semibold mb-2">Commitments vs Disbursements Over Time</div>
+                                <div class="fw-semibold mb-2">Global, Planned, and Cumulative Disbursements</div>
                                 <canvas id="ifrLineChart" height="200"></canvas>
                             </div>
                         </div>
                         <div class="col-lg-4">
                             <div class="border rounded p-3 h-100">
-                                <div class="fw-semibold mb-2">Committed vs Disbursed (Bar)</div>
+                                <div class="fw-semibold mb-2">Commitments vs Cumulative Disbursed (Bar)</div>
                                 <canvas id="ifrBarChart" height="200"></canvas>
                             </div>
                         </div>
@@ -353,9 +366,11 @@
         <script>
             const lineLabels = @json($chartData['line']['labels']);
             const lineCommitments = @json($chartData['line']['commitments']);
+            const linePlannedCommitments = @json($chartData['line']['planned_commitments'] ?? []);
             const lineDisbursements = @json($chartData['line']['disbursements']);
             const barLabels = @json($chartData['bar']['labels']);
             const barCommitments = @json($chartData['bar']['commitments']);
+            const barPlannedCommitments = @json($chartData['bar']['planned_commitments'] ?? []);
             const barDisbursements = @json($chartData['bar']['disbursements']);
             const bubbleData = @json($chartData['bubble']);
 
@@ -364,14 +379,23 @@
                 data: {
                     labels: lineLabels,
                     datasets: [{
-                        label: 'Committed',
+                        label: 'Global Commitments',
                         data: lineCommitments,
                         borderColor: '#0d6efd',
                         backgroundColor: 'rgba(13,110,253,0.15)',
+                        borderDash: [6, 4],
                         tension: 0.3,
-                        fill: true,
+                        fill: false,
                     }, {
-                        label: 'Disbursed',
+                        label: 'Planned Commitments',
+                        data: linePlannedCommitments,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245,158,11,0.12)',
+                        borderDash: [2, 4],
+                        tension: 0.3,
+                        fill: false,
+                    }, {
+                        label: 'Cumulative Disbursed',
                         data: lineDisbursements,
                         borderColor: '#22c55e',
                         backgroundColor: 'rgba(34,197,94,0.15)',
@@ -390,11 +414,15 @@
                 data: {
                     labels: barLabels,
                     datasets: [{
-                        label: 'Committed',
+                        label: 'Global Commitments',
                         data: barCommitments,
                         backgroundColor: '#0d6efd'
                     }, {
-                        label: 'Disbursed',
+                        label: 'Planned Commitments',
+                        data: barPlannedCommitments,
+                        backgroundColor: '#f59e0b'
+                    }, {
+                        label: 'Cumulative Disbursed',
                         data: barDisbursements,
                         backgroundColor: '#22c55e'
                     }]
@@ -418,7 +446,7 @@
                 options: {
                     responsive: true,
                     scales: {
-                        x: { title: { display: true, text: 'Committed' } },
+                        x: { title: { display: true, text: 'Global Commitments' } },
                         y: { title: { display: true, text: 'Disbursed' } }
                     },
                     plugins: {
@@ -426,7 +454,7 @@
                             callbacks: {
                                 label: (context) => {
                                     const raw = context.raw || {};
-                                    return `${raw.label ?? 'Sub-Activity'}: ${raw.x} committed, ${raw.y} disbursed`;
+                                    return `${raw.label ?? 'Sub-Activity'}: ${raw.x} global, ${raw.planned ?? 0} planned, ${raw.y} disbursed`;
                                 }
                             }
                         }

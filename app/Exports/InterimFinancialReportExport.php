@@ -32,10 +32,12 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
             'Activity',
             'Sub-Activity',
             'PR Reference No',
-            'Committed',
-            'Disbursed',
+            'Global Commitments',
+            'Planned Commitments',
+            'Cumulative Disbursed',
             'Variance',
-            'Utilization %',
+            'Commitment Rate %',
+            'Disbursement Rate %',
         ];
         foreach ($this->yearRange as $year) {
             $headerRow1[] = (string) $year;
@@ -43,10 +45,10 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
             $headerRow1[] = '';
         }
 
-        $headerRow2 = array_fill(0, 10, '');
+        $headerRow2 = array_fill(0, 12, '');
         foreach ($this->yearRange as $year) {
-            $headerRow2[] = 'Committed';
-            $headerRow2[] = 'Disbursed';
+            $headerRow2[] = 'Global Commitments';
+            $headerRow2[] = 'Cumulative Disbursed';
             $headerRow2[] = 'Variance';
         }
 
@@ -61,10 +63,12 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
                 '',
                 '',
                 $projectRow['references'] ?? '',
-                $projectRow['committed'],
+                $projectRow['global_commitment'] ?? $projectRow['committed'],
+                $projectRow['planned_commitment'] ?? 0,
                 $projectRow['disbursed'],
                 $projectRow['variance'],
-                $projectRow['utilization'],
+                $projectRow['commitment_rate'] ?? 0,
+                $projectRow['disbursement_rate'] ?? $projectRow['utilization'],
             ];
 
             foreach ($this->yearRange as $year) {
@@ -82,10 +86,12 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
                     $activityRow['activity']->name ?? '',
                     '',
                     $activityRow['references'] ?? '',
-                    $activityRow['committed'],
+                    $activityRow['global_commitment'] ?? $activityRow['committed'],
+                    $activityRow['planned_commitment'] ?? 0,
                     $activityRow['disbursed'],
                     $activityRow['variance'],
-                    $activityRow['utilization'],
+                    $activityRow['commitment_rate'] ?? 0,
+                    $activityRow['disbursement_rate'] ?? $activityRow['utilization'],
                 ];
 
                 foreach ($this->yearRange as $year) {
@@ -102,11 +108,13 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
                         $projectRow['project']->name ?? '',
                         $activityRow['activity']->name ?? '',
                         $subRow['subActivity']->name ?? '',
-                        $subRow['references'] ?? '—',
-                        $subRow['committed'],
+                        $subRow['references'] ?? '-',
+                        $subRow['global_commitment'] ?? $subRow['committed'],
+                        $subRow['planned_commitment'] ?? 0,
                         $subRow['disbursed'],
                         $subRow['variance'],
-                        $subRow['utilization'],
+                        $subRow['commitment_rate'] ?? 0,
+                        $subRow['disbursement_rate'] ?? $subRow['utilization'],
                     ];
 
                     foreach ($this->yearRange as $year) {
@@ -126,10 +134,12 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
             '',
             '',
             '',
-            $this->totals['committed'] ?? 0,
+            $this->totals['global_commitment'] ?? $this->totals['committed'] ?? 0,
+            $this->totals['planned_commitment'] ?? 0,
             $this->totals['disbursed'] ?? 0,
             $this->totals['variance'] ?? 0,
-            $this->totals['utilization'] ?? 0,
+            $this->totals['commitment_rate'] ?? 0,
+            $this->totals['disbursement_rate'] ?? $this->totals['utilization'] ?? 0,
         ];
 
         foreach ($this->yearRange as $year) {
@@ -162,10 +172,12 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
             'G' => 16,
             'H' => 16,
             'I' => 16,
-            'J' => 14,
+            'J' => 16,
+            'K' => 18,
+            'L' => 18,
         ];
 
-        $start = 11;
+        $start = 13;
         $colIndex = $start;
         foreach ($this->yearRange as $year) {
             $widths[Coordinate::stringFromColumnIndex($colIndex++)] = 14;
@@ -182,12 +194,12 @@ class InterimFinancialReportExport implements FromArray, WithStyles, WithColumnW
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
 
-                for ($col = 1; $col <= 10; $col++) {
+                for ($col = 1; $col <= 12; $col++) {
                     $letter = Coordinate::stringFromColumnIndex($col);
                     $sheet->mergeCells("{$letter}1:{$letter}2");
                 }
 
-                $colIndex = 11;
+                $colIndex = 13;
                 foreach ($this->yearRange as $year) {
                     $start = Coordinate::stringFromColumnIndex($colIndex);
                     $end = Coordinate::stringFromColumnIndex($colIndex + 2);

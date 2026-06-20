@@ -212,21 +212,21 @@
             'allocation' => $totalAlloc,
             'commitment' => $totalCommit,
             'disbursement' => $totalDisbursed,
-            'remaining' => max($totalAlloc - $totalCommit, 0),
+            'remaining' => $totalAlloc - $totalCommit,
             'execution_rate' => 0,
             'disbursement_rate' => 0,
         ];
         $totalRemain = $breakdownTotals['remaining'];
-        $totalPercent = min(100, max(0, (float) ($breakdownTotals['execution_rate'] ?? 0)));
-        $totalDisbursementPercent = min(100, max(0, (float) ($breakdownTotals['disbursement_rate'] ?? 0)));
+        $totalPercent = max(0, (float) ($breakdownTotals['execution_rate'] ?? 0));
+        $totalDisbursementPercent = max(0, (float) ($breakdownTotals['disbursement_rate'] ?? 0));
     @endphp
 
     <div class="header">
         <div class="eyebrow">Finance Execution</div>
         <div class="title">Execution Dashboard</div>
         <p class="muted">
-            {{ $scopeLabel }}. Financial execution performance covering planned allocation,
-            actual commitment, variance, momentum, and risk. Generated on {{ $generatedAt }}.
+            {{ $scopeLabel }}. Financial execution performance covering global commitments,
+            planned commitments, paid disbursements, variance, momentum, and risk. Generated on {{ $generatedAt }}.
         </p>
     </div>
 
@@ -234,34 +234,34 @@
         <table class="summary-table">
             <tr>
                 <td>
-                    <div class="label">Total Allocation</div>
+                    <div class="label">Global Commitments</div>
                     <div class="value">{{ $money($totalAllocation) }}</div>
                     <div class="muted">Planned budget envelope</div>
                 </td>
                 <td>
-                    <div class="label">Total Commitment</div>
+                    <div class="label">Planned Commitments</div>
                     <div class="value">{{ $money($totalCommitment) }}</div>
-                    <div class="muted">Actual committed amount</div>
+                    <div class="muted">Approved planned commitment amount</div>
                 </td>
                 <td>
-                    <div class="label">Execution Rate</div>
+                    <div class="label">Commitment Rate</div>
                     <div class="value">{{ number_format($executionRate, 2) }}%</div>
-                    <div class="muted">Commitment against allocation</div>
+                    <div class="muted">Planned commitments against global commitments</div>
                 </td>
                 <td>
-                    <div class="label">Total Disbursements</div>
+                    <div class="label">Cumulative Disbursed</div>
                     <div class="value">{{ $money($totalDisbursements) }}</div>
                     <div class="muted">Paid disbursements</div>
                 </td>
                 <td>
                     <div class="label">Disbursement Rate</div>
                     <div class="value">{{ number_format($disbursementRate, 2) }}%</div>
-                    <div class="muted">Paid against commitment</div>
+                    <div class="muted">Paid against global commitments</div>
                 </td>
                 <td>
                     <div class="label">Variance</div>
                     <div class="value {{ $variance < 0 ? 'negative' : 'positive' }}">{{ $money($variance) }}</div>
-                    <div class="muted">Allocation minus commitment</div>
+                    <div class="muted">Global commitments minus planned commitments</div>
                 </td>
             </tr>
         </table>
@@ -273,30 +273,31 @@
             <thead>
                 <tr>
                     <th class="center">Year</th>
-                    <th class="right">Allocated Amount</th>
-                    <th class="right">Committed Amount</th>
+                    <th class="right">Global Commitments</th>
+                    <th class="right">Planned Commitments</th>
                     <th class="right">Disbursed Amount</th>
                     <th class="right">Remaining</th>
-                    <th class="center">Execution %</th>
-                    <th class="center">Disbursement %</th>
+                    <th class="center">Commitment Rate</th>
+                    <th class="center">Disbursement Rate</th>
                     <th style="width: 210px;">Progress</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (($executionBreakdownRows ?? collect()) as $row)
                     @php
-                        $percent = min(100, max(0, (float) ($row['execution_rate'] ?? 0)));
-                        $disbursementPercent = min(100, max(0, (float) ($row['disbursement_rate'] ?? 0)));
+                        $percent = max(0, (float) ($row['execution_rate'] ?? 0));
+                        $disbursementPercent = max(0, (float) ($row['disbursement_rate'] ?? 0));
                         $barClass = $percent < 50 ? 'danger' : ($percent < 80 ? 'warning' : '');
                         $badgeClass = $percent < 50 ? 'badge-bad' : ($percent < 80 ? 'badge-warn' : 'badge-good');
                         $disbursementBadgeClass = $disbursementPercent < 50 ? 'badge-bad' : ($disbursementPercent < 80 ? 'badge-warn' : 'badge-good');
+                        $remainingClass = ($row['remaining'] ?? 0) < 0 ? 'negative' : 'positive';
                     @endphp
                     <tr>
                         <td class="center"><strong>{{ $row['year'] }}</strong></td>
                         <td class="right">{{ $money($row['allocation']) }}</td>
                         <td class="right">{{ $money($row['commitment']) }}</td>
                         <td class="right">{{ $money($row['disbursement']) }}</td>
-                        <td class="right positive">{{ $money($row['remaining']) }}</td>
+                        <td class="right {{ $remainingClass }}">{{ $money($row['remaining']) }}</td>
                         <td class="center"><span class="badge {{ $badgeClass }}">{{ $rate($percent) }}</span></td>
                         <td class="center"><span class="badge {{ $disbursementBadgeClass }}">{{ $rate($disbursementPercent) }}</span></td>
                         <td>
@@ -311,7 +312,7 @@
                     <th class="right">{{ $money($breakdownTotals['allocation']) }}</th>
                     <th class="right">{{ $money($breakdownTotals['commitment']) }}</th>
                     <th class="right">{{ $money($breakdownTotals['disbursement']) }}</th>
-                    <th class="right positive">{{ $money($totalRemain) }}</th>
+                    <th class="right {{ $totalRemain < 0 ? 'negative' : 'positive' }}">{{ $money($totalRemain) }}</th>
                     <th class="center">{{ $rate($totalPercent) }}</th>
                     <th class="center">{{ $rate($totalDisbursementPercent) }}</th>
                     <th></th>
@@ -331,7 +332,7 @@
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td>Budget Utilization</td>
+                                    <td>Commitment Rate</td>
                                     <td class="right"><strong>{{ $rate($radarMetrics['budget_utilization'] ?? 0) }}</strong></td>
                                 </tr>
                                 <tr>
@@ -369,7 +370,7 @@
                                 @foreach ($heatmap as $row)
                                     @php
                                         $rowVariance = ($row['allocation'] ?? 0) - ($row['commitment'] ?? 0);
-                                        $status = $rowVariance < 0 ? 'Over commitment' : (($row['execution_rate'] ?? 0) < 50 ? 'Slow execution' : 'On track');
+                                        $status = $rowVariance < 0 ? 'Over commitment' : (($row['execution_rate'] ?? 0) < 50 ? 'Slow commitment' : 'On track');
                                     @endphp
                                     <tr>
                                         <td>{{ $row['year'] }}</td>

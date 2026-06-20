@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\WebsiteVisit;
 use App\Models\WebsiteVisitActivity;
 use App\Services\WebsiteVisitLocationResolver;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -87,6 +88,11 @@ class WebsiteVisitTrackerController extends Controller
         ]);
     }
 
+    public function startFallback(Request $request): JsonResponse|RedirectResponse
+    {
+        return $this->ignoredTrackerGet($request);
+    }
+
     public function heartbeat(Request $request): JsonResponse
     {
         if ($this->shouldIgnore($request)) {
@@ -134,6 +140,55 @@ class WebsiteVisitTrackerController extends Controller
             'visit_id' => $visit->id,
             'duration_seconds' => $visit->duration_seconds,
         ]);
+    }
+
+    public function heartbeatFallback(Request $request): JsonResponse|RedirectResponse
+    {
+        return $this->ignoredTrackerGet($request);
+    }
+
+    private function ignoredTrackerGet(Request $request): JsonResponse|RedirectResponse
+    {
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'ignored' => true,
+                'message' => 'Visit tracking endpoints accept POST requests.',
+            ]);
+        }
+
+        return redirect()->to($this->safeTrackerReturnUrl($request));
+    }
+
+    private function safeTrackerReturnUrl(Request $request): string
+    {
+        $referer = trim((string) $request->headers->get('referer'));
+        $refererHost = parse_url($referer, PHP_URL_HOST);
+        $refererPath = parse_url($referer, PHP_URL_PATH) ?: '/';
+
+        if ($referer !== ''
+            && $refererHost === $request->getHost()
+            && ! Str::startsWith(ltrim($refererPath, '/'), 'website-visit-tracker')) {
+            return $referer;
+        }
+
+        $user = $request->user();
+        if ($user?->user_type === 'vendor') {
+            return route('vendor.dashboard', [], false);
+        }
+
+        if ($user?->user_type === 'funding_partner' || ($user && method_exists($user, 'isFundingPartner') && $user->isFundingPartner())) {
+            return route('partner.dashboard', [], false);
+        }
+
+        if ($user?->user_type === 'member_state') {
+            return route('member-state.dashboard', [], false);
+        }
+
+        if ($user?->user_type === 'think_tank') {
+            return route('think-tank.dashboard', [], false);
+        }
+
+        return $user ? route('dashboard', [], false) : route('login', [], false);
     }
 
     private function validatedPayload(Request $request, bool $requireVisit = false): array|JsonResponse

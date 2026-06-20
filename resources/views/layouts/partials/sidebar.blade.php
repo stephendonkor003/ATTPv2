@@ -145,6 +145,106 @@
         letter-spacing: 0.08em;
         color: rgba(248, 250, 252, 0.78);
     }
+
+    .admin-sidebar-search-item {
+        padding: 0 16px 12px;
+    }
+
+    .admin-sidebar-search {
+        position: relative;
+    }
+
+    .admin-sidebar-search-icon {
+        position: absolute;
+        left: 13px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #64748b;
+        pointer-events: none;
+    }
+
+    .admin-sidebar-search input {
+        width: 100%;
+        height: 40px;
+        border: 1px solid rgba(100, 116, 139, 0.24);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.88);
+        color: #1e293b;
+        font-size: 0.82rem;
+        font-weight: 600;
+        padding: 0 40px 0 38px;
+        box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+    }
+
+    .admin-sidebar-search input:focus {
+        border-color: rgba(14, 165, 233, 0.72);
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+        outline: none;
+    }
+
+    .admin-sidebar-search-clear {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 26px;
+        height: 26px;
+        border: 0;
+        border-radius: 6px;
+        background: rgba(15, 23, 42, 0.08);
+        color: #334155;
+        display: none;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .admin-sidebar-search-clear.is-visible {
+        display: flex;
+    }
+
+    .admin-sidebar-search-meta {
+        min-height: 16px;
+        margin-top: 6px;
+        color: #64748b;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .admin-sidebar-empty {
+        margin: 0 16px 12px;
+        padding: 10px 12px;
+        border: 1px dashed rgba(100, 116, 139, 0.35);
+        border-radius: 8px;
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.62);
+    }
+
+    .nxl-navbar.sidebar-search-active .sidebar-search-hidden {
+        display: none !important;
+    }
+
+    .nxl-navbar.sidebar-search-active .nxl-hasmenu.sidebar-search-open>.nxl-submenu {
+        display: block !important;
+        height: auto !important;
+        max-height: none !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
+    .nxl-navbar.sidebar-search-active .nxl-hasmenu.sidebar-search-open>.nxl-link,
+    .nxl-navbar.sidebar-search-active .sidebar-search-match>.nxl-link {
+        background: rgba(14, 165, 233, 0.12);
+        color: #0f172a;
+    }
+
+    .nxl-navbar.sidebar-search-active .nxl-hasmenu.sidebar-search-open>.nxl-link .nxl-micon,
+    .nxl-navbar.sidebar-search-active .sidebar-search-match>.nxl-link .nxl-micon {
+        color: #0284c7;
+    }
 </style>
 
 <nav class="nxl-navigation" style="background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #e0f2fe 100%);">
@@ -250,6 +350,23 @@
                         </a>
                     </li>
                 @endif
+
+                <li class="nxl-item admin-sidebar-search-item" data-sidebar-search-fixed="true">
+                    <div class="admin-sidebar-search">
+                        <i class="feather-search admin-sidebar-search-icon"></i>
+                        <input type="search" id="admin-sidebar-menu-search" autocomplete="off" placeholder="Search menus"
+                            aria-label="Search sidebar menus">
+                        <button type="button" class="admin-sidebar-search-clear" id="admin-sidebar-menu-clear"
+                            aria-label="Clear menu search">
+                            <i class="feather-x"></i>
+                        </button>
+                    </div>
+                    <div class="admin-sidebar-search-meta" id="admin-sidebar-menu-count"></div>
+                </li>
+                <li class="nxl-item admin-sidebar-empty d-none" id="admin-sidebar-menu-empty"
+                    data-sidebar-search-fixed="true">
+                    No matching menus found
+                </li>
 
                 {{-- ================= DASHBOARD ================= --}}
                 @can('dashboard.access')
@@ -1579,5 +1696,229 @@
         };
         rotate();
         setInterval(rotate, 5000);
+
+        const navList = document.querySelector('.nxl-navbar');
+        const searchInput = document.getElementById('admin-sidebar-menu-search');
+        const clearButton = document.getElementById('admin-sidebar-menu-clear');
+        const emptyState = document.getElementById('admin-sidebar-menu-empty');
+        const countEl = document.getElementById('admin-sidebar-menu-count');
+
+        if (!navList || !searchInput) {
+            return;
+        }
+
+        const searchItem = searchInput.closest('[data-sidebar-search-fixed]');
+        const originalTopLevelNodes = Array.from(navList.children);
+        const topOrder = new Map(originalTopLevelNodes.map((node, index) => [node, index]));
+        const managedTopItems = originalTopLevelNodes.filter((node) => (
+            node.classList.contains('nxl-item') && !node.dataset.sidebarSearchFixed
+        ));
+        let activeMatches = [];
+        let pendingSearchFrame = null;
+
+        const normalizeSearchText = (value) => (value || '')
+            .toString()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+
+        const visibleText = (node) => (node?.textContent || '').replace(/\s+/g, ' ').trim();
+
+        const directTopItemFor = (node) => {
+            let current = node;
+            while (current && current.parentElement !== navList) {
+                current = current.parentElement;
+            }
+            return current;
+        };
+
+        const directLinkFor = (node) => Array.from(node.children || [])
+            .find((child) => child.matches?.('a.nxl-link'));
+
+        const sectionLabelFor = (topItem) => {
+            let cursor = topItem.previousElementSibling;
+            while (cursor) {
+                if (cursor.classList.contains('nxl-caption')) {
+                    return visibleText(cursor);
+                }
+                cursor = cursor.previousElementSibling;
+            }
+            return '';
+        };
+
+        const menuRecords = Array.from(navList.querySelectorAll('a.nxl-link[href]'))
+            .filter((link) => {
+                const href = (link.getAttribute('href') || '').trim().toLowerCase();
+                return href && href !== '#' && !href.startsWith('javascript') && !link.closest('[data-sidebar-search-fixed]');
+            })
+            .map((link) => {
+                const topItem = directTopItemFor(link);
+                const item = link.closest('.nxl-item');
+                const topLink = topItem ? directLinkFor(topItem) : null;
+                const parentLabel = topLink && topLink !== link ? visibleText(topLink) : '';
+                const ownLabel = visibleText(link);
+                const sectionLabel = topItem ? sectionLabelFor(topItem) : '';
+                const searchable = normalizeSearchText([sectionLabel, parentLabel, ownLabel].filter(Boolean).join(' '));
+
+                return {
+                    link,
+                    item,
+                    topItem,
+                    ownLabel,
+                    text: searchable,
+                    order: topOrder.get(topItem) ?? 9999,
+                };
+            })
+            .filter((record) => record.topItem && record.item && record.text);
+
+        const scoreRecord = (record, query, tokens) => {
+            if (!tokens.every((token) => record.text.includes(token))) {
+                return null;
+            }
+
+            const ownText = normalizeSearchText(record.ownLabel);
+            let score = record.order;
+
+            if (ownText === query) {
+                score -= 1200;
+            } else if (ownText.startsWith(query)) {
+                score -= 900;
+            } else if (record.text.startsWith(query)) {
+                score -= 600;
+            }
+
+            score += Math.max(record.text.indexOf(tokens[0]), 0);
+            return score;
+        };
+
+        const resetSidebarSearch = () => {
+            navList.classList.remove('sidebar-search-active');
+            originalTopLevelNodes.forEach((node) => navList.appendChild(node));
+            navList.querySelectorAll('.sidebar-search-hidden, .sidebar-search-match, .sidebar-search-open').forEach((node) => {
+                node.classList.remove('sidebar-search-hidden', 'sidebar-search-match', 'sidebar-search-open');
+            });
+            emptyState?.classList.add('d-none');
+            clearButton?.classList.remove('is-visible');
+            if (countEl) {
+                countEl.textContent = '';
+            }
+            activeMatches = [];
+        };
+
+        const markVisibleChildPath = (topItem, item, visibleItems) => {
+            let current = item;
+            while (current && current !== topItem) {
+                if (current.classList.contains('nxl-item')) {
+                    visibleItems.add(current);
+                }
+                current = current.parentElement?.closest('.nxl-item');
+            }
+        };
+
+        const applySidebarSearch = () => {
+            const query = normalizeSearchText(searchInput.value);
+            const tokens = query.split(' ').filter(Boolean);
+
+            if (!query || tokens.length === 0) {
+                resetSidebarSearch();
+                return;
+            }
+
+            navList.classList.add('sidebar-search-active');
+            clearButton?.classList.add('is-visible');
+
+            navList.querySelectorAll('.sidebar-search-hidden, .sidebar-search-match, .sidebar-search-open').forEach((node) => {
+                node.classList.remove('sidebar-search-hidden', 'sidebar-search-match', 'sidebar-search-open');
+            });
+            managedTopItems.forEach((node) => node.classList.add('sidebar-search-hidden'));
+
+            const scoredMatches = menuRecords
+                .map((record) => ({ record, score: scoreRecord(record, query, tokens) }))
+                .filter((entry) => entry.score !== null)
+                .sort((a, b) => a.score - b.score || a.record.order - b.record.order);
+
+            activeMatches = scoredMatches.map((entry) => entry.record);
+
+            const topMatches = new Map();
+            scoredMatches.forEach(({ record, score }) => {
+                const existing = topMatches.get(record.topItem);
+                if (!existing) {
+                    topMatches.set(record.topItem, {
+                        topItem: record.topItem,
+                        score,
+                        order: record.order,
+                        records: [record],
+                    });
+                    return;
+                }
+
+                existing.score = Math.min(existing.score, score);
+                existing.records.push(record);
+            });
+
+            const orderedTopMatches = Array.from(topMatches.values())
+                .sort((a, b) => a.score - b.score || a.order - b.order);
+            const insertionPoint = emptyState || searchItem?.nextSibling || null;
+
+            orderedTopMatches.forEach(({ topItem, records }) => {
+                const visibleChildItems = new Set();
+                const matchedItems = new Set(records.map((record) => record.item));
+
+                records.forEach((record) => markVisibleChildPath(topItem, record.item, visibleChildItems));
+
+                topItem.classList.remove('sidebar-search-hidden');
+                topItem.classList.add('sidebar-search-match');
+                if (topItem.classList.contains('nxl-hasmenu')) {
+                    topItem.classList.add('sidebar-search-open');
+                }
+
+                Array.from(topItem.querySelectorAll('.nxl-submenu .nxl-item')).forEach((childItem) => {
+                    const isVisible = visibleChildItems.has(childItem) || matchedItems.has(childItem);
+                    childItem.classList.toggle('sidebar-search-hidden', !isVisible);
+                    childItem.classList.toggle('sidebar-search-match', matchedItems.has(childItem));
+                    if (isVisible && childItem.classList.contains('nxl-hasmenu')) {
+                        childItem.classList.add('sidebar-search-open');
+                    }
+                });
+
+                navList.insertBefore(topItem, insertionPoint);
+            });
+
+            if (emptyState) {
+                emptyState.classList.toggle('d-none', scoredMatches.length > 0);
+            }
+            if (countEl) {
+                countEl.textContent = scoredMatches.length === 1
+                    ? '1 menu match'
+                    : `${scoredMatches.length} menu matches`;
+            }
+        };
+
+        const scheduleSidebarSearch = () => {
+            if (pendingSearchFrame) {
+                cancelAnimationFrame(pendingSearchFrame);
+            }
+            pendingSearchFrame = requestAnimationFrame(applySidebarSearch);
+        };
+
+        searchInput.addEventListener('input', scheduleSidebarSearch);
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                searchInput.value = '';
+                resetSidebarSearch();
+            }
+            if (event.key === 'Enter' && activeMatches[0]) {
+                event.preventDefault();
+                activeMatches[0].link.click();
+            }
+        });
+
+        clearButton?.addEventListener('click', () => {
+            searchInput.value = '';
+            resetSidebarSearch();
+            searchInput.focus();
+        });
     });
 </script>

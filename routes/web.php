@@ -217,7 +217,9 @@ Route::prefix('website-visit-tracker')
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->group(function () {
         Route::post('/start', [WebsiteVisitTrackerController::class, 'start'])->name('start');
+        Route::get('/start', [WebsiteVisitTrackerController::class, 'startFallback'])->name('start.fallback');
         Route::post('/heartbeat', [WebsiteVisitTrackerController::class, 'heartbeat'])->name('heartbeat');
+        Route::get('/heartbeat', [WebsiteVisitTrackerController::class, 'heartbeatFallback'])->name('heartbeat.fallback');
     });
 
 Route::middleware(['auth', 'verified', 'not.funding.partner'])
