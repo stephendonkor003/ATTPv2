@@ -350,6 +350,61 @@
         background: rgba(255, 255, 255, 0.62);
     }
 
+    .attp-admin-sidebar,
+    .attp-admin-sidebar .navbar-wrapper,
+    .attp-admin-sidebar .navbar-content {
+        background: linear-gradient(180deg, #064e3b 0%, #047857 48%, #065f46 100%) !important;
+    }
+
+    .attp-admin-sidebar .nxl-navbar .nxl-caption label,
+    .attp-admin-sidebar .nxl-navbar .nxl-link,
+    .attp-admin-sidebar .nxl-navbar .nxl-link .nxl-micon,
+    .attp-admin-sidebar .nxl-navbar .nxl-link .nxl-mtext,
+    .attp-admin-sidebar .nxl-navbar .nxl-link .nxl-arrow,
+    .attp-admin-sidebar .nxl-navbar .nxl-link i {
+        color: #ffffff !important;
+    }
+
+    .attp-admin-sidebar .nxl-navbar .nxl-caption label {
+        opacity: 0.82;
+    }
+
+    .attp-admin-sidebar .nxl-navbar .nxl-link:hover,
+    .attp-admin-sidebar .nxl-navbar .nxl-link:focus,
+    .attp-admin-sidebar .nxl-navbar .nxl-item.active>.nxl-link,
+    .attp-admin-sidebar .nxl-navbar .nxl-hasmenu.sidebar-search-open>.nxl-link,
+    .attp-admin-sidebar .nxl-navbar .sidebar-search-match>.nxl-link {
+        background: rgba(255, 255, 255, 0.14) !important;
+        color: #ffffff !important;
+    }
+
+    .attp-admin-sidebar .nxl-submenu {
+        background: rgba(2, 44, 34, 0.22);
+    }
+
+    .attp-admin-sidebar .admin-sidebar-search-meta,
+    .attp-admin-sidebar .admin-sidebar-empty {
+        color: rgba(255, 255, 255, 0.82);
+    }
+
+    .attp-admin-sidebar .admin-sidebar-empty {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .attp-admin-sidebar .sidebar-footer-card {
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        color: #ffffff;
+    }
+
+    .attp-admin-sidebar .sidebar-footer-card,
+    .attp-admin-sidebar .sidebar-footer-card i,
+    .attp-admin-sidebar .sidebar-footer-card h6,
+    .attp-admin-sidebar .sidebar-footer-card p {
+        color: #ffffff !important;
+    }
+
     .nxl-navbar.sidebar-search-active .sidebar-search-hidden {
         display: none !important;
     }
@@ -374,7 +429,7 @@
     }
 </style>
 
-<nav class="nxl-navigation" style="background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #e0f2fe 100%);">
+<nav class="nxl-navigation {{ $isMemberStateSidebarUser ? 'member-state-sidebar' : 'attp-admin-sidebar' }}">
     <div class="navbar-wrapper" style="background: transparent;">
         {{-- <div class="m-header">
             <a href="#" class="b-brand">
@@ -1827,13 +1882,12 @@
 
 
             {{-- Footer card --}}
-            <div class="card text-center mt-4">
+            <div class="card text-center mt-4 sidebar-footer-card">
                 <div class="card-body">
                     <i class="feather-clipboard fs-4 text-dark"></i>
                     <h6 class="mt-4 text-dark fw-bolder">ATTP</h6>
                     <p class="fs-11 my-3 text-dark">
-                        Manage bidding projects, evaluation committees, and procurement reporting for Africa’s
-                        development initiatives.
+                        Manage ATTP procurement, finance, and think tank management workflows from one secure control center.
                     </p>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
