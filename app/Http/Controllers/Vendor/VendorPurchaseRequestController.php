@@ -7,6 +7,7 @@ use App\Models\SubActivity;
 use App\Models\User;
 use App\Models\VendorDocument;
 use App\Models\VendorPurchaseRequest;
+use App\Services\VendorPurchaseRequestAdminNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -125,6 +126,8 @@ class VendorPurchaseRequestController extends Controller
 
             return $vendorRequest;
         });
+
+        app(VendorPurchaseRequestAdminNotificationService::class)->notify($vendorRequest);
 
         return redirect()
             ->route('vendor.purchase-requests.show', $vendorRequest)
