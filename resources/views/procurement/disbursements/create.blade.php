@@ -355,9 +355,11 @@
             box-shadow: 0 12px 24px rgba(15, 23, 42, .16);
             cursor: grab;
             display: none;
+            flex-direction: column;
+            gap: 4px;
             justify-content: center;
             min-height: 76px;
-            min-width: 220px;
+            min-width: 260px;
             padding: 8px 12px;
             position: absolute;
             touch-action: none;
@@ -377,6 +379,15 @@
             display: block;
             max-height: 70px;
             max-width: 260px;
+        }
+
+        .signature-stamp-time {
+            color: #064e3b;
+            font-size: .72rem;
+            font-weight: 800;
+            line-height: 1.2;
+            text-align: center;
+            white-space: nowrap;
         }
 
         .signature-position-hint {
@@ -812,6 +823,7 @@
             let activeSignaturePaymentIndex = null;
             let selectedSignatureDocument = null;
             let signatureImageDataUrl = null;
+            let signatureTimestamp = null;
             let signaturePlacement = { x: 42, y: 42 };
             let signatureStampDragging = false;
             let signatureStampDragOffset = { x: 0, y: 0 };
@@ -824,6 +836,17 @@
 
             const fmt = (value) =>
                 Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            const formatSignatureTimestamp = (value) => {
+                const date = value instanceof Date ? value : new Date(value || Date.now());
+                return date.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: 'short',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+            };
 
             const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
                 '&': '&amp;',
@@ -1225,6 +1248,7 @@
                 ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
                 signatureHasInk = false;
                 signatureImageDataUrl = null;
+                signatureTimestamp = null;
                 if (signatureUploadInput) signatureUploadInput.value = '';
                 refreshSignatureStamp();
             }
@@ -1256,6 +1280,7 @@
                 ctx.lineTo(Math.min(rect.width - 24, 420), rect.height / 2 + 32);
                 ctx.stroke();
                 signatureHasInk = true;
+                signatureTimestamp = new Date();
                 signatureImageDataUrl = signaturePad.toDataURL('image/png');
                 refreshSignatureStamp();
             }
@@ -1284,6 +1309,7 @@
                     ctx.clearRect(0, 0, rect.width, rect.height);
                     ctx.drawImage(image, x, y, width, height);
                     signatureHasInk = true;
+                    signatureTimestamp = new Date();
                     signatureImageDataUrl = signaturePad.toDataURL('image/png');
                     refreshSignatureStamp();
                 };
@@ -1345,7 +1371,11 @@
                     return;
                 }
 
-                stamp.innerHTML = `<img src="${signatureImageDataUrl}" alt="Signature">`;
+                const signedAt = signatureTimestamp ? formatSignatureTimestamp(signatureTimestamp) : formatSignatureTimestamp(new Date());
+                stamp.innerHTML = `
+                    <img src="${signatureImageDataUrl}" alt="Signature">
+                    <div class="signature-stamp-time">Signed ${escapeHtml(signedAt)}</div>
+                `;
                 signaturePlacement = clampSignaturePlacement(signaturePlacement.x, signaturePlacement.y);
                 stamp.style.left = `${signaturePlacement.x}px`;
                 stamp.style.top = `${signaturePlacement.y}px`;
@@ -1487,6 +1517,7 @@
                 activeSignaturePaymentIndex = index;
                 signatureHasInk = false;
                 signatureImageDataUrl = null;
+                signatureTimestamp = null;
                 signaturePlacement = { x: 42, y: 42 };
                 document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove());
                 renderSignatureDocuments();
@@ -1560,14 +1591,17 @@
 
                 if (!signatureImageDataUrl) {
                     signatureImageDataUrl = signaturePad.toDataURL('image/png');
+                    signatureTimestamp = signatureTimestamp || new Date();
                     refreshSignatureStamp();
                 }
+                signatureTimestamp = signatureTimestamp || new Date();
 
                 const output = document.createElement('canvas');
                 output.width = 1200;
                 output.height = 820;
                 const ctx = output.getContext('2d');
-                const signedAt = new Date();
+                const signedAt = signatureTimestamp;
+                const signedAtText = formatSignatureTimestamp(signedAt);
                 const stage = signaturePreviewStage();
                 const positionText = stage
                     ? `${Math.round((signaturePlacement.x / Math.max(stage.clientWidth, 1)) * 100)}% from left, ${Math.round((signaturePlacement.y / Math.max(stage.clientHeight, 1)) * 100)}% from top`
@@ -1593,7 +1627,7 @@
                     ['Deliverable', selectedSignatureDocument.deliverable],
                     ['Purchase Order', currentPo?.reference_no || 'N/A'],
                     ['Signed By', `${signer.name || 'User'}${signer.email ? ' <' + signer.email + '>' : ''}`],
-                    ['Signed At', signedAt.toLocaleString()],
+                    ['Signed At', signedAtText],
                     ['Signature Position', positionText],
                 ];
 
@@ -1623,6 +1657,10 @@
                     ctx.moveTo(82, 685);
                     ctx.lineTo(600, 685);
                     ctx.stroke();
+
+                    ctx.fillStyle = '#064e3b';
+                    ctx.font = 'bold 18px Arial, sans-serif';
+                    ctx.fillText(`Signed ${signedAtText}`, 82, 715);
 
                     ctx.fillStyle = '#475569';
                     ctx.font = '14px Arial, sans-serif';
@@ -1995,6 +2033,7 @@
                     resizeSignaturePad();
                     signatureHasInk = false;
                     signatureImageDataUrl = null;
+                    signatureTimestamp = null;
                     if (signatureUploadInput) signatureUploadInput.value = '';
                     refreshSignatureStamp();
                     const ctx = signaturePad.getContext('2d');
@@ -2015,6 +2054,7 @@
                 ['pointerup', 'pointerleave', 'pointercancel'].forEach((eventName) => {
                     signaturePad.addEventListener(eventName, () => {
                         if (signatureDrawing && signatureHasInk) {
+                            signatureTimestamp = signatureTimestamp || new Date();
                             signatureImageDataUrl = signaturePad.toDataURL('image/png');
                             refreshSignatureStamp();
                         }
