@@ -254,26 +254,36 @@
         }
 
         #digitalSignatureModal .modal-dialog {
-            max-width: min(1180px, calc(100vw - 28px));
+            height: calc(100vh - 24px);
+            margin: 12px auto;
+            max-width: min(1680px, calc(100vw - 24px));
+            width: calc(100vw - 24px);
         }
 
         #digitalSignatureModal .modal-content {
             border: 0;
             border-radius: 14px;
             box-shadow: 0 30px 86px rgba(15, 23, 42, .32);
+            height: 100%;
             overflow: hidden;
+        }
+
+        #digitalSignatureModal .modal-body {
+            min-height: 0;
+            overflow: auto;
         }
 
         .signature-workspace {
             display: grid;
             gap: 14px;
-            grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+            grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+            min-height: calc(100vh - 255px);
         }
 
         .signature-doc-list {
             border: 1px solid #e2e8f0;
             border-radius: 12px;
-            max-height: 560px;
+            max-height: calc(100vh - 230px);
             overflow: auto;
         }
 
@@ -297,14 +307,14 @@
         .signature-preview {
             border: 1px solid #dbe4ef;
             border-radius: 12px;
-            min-height: 420px;
+            min-height: min(72vh, 760px);
             overflow: hidden;
             background: #f8fafc;
             position: relative;
         }
 
         .signature-preview-stage {
-            min-height: 520px;
+            min-height: min(72vh, 760px);
             position: relative;
         }
 
@@ -325,14 +335,14 @@
         .signature-preview-image {
             border: 0;
             display: block;
-            height: 520px;
+            height: min(72vh, 760px);
             width: 100%;
         }
 
         .signature-preview-image {
             display: block;
             height: auto;
-            max-height: 640px;
+            max-height: min(72vh, 760px);
             object-fit: contain;
             background: #fff;
         }
@@ -400,8 +410,23 @@
         }
 
         @media (max-width: 991.98px) {
+            #digitalSignatureModal .modal-dialog {
+                height: calc(100vh - 12px);
+                margin: 6px auto;
+                max-width: calc(100vw - 12px);
+                width: calc(100vw - 12px);
+            }
+
             .signature-workspace {
                 grid-template-columns: 1fr;
+                min-height: auto;
+            }
+
+            .signature-preview,
+            .signature-preview-stage,
+            .signature-preview-frame {
+                min-height: 58vh;
+                height: 58vh;
             }
         }
 
