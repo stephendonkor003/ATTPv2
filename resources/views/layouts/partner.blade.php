@@ -107,6 +107,13 @@
             padding: 28px;
         }
 
+        .partner-footer {
+            border-top: 1px solid #e2e8f0;
+            background: #fff;
+            padding: 18px 28px;
+            color: #64748b;
+        }
+
         .content .nxl-container,
         .partner-content .nxl-container {
             max-width: 100%;
@@ -207,6 +214,13 @@
             <div class="partner-content">
                 @yield('content')
             </div>
+
+            <footer class="partner-footer">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="small">ATTP Partner Portal</div>
+                    <div class="small fw-semibold">Developed, maintained and supported by the ATTP Technical Team.</div>
+                </div>
+            </footer>
         </main>
     </div>
 

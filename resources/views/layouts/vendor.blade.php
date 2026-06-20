@@ -502,7 +502,7 @@
             <footer class="vendor-footer">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="small">ATTP Vendor Portal</div>
-                    <div class="small">Procurement, reporting, payments, and document knowledge management.</div>
+                    <div class="small fw-semibold">Developed, maintained and supported by the ATTP Technical Team.</div>
                 </div>
             </footer>
         </main>

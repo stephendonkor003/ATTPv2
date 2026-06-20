@@ -152,6 +152,13 @@
             color: #0f172a;
         }
 
+        .think-tank-workspace .think-tank-footer {
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+            padding-top: 16px;
+            margin-top: 24px;
+        }
+
         @media (max-width: 900px) {
             .think-tank-workspace .grid,
             .think-tank-workspace .grid.two,
@@ -285,5 +292,12 @@
         @endif
 
         {{ $slot }}
+
+        <footer class="think-tank-footer">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="small">ATTP Think Tank Portal</div>
+                <div class="small fw-semibold">Developed, maintained and supported by the ATTP Technical Team.</div>
+            </div>
+        </footer>
     </div>
 @endsection
