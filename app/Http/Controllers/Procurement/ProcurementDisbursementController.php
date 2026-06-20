@@ -212,12 +212,18 @@ class ProcurementDisbursementController extends Controller
                                 $mimeType = (string) ($document['mime_type'] ?? '');
                                 $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION)
                                     ?: pathinfo((string) ($document['path'] ?? ''), PATHINFO_EXTENSION));
-                                if ($extension === '' && str_contains($mimeType, 'wordprocessingml')) {
+                                $normalizedMimeType = strtolower($mimeType);
+                                if ($extension === '' && str_contains($normalizedMimeType, 'wordprocessingml')) {
                                     $extension = 'docx';
-                                } elseif ($extension === '' && $mimeType === 'application/msword') {
+                                } elseif ($extension === '' && str_contains($normalizedMimeType, 'msword')) {
                                     $extension = 'doc';
+                                } elseif ($extension === '' && ! empty($document['path'])) {
+                                    $extension = $this->detectWordDocumentExtension((string) $document['path']);
                                 }
                                 $previewUrl = route('procurement.purchase-orders.line-item-evidence.document', [$order, $evidence, $index]);
+                                $wordPreviewUrl = in_array($extension, ['doc', 'docx'], true)
+                                    ? route('procurement.purchase-orders.line-item-evidence.document-preview', [$order, $evidence, $index])
+                                    : null;
                                 $publicPreviewUrl = URL::temporarySignedRoute(
                                     'procurement.purchase-orders.line-item-evidence.public-preview',
                                     now()->addMinutes(45),
@@ -231,9 +237,8 @@ class ProcurementDisbursementController extends Controller
                                     'extension' => $extension,
                                     'url' => $previewUrl,
                                     'preview_url' => $previewUrl,
-                                    'docx_preview_url' => $extension === 'docx'
-                                        ? route('procurement.purchase-orders.line-item-evidence.document-preview', [$order, $evidence, $index])
-                                        : null,
+                                    'word_preview_url' => $wordPreviewUrl,
+                                    'docx_preview_url' => $wordPreviewUrl,
                                     'download_url' => $previewUrl . '?download=1',
                                     'public_preview_url' => $publicPreviewUrl,
                                     'office_preview_url' => in_array($extension, ['doc', 'docx'], true)
@@ -1447,6 +1452,36 @@ class ProcurementDisbursementController extends Controller
         if (! $this->canEditDisbursements()) {
             abort(403, 'Only administrators can revert disbursement payments.');
         }
+    }
+
+    private function detectWordDocumentExtension(string $path): string
+    {
+        $disk = Storage::disk('local');
+        if (! $disk->exists($path)) {
+            return '';
+        }
+
+        $absolutePath = $disk->path($path);
+        $handle = @fopen($absolutePath, 'rb');
+        if (! is_resource($handle)) {
+            return '';
+        }
+
+        $signature = fread($handle, 8) ?: '';
+        fclose($handle);
+
+        if (str_starts_with($signature, "PK\x03\x04") && class_exists(\ZipArchive::class)) {
+            $zip = new \ZipArchive();
+            $opened = $zip->open($absolutePath);
+            if ($opened === true) {
+                $isDocx = $zip->locateName('word/document.xml') !== false;
+                $zip->close();
+
+                return $isDocx ? 'docx' : '';
+            }
+        }
+
+        return str_starts_with($signature, "\xD0\xCF\x11\xE0") ? 'doc' : '';
     }
 
     private function paymentMethods(): array

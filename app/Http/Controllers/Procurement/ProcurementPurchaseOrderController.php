@@ -880,18 +880,31 @@ class ProcurementPurchaseOrderController extends Controller
         abort_unless(is_array($file) && ! empty($file['path']), 404, 'Evidence document not found.');
 
         $fileName = $file['name'] ?? basename($file['path']);
-        $mimeType = (string) ($file['mime_type'] ?? '');
+        $mimeType = strtolower((string) ($file['mime_type'] ?? ''));
         $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION)
             ?: pathinfo((string) $file['path'], PATHINFO_EXTENSION));
         if ($extension === '' && str_contains($mimeType, 'wordprocessingml')) {
             $extension = 'docx';
+        } elseif ($extension === '' && str_contains($mimeType, 'msword')) {
+            $extension = 'doc';
         }
-        abort_unless($extension === 'docx', 415, 'Only DOCX files can be previewed here.');
 
         $privateDisk = Storage::disk('local');
         abort_unless($privateDisk->exists($file['path']), 404, 'Evidence document file missing on disk.');
 
-        $html = $this->renderDocxPreviewHtml($privateDisk->path($file['path']), $fileName);
+        $path = $privateDisk->path($file['path']);
+        if ($extension === '') {
+            $extension = $this->detectWordDocumentExtensionFromPath($path);
+        }
+
+        $isWordDocument = in_array($extension, ['doc', 'docx'], true)
+            || str_contains($mimeType, 'msword')
+            || str_contains($mimeType, 'wordprocessingml');
+        abort_unless($isWordDocument, 415, 'Only Word files can be previewed here.');
+
+        $html = $extension === 'docx' || str_contains($mimeType, 'wordprocessingml')
+            ? $this->renderDocxPreviewHtml($path, $fileName)
+            : $this->renderLegacyWordPreviewHtml($path, $fileName);
 
         return response($html, 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
@@ -899,6 +912,91 @@ class ProcurementPurchaseOrderController extends Controller
             'Pragma' => 'no-cache',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+    }
+
+    private function renderLegacyWordPreviewHtml(string $path, string $fileName): string
+    {
+        $contents = @file_get_contents($path);
+        if (! is_string($contents) || $contents === '') {
+            return $this->docxPreviewShell($fileName, '<p class="empty">This Word document could not be opened for preview.</p>');
+        }
+
+        $chunks = [];
+
+        if (preg_match_all('/(?:[\x20-\x7E]\x00){4,}/', $contents, $unicodeMatches)) {
+            foreach ($unicodeMatches[0] as $match) {
+                $text = function_exists('mb_convert_encoding')
+                    ? mb_convert_encoding($match, 'UTF-8', 'UTF-16LE')
+                    : @iconv('UTF-16LE', 'UTF-8//IGNORE', $match);
+                $text = $this->cleanLegacyWordText((string) $text);
+                if ($text !== '') {
+                    $chunks[] = $text;
+                }
+            }
+        }
+
+        if (preg_match_all('/[A-Za-z0-9][A-Za-z0-9\s\.,;:\'"\/\\\\\-\(\)\[\]&%#@]{10,}/', $contents, $asciiMatches)) {
+            foreach ($asciiMatches[0] as $match) {
+                $text = $this->cleanLegacyWordText($match);
+                if ($text !== '') {
+                    $chunks[] = $text;
+                }
+            }
+        }
+
+        $chunks = collect($chunks)
+            ->map(fn (string $chunk) => trim($chunk))
+            ->filter(fn (string $chunk) => strlen($chunk) >= 8)
+            ->unique()
+            ->take(140)
+            ->values();
+
+        if ($chunks->isEmpty()) {
+            return $this->docxPreviewShell($fileName, '<p class="empty">This older Word document cannot be previewed as formatted HTML on this server. Please upload it as DOCX or PDF for full preview and signing.</p>');
+        }
+
+        $content = $chunks
+            ->map(fn (string $chunk) => '<p>' . e($chunk) . '</p>')
+            ->implode('');
+
+        return $this->docxPreviewShell($fileName, $content);
+    }
+
+    private function detectWordDocumentExtensionFromPath(string $path): string
+    {
+        $handle = @fopen($path, 'rb');
+        if (! is_resource($handle)) {
+            return '';
+        }
+
+        $signature = fread($handle, 8) ?: '';
+        fclose($handle);
+
+        if (str_starts_with($signature, "PK\x03\x04") && class_exists(\ZipArchive::class)) {
+            $zip = new \ZipArchive();
+            $opened = $zip->open($path);
+            if ($opened === true) {
+                $isDocx = $zip->locateName('word/document.xml') !== false;
+                $zip->close();
+
+                return $isDocx ? 'docx' : '';
+            }
+        }
+
+        return str_starts_with($signature, "\xD0\xCF\x11\xE0") ? 'doc' : '';
+    }
+
+    private function cleanLegacyWordText(string $text): string
+    {
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/', '', $text) ?? '';
+        $text = preg_replace('/\s+/u', ' ', $text) ?? '';
+        $text = trim($text);
+
+        if ($text === '' || preg_match('/^[\W_]+$/u', $text)) {
+            return '';
+        }
+
+        return $text;
     }
 
     private function renderDocxPreviewHtml(string $path, string $fileName): string

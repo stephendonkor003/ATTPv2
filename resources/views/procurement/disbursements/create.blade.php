@@ -1143,7 +1143,7 @@
                     const docs = Array.isArray(item.evidence?.documents) ? item.evidence.documents : [];
                     return docs.map((document, index) => {
                         const url = String(document.preview_url || document.url || '');
-                        const mimeType = String(document.mime_type || '');
+                        const mimeType = String(document.mime_type || '').toLowerCase();
                         const documentNameParts = String(document.name || '').split('.');
                         let extension = String(document.extension || '').toLowerCase();
                         if (!extension && documentNameParts.length > 1) {
@@ -1154,7 +1154,8 @@
                         } else if (!extension && mimeType === 'application/msword') {
                             extension = 'doc';
                         }
-                        const localDocxPreviewUrl = extension === 'docx' ? String(document.docx_preview_url || '') : '';
+                        const isWord = ['doc', 'docx'].includes(extension) || mimeType.includes('word');
+                        const localWordPreviewUrl = isWord ? String(document.word_preview_url || document.docx_preview_url || '') : '';
                         return {
                             id: `${item.id}-${index}`,
                             item_id: item.id,
@@ -1165,9 +1166,9 @@
                             extension,
                             mime_type: mimeType,
                             url,
-                            preview_url: localDocxPreviewUrl || document.office_preview_url || document.preview_url || url,
+                            preview_url: localWordPreviewUrl || (isWord ? '' : (document.preview_url || url)),
                             download_url: document.download_url || `${url}${url.includes('?') ? '&' : '?'}download=1`,
-                            is_office: ['doc', 'docx'].includes(extension),
+                            is_office: isWord,
                             is_pdf: extension === 'pdf' || String(document.mime_type || '').includes('pdf'),
                             is_image: ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension) || String(document.mime_type || '').startsWith('image/'),
                         };
