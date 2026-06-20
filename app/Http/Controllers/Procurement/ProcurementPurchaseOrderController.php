@@ -866,6 +866,238 @@ class ProcurementPurchaseOrderController extends Controller
         return $privateDisk->response($file['path'], $fileName, $headers);
     }
 
+    public function previewLineItemEvidenceDocumentHtml(
+        ProcurementPurchaseOrder $purchaseOrder,
+        ProcurementPurchaseOrderItemEvidence $evidence,
+        int $document
+    ) {
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        abort_unless((string) $evidence->purchase_order_id === (string) $purchaseOrder->id, 404);
+
+        $documents = $evidence->documents ?? [];
+        $file = $documents[$document] ?? null;
+        abort_unless(is_array($file) && ! empty($file['path']), 404, 'Evidence document not found.');
+
+        $fileName = $file['name'] ?? basename($file['path']);
+        $mimeType = (string) ($file['mime_type'] ?? '');
+        $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION)
+            ?: pathinfo((string) $file['path'], PATHINFO_EXTENSION));
+        if ($extension === '' && str_contains($mimeType, 'wordprocessingml')) {
+            $extension = 'docx';
+        }
+        abort_unless($extension === 'docx', 415, 'Only DOCX files can be previewed here.');
+
+        $privateDisk = Storage::disk('local');
+        abort_unless($privateDisk->exists($file['path']), 404, 'Evidence document file missing on disk.');
+
+        $html = $this->renderDocxPreviewHtml($privateDisk->path($file['path']), $fileName);
+
+        return response($html, 200, [
+            'Content-Type' => 'text/html; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    private function renderDocxPreviewHtml(string $path, string $fileName): string
+    {
+        if (! class_exists(\ZipArchive::class)) {
+            return $this->docxPreviewShell($fileName, '<p class="empty">DOCX preview is not available because the PHP Zip extension is disabled on this server.</p>');
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($path) !== true) {
+            return $this->docxPreviewShell($fileName, '<p class="empty">This Word document could not be opened for preview.</p>');
+        }
+
+        $documentXml = $zip->getFromName('word/document.xml');
+        $zip->close();
+
+        if (! is_string($documentXml) || trim($documentXml) === '') {
+            return $this->docxPreviewShell($fileName, '<p class="empty">This Word document has no readable preview content.</p>');
+        }
+
+        $document = new \DOMDocument();
+        $loaded = @$document->loadXML($documentXml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+
+        if (! $loaded) {
+            return $this->docxPreviewShell($fileName, '<p class="empty">This Word document could not be parsed for preview.</p>');
+        }
+
+        $xpath = new \DOMXPath($document);
+        $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+
+        $body = $xpath->query('//w:body')->item(0);
+        if (! $body) {
+            return $this->docxPreviewShell($fileName, '<p class="empty">This Word document has no body content to preview.</p>');
+        }
+
+        $content = '';
+        foreach ($body->childNodes as $child) {
+            if ($child->localName === 'p') {
+                $content .= $this->renderDocxParagraph($child);
+            } elseif ($child->localName === 'tbl') {
+                $content .= $this->renderDocxTable($child);
+            }
+        }
+
+        return $this->docxPreviewShell($fileName, $content !== '' ? $content : '<p class="empty">This Word document has no visible text content.</p>');
+    }
+
+    private function docxPreviewShell(string $fileName, string $content): string
+    {
+        $title = e($fileName);
+
+        return <<<HTML
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{$title}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: #d9dce1;
+            color: #111827;
+            font-family: Calibri, "Segoe UI", Arial, sans-serif;
+            line-height: 1.5;
+            margin: 0;
+            padding: 28px;
+        }
+        .page {
+            background: #fff;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, .16);
+            margin: 0 auto;
+            min-height: 920px;
+            max-width: 850px;
+            padding: 68px 74px;
+        }
+        p { margin: 0 0 12px; min-height: 1em; }
+        table { border-collapse: collapse; margin: 14px 0; width: 100%; }
+        td { border: 1px solid #cbd5e1; padding: 8px 10px; vertical-align: top; }
+        .empty { color: #64748b; font-style: italic; }
+        @media (max-width: 760px) {
+            body { padding: 14px; }
+            .page { padding: 34px 24px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">{$content}</main>
+</body>
+</html>
+HTML;
+    }
+
+    private function renderDocxParagraph(\DOMNode $paragraph): string
+    {
+        $html = $this->renderDocxInlineContent($paragraph);
+
+        return '<p>' . ($html !== '' ? $html : '&nbsp;') . '</p>';
+    }
+
+    private function renderDocxTable(\DOMNode $table): string
+    {
+        $rows = '';
+
+        foreach ($table->childNodes as $row) {
+            if ($row->localName !== 'tr') {
+                continue;
+            }
+
+            $cells = '';
+            foreach ($row->childNodes as $cell) {
+                if ($cell->localName !== 'tc') {
+                    continue;
+                }
+
+                $cellContent = '';
+                foreach ($cell->childNodes as $cellChild) {
+                    if ($cellChild->localName === 'p') {
+                        $cellContent .= $this->renderDocxParagraph($cellChild);
+                    } elseif ($cellChild->localName === 'tbl') {
+                        $cellContent .= $this->renderDocxTable($cellChild);
+                    }
+                }
+
+                $cells .= '<td>' . ($cellContent !== '' ? $cellContent : '&nbsp;') . '</td>';
+            }
+
+            $rows .= '<tr>' . $cells . '</tr>';
+        }
+
+        return $rows !== '' ? '<table>' . $rows . '</table>' : '';
+    }
+
+    private function renderDocxInlineContent(\DOMNode $node): string
+    {
+        $html = '';
+
+        foreach ($node->childNodes as $child) {
+            if ($child->localName === 't') {
+                $html .= e($child->nodeValue);
+            } elseif ($child->localName === 'tab') {
+                $html .= '&emsp;';
+            } elseif (in_array($child->localName, ['br', 'cr'], true)) {
+                $html .= '<br>';
+            } elseif ($child->localName === 'r') {
+                $html .= $this->renderDocxRun($child);
+            } else {
+                $html .= $this->renderDocxInlineContent($child);
+            }
+        }
+
+        return $html;
+    }
+
+    private function renderDocxRun(\DOMNode $run): string
+    {
+        $html = '';
+        foreach ($run->childNodes as $child) {
+            if ($child->localName === 'rPr') {
+                continue;
+            }
+
+            if ($child->localName === 't') {
+                $html .= e($child->nodeValue);
+            } elseif ($child->localName === 'tab') {
+                $html .= '&emsp;';
+            } elseif (in_array($child->localName, ['br', 'cr'], true)) {
+                $html .= '<br>';
+            } else {
+                $html .= $this->renderDocxInlineContent($child);
+            }
+        }
+
+        if ($html === '') {
+            return '';
+        }
+
+        $styles = [];
+        foreach ($run->childNodes as $child) {
+            if ($child->localName !== 'rPr') {
+                continue;
+            }
+
+            foreach ($child->childNodes as $styleNode) {
+                if ($styleNode->localName === 'b') {
+                    $styles[] = 'font-weight:700';
+                } elseif ($styleNode->localName === 'i') {
+                    $styles[] = 'font-style:italic';
+                } elseif ($styleNode->localName === 'u') {
+                    $styles[] = 'text-decoration:underline';
+                }
+            }
+        }
+
+        return $styles === []
+            ? $html
+            : '<span style="' . e(implode(';', array_unique($styles))) . '">' . $html . '</span>';
+    }
+
     public function publicLineItemEvidenceDocumentPreview(
         Request $request,
         ProcurementPurchaseOrder $purchaseOrder,

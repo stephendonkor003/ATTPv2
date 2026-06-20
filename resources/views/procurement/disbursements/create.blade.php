@@ -311,9 +311,14 @@
         .signature-placement-layer {
             cursor: crosshair;
             inset: 0;
+            pointer-events: none;
             position: absolute;
             touch-action: none;
             z-index: 7;
+        }
+
+        .signature-placement-layer.is-active {
+            pointer-events: auto;
         }
 
         .signature-preview-frame,
@@ -322,7 +327,6 @@
             display: block;
             height: 520px;
             width: 100%;
-            pointer-events: none;
         }
 
         .signature-preview-image {
@@ -1139,7 +1143,18 @@
                     const docs = Array.isArray(item.evidence?.documents) ? item.evidence.documents : [];
                     return docs.map((document, index) => {
                         const url = String(document.preview_url || document.url || '');
-                        const extension = String(document.extension || document.name?.split('.').pop() || '').toLowerCase();
+                        const mimeType = String(document.mime_type || '');
+                        const documentNameParts = String(document.name || '').split('.');
+                        let extension = String(document.extension || '').toLowerCase();
+                        if (!extension && documentNameParts.length > 1) {
+                            extension = documentNameParts.pop().toLowerCase();
+                        }
+                        if (!extension && mimeType.includes('wordprocessingml')) {
+                            extension = 'docx';
+                        } else if (!extension && mimeType === 'application/msword') {
+                            extension = 'doc';
+                        }
+                        const localDocxPreviewUrl = extension === 'docx' ? String(document.docx_preview_url || '') : '';
                         return {
                             id: `${item.id}-${index}`,
                             item_id: item.id,
@@ -1148,9 +1163,9 @@
                             name: document.name || 'Evidence document',
                             display_name: document.display_name || document.name || 'Evidence document',
                             extension,
-                            mime_type: document.mime_type || '',
+                            mime_type: mimeType,
                             url,
-                            preview_url: document.office_preview_url || document.preview_url || url,
+                            preview_url: localDocxPreviewUrl || document.office_preview_url || document.preview_url || url,
                             download_url: document.download_url || `${url}${url.includes('?') ? '&' : '?'}download=1`,
                             is_office: ['doc', 'docx'].includes(extension),
                             is_pdf: extension === 'pdf' || String(document.mime_type || '').includes('pdf'),
@@ -1222,6 +1237,10 @@
                 return document.getElementById('signatureStamp');
             }
 
+            function signaturePlacementLayerElement() {
+                return document.getElementById('signaturePlacementLayer');
+            }
+
             function clampSignaturePlacement(x, y) {
                 const stage = signaturePreviewStage();
                 const stamp = signatureStampElement();
@@ -1241,10 +1260,12 @@
 
             function refreshSignatureStamp() {
                 const stamp = signatureStampElement();
+                const placementLayer = signaturePlacementLayerElement();
                 if (!stamp) return;
 
                 if (!signatureImageDataUrl) {
                     stamp.classList.remove('is-visible', 'is-dragging');
+                    placementLayer?.classList.remove('is-active');
                     stamp.innerHTML = '';
                     return;
                 }
@@ -1254,6 +1275,7 @@
                 stamp.style.left = `${signaturePlacement.x}px`;
                 stamp.style.top = `${signaturePlacement.y}px`;
                 stamp.classList.add('is-visible');
+                placementLayer?.classList.add('is-active');
             }
 
             function placeSignatureFromEvent(event) {

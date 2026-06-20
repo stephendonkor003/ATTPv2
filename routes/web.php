@@ -1800,6 +1800,9 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.purchase_r
         Route::post('{purchaseOrder}/line-item-evidence/{evidence}/request-resubmission', [ProcurementPurchaseOrderController::class, 'requestLineItemEvidenceResubmission'])
             ->middleware('permission:finance.purchase_orders.create')
             ->name('line-item-evidence.resubmission');
+        Route::get('{purchaseOrder}/line-item-evidence/{evidence}/documents/{document}/preview-html', [ProcurementPurchaseOrderController::class, 'previewLineItemEvidenceDocumentHtml'])
+            ->whereNumber('document')
+            ->name('line-item-evidence.document-preview');
         Route::get('{purchaseOrder}/line-item-evidence/{evidence}/documents/{document}', [ProcurementPurchaseOrderController::class, 'downloadLineItemEvidenceDocument'])
             ->whereNumber('document')
             ->name('line-item-evidence.document');

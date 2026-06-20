@@ -209,7 +209,14 @@ class ProcurementDisbursementController extends Controller
                         'documents' => collect($evidence->documents ?? [])
                             ->map(function ($document, $index) use ($order, $evidence) {
                                 $name = $document['name'] ?? 'Document';
-                                $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+                                $mimeType = (string) ($document['mime_type'] ?? '');
+                                $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION)
+                                    ?: pathinfo((string) ($document['path'] ?? ''), PATHINFO_EXTENSION));
+                                if ($extension === '' && str_contains($mimeType, 'wordprocessingml')) {
+                                    $extension = 'docx';
+                                } elseif ($extension === '' && $mimeType === 'application/msword') {
+                                    $extension = 'doc';
+                                }
                                 $previewUrl = route('procurement.purchase-orders.line-item-evidence.document', [$order, $evidence, $index]);
                                 $publicPreviewUrl = URL::temporarySignedRoute(
                                     'procurement.purchase-orders.line-item-evidence.public-preview',
@@ -220,10 +227,13 @@ class ProcurementDisbursementController extends Controller
                                 return [
                                     'name' => $name,
                                     'display_name' => $document['display_name'] ?? null,
-                                    'mime_type' => $document['mime_type'] ?? null,
+                                    'mime_type' => $mimeType,
                                     'extension' => $extension,
                                     'url' => $previewUrl,
                                     'preview_url' => $previewUrl,
+                                    'docx_preview_url' => $extension === 'docx'
+                                        ? route('procurement.purchase-orders.line-item-evidence.document-preview', [$order, $evidence, $index])
+                                        : null,
                                     'download_url' => $previewUrl . '?download=1',
                                     'public_preview_url' => $publicPreviewUrl,
                                     'office_preview_url' => in_array($extension, ['doc', 'docx'], true)
