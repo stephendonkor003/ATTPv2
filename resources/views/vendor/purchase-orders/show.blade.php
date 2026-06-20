@@ -121,9 +121,14 @@
                             $documents = collect($evidence?->documents ?? [])->filter(fn ($document) => is_array($document))->values();
                             $deliverableTitle = $item->milestone ?: ($item->deliverable?->title ?? $item->resource?->name ?? 'Deliverable');
                             $lineAmount = $purchaseOrder->lineItemPayableAmount($item);
+                            $hasVendorDocuments = $evidence?->hasVendorDocuments() ?? false;
+                            $isResubmissionRequested = $evidence?->isOpenForVendorResubmission() ?? false;
+                            $isLockedSubmission = $evidence?->isLockedForVendorUpload() ?? false;
+                            $isVerified = (bool) ($evidence?->is_met ?? false);
+                            $canUploadEvidence = ! $isCancelled && ! $isVerified && (! $hasVendorDocuments || $isResubmissionRequested);
                         @endphp
 
-                        <div class="border rounded-3 p-3">
+                        <div class="border rounded-3 p-3 {{ $isLockedSubmission ? 'bg-light' : '' }}">
                             <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
                                 <div class="min-w-0">
                                     <div class="fw-bold">{{ $deliverableTitle }}</div>
@@ -135,7 +140,17 @@
                                     @endif
                                 </div>
                                 <span class="status-pill">
-                                    {{ $evidence?->is_met ? 'Confirmed' : ($documents->isNotEmpty() ? 'Evidence Uploaded' : 'Awaiting Evidence') }}
+                                    @if ($isVerified)
+                                        Verified
+                                    @elseif ($isResubmissionRequested)
+                                        Resubmission Requested
+                                    @elseif ($isLockedSubmission)
+                                        Submitted
+                                    @elseif ($documents->isNotEmpty())
+                                        Evidence Uploaded
+                                    @else
+                                        Awaiting Evidence
+                                    @endif
                                 </span>
                             </div>
 
@@ -164,7 +179,39 @@
                                 </div>
                             @endif
 
-                            @unless ($isCancelled)
+                            @if ($isVerified)
+                                <div class="alert alert-success border d-flex align-items-start gap-2 mb-0">
+                                    <i class="feather-check-circle mt-1"></i>
+                                    <div>
+                                        <div class="fw-bold">Internal verification completed</div>
+                                        <div class="small">This evidence has been verified by ATTP and is closed for vendor edits.</div>
+                                    </div>
+                                </div>
+                            @elseif ($isResubmissionRequested)
+                                <div class="alert alert-warning border d-flex align-items-start gap-2 mb-3">
+                                    <i class="feather-rotate-ccw mt-1"></i>
+                                    <div>
+                                        <div class="fw-bold">Resubmission requested</div>
+                                        <div class="small">ATTP has reopened this deliverable for corrected evidence.</div>
+                                        @if ($evidence?->vendor_resubmission_note)
+                                            <div class="small mt-2"><strong>Admin note:</strong> {{ $evidence->vendor_resubmission_note }}</div>
+                                        @endif
+                                    </div>
+                                </div>
+                            @elseif ($isLockedSubmission)
+                                <div class="alert alert-info border d-flex align-items-start gap-2 mb-0">
+                                    <i class="feather-clock mt-1"></i>
+                                    <div>
+                                        <div class="fw-bold">Submitted, awaiting internal process verification</div>
+                                        <div class="small">This section is locked. It will reopen only if ATTP requests a resubmission.</div>
+                                        @if ($evidence?->vendor_submitted_at)
+                                            <div class="small mt-1">Submitted on {{ $evidence->vendor_submitted_at->format('M d, Y H:i') }}</div>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endif
+
+                            @if ($canUploadEvidence)
                                 <form method="POST"
                                     action="{{ route('vendor.purchase-orders.evidence.store', [$purchaseOrder, $item]) }}"
                                     enctype="multipart/form-data"
@@ -219,7 +266,7 @@
                                         </button>
                                     </div>
                                 </form>
-                            @endunless
+                            @endif
                         </div>
                     @endforeach
                 </div>

@@ -17,6 +17,7 @@ use App\Models\Resource;
 use App\Models\ResourceCategory;
 use App\Models\SubActivity;
 use App\Models\User;
+use App\Services\VendorPurchaseOrderEvidenceResubmissionNotificationService;
 use App\Services\VendorPurchaseOrderNotificationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -862,6 +863,42 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         return $privateDisk->response($file['path'], $fileName, $headers);
+    }
+
+    public function requestLineItemEvidenceResubmission(
+        Request $request,
+        ProcurementPurchaseOrder $purchaseOrder,
+        ProcurementPurchaseOrderItemEvidence $evidence
+    ) {
+        $this->assertPurchaseOrderInScope($purchaseOrder);
+
+        abort_unless((string) $evidence->purchase_order_id === (string) $purchaseOrder->id, 404);
+
+        if (! $purchaseOrder->vendor_id) {
+            return back()->withErrors(['resubmission' => 'This purchase order has no vendor assigned.']);
+        }
+
+        if (! $evidence->hasVendorDocuments()) {
+            return back()->withErrors(['resubmission' => 'There is no vendor-submitted evidence to return for resubmission.']);
+        }
+
+        $data = $request->validate([
+            'vendor_resubmission_note' => ['required', 'string', 'min:5', 'max:3000'],
+        ], [
+            'vendor_resubmission_note.required' => 'Enter the reason the vendor needs to resubmit this evidence.',
+        ]);
+
+        $evidence->update([
+            'is_met' => false,
+            'vendor_submission_status' => ProcurementPurchaseOrderItemEvidence::VENDOR_STATUS_REVISION_REQUESTED,
+            'vendor_resubmission_requested_at' => now(),
+            'vendor_resubmission_requested_by' => auth()->id(),
+            'vendor_resubmission_note' => $data['vendor_resubmission_note'],
+        ]);
+
+        app(VendorPurchaseOrderEvidenceResubmissionNotificationService::class)->notify($purchaseOrder, $evidence->fresh());
+
+        return back()->with('success', 'Evidence resubmission requested from the vendor.');
     }
 
     public function destroy(ProcurementPurchaseOrder $purchaseOrder)

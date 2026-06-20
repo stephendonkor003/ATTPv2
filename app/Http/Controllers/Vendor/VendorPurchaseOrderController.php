@@ -125,6 +125,18 @@ class VendorPurchaseOrderController extends Controller
             'purchase_request_item_id' => $item->id,
         ]);
 
+        if ($evidence->exists && $evidence->is_met) {
+            throw ValidationException::withMessages([
+                'documents' => 'This evidence has already been verified by ATTP and cannot be changed from the vendor portal.',
+            ]);
+        }
+
+        if ($evidence->exists && $evidence->isLockedForVendorUpload()) {
+            throw ValidationException::withMessages([
+                'documents' => 'This evidence has already been submitted and is awaiting internal verification. You can only upload again if ATTP requests a resubmission.',
+            ]);
+        }
+
         $documents = collect($evidence->documents ?? [])
             ->filter(fn ($document) => is_array($document))
             ->values()
@@ -167,6 +179,11 @@ class VendorPurchaseOrderController extends Controller
             'delivered_amount' => $evidence->delivered_amount,
             'notes' => $this->appendVendorNote($evidence->notes, $data['notes'] ?? null, $vendor),
             'documents' => $documents,
+            'vendor_submission_status' => ProcurementPurchaseOrderItemEvidence::VENDOR_STATUS_SUBMITTED,
+            'vendor_submitted_at' => now(),
+            'vendor_resubmission_requested_at' => null,
+            'vendor_resubmission_requested_by' => null,
+            'vendor_resubmission_note' => null,
             'created_by' => $evidence->created_by ?: $vendor->id,
         ]);
         $evidence->save();

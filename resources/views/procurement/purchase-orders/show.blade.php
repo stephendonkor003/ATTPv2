@@ -400,6 +400,8 @@
                                         @php
                                             $itemEvidence = $evidenceByItem->get($item->id);
                                             $itemDocuments = collect($itemEvidence?->documents ?? []);
+                                            $itemHasVendorDocuments = $itemEvidence?->hasVendorDocuments() ?? false;
+                                            $itemEvidenceStatus = $itemEvidence?->vendorEvidenceStatus();
                                             $itemPaidAmount = $linePaidAmountForItem($item);
                                             $itemHasPaidDisbursement = $itemPaidAmount > 0;
                                             $itemAmount = $lineAmountForItem($item);
@@ -452,6 +454,53 @@
                                                                 </a>
                                                             @endforeach
                                                         </div>
+                                                    @endif
+                                                    @if ($itemHasVendorDocuments)
+                                                        <div class="small mt-2">
+                                                            @if ($itemEvidenceStatus === \App\Models\ProcurementPurchaseOrderItemEvidence::VENDOR_STATUS_REVISION_REQUESTED)
+                                                                <span class="badge bg-warning text-dark">Resubmission requested</span>
+                                                            @elseif ($itemEvidence->is_met)
+                                                                <span class="badge bg-success">Vendor evidence verified</span>
+                                                            @else
+                                                                <span class="badge bg-info">Submitted, awaiting internal verification</span>
+                                                            @endif
+                                                        </div>
+                                                        @can('finance.purchase_orders.create')
+                                                            @unless ($itemEvidenceStatus === \App\Models\ProcurementPurchaseOrderItemEvidence::VENDOR_STATUS_REVISION_REQUESTED)
+                                                                <button type="button"
+                                                                    class="btn btn-sm btn-outline-warning mt-2"
+                                                                    data-bs-toggle="modal"
+                                                                    data-bs-target="#requestEvidenceResubmissionModal{{ $itemEvidence->id }}">
+                                                                    <i class="feather-rotate-ccw me-1"></i> Request Resubmission
+                                                                </button>
+
+                                                                <div class="modal fade" id="requestEvidenceResubmissionModal{{ $itemEvidence->id }}" tabindex="-1" aria-hidden="true">
+                                                                    <div class="modal-dialog modal-dialog-centered">
+                                                                        <div class="modal-content text-start">
+                                                                            <form method="POST" action="{{ route('procurement.purchase-orders.line-item-evidence.resubmission', [$purchaseOrder, $itemEvidence]) }}">
+                                                                                @csrf
+                                                                                <div class="modal-header">
+                                                                                    <h5 class="modal-title">Request Evidence Resubmission</h5>
+                                                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                                                </div>
+                                                                                <div class="modal-body">
+                                                                                    <div class="mb-2 fw-semibold">{{ $item->milestone ?: ($item->deliverable?->title ?? 'Deliverable') }}</div>
+                                                                                    <label class="form-label">Reason for resubmission</label>
+                                                                                    <textarea name="vendor_resubmission_note" class="form-control" rows="4" minlength="5" maxlength="3000" required></textarea>
+                                                                                    <div class="form-text">The vendor will receive this note and the evidence upload section will reopen.</div>
+                                                                                </div>
+                                                                                <div class="modal-footer">
+                                                                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                                                    <button type="submit" class="btn btn-warning">
+                                                                                        <i class="feather-send me-1"></i> Send Request
+                                                                                    </button>
+                                                                                </div>
+                                                                            </form>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            @endunless
+                                                        @endcan
                                                     @endif
                                                 @elseif ($itemFullyPaid)
                                                     <span class="badge bg-success">Paid</span>
