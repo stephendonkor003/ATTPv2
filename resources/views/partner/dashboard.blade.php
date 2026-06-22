@@ -49,6 +49,7 @@
         }
 
         .partner-hero-title {
+            color: #fff;
             font-size: 1.28rem;
             font-weight: 900;
             line-height: 1.22;

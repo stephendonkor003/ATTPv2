@@ -129,33 +129,80 @@
             padding: 10px;
             color: #fff;
             text-decoration: none;
-            background: rgba(255, 255, 255, .10);
-            box-shadow: 0 10px 20px rgba(2, 44, 34, .16);
-            transition: transform .18s ease, background-color .18s ease, border-color .18s ease;
+            background:
+                linear-gradient(135deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .07)),
+                rgba(255, 255, 255, .08);
+            box-shadow: 0 12px 24px rgba(2, 44, 34, .18);
+            transition: transform .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
         }
 
         .partner-notification-card:hover {
             color: #fff;
-            transform: translateY(-2px);
-            border-color: rgba(255, 255, 255, .28);
-            background: rgba(255, 255, 255, .14);
+            transform: translateY(-3px);
+            border-color: rgba(255, 233, 189, .52);
+            background:
+                linear-gradient(135deg, rgba(255, 233, 189, .20), rgba(255, 255, 255, .08)),
+                rgba(255, 255, 255, .12);
+            box-shadow: 0 16px 30px rgba(2, 44, 34, .24);
         }
 
         .partner-notification-head {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 10px;
+            gap: 9px;
             margin-bottom: 8px;
+        }
+
+        .partner-notification-icon {
+            position: relative;
+            width: 36px;
+            height: 36px;
+            display: grid;
+            place-items: center;
+            flex: 0 0 36px;
+            border-radius: 8px;
+            color: #043b32;
+            background: #ffe9bd;
+            box-shadow: 0 10px 18px rgba(255, 233, 189, .16);
+            transition: transform .18s ease;
+        }
+
+        .partner-notification-card:hover .partner-notification-icon {
+            transform: rotate(-6deg) scale(1.04);
+        }
+
+        .partner-notification-pulse {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 13px;
+            height: 13px;
+            border: 2px solid #043b32;
+            border-radius: 50%;
+            background: #22c55e;
+        }
+
+        .partner-notification-copy {
+            min-width: 0;
+            flex: 1;
         }
 
         .partner-notification-title {
             display: flex;
             align-items: center;
-            gap: 8px;
-            min-width: 0;
-            font-size: .78rem;
+            justify-content: space-between;
+            gap: 7px;
+            color: #fff;
+            font-size: .8rem;
             font-weight: 900;
+            line-height: 1.15;
+        }
+
+        .partner-notification-subtitle {
+            color: rgba(255, 255, 255, .68);
+            font-size: .66rem;
+            font-weight: 800;
+            margin-top: 3px;
         }
 
         .partner-notification-badge {
@@ -169,6 +216,7 @@
             font-size: .72rem;
             font-weight: 900;
             padding: 0 7px;
+            box-shadow: inset 0 -1px 0 rgba(4, 59, 50, .12);
         }
 
         .partner-notification-badge.is-zero {
@@ -185,7 +233,8 @@
         .partner-notification-stat {
             border-radius: 8px;
             padding: 7px;
-            background: rgba(255, 255, 255, .10);
+            background: rgba(255, 255, 255, .11);
+            border: 1px solid rgba(255, 255, 255, .08);
         }
 
         .partner-notification-stat span {
@@ -353,27 +402,58 @@
         }
 
         .partner-topbar {
-            min-height: 66px;
-            background: rgba(255, 255, 255, .94);
-            border-bottom: 1px solid rgba(219, 230, 239, .85);
-            padding: 10px 22px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
             position: sticky;
             top: 0;
             z-index: 1020;
+            min-height: 92px;
+            overflow: visible;
+            background:
+                linear-gradient(135deg, rgba(4, 59, 50, .98) 0%, rgba(15, 118, 110, .98) 54%, rgba(18, 60, 105, .98) 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, .16);
+            padding: 13px 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
             backdrop-filter: blur(14px);
-            box-shadow: 0 8px 22px rgba(17, 32, 51, .06);
+            box-shadow: 0 18px 36px rgba(17, 32, 51, .18);
+        }
+
+        .partner-topbar::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(90deg, rgba(255, 255, 255, .09) 1px, transparent 1px),
+                linear-gradient(180deg, rgba(255, 255, 255, .07) 1px, transparent 1px);
+            background-size: 48px 48px;
+            opacity: .16;
+        }
+
+        .partner-topbar::after {
+            content: "";
+            position: absolute;
+            left: 22px;
+            right: 22px;
+            bottom: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 233, 189, .64), transparent);
+        }
+
+        .partner-topbar-copy {
+            position: relative;
+            z-index: 1;
+            min-width: 0;
+            max-width: 820px;
         }
 
         .partner-topbar-kicker {
             display: inline-flex;
             align-items: center;
             gap: 7px;
-            color: var(--partner-green);
-            font-size: .68rem;
+            color: #ffe9bd;
+            font-size: .7rem;
             font-weight: 900;
             letter-spacing: .06em;
             text-transform: uppercase;
@@ -381,23 +461,124 @@
         }
 
         .partner-topbar-title {
-            color: var(--partner-ink);
-            font-size: .95rem;
+            color: #fff;
+            font-size: 1.15rem;
             font-weight: 900;
-            line-height: 1.2;
+            line-height: 1.18;
+            letter-spacing: .01em;
         }
 
         .partner-topbar-subtitle {
-            color: var(--partner-muted);
-            font-size: .76rem;
-            margin-top: 2px;
+            color: rgba(255, 255, 255, .78);
+            font-size: .8rem;
+            margin-top: 4px;
+            max-width: 780px;
+        }
+
+        .partner-topbar-meta {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .partner-topbar-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 30px;
+            border: 1px solid rgba(255, 255, 255, .16);
+            border-radius: 999px;
+            padding: 5px 10px;
+            color: #fff;
+            background: rgba(255, 255, 255, .12);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+            font-size: .72rem;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+        .partner-topbar-chip i {
+            color: #ffe9bd;
+        }
+
+        .partner-topbar-chip.is-accent {
+            color: #043b32;
+            border-color: rgba(255, 233, 189, .54);
+            background: #ffe9bd;
+        }
+
+        .partner-topbar-chip.is-accent i {
+            color: #7c4a03;
         }
 
         .partner-topbar-actions {
+            position: relative;
+            z-index: 1;
             display: flex;
             align-items: center;
             gap: 8px;
             min-width: 0;
+        }
+
+        .partner-language-form {
+            margin: 0;
+        }
+
+        .partner-language-select-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .partner-language-select-wrap i {
+            position: absolute;
+            left: 10px;
+            color: #ffe9bd;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .partner-language-select {
+            min-height: 38px;
+            max-width: 170px;
+            border: 1px solid rgba(255, 255, 255, .18);
+            border-radius: 8px;
+            color: #fff;
+            background: rgba(255, 255, 255, .12);
+            padding: 8px 32px 8px 34px;
+            font-size: .78rem;
+            font-weight: 900;
+            outline: none;
+            appearance: none;
+            cursor: pointer;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+            transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+        }
+
+        .partner-language-select:hover,
+        .partner-language-select:focus {
+            border-color: rgba(255, 233, 189, .62);
+            background: rgba(255, 255, 255, .17);
+            box-shadow: 0 0 0 3px rgba(255, 233, 189, .12);
+        }
+
+        .partner-language-select option {
+            color: #172033;
+            background: #fff;
+        }
+
+        .partner-language-select-wrap::after {
+            content: "";
+            position: absolute;
+            right: 12px;
+            width: 7px;
+            height: 7px;
+            border-right: 2px solid #ffe9bd;
+            border-bottom: 2px solid #ffe9bd;
+            pointer-events: none;
+            transform: rotate(45deg) translateY(-2px);
         }
 
         .partner-user-chip {
@@ -412,6 +593,21 @@
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, .78);
         }
 
+        .partner-topbar .partner-user-chip {
+            border-color: rgba(255, 255, 255, .16);
+            color: #fff;
+            background: rgba(255, 255, 255, .12);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+        }
+
+        .partner-topbar .partner-user-chip .text-dark {
+            color: #fff !important;
+        }
+
+        .partner-topbar .partner-user-chip .text-muted {
+            color: rgba(255, 255, 255, .68) !important;
+        }
+
         .partner-user-avatar {
             width: 32px;
             height: 32px;
@@ -420,7 +616,8 @@
             display: grid;
             place-items: center;
             color: #fff;
-            background: linear-gradient(135deg, var(--partner-green), #123c69);
+            background: linear-gradient(135deg, #ffe9bd, #f5b84b);
+            color: #043b32;
             font-size: .74rem;
             font-weight: 900;
         }
@@ -707,6 +904,15 @@
             ->take(2)
             ->map(fn ($namePart) => strtoupper(substr($namePart, 0, 1)))
             ->implode('') ?: 'FP';
+        $partnerLocales = [
+            'en' => ['short' => 'EN', 'name' => 'English'],
+            'fr' => ['short' => 'FR', 'name' => 'French'],
+            'ar' => ['short' => 'AR', 'name' => 'Arabic'],
+            'pt' => ['short' => 'PT', 'name' => 'Portuguese'],
+            'es' => ['short' => 'ES', 'name' => 'Spanish'],
+            'sw' => ['short' => 'SW', 'name' => 'Kiswahili'],
+        ];
+        $partnerCurrentLocale = app()->getLocale();
         $partnerUnreadNotificationCount = $partnerUser?->unreadNotifications()->count() ?? 0;
         $partnerOpenRequestCount = $partnerFunder
             ? \App\Models\PartnerInformationRequest::where('funder_id', $partnerFunder->id)
@@ -775,12 +981,21 @@
                 @can('partner.requests.view')
                     <a href="{{ route('partner.requests.index') }}" class="partner-notification-card">
                         <div class="partner-notification-head">
-                            <div class="partner-notification-title">
-                                <i class="feather-bell"></i> Notifications
+                            <div class="partner-notification-icon">
+                                <i class="feather-bell"></i>
+                                @if($partnerSidebarNotificationCount > 0)
+                                    <span class="partner-notification-pulse"></span>
+                                @endif
                             </div>
-                            <span class="partner-notification-badge {{ $partnerSidebarNotificationCount === 0 ? 'is-zero' : '' }}">
-                                {{ number_format($partnerSidebarNotificationCount) }}
-                            </span>
+                            <div class="partner-notification-copy">
+                                <div class="partner-notification-title">
+                                    <span>Partner alerts</span>
+                                    <span class="partner-notification-badge {{ $partnerSidebarNotificationCount === 0 ? 'is-zero' : '' }}">
+                                        {{ number_format($partnerSidebarNotificationCount) }}
+                                    </span>
+                                </div>
+                                <div class="partner-notification-subtitle">Requests, responses and updates</div>
+                            </div>
                         </div>
                         <div class="partner-notification-grid">
                             <div class="partner-notification-stat">
@@ -897,12 +1112,27 @@
 
         <main class="partner-main">
             <header class="partner-topbar">
-                <div>
+                <div class="partner-topbar-copy">
                     <div class="partner-topbar-kicker">
-                        <i class="feather-shield"></i> Funding Partner Workspace
+                        <i class="feather-shield"></i> Integrated Funding Partner Dashboard
                     </div>
                     <div class="partner-topbar-title">{{ $partnerOrgName }}</div>
-                    <div class="partner-topbar-subtitle">Program dashboards, reports, documents and portfolio intelligence.</div>
+                    <div class="partner-topbar-subtitle">
+                        An integrated dashboard providing deep insight for portfolio funding partners across funding, delivery, reports, documents and evidence.
+                    </div>
+                    <div class="partner-topbar-meta">
+                        <span class="partner-topbar-chip">
+                            <i class="feather-clock"></i>
+                            <span data-partner-current-time>{{ now()->format('D, M j H:i:s') }}</span>
+                        </span>
+                        <span class="partner-topbar-chip">
+                            <i class="feather-map-pin"></i>
+                            <span data-partner-current-location>{{ config('app.timezone', 'Africa/Accra') }}</span>
+                        </span>
+                        <span class="partner-topbar-chip is-accent">
+                            <i class="feather-trending-up"></i> Portfolio insight
+                        </span>
+                    </div>
                 </div>
                 <div class="partner-topbar-actions">
                     @can('partner.requests.create')
@@ -910,6 +1140,24 @@
                             <i class="feather-plus-circle me-1"></i> New Request
                         </a>
                     @endcan
+                    <form method="POST"
+                        action="{{ route('language.switch', $partnerCurrentLocale) }}"
+                        class="partner-language-form"
+                        data-partner-language-form
+                        data-action-template="{{ route('language.switch', '__LOCALE__') }}">
+                        @csrf
+                        <label class="partner-language-select-wrap">
+                            <i class="feather-globe"></i>
+                            <span class="visually-hidden">Select language</span>
+                            <select class="partner-language-select" data-partner-language-select aria-label="Select language">
+                                @foreach($partnerLocales as $localeCode => $locale)
+                                    <option value="{{ $localeCode }}" @selected($partnerCurrentLocale === $localeCode)>
+                                        {{ $locale['short'] }} - {{ $locale['name'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </label>
+                    </form>
                     <div class="partner-user-chip">
                         <div class="partner-user-avatar">{{ $partnerInitials }}</div>
                         <div class="partner-user-chip-text">
@@ -1024,6 +1272,53 @@
 
             searchInput.addEventListener('input', filterMenus);
             searchInput.addEventListener('search', filterMenus);
+        })();
+
+        (function () {
+            const timeTarget = document.querySelector('[data-partner-current-time]');
+            const locationTarget = document.querySelector('[data-partner-current-location]');
+            const languageForm = document.querySelector('[data-partner-language-form]');
+            const languageSelect = document.querySelector('[data-partner-language-select]');
+
+            if (locationTarget && window.Intl) {
+                const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+                if (timeZone) {
+                    locationTarget.textContent = timeZone.replace(/_/g, ' ');
+                }
+            }
+
+            if (!timeTarget) {
+                return;
+            }
+
+            const updateClock = () => {
+                timeTarget.textContent = new Date().toLocaleString([], {
+                    weekday: 'short',
+                    month: 'short',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            };
+
+            updateClock();
+            window.setInterval(updateClock, 1000);
+
+            if (languageForm && languageSelect) {
+                languageSelect.addEventListener('change', function () {
+                    const template = languageForm.dataset.actionTemplate;
+                    const locale = this.value;
+
+                    if (!template || !locale) {
+                        return;
+                    }
+
+                    languageForm.action = template.replace('__LOCALE__', encodeURIComponent(locale));
+                    languageForm.submit();
+                });
+            }
         })();
     </script>
 
