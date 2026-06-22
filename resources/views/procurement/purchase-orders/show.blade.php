@@ -52,6 +52,42 @@
         .po-show .white-space-pre-line {
             white-space: pre-line;
         }
+
+        .po-resubmission-modal {
+            z-index: 1210 !important;
+        }
+
+        .po-resubmission-modal .modal-dialog {
+            max-width: min(680px, calc(100vw - 28px));
+        }
+
+        .po-resubmission-modal .modal-content {
+            background: #ffffff;
+            border: 0;
+            border-radius: 14px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+            overflow: hidden;
+        }
+
+        .po-resubmission-modal .modal-header,
+        .po-resubmission-modal .modal-footer {
+            background: #ffffff;
+            border-color: #e5ebf4;
+        }
+
+        .po-resubmission-modal .modal-body {
+            background: #f8fafc;
+        }
+
+        .po-resubmission-modal textarea {
+            min-height: 140px;
+            resize: vertical;
+        }
+
+        body.po-resubmission-modal-open .modal-backdrop.po-resubmission-backdrop {
+            z-index: 1200 !important;
+            opacity: .42 !important;
+        }
     </style>
 @endpush
 
@@ -473,32 +509,6 @@
                                                                     data-bs-target="#requestEvidenceResubmissionModal{{ $itemEvidence->id }}">
                                                                     <i class="feather-rotate-ccw me-1"></i> Request Resubmission
                                                                 </button>
-
-                                                                <div class="modal fade" id="requestEvidenceResubmissionModal{{ $itemEvidence->id }}" tabindex="-1" aria-hidden="true">
-                                                                    <div class="modal-dialog modal-dialog-centered">
-                                                                        <div class="modal-content text-start">
-                                                                            <form method="POST" action="{{ route('procurement.purchase-orders.line-item-evidence.resubmission', [$purchaseOrder, $itemEvidence]) }}">
-                                                                                @csrf
-                                                                                <div class="modal-header">
-                                                                                    <h5 class="modal-title">Request Evidence Resubmission</h5>
-                                                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                                                </div>
-                                                                                <div class="modal-body">
-                                                                                    <div class="mb-2 fw-semibold">{{ $item->milestone ?: ($item->deliverable?->title ?? 'Deliverable') }}</div>
-                                                                                    <label class="form-label">Reason for resubmission</label>
-                                                                                    <textarea name="vendor_resubmission_note" class="form-control" rows="4" minlength="5" maxlength="3000" required></textarea>
-                                                                                    <div class="form-text">The vendor will receive this note and the evidence upload section will reopen.</div>
-                                                                                </div>
-                                                                                <div class="modal-footer">
-                                                                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                                                    <button type="submit" class="btn btn-warning">
-                                                                                        <i class="feather-send me-1"></i> Send Request
-                                                                                    </button>
-                                                                                </div>
-                                                                            </form>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
                                                             @endunless
                                                         @endcan
                                                     @endif
@@ -616,4 +626,95 @@
             </div>
         </div>
     </div>
+
+    @can('finance.purchase_orders.create')
+        @foreach ($lineItems as $resubmissionItem)
+            @php
+                $resubmissionEvidence = $evidenceByItem->get($resubmissionItem->id);
+                $resubmissionStatus = $resubmissionEvidence?->vendorEvidenceStatus();
+                $resubmissionCanRequest = $resubmissionEvidence
+                    && $resubmissionEvidence->hasVendorDocuments()
+                    && $resubmissionStatus !== \App\Models\ProcurementPurchaseOrderItemEvidence::VENDOR_STATUS_REVISION_REQUESTED;
+            @endphp
+
+            @if ($resubmissionCanRequest)
+                <div class="modal fade po-resubmission-modal"
+                    id="requestEvidenceResubmissionModal{{ $resubmissionEvidence->id }}"
+                    tabindex="-1"
+                    aria-labelledby="requestEvidenceResubmissionTitle{{ $resubmissionEvidence->id }}"
+                    aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content text-start">
+                            <form method="POST" action="{{ route('procurement.purchase-orders.line-item-evidence.resubmission', [$purchaseOrder, $resubmissionEvidence]) }}">
+                                @csrf
+                                <div class="modal-header">
+                                    <div>
+                                        <h5 class="modal-title mb-1" id="requestEvidenceResubmissionTitle{{ $resubmissionEvidence->id }}">
+                                            Request Evidence Resubmission
+                                        </h5>
+                                        <div class="small text-muted">
+                                            Reopen this vendor evidence item with a clear correction note.
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="bg-white border rounded-3 p-3 mb-3">
+                                        <div class="small text-muted mb-1">Deliverable</div>
+                                        <div class="fw-semibold">
+                                            {{ $resubmissionItem->milestone ?: ($resubmissionItem->deliverable?->title ?? 'Deliverable') }}
+                                        </div>
+                                    </div>
+                                    <label class="form-label fw-semibold" for="vendorResubmissionNote{{ $resubmissionEvidence->id }}">
+                                        Reason for resubmission
+                                    </label>
+                                    <textarea id="vendorResubmissionNote{{ $resubmissionEvidence->id }}"
+                                        name="vendor_resubmission_note"
+                                        class="form-control"
+                                        rows="5"
+                                        minlength="5"
+                                        maxlength="3000"
+                                        required></textarea>
+                                    <div class="form-text">
+                                        The vendor will receive this note by email and the evidence upload section will reopen on their portal.
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-warning">
+                                        <i class="feather-send me-1"></i> Send Request
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            @endif
+        @endforeach
+    @endcan
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('.po-resubmission-modal').forEach(function (modal) {
+                modal.addEventListener('show.bs.modal', function () {
+                    document.body.classList.add('po-resubmission-modal-open');
+                });
+
+                modal.addEventListener('shown.bs.modal', function () {
+                    document.querySelectorAll('.modal-backdrop').forEach(function (backdrop) {
+                        backdrop.classList.add('po-resubmission-backdrop');
+                    });
+                });
+
+                modal.addEventListener('hidden.bs.modal', function () {
+                    document.body.classList.remove('po-resubmission-modal-open');
+                    document.querySelectorAll('.modal-backdrop.po-resubmission-backdrop').forEach(function (backdrop) {
+                        backdrop.classList.remove('po-resubmission-backdrop');
+                    });
+                });
+            });
+        });
+    </script>
+@endpush

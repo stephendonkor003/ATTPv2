@@ -5,32 +5,53 @@
 
     var index = 0;
     var timer;
+    var activeVideo = null;
+    var activeEndedHandler = null;
+    var activeErrorHandler = null;
 
     function getVideo(slide) {
         return slide.querySelector('video');
     }
 
-    function delay(slide) {
-        var v = getVideo(slide);
-        if (v) {
-            var d = v.duration;
-            if (d && isFinite(d)) return Math.min(Math.max(d * 1000, 8000), 28000);
-            return 16000;
-        }
+    function delay() {
         return 6000;
+    }
+
+    function removeVideoListeners() {
+        if (!activeVideo) return;
+
+        if (activeEndedHandler) {
+            activeVideo.removeEventListener('ended', activeEndedHandler);
+        }
+
+        if (activeErrorHandler) {
+            activeVideo.removeEventListener('error', activeErrorHandler);
+        }
+
+        activeVideo = null;
+        activeEndedHandler = null;
+        activeErrorHandler = null;
+    }
+
+    function nextSlide() {
+        index = (index + 1) % slides.length;
+        activate(index);
+        schedule();
     }
 
     function activate(i) {
         var hero = document.querySelector('.hero');
+        removeVideoListeners();
+
         slides.forEach(function (s, si) {
-            var wasActive = s.classList.contains('active');
             s.classList.toggle('active', si === i);
             var v = getVideo(s);
+
             if (v) {
                 if (si === i) {
                     v.currentTime = 0;
+                    v.loop = false;
                     v.muted = true;
-                    v.play().catch(function () {});
                     if (hero) hero.classList.add('video-active');
                 } else {
                     v.pause();
@@ -43,11 +64,30 @@
 
     function schedule() {
         clearTimeout(timer);
-        timer = setTimeout(function () {
-            index = (index + 1) % slides.length;
-            activate(index);
-            schedule();
-        }, delay(slides[index]));
+
+        var slide = slides[index];
+        var video = getVideo(slide);
+
+        if (video) {
+            activeVideo = video;
+            activeEndedHandler = nextSlide;
+            activeErrorHandler = function () {
+                timer = setTimeout(nextSlide, delay());
+            };
+
+            video.addEventListener('ended', activeEndedHandler, { once: true });
+            video.addEventListener('error', activeErrorHandler, { once: true });
+
+            video.play().catch(function () {
+                video.muted = true;
+                video.play().catch(function () {
+                    timer = setTimeout(nextSlide, delay());
+                });
+            });
+            return;
+        }
+
+        timer = setTimeout(nextSlide, delay());
     }
 
     activate(0);

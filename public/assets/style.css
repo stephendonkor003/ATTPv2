@@ -630,6 +630,11 @@ html {
     display: block;
 }
 
+.slide.video-slide--full-frame video {
+    object-fit: contain;
+    background: #000;
+}
+
 /* Lighter overlay when video is the active slide */
 .hero.video-active .overlay {
     background: linear-gradient(

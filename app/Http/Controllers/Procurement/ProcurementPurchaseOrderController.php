@@ -1011,9 +1011,9 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $documentXml = $zip->getFromName('word/document.xml');
-        $zip->close();
 
         if (! is_string($documentXml) || trim($documentXml) === '') {
+            $zip->close();
             return $this->docxPreviewShell($fileName, '<p class="empty">This Word document has no readable preview content.</p>');
         }
 
@@ -1021,25 +1021,30 @@ class ProcurementPurchaseOrderController extends Controller
         $loaded = @$document->loadXML($documentXml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
 
         if (! $loaded) {
+            $zip->close();
             return $this->docxPreviewShell($fileName, '<p class="empty">This Word document could not be parsed for preview.</p>');
         }
 
         $xpath = new \DOMXPath($document);
         $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+        $documentRelationships = $this->docxRelationshipsForPart($zip, 'word/document.xml');
 
         $body = $xpath->query('//w:body')->item(0);
         if (! $body) {
+            $zip->close();
             return $this->docxPreviewShell($fileName, '<p class="empty">This Word document has no body content to preview.</p>');
         }
 
-        $content = '';
+        $content = $this->renderDocxHeaders($zip, $documentRelationships);
         foreach ($body->childNodes as $child) {
             if ($child->localName === 'p') {
-                $content .= $this->renderDocxParagraph($child);
+                $content .= $this->renderDocxParagraph($child, $zip, $documentRelationships);
             } elseif ($child->localName === 'tbl') {
-                $content .= $this->renderDocxTable($child);
+                $content .= $this->renderDocxTable($child, $zip, $documentRelationships);
             }
         }
+
+        $zip->close();
 
         return $this->docxPreviewShell($fileName, $content !== '' ? $content : '<p class="empty">This Word document has no visible text content.</p>');
     }
@@ -1076,6 +1081,21 @@ class ProcurementPurchaseOrderController extends Controller
         p { margin: 0 0 12px; min-height: 1em; }
         table { border-collapse: collapse; margin: 14px 0; width: 100%; }
         td { border: 1px solid #cbd5e1; padding: 8px 10px; vertical-align: top; }
+        .docx-header {
+            border-bottom: 1px solid #e5e7eb;
+            margin: 0 0 24px;
+            padding: 0 0 18px;
+        }
+        .docx-image-wrap {
+            display: inline-block;
+            line-height: 1;
+            margin: 2px 0 8px;
+            max-width: 100%;
+        }
+        .docx-image {
+            display: block;
+            object-fit: contain;
+        }
         .empty { color: #64748b; font-style: italic; }
         @media (max-width: 760px) {
             body { padding: 14px; }
@@ -1090,14 +1110,128 @@ class ProcurementPurchaseOrderController extends Controller
 HTML;
     }
 
-    private function renderDocxParagraph(\DOMNode $paragraph): string
+    private function renderDocxHeaders(\ZipArchive $zip, array $documentRelationships): string
     {
-        $html = $this->renderDocxInlineContent($paragraph);
+        $headerPaths = collect($documentRelationships)
+            ->filter(fn (array $relationship) => str_contains($relationship['type'] ?? '', '/header'))
+            ->pluck('target')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($headerPaths === []) {
+            for ($index = 0; $index < $zip->numFiles; $index++) {
+                $name = $zip->getNameIndex($index);
+                if (is_string($name) && preg_match('#^word/header\d+\.xml$#', $name)) {
+                    $headerPaths[] = $name;
+                }
+            }
+        }
+
+        $content = '';
+        foreach (array_unique($headerPaths) as $headerPath) {
+            $headerXml = $zip->getFromName($headerPath);
+            if (! is_string($headerXml) || trim($headerXml) === '') {
+                continue;
+            }
+
+            $header = new \DOMDocument();
+            if (! @$header->loadXML($headerXml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) {
+                continue;
+            }
+
+            $relationships = $this->docxRelationshipsForPart($zip, $headerPath);
+            $headerContent = '';
+
+            foreach ($header->documentElement?->childNodes ?? [] as $child) {
+                if ($child->localName === 'p') {
+                    $headerContent .= $this->renderDocxParagraph($child, $zip, $relationships);
+                } elseif ($child->localName === 'tbl') {
+                    $headerContent .= $this->renderDocxTable($child, $zip, $relationships);
+                }
+            }
+
+            if (trim(strip_tags($headerContent)) !== '' || str_contains($headerContent, '<img')) {
+                $content .= '<div class="docx-header">' . $headerContent . '</div>';
+            }
+        }
+
+        return $content;
+    }
+
+    private function docxRelationshipsForPart(\ZipArchive $zip, string $partPath): array
+    {
+        $partPath = str_replace('\\', '/', $partPath);
+        $directory = trim(dirname($partPath), '.');
+        $baseDirectory = $directory !== '' ? $directory : '';
+        $relsPath = ($baseDirectory !== '' ? $baseDirectory . '/' : '')
+            . '_rels/' . basename($partPath) . '.rels';
+
+        $relsXml = $zip->getFromName($relsPath);
+        if (! is_string($relsXml) || trim($relsXml) === '') {
+            return [];
+        }
+
+        $document = new \DOMDocument();
+        if (! @$document->loadXML($relsXml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) {
+            return [];
+        }
+
+        $relationships = [];
+        foreach ($document->getElementsByTagName('Relationship') as $relationship) {
+            $id = $relationship->getAttribute('Id');
+            $target = $relationship->getAttribute('Target');
+            if ($id === '' || $target === '') {
+                continue;
+            }
+
+            $relationships[$id] = [
+                'type' => $relationship->getAttribute('Type'),
+                'target' => $this->normalizeDocxPartPath($baseDirectory, $target),
+            ];
+        }
+
+        return $relationships;
+    }
+
+    private function normalizeDocxPartPath(string $baseDirectory, string $target): string
+    {
+        if (str_starts_with($target, '/')) {
+            return ltrim($target, '/');
+        }
+
+        if (preg_match('#^[a-z][a-z0-9+.-]*://#i', $target)) {
+            return $target;
+        }
+
+        $parts = explode('/', trim(($baseDirectory !== '' ? $baseDirectory . '/' : '') . $target, '/'));
+        $normalized = [];
+
+        foreach ($parts as $part) {
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+
+            if ($part === '..') {
+                array_pop($normalized);
+                continue;
+            }
+
+            $normalized[] = $part;
+        }
+
+        return implode('/', $normalized);
+    }
+
+    private function renderDocxParagraph(\DOMNode $paragraph, ?\ZipArchive $zip = null, array $relationships = []): string
+    {
+        $html = $this->renderDocxInlineContent($paragraph, $zip, $relationships);
 
         return '<p>' . ($html !== '' ? $html : '&nbsp;') . '</p>';
     }
 
-    private function renderDocxTable(\DOMNode $table): string
+    private function renderDocxTable(\DOMNode $table, ?\ZipArchive $zip = null, array $relationships = []): string
     {
         $rows = '';
 
@@ -1115,9 +1249,9 @@ HTML;
                 $cellContent = '';
                 foreach ($cell->childNodes as $cellChild) {
                     if ($cellChild->localName === 'p') {
-                        $cellContent .= $this->renderDocxParagraph($cellChild);
+                        $cellContent .= $this->renderDocxParagraph($cellChild, $zip, $relationships);
                     } elseif ($cellChild->localName === 'tbl') {
-                        $cellContent .= $this->renderDocxTable($cellChild);
+                        $cellContent .= $this->renderDocxTable($cellChild, $zip, $relationships);
                     }
                 }
 
@@ -1130,7 +1264,7 @@ HTML;
         return $rows !== '' ? '<table>' . $rows . '</table>' : '';
     }
 
-    private function renderDocxInlineContent(\DOMNode $node): string
+    private function renderDocxInlineContent(\DOMNode $node, ?\ZipArchive $zip = null, array $relationships = []): string
     {
         $html = '';
 
@@ -1142,16 +1276,18 @@ HTML;
             } elseif (in_array($child->localName, ['br', 'cr'], true)) {
                 $html .= '<br>';
             } elseif ($child->localName === 'r') {
-                $html .= $this->renderDocxRun($child);
+                $html .= $this->renderDocxRun($child, $zip, $relationships);
+            } elseif (in_array($child->localName, ['drawing', 'pict', 'object'], true)) {
+                $html .= $this->renderDocxImage($child, $zip, $relationships);
             } else {
-                $html .= $this->renderDocxInlineContent($child);
+                $html .= $this->renderDocxInlineContent($child, $zip, $relationships);
             }
         }
 
         return $html;
     }
 
-    private function renderDocxRun(\DOMNode $run): string
+    private function renderDocxRun(\DOMNode $run, ?\ZipArchive $zip = null, array $relationships = []): string
     {
         $html = '';
         foreach ($run->childNodes as $child) {
@@ -1165,8 +1301,10 @@ HTML;
                 $html .= '&emsp;';
             } elseif (in_array($child->localName, ['br', 'cr'], true)) {
                 $html .= '<br>';
+            } elseif (in_array($child->localName, ['drawing', 'pict', 'object'], true)) {
+                $html .= $this->renderDocxImage($child, $zip, $relationships);
             } else {
-                $html .= $this->renderDocxInlineContent($child);
+                $html .= $this->renderDocxInlineContent($child, $zip, $relationships);
             }
         }
 
@@ -1194,6 +1332,134 @@ HTML;
         return $styles === []
             ? $html
             : '<span style="' . e(implode(';', array_unique($styles))) . '">' . $html . '</span>';
+    }
+
+    private function renderDocxImage(\DOMNode $node, ?\ZipArchive $zip, array $relationships): string
+    {
+        if (! $zip) {
+            return '';
+        }
+
+        $relationshipId = $this->docxImageRelationshipId($node);
+        if ($relationshipId === '' || empty($relationships[$relationshipId]['target'])) {
+            return '';
+        }
+
+        $target = (string) $relationships[$relationshipId]['target'];
+        if ($target === '' || preg_match('#^[a-z][a-z0-9+.-]*://#i', $target)) {
+            return '';
+        }
+
+        $imageBytes = $zip->getFromName($target);
+        if (! is_string($imageBytes) || $imageBytes === '') {
+            return '';
+        }
+
+        $mimeType = $this->docxImageMimeType($target);
+        if ($mimeType === '') {
+            return '';
+        }
+
+        [$width, $height] = $this->docxImageDimensions($node);
+        $style = 'max-width:100%;height:auto;';
+        if ($width !== null) {
+            $style .= 'width:' . min($width, 680) . 'px;';
+        }
+        if ($height !== null && $height < 260) {
+            $style .= 'max-height:' . max($height, 24) . 'px;';
+        }
+
+        return '<span class="docx-image-wrap"><img class="docx-image" src="data:'
+            . e($mimeType)
+            . ';base64,'
+            . base64_encode($imageBytes)
+            . '" style="'
+            . e($style)
+            . '" alt="Embedded image"></span>';
+    }
+
+    private function docxImageRelationshipId(\DOMNode $node): string
+    {
+        $xpath = new \DOMXPath($node->ownerDocument);
+        $xpath->registerNamespace('a', 'http://schemas.openxmlformats.org/drawingml/2006/main');
+        $xpath->registerNamespace('r', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+        $xpath->registerNamespace('v', 'urn:schemas-microsoft-com:vml');
+
+        foreach ($xpath->query('.//*[local-name()="blip" or local-name()="imagedata"]', $node) as $imageNode) {
+            if (! $imageNode instanceof \DOMElement) {
+                continue;
+            }
+
+            foreach (['embed', 'id', 'link'] as $attribute) {
+                $value = $imageNode->getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', $attribute)
+                    ?: $imageNode->getAttribute('r:' . $attribute);
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function docxImageDimensions(\DOMNode $node): array
+    {
+        $xpath = new \DOMXPath($node->ownerDocument);
+
+        $extent = $xpath->query('.//*[local-name()="extent"]', $node)->item(0);
+        if ($extent instanceof \DOMElement) {
+            $width = (int) $extent->getAttribute('cx');
+            $height = (int) $extent->getAttribute('cy');
+
+            return [
+                $width > 0 ? (int) round($width / 9525) : null,
+                $height > 0 ? (int) round($height / 9525) : null,
+            ];
+        }
+
+        foreach ($xpath->query('.//*[local-name()="imagedata"]/ancestor::*[local-name()="shape"][1]', $node) as $shape) {
+            if (! $shape instanceof \DOMElement) {
+                continue;
+            }
+
+            $style = $shape->getAttribute('style');
+            $width = $this->docxCssLengthToPixels($style, 'width');
+            $height = $this->docxCssLengthToPixels($style, 'height');
+
+            return [$width, $height];
+        }
+
+        return [null, null];
+    }
+
+    private function docxCssLengthToPixels(string $style, string $property): ?int
+    {
+        if (! preg_match('/(?:^|;)\s*' . preg_quote($property, '/') . '\s*:\s*([0-9.]+)(pt|px|in|cm|mm)?/i', $style, $matches)) {
+            return null;
+        }
+
+        $value = (float) $matches[1];
+        $unit = strtolower($matches[2] ?? 'px');
+
+        return match ($unit) {
+            'pt' => (int) round($value * 1.333333),
+            'in' => (int) round($value * 96),
+            'cm' => (int) round($value * 37.795),
+            'mm' => (int) round($value * 3.7795),
+            default => (int) round($value),
+        };
+    }
+
+    private function docxImageMimeType(string $path): string
+    {
+        return match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'bmp' => 'image/bmp',
+            'webp' => 'image/webp',
+            default => '',
+        };
     }
 
     public function publicLineItemEvidenceDocumentPreview(

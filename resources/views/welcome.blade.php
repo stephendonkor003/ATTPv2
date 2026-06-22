@@ -163,10 +163,9 @@
 
         <div class="slider">
             {{-- Video slide — dominant, plays first --}}
-            <div class="slide active" style="background-image: url('{{ asset('assets/images/au3.jpg') }}');"></div>
-            <div class="slide video-slide">
-                <video id="heroSlideVideo" muted playsinline preload="none" loop poster="{{ asset('assets/images/au3.jpg') }}">
-                    <source src="{{ asset('gallary/video.mp4') }}" type="video/mp4">
+            <div class="slide active video-slide video-slide--full-frame">
+                <video id="heroSlideVideo" muted playsinline autoplay preload="auto" poster="{{ asset('assets/images/au3.jpg') }}">
+                    <source src="{{ asset('assets/images/video%20of%20dcp%20and%20world%20bank.mp4') }}" type="video/mp4">
                 </video>
             </div>
             <div class="slide" style="background-image: url('{{ asset('assets/images/au1.jpg') }}');"></div>
