@@ -25,6 +25,7 @@ class FunderController extends Controller
         $funders = Funder::with([
             'relationshipManager:id,name,email',
             'portalUser:id,name,email',
+            'portalUsers:id,name,email',
             'lastContactOwner:id,name,email',
             'programFundings:id,funder_id,program_id,program_name,approved_amount,currency,status',
         ])
@@ -54,6 +55,8 @@ class FunderController extends Controller
     public function store(Request $request)
     {
         $validated = $this->validateFunder($request);
+        $portalUsers = $validated['portal_users'] ?? [];
+        unset($validated['portal_users']);
 
         // Handle logo upload
         if ($request->hasFile('logo')) {
@@ -64,10 +67,11 @@ class FunderController extends Controller
 
         // Handle portal access
         $portalEmailSent = $this->syncPortalAccess($funder, $validated, $request->boolean('has_portal_access'));
+        $additionalEmailsSent = $this->syncAdditionalPortalUsers($funder->fresh(['portalUser', 'portalUsers']), $portalUsers, $request->boolean('has_portal_access'));
 
         return redirect()
             ->route('finance.funders.index')
-            ->with('success', 'Partner created successfully.' . ($portalEmailSent ? ' Portal access email sent.' : ''));
+            ->with('success', 'Partner created successfully.' . (($portalEmailSent || $additionalEmailsSent) ? ' Portal access email sent.' : ''));
     }
 
     /**
@@ -89,6 +93,7 @@ class FunderController extends Controller
      */
     public function edit(Funder $funder)
     {
+        $funder->load('portalUsers:id,name,email');
         $users = User::orderBy('name')->get(['id', 'name', 'email']);
 
         return view('finance.funders.edit', compact('funder', 'users'));
@@ -100,6 +105,8 @@ class FunderController extends Controller
     public function update(Request $request, Funder $funder)
     {
         $validated = $this->validateFunder($request, $funder);
+        $portalUsers = $validated['portal_users'] ?? [];
+        unset($validated['portal_users']);
 
         // Handle logo upload
         if ($request->hasFile('logo')) {
@@ -111,11 +118,12 @@ class FunderController extends Controller
         }
 
         $funder->update($validated);
-        $this->syncPortalAccess($funder->fresh(['portalUser']), $validated, $request->boolean('has_portal_access'));
+        $primaryEmailSent = $this->syncPortalAccess($funder->fresh(['portalUser', 'portalUsers']), $validated, $request->boolean('has_portal_access'));
+        $additionalEmailsSent = $this->syncAdditionalPortalUsers($funder->fresh(['portalUser', 'portalUsers']), $portalUsers, $request->boolean('has_portal_access'));
 
         return redirect()
             ->route('finance.funders.index')
-            ->with('success', 'Partner updated successfully.');
+            ->with('success', 'Partner updated successfully.' . (($primaryEmailSent || $additionalEmailsSent) ? ' New portal access email sent.' : ''));
     }
 
     /**
@@ -165,6 +173,9 @@ class FunderController extends Controller
             'last_contact_user_id' => 'nullable|exists:users,id',
             'last_contact_notes' => 'nullable|string',
             'notes' => 'nullable|string',
+            'portal_users' => 'nullable|array',
+            'portal_users.*.name' => 'nullable|string|max:255|required_with:portal_users.*.email',
+            'portal_users.*.email' => 'nullable|email|max:255|distinct',
         ]);
 
         $validated['has_portal_access'] = $request->boolean('has_portal_access');
@@ -182,6 +193,8 @@ class FunderController extends Controller
                 ]);
             }
 
+            $funder->portalUsers()->detach();
+
             return false;
         }
 
@@ -189,11 +202,21 @@ class FunderController extends Controller
             $funder->portalUser->update([
                 'name' => $validated['contact_person'] ?: $funder->name,
                 'email' => $validated['contact_email'],
+                'user_type' => 'funding_partner',
+                'role_id' => Role::where('name', 'Funding Partner')->value('id') ?: $funder->portalUser->role_id,
             ]);
 
             if (!$funder->has_portal_access) {
                 $funder->update(['has_portal_access' => true]);
             }
+
+            $funder->portalUsers()->syncWithoutDetaching([
+                $funder->portalUser->id => [
+                    'is_primary' => true,
+                    'invited_by' => auth()->id(),
+                    'invited_at' => now(),
+                ],
+            ]);
 
             return false;
         }
@@ -215,6 +238,14 @@ class FunderController extends Controller
             'has_portal_access' => true,
         ]);
 
+        $funder->portalUsers()->syncWithoutDetaching([
+            $user->id => [
+                'is_primary' => true,
+                'invited_by' => auth()->id(),
+                'invited_at' => now(),
+            ],
+        ]);
+
         try {
             Mail::to($user->email)->send(new FundingPartnerWelcome($funder->fresh(), $user, $password));
         } catch (\Exception $e) {
@@ -231,12 +262,103 @@ class FunderController extends Controller
         return true;
     }
 
+    private function syncAdditionalPortalUsers(Funder $funder, array $portalUsers, bool $hasPortalAccess): bool
+    {
+        if (! $hasPortalAccess) {
+            return false;
+        }
+
+        $partnerRoleId = Role::where('name', 'Funding Partner')->value('id');
+        $primaryUserId = $funder->user_id;
+        $primaryEmail = Str::lower((string) $funder->contact_email);
+        $allowedUserIds = collect([$primaryUserId])->filter()->values();
+        $sentAnyEmail = false;
+
+        foreach ($portalUsers as $portalUser) {
+            $email = Str::lower(trim((string) ($portalUser['email'] ?? '')));
+            $name = trim((string) ($portalUser['name'] ?? ''));
+
+            if ($email === '' || $name === '' || $email === $primaryEmail) {
+                continue;
+            }
+
+            $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
+            $plainPassword = null;
+
+            if ($user && $user->user_type !== 'funding_partner') {
+                \Log::warning('Skipped partner portal user because email belongs to a non-partner user.', [
+                    'funder_id' => $funder->id,
+                    'email' => $email,
+                    'existing_user_id' => $user->id,
+                ]);
+                continue;
+            }
+
+            if (! $user) {
+                $plainPassword = Str::random(12);
+                $user = User::create([
+                    'name' => $name,
+                    'email' => $email,
+                    'password' => Hash::make($plainPassword),
+                    'user_type' => 'funding_partner',
+                    'role_id' => $partnerRoleId,
+                    'must_change_password' => true,
+                ]);
+            } else {
+                $user->update([
+                    'name' => $name,
+                    'role_id' => $partnerRoleId ?: $user->role_id,
+                    'user_type' => 'funding_partner',
+                ]);
+            }
+
+            $funder->portalUsers()->syncWithoutDetaching([
+                $user->id => [
+                    'is_primary' => false,
+                    'invited_by' => auth()->id(),
+                    'invited_at' => now(),
+                ],
+            ]);
+
+            $allowedUserIds->push($user->id);
+
+            if ($plainPassword) {
+                try {
+                    Mail::to($user->email)->send(new FundingPartnerWelcome($funder->fresh(), $user, $plainPassword));
+                    $sentAnyEmail = true;
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send additional partner welcome email: ' . $e->getMessage());
+                }
+
+                PartnerActivityLog::logActivity(
+                    funderId: $funder->id,
+                    userId: $user->id,
+                    action: 'account_created',
+                    metadata: ['updated_by' => auth()->id(), 'access_type' => 'additional_partner_user']
+                );
+            }
+        }
+
+        $removeUserIds = $funder->portalUsers()
+            ->wherePivot('is_primary', false)
+            ->whereNotIn('users.id', $allowedUserIds->unique()->all())
+            ->pluck('users.id')
+            ->all();
+
+        if ($removeUserIds !== []) {
+            $funder->portalUsers()->detach($removeUserIds);
+        }
+
+        return $sentAnyEmail;
+    }
+
     private function loadPartnerDetails(Funder $funder): Funder
     {
         $funder->load([
             'relationshipManager:id,name,email',
             'lastContactOwner:id,name,email',
             'portalUser:id,name,email,created_at',
+            'portalUsers:id,name,email,created_at',
             'programFundings' => fn ($query) => $query
                 ->with([
                     'program:id,name',

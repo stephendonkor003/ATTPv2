@@ -56,6 +56,11 @@ class PartnerPortalPermissionsSeeder extends Seeder
                 'module' => 'partner_portal',
                 'description' => 'Edit own profile and change password',
             ],
+            [
+                'name' => 'partner.workplan.review',
+                'module' => 'partner_portal',
+                'description' => 'Review funded work plan items from the partner portal',
+            ],
 
             // Admin side - manage partner requests
             [
@@ -91,10 +96,16 @@ class PartnerPortalPermissionsSeeder extends Seeder
             ]
         );
 
-        // Assign partner permissions to Funding Partner role (excluding admin permissions)
+        // Assign read-only partner permissions to Funding Partner role by default.
         $partnerPermissions = $createdPermissions->filter(function ($permission) {
-            return str_starts_with($permission->name, 'partner.') &&
-                   !in_array($permission->name, ['partner.requests.manage', 'partner.requests.respond']);
+            return in_array($permission->name, [
+                'partner.dashboard.access',
+                'partner.programs.view',
+                'partner.projects.view',
+                'partner.budgets.view',
+                'partner.documents.view',
+                'partner.requests.view',
+            ], true);
         });
 
         $partnerRole->permissions()->sync($partnerPermissions->pluck('id'));

@@ -2846,6 +2846,7 @@ Route::middleware(['auth', 'funding.partner', 'permission:partner.dashboard.acce
                 ->name('workplan.index');
 
             Route::post('/work-plan/items/{item}/review', [ApprovedWorkPlanController::class, 'partnerReviewItem'])
+                ->middleware('permission:partner.workplan.review')
                 ->name('workplan.items.review');
 
             Route::get('/work-plan/items/{item}/document', [ApprovedWorkPlanController::class, 'partnerDownloadItemDocument'])

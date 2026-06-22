@@ -114,9 +114,48 @@
                     <strong>{{ $funder->portalUser?->email ?: 'Portal disabled' }}</strong>
                 </div>
                 <div class="partner-detail-row">
+                    <span>Portal users</span>
+                    <strong>{{ $funder->portalUsers?->count() ?: 0 }}</strong>
+                </div>
+                <div class="partner-detail-row">
                     <span>Default currency</span>
                     <strong>{{ strtoupper($funder->currency ?: 'N/A') }}</strong>
                 </div>
+            </div>
+
+            <div class="partner-crm-card p-4 mb-4">
+                <h5 class="card-title mb-3">Partner Portal Users</h5>
+
+                @if($funder->portalUsers->isEmpty())
+                    <div class="partner-empty-state">
+                        No portal users are linked to this partner yet.
+                    </div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Access</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($funder->portalUsers as $portalUser)
+                                    <tr>
+                                        <td class="fw-semibold">{{ $portalUser->name }}</td>
+                                        <td>{{ $portalUser->email }}</td>
+                                        <td>
+                                            <span class="badge {{ $portalUser->pivot?->is_primary ? 'bg-primary' : 'bg-light text-dark' }}">
+                                                {{ $portalUser->pivot?->is_primary ? 'Primary' : 'Read only' }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
             </div>
 
             <div class="partner-crm-card p-4 mb-4">

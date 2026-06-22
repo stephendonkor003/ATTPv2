@@ -136,7 +136,7 @@ class PartnerRequestController extends Controller
      */
     protected function getPartnerFunder(): Funder
     {
-        $funder = Funder::where('user_id', Auth::id())->first();
+        $funder = Auth::user()?->partnerFunder();
 
         if (!$funder) {
             abort(403, 'No funder account associated with this user.');

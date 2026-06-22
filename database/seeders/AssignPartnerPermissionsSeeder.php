@@ -26,9 +26,15 @@ class AssignPartnerPermissionsSeeder extends Seeder
 
         $this->command->info("✅ Found role: {$partnerRole->name} (ID: {$partnerRole->id})");
 
-        // Get all partner permissions (excluding admin-only permissions)
-        $partnerPermissions = Permission::where('name', 'like', 'partner.%')
-            ->whereNotIn('name', ['partner.requests.manage', 'partner.requests.respond'])
+        // Funding Partner is read-only by default.
+        $partnerPermissions = Permission::whereIn('name', [
+                'partner.dashboard.access',
+                'partner.programs.view',
+                'partner.projects.view',
+                'partner.budgets.view',
+                'partner.documents.view',
+                'partner.requests.view',
+            ])
             ->pluck('name')
             ->toArray();
 
@@ -37,6 +43,7 @@ class AssignPartnerPermissionsSeeder extends Seeder
         // Find all funding partner users
         $fundingPartners = User::where('user_type', 'funding_partner')
             ->orWhereHas('funderPortal')
+            ->orWhereHas('partnerFunders')
             ->get();
 
         if ($fundingPartners->isEmpty()) {
@@ -109,9 +116,8 @@ class AssignPartnerPermissionsSeeder extends Seeder
         $this->command->info('🔍 Verifying Funding Partner role permissions...');
         $rolePermissions = $partnerRole->permissions->pluck('name')->toArray();
 
-        $rolePartnerPerms = array_filter($rolePermissions, function($perm) {
-            return str_starts_with($perm, 'partner.') &&
-                   !in_array($perm, ['partner.requests.manage', 'partner.requests.respond']);
+        $rolePartnerPerms = array_filter($rolePermissions, function($perm) use ($partnerPermissions) {
+            return in_array($perm, $partnerPermissions, true);
         });
 
         $missingFromRole = array_diff($partnerPermissions, $rolePartnerPerms);

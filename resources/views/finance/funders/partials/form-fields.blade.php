@@ -2,6 +2,18 @@
     $partner = $funder ?? null;
     $portalAccess = (bool) old('has_portal_access', $partner?->has_portal_access);
     $lastContactAt = old('last_contact_at', optional($partner?->last_contact_at)->format('Y-m-d\TH:i'));
+    $existingPortalTeamRows = $partner?->portalUsers
+        ? $partner->portalUsers
+            ->reject(fn ($portalUser) => (string) $portalUser->id === (string) $partner?->user_id
+                || strcasecmp((string) $portalUser->email, (string) $partner?->contact_email) === 0)
+            ->map(fn ($portalUser) => ['name' => $portalUser->name, 'email' => $portalUser->email])
+            ->values()
+            ->all()
+        : [];
+    $portalTeamRows = collect(old('portal_users', $existingPortalTeamRows))
+        ->filter(fn ($row) => filled(data_get($row, 'name')) || filled(data_get($row, 'email')))
+        ->values()
+        ->all();
 @endphp
 
 <div class="row g-4">
@@ -192,6 +204,48 @@
                         <div class="text-muted">{{ $partner->portalUser->email }}</div>
                     </div>
                 @endif
+
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                        <div>
+                            <h6 class="fw-bold mb-1">Additional Partner Users</h6>
+                            <div class="small text-muted">Read-only users from the same partner organization.</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="addPartnerPortalUser">
+                            <i class="feather-plus me-1"></i> Add User
+                        </button>
+                    </div>
+
+                    <div id="partnerPortalUsers" class="d-grid gap-2">
+                        @forelse($portalTeamRows as $index => $portalUserRow)
+                            <div class="partner-portal-user-row border rounded-3 p-2 bg-light">
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-5">
+                                        <label class="form-label small fw-semibold">Name</label>
+                                        <input name="portal_users[{{ $index }}][name]" class="form-control"
+                                            value="{{ data_get($portalUserRow, 'name') }}"
+                                            placeholder="Partner staff name">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small fw-semibold">Email</label>
+                                        <input type="email" name="portal_users[{{ $index }}][email]" class="form-control"
+                                            value="{{ data_get($portalUserRow, 'email') }}"
+                                            placeholder="name@partner.org">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-outline-danger w-100" data-remove-partner-portal-user>
+                                            <i class="feather-trash-2"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        @empty
+                            <div class="partner-portal-user-empty text-muted small border rounded-3 p-3 bg-light">
+                                No additional partner users added yet.
+                            </div>
+                        @endforelse
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -211,6 +265,9 @@
             document.addEventListener('DOMContentLoaded', function () {
                 const portalCheckbox = document.getElementById('has_portal_access');
                 const contactFields = document.querySelectorAll('[data-portal-required]');
+                const portalUserList = document.getElementById('partnerPortalUsers');
+                const addPortalUserButton = document.getElementById('addPartnerPortalUser');
+                let portalUserIndex = {{ count($portalTeamRows) }};
 
                 if (!portalCheckbox) {
                     return;
@@ -224,6 +281,69 @@
 
                 portalCheckbox.addEventListener('change', syncPortalRequirements);
                 syncPortalRequirements();
+
+                const removeEmptyState = () => {
+                    portalUserList?.querySelector('.partner-portal-user-empty')?.remove();
+                };
+
+                const renumberPortalUsers = () => {
+                    portalUserList?.querySelectorAll('.partner-portal-user-row').forEach((row, index) => {
+                        row.querySelectorAll('input').forEach((input) => {
+                            input.name = input.name.replace(/portal_users\[\d+\]/, `portal_users[${index}]`);
+                        });
+                    });
+                    portalUserIndex = portalUserList?.querySelectorAll('.partner-portal-user-row').length || 0;
+                };
+
+                const addPortalUserRow = () => {
+                    if (!portalUserList) {
+                        return;
+                    }
+
+                    removeEmptyState();
+
+                    const row = document.createElement('div');
+                    row.className = 'partner-portal-user-row border rounded-3 p-2 bg-light';
+                    row.innerHTML = `
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold">Name</label>
+                                <input name="portal_users[${portalUserIndex}][name]" class="form-control" placeholder="Partner staff name">
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold">Email</label>
+                                <input type="email" name="portal_users[${portalUserIndex}][email]" class="form-control" placeholder="name@partner.org">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-outline-danger w-100" data-remove-partner-portal-user>
+                                    <i class="feather-trash-2"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    portalUserList.appendChild(row);
+                    portalUserIndex += 1;
+                };
+
+                addPortalUserButton?.addEventListener('click', addPortalUserRow);
+
+                portalUserList?.addEventListener('click', function (event) {
+                    const button = event.target.closest('[data-remove-partner-portal-user]');
+
+                    if (!button) {
+                        return;
+                    }
+
+                    button.closest('.partner-portal-user-row')?.remove();
+                    renumberPortalUsers();
+
+                    if (!portalUserList.querySelector('.partner-portal-user-row')) {
+                        const empty = document.createElement('div');
+                        empty.className = 'partner-portal-user-empty text-muted small border rounded-3 p-3 bg-light';
+                        empty.textContent = 'No additional partner users added yet.';
+                        portalUserList.appendChild(empty);
+                    }
+                });
             });
         </script>
     @endpush

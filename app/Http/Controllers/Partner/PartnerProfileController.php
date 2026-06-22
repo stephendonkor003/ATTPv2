@@ -18,7 +18,7 @@ class PartnerProfileController extends Controller
     public function edit()
     {
         $user = Auth::user();
-        $funder = $user->funderPortal;
+        $funder = $user->partnerFunder();
 
         if (!$funder) {
             abort(403, 'Unauthorized access');
@@ -40,7 +40,7 @@ class PartnerProfileController extends Controller
     public function update(Request $request)
     {
         $user = Auth::user();
-        $funder = $user->funderPortal;
+        $funder = $user->partnerFunder();
 
         if (!$funder) {
             abort(403, 'Unauthorized access');

@@ -75,6 +75,13 @@ class Funder extends BaseModel
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    public function portalUsers()
+    {
+        return $this->belongsToMany(User::class, 'funder_user')
+            ->withPivot(['is_primary', 'invited_by', 'invited_at'])
+            ->withTimestamps();
+    }
+
     public function relationshipManager()
     {
         return $this->belongsTo(User::class, 'relationship_manager_id');
@@ -106,12 +113,30 @@ class Funder extends BaseModel
 
     public function hasPortalAccess(): bool
     {
-        return $this->has_portal_access && $this->user_id !== null;
+        if (! $this->has_portal_access) {
+            return false;
+        }
+
+        if ($this->user_id !== null) {
+            return true;
+        }
+
+        if ($this->relationLoaded('portalUsers')) {
+            return $this->portalUsers->isNotEmpty();
+        }
+
+        return $this->portalUsers()->exists();
     }
 
     public function scopeWithPortalAccess($query)
     {
-        return $query->where('has_portal_access', true)->whereNotNull('user_id');
+        return $query
+            ->where('has_portal_access', true)
+            ->where(function ($query) {
+                $query
+                    ->whereNotNull('user_id')
+                    ->orWhereHas('portalUsers');
+            });
     }
 
     public function getLogoUrl(): ?string

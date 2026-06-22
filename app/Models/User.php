@@ -145,6 +145,25 @@ class User extends Authenticatable
         return $this->hasOne(Funder::class, 'user_id');
     }
 
+    public function partnerFunders(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Funder::class,
+            'funder_user'
+        )
+            ->withPivot(['is_primary', 'invited_by', 'invited_at'])
+            ->withTimestamps();
+    }
+
+    public function partnerFunder(): ?Funder
+    {
+        $funder = $this->relationLoaded('partnerFunders')
+            ? $this->partnerFunders->first()
+            : $this->partnerFunders()->where('has_portal_access', true)->first();
+
+        return $funder ?: $this->funderPortal;
+    }
+
     public function thinkTankMembership()
     {
         return $this->hasOne(ConsortiumThinkTank::class, 'portal_user_id');

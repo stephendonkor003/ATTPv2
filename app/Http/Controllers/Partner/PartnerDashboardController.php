@@ -52,10 +52,24 @@ class PartnerDashboardController extends Controller
             ->get();
 
         $reportingOverview = $this->buildReportingOverview($funder, $fundings);
+        $fundedPrograms = $fundings
+            ->map(fn (ProgramFunding $funding) => $this->resolveProgramForFunding($funding))
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        $fundedProjects = $fundedPrograms->isNotEmpty()
+            ? Project::with(['program:id,name', 'governanceNode.level'])
+                ->withCount('activities')
+                ->whereIn('program_id', $fundedPrograms->pluck('id')->all())
+                ->orderBy('name')
+                ->get()
+            : collect();
 
         // Calculate statistics
         $stats = [
             'total_programs'    => $fundings->count(),
+            'total_projects'    => $fundedProjects->count(),
             'total_funding'     => $fundings->sum('approved_amount'),
             'active_programs'   => $fundings->filter(fn($f) => !$f->isExpired())->count(),
             'pending_requests'  => $funder->informationRequests()->where('status', 'pending')->count(),
@@ -63,7 +77,7 @@ class PartnerDashboardController extends Controller
             'think_tanks'       => $reportingOverview['think_tank_count'],
         ];
 
-        return view('partner.dashboard', compact('funder', 'fundings', 'stats', 'reportingOverview'));
+        return view('partner.dashboard', compact('funder', 'fundings', 'fundedProjects', 'stats', 'reportingOverview'));
     }
 
     /**
@@ -575,7 +589,7 @@ class PartnerDashboardController extends Controller
      */
     protected function getPartnerFunder(): Funder
     {
-        $funder = Funder::where('user_id', Auth::id())->first();
+        $funder = Auth::user()?->partnerFunder();
 
         if (!$funder) {
             abort(403, 'No funder account associated with this user.');

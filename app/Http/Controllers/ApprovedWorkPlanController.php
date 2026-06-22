@@ -198,10 +198,10 @@ class ApprovedWorkPlanController extends Controller
             'awpIndexRoute' => 'partner.workplan.index',
             'awpReviewRoute' => 'partner.workplan.items.review',
             'awpDocumentRoute' => 'partner.workplan.items.document',
-            'awpCanReview' => true,
+            'awpCanReview' => (bool) $request->user()?->hasPermission('partner.workplan.review'),
             'awpCanEdit' => false,
             'awpAllowDocumentUpload' => false,
-            'awpReadOnly' => false,
+            'awpReadOnly' => ! $request->user()?->hasPermission('partner.workplan.review'),
         ]);
     }
 
@@ -2105,12 +2105,12 @@ class ApprovedWorkPlanController extends Controller
     {
         $user = $request->user();
 
-        return (bool) ($user && ($user->hasPermission('finance.awp.approve') || $user->isFundingPartner()));
+        return (bool) ($user && ($user->hasPermission('finance.awp.approve') || $user->hasPermission('partner.workplan.review')));
     }
 
     private function partnerFunder(Request $request): Funder
     {
-        $funder = Funder::where('user_id', $request->user()?->id ?? Auth::id())->first();
+        $funder = $request->user()?->partnerFunder() ?? Auth::user()?->partnerFunder();
 
         abort_unless($funder && $funder->hasPortalAccess(), 403, 'No funding partner account is linked to this user.');
 

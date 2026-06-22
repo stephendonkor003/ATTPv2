@@ -29,7 +29,7 @@ class EnsureFundingPartner
         }
 
         // Check if user has portal access
-        $funder = $user->funderPortal;
+        $funder = $user->partnerFunder();
         if (!$funder || !$funder->hasPortalAccess()) {
             abort(403, 'Your partner portal access has been disabled. Please contact the administrator.');
         }
