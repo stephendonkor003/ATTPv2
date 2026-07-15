@@ -14,6 +14,10 @@ class Program extends BaseModel
     'sector_id',
     'department_id',
     'governance_node_id',
+    'ttl_user_id',
+    'ttl_name',
+    'ttl_email',
+    'ttl_notified_at',
     'name',
     'description',
     'expected_outcome_type',
@@ -25,6 +29,10 @@ class Program extends BaseModel
     'total_budget',
     'created_by',
 ];
+
+    protected $casts = [
+        'ttl_notified_at' => 'datetime',
+    ];
 
 
     public function sector()
@@ -53,6 +61,11 @@ public function department()
 public function governanceNode()
 {
     return $this->belongsTo(GovernanceNode::class, 'governance_node_id');
+}
+
+public function ttlUser()
+{
+    return $this->belongsTo(User::class, 'ttl_user_id');
 }
 
 // Program has many funding approvals

@@ -206,17 +206,29 @@ class ConsortiumOperationsController extends Controller
             }
 
             if ($user->user_type !== 'think_tank') {
-                return back()->withErrors(['email' => 'This email is already assigned to another account type.']);
+                return back()->withErrors(['email' => 'This email cannot be used for a think tank portal account.']);
             }
 
-            $user->update(['role_id' => $user->role_id ?: $roleId]);
+            $user->update([
+                'role_id' => $user->role_id ?: $roleId,
+                'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
+            ]);
             $data['portal_user_id'] = $user->id;
             $portalUser = $user;
         } elseif (! empty($data['portal_user_id'])) {
             $portalUser = User::find($data['portal_user_id']);
+
+            if ($portalUser && $portalUser->user_type !== 'think_tank') {
+                return back()->withErrors(['portal_user_id' => 'This account cannot be used for the think tank portal.']);
+            }
         }
 
         $member = ConsortiumThinkTank::create($data);
+
+        $portalUser?->update([
+            'think_tank_member_id' => $member->id,
+            'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
+        ]);
 
         if ($initialDisbursedAmount > 0) {
             ConsortiumFundAllocation::create([
@@ -270,8 +282,16 @@ class ConsortiumOperationsController extends Controller
     public function storeReport(Request $request, Consortium $consortium)
     {
         $data = $request->validate([
-            'think_tank_member_id' => 'nullable|exists:attp_consortium_think_tanks,id',
-            'workplan_id' => 'nullable|exists:attp_workplans,id',
+            'think_tank_member_id' => [
+                'nullable',
+                Rule::exists('attp_consortium_think_tanks', 'id')
+                    ->where('consortium_id', $consortium->id),
+            ],
+            'workplan_id' => [
+                'nullable',
+                Rule::exists('attp_workplans', 'id')
+                    ->where('consortium_id', $consortium->id),
+            ],
             'title' => 'required|string|max:255',
             'reporting_period_start' => 'nullable|date',
             'reporting_period_end' => 'nullable|date|after_or_equal:reporting_period_start',

@@ -1,0 +1,337 @@
+@php
+    $isEditing = (bool) $editingIndicator;
+    $formAction = $isEditing
+        ? route('budget.me.indicators.update', $editingIndicator)
+        : route('budget.me.indicators.store');
+    $selectedResponsibleUser = (string) old(
+        'responsible_user_id',
+        $editingResponsibleUserIds[0] ?? ''
+    );
+    $selectedOwner = (string) old('owner_reference', $editingOwnerReference ?? '');
+    $ownerPortfolioMap = $ownerPortfolioMap ?? [];
+    $selectedPortfolioId = (string) old(
+        'portfolio_id',
+        $editingPortfolioId ?? ($ownerPortfolioMap[$selectedOwner] ?? '')
+    );
+    if ($selectedPortfolioId === '' && ($portfolios ?? collect())->count() === 1) {
+        $selectedPortfolioId = (string) $portfolios->first()->id;
+    }
+    if ($selectedOwner === 'portfolio:'.$selectedPortfolioId) {
+        $selectedOwner = '';
+    }
+    $targetValue = old('target_value', $editingTargetValue ?? '');
+    $sourceValue = old('data_source', $editingPrimarySourceValue ?? '');
+    $showConfigurationPortfolio = ($portfolios ?? collect())->count() > 1;
+@endphp
+
+<section class="me-panel" id="indicator-form" aria-labelledby="indicator-form-title">
+    <div class="me-panel-header">
+        <div>
+            <h2 class="me-panel-title" id="indicator-form-title">
+                {{ $isEditing ? 'Edit indicator' : 'Add a new indicator' }}
+            </h2>
+            <p class="me-panel-subtitle">Complete the essential measurement and accountability information.</p>
+        </div>
+        <a href="{{ route('budget.me.indicators.index') }}" class="btn btn-sm btn-light border">
+            <i class="feather-x me-1"></i> Close form
+        </a>
+    </div>
+
+    <div class="me-panel-body">
+        <div class="me-required-note" role="note">
+            <i class="feather-info mt-1" aria-hidden="true"></i>
+            <span>All fields marked with <strong>*</strong> are required. Keep definitions concise and use the same unit for the baseline and target.</span>
+        </div>
+
+        <form method="POST" action="{{ $formAction }}" novalidate data-indicator-form>
+            @csrf
+            @if ($isEditing)
+                @method('PUT')
+            @endif
+
+            <div class="me-form-section">
+                <h3 class="me-form-section-title">1. Portfolio and hierarchy</h3>
+                <div class="me-scope-card" data-indicator-scope>
+                    <div class="row g-3">
+                        <div class="col-lg-5">
+                            <label class="form-label" for="indicator-portfolio">Portfolio <span class="text-danger">*</span></label>
+                            <select
+                                id="indicator-portfolio"
+                                name="portfolio_id"
+                                class="form-select @error('portfolio_id') is-invalid @enderror"
+                                aria-describedby="indicator-portfolio-help @error('portfolio_id') indicator-portfolio-error @enderror"
+                                data-indicator-portfolio
+                                required
+                            >
+                                <option value="">Select portfolio first</option>
+                                @foreach ($portfolios as $portfolio)
+                                    <option value="{{ $portfolio->id }}" @selected($selectedPortfolioId === (string) $portfolio->id)>{{ $portfolio->name }}</option>
+                                @endforeach
+                            </select>
+                            <small class="me-field-help" id="indicator-portfolio-help">This selection controls the available hierarchy, unit and reporting frequency.</small>
+                            @error('portfolio_id')
+                                <div class="invalid-feedback" id="indicator-portfolio-error">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-lg-7">
+                            <label class="form-label" for="indicator-owner-reference">Results hierarchy owner <span class="text-muted fw-normal">(optional)</span></label>
+                            <select
+                                id="indicator-owner-reference"
+                                name="owner_reference"
+                                class="form-select @error('owner_reference') is-invalid @enderror"
+                                aria-describedby="indicator-owner-help indicator-scope-status @error('owner_reference') indicator-owner-error @enderror"
+                                data-indicator-owner
+                            >
+                                <option value="">Use the selected portfolio</option>
+                                @if ($programs->isNotEmpty())
+                                    <optgroup label="Programmes">
+                                        @foreach ($programs as $program)
+                                            @php($ownerValue = 'program:'.$program->id)
+                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $program->name }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endif
+                                @if ($projects->isNotEmpty())
+                                    <optgroup label="Projects">
+                                        @foreach ($projects as $project)
+                                            @php($ownerValue = 'project:'.$project->id)
+                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $project->name }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endif
+                                @if ($activities->isNotEmpty())
+                                    <optgroup label="Activities">
+                                        @foreach ($activities as $activity)
+                                            @php($ownerValue = 'activity:'.$activity->id)
+                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $activity->name }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endif
+                                @if ($subActivities->isNotEmpty())
+                                    <optgroup label="Sub-activities">
+                                        @foreach ($subActivities as $subActivity)
+                                            @php($ownerValue = 'sub_activity:'.$subActivity->id)
+                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $subActivity->name }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endif
+                            </select>
+                            <small class="me-field-help" id="indicator-owner-help">Leave this as “Use the selected portfolio” unless the indicator belongs to a specific programme, project or activity.</small>
+                            @error('owner_reference')<div class="invalid-feedback" id="indicator-owner-error">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+                    <div class="me-scope-status" id="indicator-scope-status" data-indicator-scope-status role="status" aria-live="polite"></div>
+                </div>
+            </div>
+
+            <div class="me-form-section">
+                <h3 class="me-form-section-title">2. Indicator identity</h3>
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        <label class="form-label" for="indicator-code">Indicator ID</label>
+                        <input
+                            type="text"
+                            id="indicator-code"
+                            class="form-control text-uppercase"
+                            value="{{ $editingIndicator->indicator_code ?? 'Assigned automatically when saved' }}"
+                            aria-describedby="indicator-code-help"
+                            readonly
+                        >
+                        <small class="me-field-help" id="indicator-code-help">The system assigns a permanent, unique ID so duplicate codes cannot be created.</small>
+                    </div>
+
+                    <div class="col-lg-8">
+                        <label class="form-label" for="indicator-name">Indicator name <span class="text-danger">*</span></label>
+                        <input
+                            type="text"
+                            id="indicator-name"
+                            name="name"
+                            class="form-control @error('name') is-invalid @enderror"
+                            value="{{ old('name', $editingIndicator->name ?? '') }}"
+                            maxlength="255"
+                            placeholder="State exactly what will be measured"
+                            @error('name') aria-describedby="indicator-name-error" @enderror
+                            required
+                        >
+                        @error('name')
+                            <div class="invalid-feedback" id="indicator-name-error">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label" for="indicator-definition">Definition <span class="text-danger">*</span></label>
+                        <textarea
+                            id="indicator-definition"
+                            name="definition"
+                            class="form-control @error('definition') is-invalid @enderror"
+                            rows="3"
+                            maxlength="5000"
+                            placeholder="Explain what is measured, who or what is included, and how the value should be interpreted."
+                            aria-describedby="indicator-definition-help @error('definition') indicator-definition-error @enderror"
+                            required
+                        >{{ old('definition', $editingIndicator->definitions ?? '') }}</textarea>
+                        <small class="me-field-help" id="indicator-definition-help">Use one clear definition so all reporting teams measure the indicator consistently.</small>
+                        @error('definition')
+                            <div class="invalid-feedback" id="indicator-definition-error">{{ $message }}</div>
+                        @enderror
+                    </div>
+                </div>
+            </div>
+
+            <div class="me-form-section">
+                <h3 class="me-form-section-title">3. Measurement plan</h3>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="me-field-label-row">
+                            <label class="form-label" for="indicator-unit">Unit of measurement <span class="text-danger">*</span></label>
+                            <a
+                                href="{{ route('budget.me-configuration.units.create') }}"
+                                class="me-inline-create-link"
+                                data-inline-config-open="unit"
+                                aria-controls="indicatorUnitCreateModal"
+                                aria-haspopup="dialog"
+                                aria-label="Create a new unit of measurement without leaving this indicator"
+                            >
+                                <i class="feather-plus" aria-hidden="true"></i> New unit
+                            </a>
+                        </div>
+                        <select
+                            id="indicator-unit"
+                            name="unit_id"
+                            class="form-select @error('unit_id') is-invalid @enderror"
+                            aria-describedby="indicator-unit-selection-status @error('unit_id') indicator-unit-error @enderror"
+                            data-indicator-portfolio-dependent
+                            required
+                        >
+                            <option value="">Select unit</option>
+                            @foreach ($units as $unit)
+                                <option value="{{ $unit->id }}" data-portfolio-id="{{ $unit->portfolio_id }}" @selected((string) old('unit_id', $editingIndicator->unit_id ?? '') === (string) $unit->id)>
+                                    {{ $unit->name }}{{ $unit->symbol ? ' ('.$unit->symbol.')' : '' }}@if($showConfigurationPortfolio && $unit->portfolio?->name) &mdash; {{ $unit->portfolio->name }}@endif
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('unit_id')<div class="invalid-feedback" id="indicator-unit-error">{{ $message }}</div>@enderror
+                        <small
+                            class="me-inline-selection-status"
+                            id="indicator-unit-selection-status"
+                            data-inline-selection-status="unit"
+                            role="status"
+                            aria-live="polite"
+                        ></small>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label" for="indicator-baseline">Baseline <span class="text-danger">*</span></label>
+                        <input
+                            type="number"
+                            id="indicator-baseline"
+                            name="baseline_value"
+                            class="form-control @error('baseline_value') is-invalid @enderror"
+                            value="{{ old('baseline_value', $editingIndicator->baseline_value ?? '') }}"
+                            step="any"
+                            placeholder="Starting value"
+                            required
+                        >
+                        @error('baseline_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label" for="indicator-target">Target <span class="text-danger">*</span></label>
+                        <input
+                            type="number"
+                            id="indicator-target"
+                            name="target_value"
+                            class="form-control @error('target_value') is-invalid @enderror"
+                            value="{{ $targetValue }}"
+                            step="any"
+                            placeholder="Expected achievement"
+                            required
+                        >
+                        @error('target_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                </div>
+            </div>
+
+            <div class="me-form-section">
+                <h3 class="me-form-section-title">4. Reporting and accountability</h3>
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        <div class="me-field-label-row">
+                            <label class="form-label" for="indicator-frequency">Reporting frequency <span class="text-danger">*</span></label>
+                            <a
+                                href="{{ route('budget.me-configuration.frequencies.create') }}"
+                                class="me-inline-create-link"
+                                data-inline-config-open="frequency"
+                                aria-controls="indicatorFrequencyCreateModal"
+                                aria-haspopup="dialog"
+                                aria-label="Create a new reporting frequency without leaving this indicator"
+                            >
+                                <i class="feather-plus" aria-hidden="true"></i> New frequency
+                            </a>
+                        </div>
+                        <select
+                            id="indicator-frequency"
+                            name="frequency_of_reporting_id"
+                            class="form-select @error('frequency_of_reporting_id') is-invalid @enderror"
+                            aria-describedby="indicator-frequency-selection-status @error('frequency_of_reporting_id') indicator-frequency-error @enderror"
+                            data-indicator-portfolio-dependent
+                            required
+                        >
+                            <option value="">Select frequency</option>
+                            @foreach ($frequencies as $frequency)
+                                <option value="{{ $frequency->id }}" data-portfolio-id="{{ $frequency->portfolio_id }}" @selected((string) old('frequency_of_reporting_id', $editingIndicator->frequency_of_reporting_id ?? '') === (string) $frequency->id)>
+                                    {{ $frequency->name }}@if($showConfigurationPortfolio && $frequency->portfolio?->name) &mdash; {{ $frequency->portfolio->name }}@endif
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('frequency_of_reporting_id')<div class="invalid-feedback" id="indicator-frequency-error">{{ $message }}</div>@enderror
+                        <small
+                            class="me-inline-selection-status"
+                            id="indicator-frequency-selection-status"
+                            data-inline-selection-status="frequency"
+                            role="status"
+                            aria-live="polite"
+                        ></small>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <label class="form-label" for="indicator-data-source">Data source <span class="text-danger">*</span></label>
+                        <input
+                            type="text"
+                            id="indicator-data-source"
+                            name="data_source"
+                            class="form-control @error('data_source') is-invalid @enderror"
+                            value="{{ $sourceValue }}"
+                            maxlength="255"
+                            placeholder="e.g. survey, DHIS2, quarterly report"
+                            required
+                        >
+                        @error('data_source')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-lg-4">
+                        <label class="form-label" for="indicator-responsible-person">Responsible person <span class="text-danger">*</span></label>
+                        <select id="indicator-responsible-person" name="responsible_user_id" class="form-select @error('responsible_user_id') is-invalid @enderror" required>
+                            <option value="">Select indicator owner</option>
+                            @foreach ($users as $user)
+                                <option value="{{ $user->id }}" @selected($selectedResponsibleUser === (string) $user->id)>
+                                    {{ $user->name }}{{ $user->email ? ' — '.$user->email : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('responsible_user_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                </div>
+            </div>
+
+            <div class="me-form-actions">
+                <a href="{{ route('budget.me.indicators.index') }}" class="btn btn-light border">Cancel</a>
+                <button type="submit" class="me-primary-action">
+                    <i class="feather-save" aria-hidden="true"></i>
+                    {{ $isEditing ? 'Save changes' : 'Create indicator' }}
+                </button>
+            </div>
+        </form>
+    </div>
+</section>

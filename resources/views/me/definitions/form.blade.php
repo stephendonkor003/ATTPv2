@@ -51,6 +51,8 @@
     <div class="card-body">
         <h5 class="fw-bold mb-3">Create New Formula</h5>
         <div class="row g-3 mb-3">
+            @include('me.partials.portfolio-scope-field')
+
             <div class="col-md-6">
                 <label class="form-label">Formula Name <span class="text-danger">*</span></label>
                 <input type="text" name="name" class="form-control" value="{{ old('name', $definition->name ?? '') }}" required placeholder="Enter formula name...">

@@ -19,6 +19,8 @@
                 <form action="{{ route('budget.me-configuration.indicator-levels.store') }}" method="POST" class="row g-3">
                     @csrf
 
+                    @include('me.partials.portfolio-scope-field')
+
                     <div class="col-md-6">
                         <label class="form-label">Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control @error('name') is-invalid @enderror" name="name"

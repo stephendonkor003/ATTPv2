@@ -97,6 +97,7 @@
                         <tr>
                             <th class="ps-4">Code</th>
                             <th>Title</th>
+                            <th>Portfolio</th>
                             <th>Activity</th>
                             <th>Method</th>
                             <th class="text-center">Stage</th>
@@ -118,6 +119,9 @@
                                     @if($plan->subActivity)
                                         <small class="text-muted">{{ $plan->subActivity->name }}</small>
                                     @endif
+                                </td>
+                                <td>
+                                    {{ $plan->governanceNode?->name ?? '-' }}
                                 </td>
                                 <td>
                                     @if($plan->activity)

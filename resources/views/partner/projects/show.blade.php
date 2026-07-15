@@ -66,6 +66,23 @@
                             </p>
                         </div>
 
+                        <div class="col-md-6">
+                            <label class="text-muted small">Task Team Leader</label>
+                            <p class="fw-semibold mb-0">
+                                {{ $project->program?->ttl_name ?: ($project->program?->ttlUser?->name ?? 'Unassigned') }}
+                                @if($project->program?->ttl_email || $project->program?->ttlUser?->email)
+                                    <br><small class="text-muted">{{ $project->program?->ttl_email ?: $project->program?->ttlUser?->email }}</small>
+                                @endif
+                            </p>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="text-muted small">Program Progress Share</label>
+                            <p class="fw-semibold mb-0">
+                                <span class="badge bg-success-subtle text-success">{{ $project->partner_progress_percent ?? 0 }}%</span>
+                            </p>
+                        </div>
+
                         @if($project->description)
                             <div class="col-md-12">
                                 <label class="text-muted small">{{ __('partner.description') }}</label>

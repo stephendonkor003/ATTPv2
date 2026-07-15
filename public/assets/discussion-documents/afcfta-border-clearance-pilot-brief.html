@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="ATTP practical discussion brief and response worksheet for a 90-day AfCFTA border clearance pilot.">
+    <title>ATTP | 90-day border clearance pilot brief</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #17352b;
+            --muted: #557066;
+            --green: #006b3f;
+            --green-dark: #004c2d;
+            --green-soft: #eaf5ef;
+            --gold: #c69214;
+            --gold-soft: #fff7dc;
+            --line: #cfded6;
+            --paper: #ffffff;
+            --canvas: #eef4f1;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--canvas);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 15px;
+            line-height: 1.55;
+        }
+
+        main {
+            width: min(960px, calc(100% - 32px));
+            margin: 32px auto;
+            overflow: hidden;
+            background: var(--paper);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: 0 18px 45px rgba(23, 53, 43, .11);
+        }
+
+        header {
+            position: relative;
+            padding: 38px 42px 34px;
+            color: white;
+            background: linear-gradient(130deg, var(--green-dark), var(--green) 64%, #138557);
+        }
+
+        header::after {
+            position: absolute;
+            right: -52px;
+            bottom: -86px;
+            width: 260px;
+            height: 260px;
+            content: "";
+            border: 46px solid rgba(255, 255, 255, .08);
+            border-radius: 50%;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            padding: 6px 10px;
+            border: 1px solid rgba(255, 255, 255, .42);
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            max-width: 700px;
+            margin: 18px 0 10px;
+            font-size: clamp(30px, 5vw, 46px);
+            line-height: 1.08;
+            letter-spacing: -.035em;
+        }
+
+        header p {
+            max-width: 680px;
+            margin: 0;
+            color: rgba(255, 255, 255, .84);
+            font-size: 17px;
+        }
+
+        .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 22px;
+        }
+
+        .meta span {
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, .12);
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .content { padding: 38px 42px 46px; }
+
+        h2 {
+            margin: 0 0 10px;
+            color: var(--green-dark);
+            font-size: 22px;
+            line-height: 1.25;
+        }
+
+        h3 {
+            margin: 0 0 8px;
+            color: var(--green-dark);
+            font-size: 16px;
+        }
+
+        p { margin: 0 0 14px; }
+
+        .prompt {
+            margin-bottom: 28px;
+            padding: 24px;
+            border: 1px solid #e2cf8a;
+            border-left: 6px solid var(--gold);
+            border-radius: 12px;
+            background: var(--gold-soft);
+        }
+
+        .prompt strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #78580b;
+            font-size: 13px;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+
+        .prompt p {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 750;
+            line-height: 1.4;
+        }
+
+        .scenario {
+            margin-bottom: 28px;
+            padding: 20px 22px;
+            border-radius: 12px;
+            background: var(--green-soft);
+        }
+
+        .response-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin: 14px 0 28px;
+            padding: 0;
+            list-style: none;
+            counter-reset: response-step;
+        }
+
+        .response-grid li {
+            min-height: 124px;
+            padding: 18px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            counter-increment: response-step;
+        }
+
+        .response-grid li::before {
+            display: grid;
+            width: 30px;
+            height: 30px;
+            margin-bottom: 10px;
+            place-items: center;
+            content: counter(response-step);
+            color: white;
+            background: var(--green);
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .response-grid p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        table {
+            width: 100%;
+            margin: 14px 0 28px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 12px;
+        }
+
+        th, td {
+            padding: 12px 14px;
+            border-right: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th:last-child, td:last-child { border-right: 0; }
+        tbody tr:last-child td { border-bottom: 0; }
+
+        th {
+            color: var(--green-dark);
+            background: var(--green-soft);
+            font-size: 13px;
+        }
+
+        td { height: 52px; }
+
+        .checklist {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px 20px;
+            margin: 14px 0 26px;
+            padding: 0;
+            list-style: none;
+        }
+
+        .checklist li {
+            position: relative;
+            padding-left: 28px;
+        }
+
+        .checklist li::before {
+            position: absolute;
+            left: 0;
+            top: 2px;
+            width: 17px;
+            height: 17px;
+            content: "";
+            border: 2px solid var(--green);
+            border-radius: 4px;
+        }
+
+        footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            padding-top: 20px;
+            color: var(--muted);
+            border-top: 1px solid var(--line);
+            font-size: 13px;
+        }
+
+        footer strong { color: var(--green-dark); }
+
+        @media (max-width: 680px) {
+            main { width: 100%; margin: 0; border: 0; border-radius: 0; }
+            header, .content { padding: 28px 22px; }
+            .response-grid, .checklist { grid-template-columns: 1fr; }
+            table { display: block; overflow-x: auto; }
+            footer { align-items: flex-start; flex-direction: column; }
+        }
+
+        @media print {
+            @page { size: A4; margin: 12mm; }
+            body { background: white; font-size: 10.5pt; }
+            main { width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+            header { padding: 22px 26px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            h1 { font-size: 27pt; }
+            .content { padding: 22px 26px; }
+            .prompt, .scenario, .response-grid li, table { break-inside: avoid; }
+            .response-grid li { min-height: 92px; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <span class="eyebrow">ATTP policy community · Practical discussion brief</span>
+        <h1>90-day border clearance challenge</h1>
+        <p>Making AfCFTA implementation more predictable for women-led small and medium enterprises.</p>
+        <div class="meta" aria-label="Discussion details">
+            <span>Theme: Trade &amp; Investment</span>
+            <span>Format: Evidence-led discussion</span>
+            <span>Time horizon: 90 days</span>
+        </div>
+    </header>
+
+    <div class="content">
+        <section class="prompt" aria-labelledby="main-question">
+            <strong id="main-question">Main discussion question</strong>
+            <p>If a border agency could test one change within 90 days, what should it change to make cross-border trade faster and more predictable for women-led small businesses?</p>
+        </section>
+
+        <section class="scenario" aria-labelledby="scenario-heading">
+            <h2 id="scenario-heading">The practical scenario</h2>
+            <p>A regional border post receives repeated reports of duplicated paperwork, unclear fees, long queues, and traders having to make several visits. The participating institutions have agreed to test one operational improvement, using existing authority and a modest implementation budget.</p>
+            <p><strong>Your task:</strong> recommend a focused pilot that can be launched, measured, and reviewed within 90 days.</p>
+        </section>
+
+        <section aria-labelledby="response-heading">
+            <h2 id="response-heading">Structure your contribution</h2>
+            <ol class="response-grid">
+                <li>
+                    <h3>Place and problem</h3>
+                    <p>Name the country, corridor, or border post and describe the operational bottleneck.</p>
+                </li>
+                <li>
+                    <h3>One practical change</h3>
+                    <p>Propose one rule, process, information, or coordination improvement suitable for a 90-day pilot.</p>
+                </li>
+                <li>
+                    <h3>Accountable actors</h3>
+                    <p>Identify the lead agency and the public, private, or regional partners needed to deliver it.</p>
+                </li>
+                <li>
+                    <h3>Evidence of progress</h3>
+                    <p>Provide a baseline, a target, and one indicator that can be measured before and after the pilot.</p>
+                </li>
+                <li>
+                    <h3>Inclusion safeguard</h3>
+                    <p>Explain how small and informal traders will be reached without new digital, language, safety, or accessibility barriers.</p>
+                </li>
+                <li>
+                    <h3>Learning decision</h3>
+                    <p>State what result would justify scaling, changing, or stopping the pilot after 90 days.</p>
+                </li>
+            </ol>
+        </section>
+
+        <section aria-labelledby="measure-heading">
+            <h2 id="measure-heading">Simple measurement worksheet</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Indicator</th>
+                        <th scope="col">Current baseline</th>
+                        <th scope="col">90-day target</th>
+                        <th scope="col">Data source / owner</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Clearance time</td><td></td><td></td><td></td></tr>
+                    <tr><td>Number of steps or visits</td><td></td><td></td><td></td></tr>
+                    <tr><td>Official cost per consignment</td><td></td><td></td><td></td></tr>
+                    <tr><td>Trader experience measure</td><td></td><td></td><td></td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section aria-labelledby="quality-heading">
+            <h2 id="quality-heading">Before you post</h2>
+            <ul class="checklist">
+                <li>Keep the recommendation specific enough to test.</li>
+                <li>Distinguish observed evidence from assumptions.</li>
+                <li>Include the perspective of affected traders.</li>
+                <li>Do not disclose personal or commercially sensitive data.</li>
+            </ul>
+        </section>
+
+        <footer>
+            <span><strong>ATTP policy community</strong><br>Evidence-informed dialogue for practical policy action.</span>
+            <span>Read online, download, or use your browser's print option to save as PDF.</span>
+        </footer>
+    </div>
+</main>
+</body>
+</html>

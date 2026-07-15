@@ -32,6 +32,11 @@
                                     </option>
                                 @endforeach
                             </select>
+                            @if ($evaluations->isEmpty())
+                                <small class="text-danger">
+                                    No portfolio-owned evaluation template is active for this procurement.
+                                </small>
+                            @endif
                         </div>
 
                         <div class="col-md-4">
@@ -98,7 +103,7 @@
                                         </a>
 
                                         @if ($a->status === 'submitted')
-                                            <a href="{{ route('eval.assign.compare', $a->id) }}"
+                                            <a href="{{ route('my.eval.compare', $a->id) }}"
                                                 class="btn btn-sm btn-outline-success">
                                                 <i class="feather-bar-chart-2 me-1"></i> Compare
                                             </a>

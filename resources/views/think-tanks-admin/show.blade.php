@@ -330,6 +330,44 @@
         </div>
 
         @can('think_tanks.directory.edit')
+            @if (auth()->user()?->isAdmin() || auth()->user()?->isSuperAdmin())
+                <div class="card tt-profile-card mb-4">
+                    <div class="card-header bg-white border-0">
+                        <h5 class="mb-1 fw-bold">Portal Logo</h5>
+                        <div class="text-muted small">Shown beside the AU identity and as the think tank portal watermark.</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-auto">
+                                <div class="d-flex align-items-center justify-content-center border rounded bg-light" style="width: 104px; height: 104px;">
+                                    @if ($thinkTank->logo_url)
+                                        <img src="{{ $thinkTank->logo_url }}" alt="{{ $thinkTank->name }} logo" style="max-width: 86px; max-height: 86px; object-fit: contain;">
+                                    @else
+                                        <i class="feather-image text-muted" style="font-size: 2rem;"></i>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="col">
+                                <form method="POST" action="{{ route('think-tanks-admin.logo.update', $thinkTank) }}" enctype="multipart/form-data">
+                                    @csrf
+                                    @method('PUT')
+                                    <label class="form-label fw-semibold" for="think-tank-logo">Choose logo</label>
+                                    <input class="form-control" id="think-tank-logo" type="file" name="logo" accept="image/png,image/jpeg,image/webp">
+                                    <div class="form-text">PNG, JPEG, or WebP, up to 5 MB. A transparent PNG works best.</div>
+                                    @if ($thinkTank->logo_path)
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" id="remove-think-tank-logo" type="checkbox" name="remove_logo" value="1">
+                                            <label class="form-check-label" for="remove-think-tank-logo">Remove the current logo</label>
+                                        </div>
+                                    @endif
+                                    <button class="btn btn-primary btn-sm mt-3" type="submit">Save Portal Logo</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
             <div class="card tt-profile-card mb-4">
                 <div class="card-header bg-white border-0"><h5 class="mb-0 fw-bold">Edit Profile</h5></div>
                 <div class="card-body">

@@ -1,16 +1,19 @@
 <?php
 
 use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\AuthenticateDiscussionParticipant;
 use App\Http\Middleware\EnsureFundingPartner;
 use App\Http\Middleware\EnsureMemberState;
 use App\Http\Middleware\EnsureNotFundingPartner;
 use App\Http\Middleware\EnsureOtpVerified;
 use App\Http\Middleware\EnsurePasswordNotExpired;
+use App\Http\Middleware\EnsureThinkTankAreaAccess;
 use App\Http\Middleware\EnsureThinkTankUser;
 use App\Http\Middleware\InjectWebsiteVisitTracker;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use App\Jobs\IndicatorReminderJob;
+use App\Jobs\ProcessGrmEscalations;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -19,6 +22,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__ . '/../routes/web.php',
+        api: __DIR__ . '/../routes/api.php',
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
@@ -26,6 +30,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule): void {
         // Send indicator reminder emails every 4 hours via queued job.
         $schedule->job(new IndicatorReminderJob())->everyFourHours();
+
+        // Process GRM reminders and escalations based on configured response clocks.
+        $schedule->job(new ProcessGrmEscalations())->hourly();
 
         // Clear Laravel cache buildup 6 times per day.
         $schedule->command('optimize:clear')->everyFourHours()->withoutOverlapping();
@@ -39,10 +46,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'permission' => CheckPermission::class,
+            'discussion.participant' => AuthenticateDiscussionParticipant::class,
             'funding.partner' => EnsureFundingPartner::class,
             'not.funding.partner' => EnsureNotFundingPartner::class,
             'member.state' => EnsureMemberState::class,
             'think.tank' => EnsureThinkTankUser::class,
+            'think.tank.area' => EnsureThinkTankAreaAccess::class,
             'password.not.expired' => EnsurePasswordNotExpired::class,
             'otp.verified' => EnsureOtpVerified::class,
         ]);

@@ -21,6 +21,7 @@ class MeIndicatorsManagementReportExport implements FromArray, WithStyles, WithC
         $data = [];
 
         $data[] = [
+            'Portfolio',
             'Program',
             'Project',
             'Activity',
@@ -46,6 +47,7 @@ class MeIndicatorsManagementReportExport implements FromArray, WithStyles, WithC
 
         foreach ($this->rows as $row) {
             $data[] = [
+                $row['portfolio'] ?? '—',
                 $row['program'] ?? '—',
                 $row['project'] ?? '—',
                 $row['activity'] ?? '—',
@@ -88,25 +90,26 @@ class MeIndicatorsManagementReportExport implements FromArray, WithStyles, WithC
         return [
             'A' => 28,
             'B' => 28,
-            'C' => 26,
+            'C' => 28,
             'D' => 26,
-            'E' => 32,
-            'F' => 16,
+            'E' => 26,
+            'F' => 32,
             'G' => 16,
-            'H' => 18,
-            'I' => 16,
-            'J' => 18,
+            'H' => 16,
+            'I' => 18,
+            'J' => 16,
             'K' => 18,
-            'L' => 30,
-            'M' => 24,
-            'N' => 20,
-            'O' => 30,
+            'L' => 18,
+            'M' => 30,
+            'N' => 24,
+            'O' => 20,
             'P' => 30,
-            'Q' => 14,
+            'Q' => 30,
             'R' => 14,
             'S' => 14,
             'T' => 14,
-            'U' => 30,
+            'U' => 14,
+            'V' => 30,
         ];
     }
 

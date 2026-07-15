@@ -11,8 +11,10 @@ return [
     'policy_programs' => 'Policy Programs & Research',
 
     // Hero Section
+    'hero_title' => 'African Think Tank Platform Administration',
     'hero_subtitle' => 'Strengthening Africa\'s policy ecosystem by supporting African Union institutions, think tanks, and partners through coordinated governance and strategic insight.',
     'hero_cta' => 'Explore Policy Programs & Initiatives',
+    'hero_media_badge' => 'ATTP in Action',
 
     // Institutional Process Flow
     'process_title' => 'Institutional Process Flow',
@@ -52,6 +54,12 @@ return [
     'download_es' => 'Download the official ATTP Grants & Award Announcement document in Spanish.',
     'download_sw' => 'Download the official ATTP Grants & Award Announcement document in Swahili.',
     'download_version' => 'Download :language Version',
+    'language_en' => 'English',
+    'language_fr' => 'French',
+    'language_ar' => 'Arabic',
+    'language_pt' => 'Portuguese',
+    'language_es' => 'Spanish',
+    'language_sw' => 'Kiswahili',
 
     // Centralized Governance
     'governance_title' => 'Centralized Governance & Strategic Oversight',
@@ -61,6 +69,15 @@ return [
     'governance_item3' => 'Executive-level visibility into funded programs and projects',
     'governance_item4' => 'Consolidated dashboards for performance, finance, and compliance',
     'governance_item5' => 'Secure, role-based access aligned with governance structures',
+
+    // Media
+    'gallery_title' => 'Our Gallery',
+    'gallery_subtitle' => 'Moments from our events, webinars, and activities across Africa',
+    'gallery_view_all' => 'View All Photos',
+    'gallery_image_alt' => 'ATTP event photo',
+    'watch_story_title' => 'Watch Our Story',
+    'watch_story_subtitle' => 'See ATTP\'s impact and activities across Africa in action',
+    'supporting_statement' => 'Supporting African Union policy coordination, governance reform, and evidence-based decision-making across the continent.',
 
     // Footer
     'footer_description' => 'African Think Tank Platform Administration – supporting African Union institutions through centralized governance, policy coordination, and strategic oversight of programs and funded initiatives.',

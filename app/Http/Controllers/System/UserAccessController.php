@@ -137,7 +137,17 @@ class UserAccessController extends Controller
         }
 
         if (! $isVendor && $request->filled('governance_node_id')) {
-            $this->assertNodeInScope((int) $request->governance_node_id);
+            $this->assertNodeInScope((string) $request->governance_node_id);
+        }
+
+        $role = ! $isVendor && ! empty($validated['role_id'])
+            ? Role::find($validated['role_id'])
+            : null;
+
+        if ($role?->name === 'Monitoring and Evaluation Manager' && ! $request->filled('governance_node_id')) {
+            return back()
+                ->withErrors(['governance_node_id' => 'A governance node is required for Monitoring and Evaluation Manager users.'])
+                ->withInput();
         }
 
         $plainPassword = str()->random(10);
@@ -239,7 +249,17 @@ class UserAccessController extends Controller
         }
 
         if (! $isVendor && $request->filled('governance_node_id')) {
-            $this->assertNodeInScope((int) $request->governance_node_id);
+            $this->assertNodeInScope((string) $request->governance_node_id);
+        }
+
+        $role = ! $isVendor && ! empty($validated['role_id'])
+            ? Role::find($validated['role_id'])
+            : null;
+
+        if ($role?->name === 'Monitoring and Evaluation Manager' && ! $request->filled('governance_node_id')) {
+            return back()
+                ->withErrors(['governance_node_id' => 'A governance node is required for Monitoring and Evaluation Manager users.'])
+                ->withInput();
         }
 
         $user->update([
@@ -500,7 +520,7 @@ class UserAccessController extends Controller
 
     private function allowedUserTypes(): array
     {
-        return ['admin', 'staff', 'member_state', 'vendor', 'funding_partner', 'think_tank', 'evaluator'];
+        return ['admin', 'staff', 'member_state', 'vendor', 'funding_partner', 'think_tank', 'evaluator', 'ttl'];
     }
 
     private function availableNodes()
@@ -526,7 +546,7 @@ class UserAccessController extends Controller
         }
     }
 
-    private function assertNodeInScope(int $nodeId): void
+    private function assertNodeInScope(string $nodeId): void
     {
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
@@ -572,16 +592,16 @@ class UserAccessController extends Controller
         ];
     }
 
-    private function descendantNodeIds(int $rootNodeId): array
+    private function descendantNodeIds(string $rootNodeId): array
     {
         $lines = GovernanceReportingLine::where('line_type', 'primary')->get(['parent_node_id', 'child_node_id']);
         $children = [];
 
         foreach ($lines as $line) {
-            $children[$line->parent_node_id][] = $line->child_node_id;
+            $children[(string) $line->parent_node_id][] = (string) $line->child_node_id;
         }
 
-        $stack = [$rootNodeId];
+        $stack = [(string) $rootNodeId];
         $seen = [];
 
         while ($stack) {
@@ -591,7 +611,7 @@ class UserAccessController extends Controller
             }
             $seen[$current] = true;
 
-            foreach ($children[$current] ?? [] as $childId) {
+            foreach ($children[(string) $current] ?? [] as $childId) {
                 if (!isset($seen[$childId])) {
                     $stack[] = $childId;
                 }

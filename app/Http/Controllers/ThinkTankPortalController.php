@@ -16,26 +16,195 @@ use App\Models\Procurement;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
+use App\Models\Role;
 use App\Models\SystemAuditLog;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankProcurementReview;
 use App\Models\ThinkTankResearchOutput;
+use App\Models\User;
+use App\Services\ThinkTankLogoService;
+use App\Services\ThinkTankMeAssignmentService;
 use App\Support\IpGeo;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class ThinkTankPortalController extends Controller
 {
+    public function __construct(
+        private readonly ThinkTankMeAssignmentService $meAssignments
+    ) {}
+
     public function dashboard(Request $request)
     {
         return view('think-tank.dashboard', $this->dashboardPayload($request));
+    }
+
+    public function teamAccess(Request $request)
+    {
+        $member = $this->member($request);
+        $teamMembers = User::query()
+            ->where('user_type', 'think_tank')
+            ->where(function ($query) use ($member): void {
+                $query->where('think_tank_member_id', $member->id)
+                    ->orWhere('id', $member->portal_user_id);
+            })
+            ->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$member->portal_user_id])
+            ->orderBy('name')
+            ->get();
+
+        $accessLevels = User::THINK_TANK_ACCESS_LEVELS;
+        $portalRouteParams = $this->portalRouteParams($request, $member);
+        $teamStats = [
+            'total' => $teamMembers->count(),
+            'active' => $teamMembers->reject(fn (User $user): bool => $user->hasActiveLoginBlock())->count(),
+            'administrators' => $teamMembers
+                ->filter(fn (User $user): bool => $user->resolvedThinkTankAccessLevel() === User::THINK_TANK_ACCESS_ADMIN)
+                ->count(),
+        ];
+
+        return view('think-tank.team-access', compact(
+            'member',
+            'teamMembers',
+            'accessLevels',
+            'teamStats',
+            'portalRouteParams'
+        ));
+    }
+
+    public function storeTeamMember(Request $request)
+    {
+        $member = $this->member($request);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            'access_level' => ['required', Rule::in(array_keys(User::THINK_TANK_ACCESS_LEVELS))],
+        ], [
+            'email.unique' => 'This email cannot be used.',
+        ]);
+
+        $temporaryPassword = Str::password(16);
+        $role = Role::firstOrCreate(
+            ['name' => 'Think Tank User'],
+            ['description' => 'Think tank staff account; portal areas are controlled by its think tank access level.']
+        );
+
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => Str::lower($data['email']),
+            'password' => Hash::make($temporaryPassword),
+            'user_type' => 'think_tank',
+            'role_id' => $role->id,
+            'think_tank_member_id' => $member->id,
+            'think_tank_access_level' => $data['access_level'],
+            'must_change_password' => true,
+            'is_disabled' => false,
+            'is_blacklisted' => false,
+        ]);
+
+        $this->auditAction('think_tank.team.created', 'Think tank portal staff account created', [
+            'think_tank_member_id' => $member->id,
+            'staff_user_id' => $user->id,
+            'access_level' => $data['access_level'],
+        ]);
+
+        return back()
+            ->with('success', 'Portal staff account created. Copy the temporary password now; it will not be shown again.')
+            ->with('temporary_password', $temporaryPassword);
+    }
+
+    public function updateTeamMember(Request $request, User $teamUser)
+    {
+        $member = $this->member($request);
+        $this->assertTeamUserBelongsToMember($teamUser, $member);
+
+        $data = $request->validate([
+            'access_level' => ['required', Rule::in(array_keys(User::THINK_TANK_ACCESS_LEVELS))],
+            'is_disabled' => ['required', 'boolean'],
+        ]);
+        $disable = (bool) $data['is_disabled'];
+        $removesAdminAccess = $teamUser->resolvedThinkTankAccessLevel() === User::THINK_TANK_ACCESS_ADMIN
+            && ($disable || $data['access_level'] !== User::THINK_TANK_ACCESS_ADMIN);
+
+        if ((string) $request->user()?->id === (string) $teamUser->id && $removesAdminAccess) {
+            throw ValidationException::withMessages([
+                'access_level' => 'You cannot remove your own think tank administrator access.',
+            ]);
+        }
+
+        if ($removesAdminAccess && ! $this->hasAnotherActiveThinkTankAdmin($member, $teamUser)) {
+            throw ValidationException::withMessages([
+                'access_level' => 'At least one active think tank administrator is required.',
+            ]);
+        }
+
+        $teamUser->update([
+            'think_tank_member_id' => $member->id,
+            'think_tank_access_level' => $data['access_level'],
+            'is_disabled' => $disable,
+            'disabled_at' => $disable ? ($teamUser->disabled_at ?: now()) : null,
+            'disabled_until' => null,
+            'disabled_reason' => $disable ? 'Disabled by a think tank administrator.' : null,
+        ]);
+
+        $this->auditAction('think_tank.team.updated', 'Think tank portal staff access updated', [
+            'think_tank_member_id' => $member->id,
+            'staff_user_id' => $teamUser->id,
+            'access_level' => $data['access_level'],
+            'is_disabled' => $disable,
+        ]);
+
+        return back()->with('success', 'Portal staff access updated.');
+    }
+
+    public function updateLogo(Request $request, ThinkTankLogoService $logos)
+    {
+        abort_unless(
+            $request->user()?->resolvedThinkTankAccessLevel() === User::THINK_TANK_ACCESS_ADMIN,
+            403,
+            'Only the Think Tank Admin can update portal branding.'
+        );
+
+        $member = $this->member($request);
+        $request->validate([
+            'logo' => [
+                'nullable',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'extensions:jpg,jpeg,png,webp',
+                'max:5120',
+                'dimensions:max_width=5000,max_height=5000',
+            ],
+            'remove_logo' => ['nullable', 'boolean'],
+        ]);
+
+        $remove = $request->boolean('remove_logo');
+
+        if (! $request->hasFile('logo') && ! $remove) {
+            throw ValidationException::withMessages([
+                'logo' => 'Choose a PNG, JPEG, or WebP logo to upload.',
+            ]);
+        }
+
+        $result = $logos->replace($member, $request->file('logo'), $remove);
+        $action = $result['removed'] ? 'think_tank.logo.removed' : 'think_tank.logo.updated';
+        $message = $result['removed'] ? 'Think tank logo removed' : 'Think tank logo updated';
+
+        $this->auditAction($action, $message, [
+            'think_tank_member_id' => $member->id,
+            'think_tank_name' => $member->name,
+            'had_previous_logo' => filled($result['previous_path']),
+        ]);
+
+        return back()->with('success', $message . '.');
     }
 
     public function downloadDashboardReport(Request $request)
@@ -52,6 +221,15 @@ class ThinkTankPortalController extends Controller
     {
         $member = $this->member($request);
         $member->load(['consortium.funder', 'fundAllocations', 'disbursementRequests', 'reports', 'researchOutputs']);
+        $portalUser = $request->user();
+        $portalAreaAccess = [
+            'me' => (bool) $portalUser?->canAccessThinkTankArea('me'),
+            'reports' => (bool) $portalUser?->canAccessThinkTankArea('reports'),
+            'finance' => (bool) $portalUser?->canAccessThinkTankArea('finance'),
+            'procurement_plans' => (bool) $portalUser?->canAccessThinkTankArea('procurement_plans'),
+            'team' => (bool) $portalUser?->canAccessThinkTankArea('team'),
+        ];
+        $canAccessLegacyPortal = (bool) $portalUser?->canAccessThinkTankArea('legacy_admin');
 
         $today = CarbonImmutable::now()->startOfDay();
         $reportingPeriodStart = $today->startOfMonth();
@@ -238,22 +416,25 @@ class ThinkTankPortalController extends Controller
 
         $upcomingActivities = collect([
             [
+                'area' => 'reports',
                 'type' => $reportSubmittedThisPeriod ? 'complete' : ($monthlyReportDaysLeft <= 3 ? 'urgent' : 'due'),
                 'title' => $reportSubmittedThisPeriod ? 'Monthly activity report submitted' : 'Submit this month\'s activity report',
                 'meta' => $reportSubmittedThisPeriod
                     ? 'The Secretariat has a report for ' . $today->format('F Y') . '.'
                     : 'Due ' . $monthlyReportDue->format('M d, Y') . ' to the ATTP Secretariat.',
                 'value' => $reportSubmittedThisPeriod ? 'Done' : ($monthlyReportDaysLeft >= 0 ? $monthlyReportDaysLeft . ' days left' : abs($monthlyReportDaysLeft) . ' days late'),
-                'route' => route('think-tank.reports', $this->portalRouteParams($request, $member)),
+                'route' => route('think-tank.report-uploads', $this->portalRouteParams($request, $member)),
             ],
             [
+                'area' => 'reports',
                 'type' => $pendingReportsCount > 0 ? 'review' : 'complete',
                 'title' => 'Secretariat report review',
                 'meta' => $pendingReportsCount > 0 ? 'Submitted reports awaiting Secretariat action.' : 'No report is waiting for review.',
                 'value' => number_format($pendingReportsCount),
-                'route' => route('think-tank.reports', $this->portalRouteParams($request, $member)),
+                'route' => route('think-tank.report-uploads', $this->portalRouteParams($request, $member)),
             ],
             [
+                'area' => 'legacy_admin',
                 'type' => $pendingResearchCount > 0 ? 'review' : 'info',
                 'title' => 'Research awaiting clearance',
                 'meta' => 'Outputs submitted for Secretariat visibility and approval.',
@@ -261,6 +442,7 @@ class ThinkTankPortalController extends Controller
                 'route' => route('think-tank.research', $this->portalRouteParams($request, $member)),
             ],
             [
+                'area' => 'legacy_admin',
                 'type' => $metrics['open_risks'] > 0 ? 'urgent' : 'complete',
                 'title' => 'Open oversight risks',
                 'meta' => $metrics['open_risks'] > 0 ? 'Resolve or update mitigation notes.' : 'No open risk flags.',
@@ -275,6 +457,7 @@ class ThinkTankPortalController extends Controller
                 : null;
 
             $upcomingActivities->push([
+                'area' => 'legacy_admin',
                 'type' => $daysLeft !== null && $daysLeft <= 3 ? 'urgent' : 'procurement',
                 'title' => $procurement->title,
                 'meta' => 'Procurement closes ' . ($procurement->application_end_date?->format('M d, Y') ?? 'soon') . ' with ' . number_format($procurement->submissions_count) . ' applications.',
@@ -293,7 +476,7 @@ class ThinkTankPortalController extends Controller
 
         $chartData = [
             'finance' => [
-                'labels' => ['PO Allocated', 'Paid from POs', 'PO Unpaid', 'Spent', 'Requested'],
+                'labels' => ['Funding committed', 'Payments recorded', 'Remaining balance', 'Spending reported', 'Funding requested'],
                 'values' => [
                     round((float) $metrics['po_allocated'], 2),
                     round((float) $metrics['disbursed'], 2),
@@ -348,6 +531,99 @@ class ThinkTankPortalController extends Controller
             : collect([$member]);
 
         $portalRouteParams = $this->portalRouteParams($request, $member);
+        $canViewMeUpdates = (bool) $portalUser?->canAccessThinkTankArea('me')
+            && (bool) $portalUser?->canAny([
+                'think_tank.me.view',
+                'think_tank.me.submit',
+            ]);
+        $canSubmitMeUpdates = $portalUser?->user_type === 'think_tank'
+            && $portalUser->canAccessThinkTankArea('me')
+            && (bool) $portalUser->can('think_tank.me.submit');
+        $mePerformanceUpdates = [
+            'can_view' => $canViewMeUpdates,
+            'can_submit' => $canSubmitMeUpdates,
+            'index_url' => null,
+            'summary' => [
+                'total' => 0,
+                'open' => 0,
+                'upcoming' => 0,
+                'submitted' => 0,
+                'closed' => 0,
+                'action_required' => 0,
+            ],
+            'priority' => collect(),
+        ];
+
+        if ($canViewMeUpdates) {
+            $meOverview = $this->meAssignments->overview(
+                $member,
+                $portalRouteParams,
+                $canSubmitMeUpdates
+            );
+            $mePerformanceUpdates = array_merge($mePerformanceUpdates, [
+                'index_url' => $meOverview['index_url'],
+                'summary' => $meOverview['summary'],
+                'priority' => $meOverview['priority'],
+            ]);
+        }
+
+        $upcomingActivities = $upcomingActivities
+            ->filter(function (array $activity) use ($portalAreaAccess, $canAccessLegacyPortal): bool {
+                $area = (string) ($activity['area'] ?? 'legacy_admin');
+
+                return $area === 'legacy_admin'
+                    ? $canAccessLegacyPortal
+                    : (bool) ($portalAreaAccess[$area] ?? false);
+            })
+            ->values();
+
+        if (! $portalAreaAccess['finance']) {
+            foreach (['allocated', 'po_allocated', 'disbursed', 'po_unpaid', 'requested', 'spent', 'balance', 'utilization'] as $metric) {
+                $metrics[$metric] = 0;
+            }
+
+            $purchaseOrderRecords = collect();
+            $transferRecords = collect();
+            $fundedActivities = collect();
+            $receiptSummary = ['sent' => 0, 'confirmed' => 0, 'pending' => 0, 'transfer_count' => 0, 'confirmed_count' => 0, 'rate' => 0];
+            $chartData['finance']['values'] = collect([0, 0, 0, 0, 0]);
+            $chartData['receipts']['values'] = collect([0, 0]);
+        }
+
+        if (! $portalAreaAccess['reports']) {
+            $metrics['reports'] = 0;
+            $recentReports = collect();
+            $reportSubmittedThisPeriod = false;
+            $reportStatusCounts = collect();
+            $chartData['reports']['values'] = collect([0, 0, 0, 0, 0, 0]);
+        }
+
+        if (! $portalAreaAccess['procurement_plans']) {
+            $metrics['procurement_plans'] = 0;
+        }
+
+        if (! $canAccessLegacyPortal) {
+            foreach (['research', 'opportunities', 'applications', 'selected', 'open_risks'] as $metric) {
+                $metrics[$metric] = 0;
+            }
+
+            $recentProcurements = collect();
+            $recentResearch = collect();
+            $researchStatusCounts = collect();
+            $procurementStatusCounts = collect();
+            $chartData['procurements']['values'] = collect([0, 0, 0, 0]);
+            $chartData['research']['labels'] = collect(['No data']);
+            $chartData['research']['values'] = collect([0]);
+        }
+
+        $chartData['delivery']['values'] = collect([
+            (int) $metrics['reports'],
+            (int) $metrics['research'],
+            (int) $metrics['procurement_plans'],
+            (int) $metrics['opportunities'],
+            (int) $metrics['applications'],
+        ]);
+
         $dashboardQueryParams = collect([
             'think_tank_member_id' => $portalRouteParams['think_tank_member_id'] ?? null,
             'filter_month' => $dashboardFilter['month'] ?? null,
@@ -377,6 +653,8 @@ class ThinkTankPortalController extends Controller
             'procurementStatusCounts',
             'membersForSearch',
             'portalRouteParams',
+            'portalAreaAccess',
+            'mePerformanceUpdates',
             'dashboardQueryParams'
         );
     }
@@ -388,16 +666,12 @@ class ThinkTankPortalController extends Controller
 
     public function uploadReportFinding(Request $request)
     {
-        $payload = $this->reportsPayload($request);
-        $researchPayload = $this->researchPayload($request);
+        return $this->reportUploads($request);
+    }
 
-        return view('think-tank.upload-report-finding', array_merge($payload, [
-            'researchRecords' => $researchPayload['outputRecords'],
-            'qascChecklist' => $researchPayload['qascChecklist'],
-            'qascConsortiumOptions' => $researchPayload['qascConsortiumOptions'],
-            'qascTrackOptions' => $researchPayload['qascTrackOptions'],
-            'qascLanguageOptions' => $researchPayload['qascLanguageOptions'],
-        ]));
+    public function reportUploads(Request $request)
+    {
+        return view('think-tank.report-uploads', $this->reportsPayload($request));
     }
 
     public function downloadReports(Request $request)
@@ -748,6 +1022,16 @@ class ThinkTankPortalController extends Controller
 
     public function purchaseOrders(Request $request)
     {
+        return view('think-tank.purchase-orders', $this->financePayload($request));
+    }
+
+    public function finance(Request $request)
+    {
+        return view('think-tank.finance', $this->financePayload($request));
+    }
+
+    private function financePayload(Request $request): array
+    {
         $member = $this->member($request);
         $member->loadMissing(['consortium', 'vendorUser', 'fundAllocations']);
 
@@ -772,7 +1056,9 @@ class ThinkTankPortalController extends Controller
             'remaining' => $allTransferOrders->sum(fn (ProcurementPurchaseOrder $order) => $order->remainingAmount()),
         ];
 
-        return view('think-tank.purchase-orders', compact('member', 'purchaseOrders', 'allocations', 'stats'));
+        $portalRouteParams = $this->portalRouteParams($request, $member);
+
+        return compact('member', 'purchaseOrders', 'allocations', 'stats', 'portalRouteParams');
     }
 
     public function storePurchaseOrder(Request $request)
@@ -1039,6 +1325,64 @@ class ThinkTankPortalController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="' . $this->researchQascFilename($output) . '"',
         ]);
+    }
+
+    public function procurementPlans(Request $request)
+    {
+        return view('think-tank.procurement-plans', $this->procurementPlansPayload($request));
+    }
+
+    private function procurementPlansPayload(Request $request): array
+    {
+        $member = $this->member($request);
+        $status = trim((string) $request->query('status', ''));
+        $fiscalYear = trim((string) $request->query('fiscal_year', ''));
+        $keyword = trim((string) $request->query('q', ''));
+
+        $baseQuery = ThinkTankProcurementPlan::query()
+            ->where('think_tank_member_id', $member->id);
+
+        $allPlans = (clone $baseQuery)->get();
+        $plans = (clone $baseQuery)
+            ->withCount('procurements')
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($fiscalYear !== '', fn ($query) => $query->where('fiscal_year', $fiscalYear))
+            ->when($keyword !== '', function ($query) use ($keyword): void {
+                $search = '%' . $keyword . '%';
+
+                $query->where(function ($searchQuery) use ($search): void {
+                    $searchQuery->where('title', 'like', $search)
+                        ->orWhere('plan_code', 'like', $search)
+                        ->orWhere('description', 'like', $search);
+                });
+            })
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+
+        $statusCounts = $allPlans
+            ->groupBy(fn (ThinkTankProcurementPlan $plan): string => $plan->status ?: 'submitted')
+            ->map->count();
+        $planStats = [
+            'total' => $allPlans->count(),
+            'estimated_budget' => (float) $allPlans->sum(fn (ThinkTankProcurementPlan $plan): float => (float) $plan->estimated_budget),
+            'draft' => (int) ($statusCounts->get('draft') ?? 0),
+            'submitted' => (int) ($statusCounts->get('submitted') ?? 0),
+            'approved' => (int) ($statusCounts->get('approved') ?? 0),
+            'revisions_requested' => (int) ($statusCounts->get('revisions_requested') ?? 0),
+        ];
+        $fiscalYears = $allPlans->pluck('fiscal_year')->filter()->unique()->sortDesc()->values();
+        $filters = compact('status', 'fiscalYear', 'keyword');
+        $portalRouteParams = $this->portalRouteParams($request, $member);
+
+        return compact(
+            'member',
+            'plans',
+            'planStats',
+            'fiscalYears',
+            'filters',
+            'portalRouteParams'
+        );
     }
 
     public function procurement(Request $request)
@@ -1534,7 +1878,47 @@ class ThinkTankPortalController extends Controller
                 ->firstOrFail();
         }
 
-        return $user->thinkTankMembership()->with('consortium')->firstOrFail();
+        $member = $user->resolvedThinkTankMembership();
+        abort_unless($member, 403, 'This account is not linked to a think tank.');
+
+        return $member->loadMissing('consortium');
+    }
+
+    private function assertTeamUserBelongsToMember(User $teamUser, ConsortiumThinkTank $member): void
+    {
+        abort_unless(
+            $teamUser->user_type === 'think_tank'
+            && (
+                (string) $teamUser->think_tank_member_id === (string) $member->id
+                || (string) $member->portal_user_id === (string) $teamUser->id
+            ),
+            404
+        );
+    }
+
+    private function hasAnotherActiveThinkTankAdmin(ConsortiumThinkTank $member, User $excluded): bool
+    {
+        return User::query()
+            ->where('user_type', 'think_tank')
+            ->where('id', '!=', $excluded->id)
+            ->where(function ($query) use ($member): void {
+                $query->where('think_tank_member_id', $member->id)
+                    ->orWhere('id', $member->portal_user_id);
+            })
+            ->where(function ($query) use ($member): void {
+                $query->where('think_tank_access_level', User::THINK_TANK_ACCESS_ADMIN)
+                    ->orWhere(function ($legacyQuery) use ($member): void {
+                        $legacyQuery->where('id', $member->portal_user_id)
+                            ->whereNull('think_tank_access_level');
+                    });
+            })
+            ->where('is_disabled', false)
+            ->where('is_blacklisted', false)
+            ->where(function ($query): void {
+                $query->whereNull('disabled_until')
+                    ->orWhere('disabled_until', '<=', now());
+            })
+            ->exists();
     }
 
     private function defaultProcurementFields(): array

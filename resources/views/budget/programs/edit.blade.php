@@ -82,9 +82,9 @@
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Sector <span class="text-danger">*</span></label>
+                                <label class="form-label fw-semibold">Portfolio <span class="text-danger">*</span></label>
                                 <select name="sector_id" id="sectorSelect" class="form-select" required>
-                                    <option value="">-- Select Sector --</option>
+                                    <option value="">-- Select Portfolio --</option>
                                     @foreach ($sectors as $sector)
                                         <option value="{{ $sector->id }}"
                                             data-governance-node-id="{{ $sector->governance_node_id }}"
@@ -128,6 +128,27 @@
                                 </select>
                                 <input type="hidden" name="currency" id="currencyHidden"
                                     value="{{ old('currency', $program->currency) }}">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">TTL Name <span class="text-danger">*</span></label>
+                                <input type="text" name="ttl_name" class="form-control"
+                                    value="{{ old('ttl_name', $program->ttl_name ?: $program->ttlUser?->name) }}"
+                                    placeholder="Task Team Leader full name" required>
+                                @error('ttl_name')
+                                    <small class="text-danger">{{ $message }}</small>
+                                @enderror
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">TTL Email <span class="text-danger">*</span></label>
+                                <input type="email" name="ttl_email" class="form-control"
+                                    value="{{ old('ttl_email', $program->ttl_email ?: $program->ttlUser?->email) }}"
+                                    placeholder="ttl@example.org" required>
+                                <small class="text-muted">If this email is new, a TTL portal account and credentials will be emailed.</small>
+                                @error('ttl_email')
+                                    <small class="text-danger d-block">{{ $message }}</small>
+                                @enderror
                             </div>
 
                             <div class="col-md-6">

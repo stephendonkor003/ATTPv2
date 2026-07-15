@@ -15,6 +15,8 @@ use App\Models\ThinkDataset;
 
 class ApplicantController extends Controller
 {
+    private const CALL_FOR_PROPOSAL_SUBMISSIONS_OPEN = false;
+
     // public function index()
     // {
 
@@ -151,7 +153,10 @@ class ApplicantController extends Controller
             ->orderBy('tt_name_en')
             ->pluck('tt_name_en');
 
-        return view('applicants.create', compact('thinkTanks'));
+        return view('applicants.create', [
+            'thinkTanks' => $thinkTanks,
+            'callForProposalSubmissionsOpen' => self::CALL_FOR_PROPOSAL_SUBMISSIONS_OPEN,
+        ]);
 
     }
 
@@ -169,6 +174,12 @@ class ApplicantController extends Controller
 
     public function store(Request $request)
     {
+        if (! self::CALL_FOR_PROPOSAL_SUBMISSIONS_OPEN) {
+            return redirect()
+                ->route('applicants.create')
+                ->withErrors(['error' => 'The call for proposals is now closed. New submissions are no longer being accepted.']);
+        }
+
         $validated = $request->validate([
             'think_tank_name' => 'required|string|max:255',
             'custom_think_tank' => 'nullable|string|max:255',

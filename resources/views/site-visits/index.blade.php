@@ -34,7 +34,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @forelse($siteVisits as $visit)
+                                @foreach($siteVisits as $visit)
                                     <tr>
                                         <td>
                                             {{ $visit->submission?->display_name ?? '-' }}
@@ -60,15 +60,15 @@
                                             </a>
                                         </td>
                                     </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="6" class="text-center">
-                                            No site visits found.
-                                        </td>
-                                    </tr>
-                                @endforelse
+                                @endforeach
                             </tbody>
                         </table>
+
+                        @if ($siteVisits->isEmpty())
+                            <div class="border-top text-center text-muted py-4">
+                                No site visits found for your portfolio.
+                            </div>
+                        @endif
 
                     </div>
                 </div>

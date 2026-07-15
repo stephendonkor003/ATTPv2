@@ -75,7 +75,7 @@
             <div class="page-header d-flex justify-content-between align-items-center mb-4">
                 <div>
                     <h4 class="mb-1 fw-bold text-primary">Budget Allocation Executive Dashboard</h4>
-                    <p class="text-muted mb-0">Comprehensive tree-view and data analytics across Sectors, Programs, Projects,
+                    <p class="text-muted mb-0">Comprehensive tree-view and data analytics across Portfolios, Programs, Projects,
                         and Activities.</p>
                 </div>
 
@@ -101,7 +101,7 @@
                     <div class="card summary-card p-3 border-start border-primary border-3">
                         <h6 class="text-muted mb-1">Programs</h6>
                         <h3 class="fw-bold text-primary">{{ $stats['programs'] ?? 0 }}</h3>
-                        <small class="text-muted">across {{ $stats['sectors'] ?? 0 }} sectors</small>
+                        <small class="text-muted">across {{ $stats['sectors'] ?? 0 }} portfolios</small>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -156,7 +156,7 @@
             <!-- SECTOR DISTRIBUTION -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i> Sectoral Distribution</h5>
+                    <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i> Portfolio Distribution</h5>
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -172,7 +172,7 @@
                                 </small>
                             </div>
                         @empty
-                            <p class="text-center text-muted py-3">No sector data available.</p>
+                            <p class="text-center text-muted py-3">No portfolio data available.</p>
                         @endforelse
                     </div>
                 </div>
@@ -181,7 +181,7 @@
             <!-- TREE STRUCTURE -->
             <div class="card shadow-sm mb-5">
                 <div class="card-header bg-light">
-                    <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i> Hierarchical View (Sector → Program → Project →
+                    <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i> Hierarchical View (Portfolio → Program → Project →
                         Activity → Sub-Activity)</h5>
                 </div>
                 <div class="card-body">

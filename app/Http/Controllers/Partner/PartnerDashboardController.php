@@ -45,11 +45,17 @@ class PartnerDashboardController extends Controller
         $this->logActivity($funder, 'view_dashboard');
 
         // Get funded programs with eager loading
-        $fundings = ProgramFunding::with(['program', 'governanceNode', 'documents'])
+        $fundings = ProgramFunding::with(['program.ttlUser:id,name,email', 'governanceNode', 'documents'])
             ->where('funder_id', $funder->id)
             ->where('status', 'approved')
             ->latest()
             ->get();
+
+        $fundings->each(function (ProgramFunding $funding) {
+            if ($program = $this->resolveProgramForFunding($funding, ['ttlUser'])) {
+                $funding->setRelation('program', $program);
+            }
+        });
 
         $reportingOverview = $this->buildReportingOverview($funder, $fundings);
         $fundedPrograms = $fundings
@@ -59,12 +65,14 @@ class PartnerDashboardController extends Controller
             ->values();
 
         $fundedProjects = $fundedPrograms->isNotEmpty()
-            ? Project::with(['program:id,name', 'governanceNode.level'])
+            ? Project::with(['program:id,name,total_budget,currency,ttl_user_id,ttl_name,ttl_email', 'program.ttlUser:id,name,email', 'governanceNode.level'])
                 ->withCount('activities')
                 ->whereIn('program_id', $fundedPrograms->pluck('id')->all())
                 ->orderBy('name')
                 ->get()
             : collect();
+
+        $fundedProjects->each(fn (Project $project) => $this->decoratePartnerProjectProgress($project));
 
         // Calculate statistics
         $stats = [
@@ -298,7 +306,7 @@ class PartnerDashboardController extends Controller
         $this->logActivity($funder, 'view_programs');
 
         $fundings = ProgramFunding::with([
-            'program',
+            'program.ttlUser:id,name,email',
             'governanceNode.level',
             'commitments',
             'documents'
@@ -307,6 +315,12 @@ class PartnerDashboardController extends Controller
             ->where('status', 'approved')
             ->latest()
             ->get();
+
+        $fundings->each(function (ProgramFunding $funding) {
+            if ($program = $this->resolveProgramForFunding($funding, ['ttlUser'])) {
+                $funding->setRelation('program', $program);
+            }
+        });
 
         return view('partner.programs.index', compact('funder', 'fundings'));
     }
@@ -417,7 +431,7 @@ class PartnerDashboardController extends Controller
         $funder = $this->getPartnerFunder();
 
         $funding = ProgramFunding::with([
-            'program',
+            'program.ttlUser:id,name,email',
             'governanceNode.level',
             'documents',
             'commitments.resource',
@@ -429,7 +443,7 @@ class PartnerDashboardController extends Controller
             ->where('status', 'approved')
             ->findOrFail($fundingId);
 
-        $program = $this->resolveProgramForFunding($funding);
+        $program = $this->resolveProgramForFunding($funding, ['ttlUser']);
         $programLinked = $program !== null;
 
         if ($program && (! $funding->relationLoaded('program') || ! $funding->program)) {
@@ -440,6 +454,8 @@ class PartnerDashboardController extends Controller
         $projects = $program
             ? Project::where('program_id', $program->id)
                 ->with([
+                    'program:id,name,total_budget,currency,ttl_user_id,ttl_name,ttl_email',
+                    'program.ttlUser:id,name,email',
                     'governanceNode.level',
                     'activities.governanceNode.level',
                     'activities.subActivities.governanceNode',
@@ -447,6 +463,8 @@ class PartnerDashboardController extends Controller
                 ->orderBy('name')
                 ->get()
             : collect();
+
+        $projects->each(fn (Project $project) => $this->decoratePartnerProjectProgress($project));
 
         $this->logActivity($funder, 'view_program', ['funding_id' => $fundingId]);
 
@@ -462,11 +480,13 @@ class PartnerDashboardController extends Controller
 
         // Get the project with relationships
         $project = Project::with([
-            'program',
+            'program.ttlUser:id,name,email',
             'governanceNode.level',
             'activities.subActivities',
             'activities.governanceNode',
         ])->findOrFail($projectId);
+
+        $this->decoratePartnerProjectProgress($project);
 
         // Verify this project belongs to a program funded by this partner
         $funding = $this->resolveFundingForProgram(
@@ -582,6 +602,17 @@ class PartnerDashboardController extends Controller
 
         // Return the file for download
         return $privateDisk->download($path, $document->file_name, $headers);
+    }
+
+    private function decoratePartnerProjectProgress(Project $project): void
+    {
+        $programBudget = (float) ($project->program?->total_budget ?? 0);
+        $projectBudget = (float) ($project->total_budget ?? 0);
+
+        $project->setAttribute(
+            'partner_progress_percent',
+            $programBudget > 0 ? min(100, round(($projectBudget / $programBudget) * 100)) : 0
+        );
     }
 
     /**

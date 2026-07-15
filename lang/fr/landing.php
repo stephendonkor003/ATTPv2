@@ -11,8 +11,10 @@ return [
     'policy_programs' => 'Programmes de Politiques & Recherche',
 
     // Hero Section
+    'hero_title' => 'Administration de la Plateforme Africaine de Groupes de Réflexion',
     'hero_subtitle' => 'Renforcement de l\'écosystème politique africain en soutenant les institutions de l\'Union africaine, les groupes de réflexion et les partenaires par une gouvernance coordonnée et une vision stratégique.',
     'hero_cta' => 'Explorer les Programmes et Initiatives Politiques',
+    'hero_media_badge' => 'ATTP en Action',
 
     // Institutional Process Flow
     'process_title' => 'Flux de Processus Institutionnel',
@@ -52,6 +54,12 @@ return [
     'download_es' => 'Téléchargez le document officiel d\'annonce de subventions et de prix ATTP en espagnol.',
     'download_sw' => 'Téléchargez le document officiel d\'annonce de subventions et de prix ATTP en swahili.',
     'download_version' => 'Télécharger la Version :language',
+    'language_en' => 'Anglaise',
+    'language_fr' => 'Française',
+    'language_ar' => 'Arabe',
+    'language_pt' => 'Portugaise',
+    'language_es' => 'Espagnole',
+    'language_sw' => 'Kiswahili',
 
     // Centralized Governance
     'governance_title' => 'Gouvernance Centralisée et Supervision Stratégique',
@@ -61,6 +69,15 @@ return [
     'governance_item3' => 'Visibilité au niveau exécutif sur les programmes et projets financés',
     'governance_item4' => 'Tableaux de bord consolidés pour la performance, les finances et la conformité',
     'governance_item5' => 'Accès sécurisé basé sur les rôles aligné avec les structures de gouvernance',
+
+    // Médias
+    'gallery_title' => 'Notre Galerie',
+    'gallery_subtitle' => 'Moments de nos événements, webinaires et activités à travers l\'Afrique',
+    'gallery_view_all' => 'Voir Toutes les Photos',
+    'gallery_image_alt' => 'Photo d\'un événement ATTP',
+    'watch_story_title' => 'Découvrez Notre Histoire',
+    'watch_story_subtitle' => 'Découvrez en images l\'impact et les activités de l\'ATTP à travers l\'Afrique',
+    'supporting_statement' => 'Soutenir la coordination des politiques de l\'Union africaine, la réforme de la gouvernance et la prise de décision fondée sur des données probantes à travers le continent.',
 
     // Footer
     'footer_description' => 'Administration de la Plateforme Africaine de Groupes de Réflexion – soutenant les institutions de l\'Union africaine par la gouvernance centralisée, la coordination des politiques et la supervision stratégique des programmes et initiatives financées.',

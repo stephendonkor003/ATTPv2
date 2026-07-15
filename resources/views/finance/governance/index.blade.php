@@ -86,13 +86,260 @@
                 color: #0d6efd;
                 margin-top: 2px;
             }
+
+            .governance-hero {
+                background: #063f36;
+                border-radius: 8px;
+                padding: 18px 20px;
+                color: #ffffff;
+                box-shadow: 0 14px 32px rgba(6, 63, 54, 0.18);
+            }
+
+            .governance-hero h4,
+            .governance-hero p {
+                color: #ffffff;
+            }
+
+            .governance-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4rem;
+                border: 1px solid rgba(255, 255, 255, 0.26);
+                border-radius: 999px;
+                padding: 0.28rem 0.62rem;
+                color: #d9fff4;
+                background: rgba(255, 255, 255, 0.08);
+                font-size: 0.78rem;
+                font-weight: 700;
+            }
+
+            .governance-stat-grid,
+            .governance-node-grid {
+                display: grid;
+                gap: 12px;
+            }
+
+            .governance-stat-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+
+            .governance-stat-card,
+            .governance-node-card {
+                border: 1px solid #dbe3ea;
+                border-radius: 8px;
+                background: #ffffff;
+                box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+            }
+
+            .governance-stat-card {
+                padding: 14px 16px;
+            }
+
+            .governance-stat-icon {
+                width: 38px;
+                height: 38px;
+                border-radius: 8px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                color: #065f46;
+                background: #d1fae5;
+                font-size: 1.05rem;
+            }
+
+            .governance-stat-label {
+                color: #64748b;
+                font-size: 0.78rem;
+                font-weight: 700;
+                text-transform: uppercase;
+            }
+
+            .governance-stat-value {
+                color: #0f172a;
+                font-size: 1.55rem;
+                font-weight: 800;
+                line-height: 1;
+            }
+
+            .governance-node-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .governance-node-card {
+                padding: 14px;
+                min-height: 184px;
+                transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+            }
+
+            .governance-node-card:hover {
+                transform: translateY(-2px);
+                border-color: #10b981;
+                box-shadow: 0 14px 28px rgba(15, 23, 42, 0.11);
+            }
+
+            .governance-node-title {
+                color: #0f172a;
+                font-size: 0.98rem;
+                font-weight: 800;
+                line-height: 1.25;
+            }
+
+            .governance-node-meta {
+                color: #64748b;
+                font-size: 0.78rem;
+            }
+
+            .governance-node-count {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                padding: 8px 10px;
+                background: #f8fafc;
+            }
+
+            .governance-node-count strong {
+                color: #0f172a;
+                font-size: 1.1rem;
+            }
+
+            @media (max-width: 1199.98px) {
+                .governance-stat-grid,
+                .governance-node-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+
+            @media (max-width: 767.98px) {
+                .governance-stat-grid,
+                .governance-node-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
         </style>
-        <div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-            <div>
-                <h4 class="fw-bold mb-1">Governance Structure</h4>
-                <p class="text-muted mb-0">
-                    Configure organizational levels, reporting lines, and assignments with effective dates.
-                </p>
+        <div class="governance-hero">
+            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                <div>
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <span class="governance-chip"><i class="feather-git-branch"></i> Governance Structure</span>
+                        <span class="governance-chip"><i class="feather-users"></i> {{ number_format($governanceStats['direct_users']) }} users</span>
+                        <span class="governance-chip"><i class="feather-briefcase"></i> {{ number_format($governanceStats['total_portfolios']) }} portfolios</span>
+                    </div>
+                    <h4 class="fw-bold mb-1">Governance Structure</h4>
+                    <p class="mb-0">
+                        Configure levels, nodes, reporting lines, and assignments across ATTP governance.
+                    </p>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="#nodesTab" class="btn btn-light btn-sm" data-bs-toggle="tab" data-bs-target="#nodesTab">
+                        <i class="feather-layers me-1"></i> Nodes
+                    </a>
+                    <a href="#assignmentsTab" class="btn btn-outline-light btn-sm" data-bs-toggle="tab" data-bs-target="#assignmentsTab">
+                        <i class="feather-user-check me-1"></i> Assignments
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="governance-stat-grid mt-3">
+            <div class="governance-stat-card">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="governance-stat-icon"><i class="feather-layers"></i></span>
+                    <div>
+                        <div class="governance-stat-label">Users</div>
+                        <div class="governance-stat-value">{{ number_format($governanceStats['direct_users']) }}</div>
+                        <small class="text-muted">Scoped to governance nodes</small>
+                    </div>
+                </div>
+            </div>
+            <div class="governance-stat-card">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="governance-stat-icon"><i class="feather-briefcase"></i></span>
+                    <div>
+                        <div class="governance-stat-label">Total Portfolios</div>
+                        <div class="governance-stat-value">{{ number_format($governanceStats['total_portfolios']) }}</div>
+                        <small class="text-muted">All portfolios in the system</small>
+                    </div>
+                </div>
+            </div>
+            <div class="governance-stat-card">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="governance-stat-icon"><i class="feather-check-circle"></i></span>
+                    <div>
+                        <div class="governance-stat-label">Active Portfolios</div>
+                        <div class="governance-stat-value">{{ number_format($governanceStats['active_portfolios']) }}</div>
+                        <small class="text-muted">Currently active</small>
+                    </div>
+                </div>
+            </div>
+            <div class="governance-stat-card">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="governance-stat-icon"><i class="feather-archive"></i></span>
+                    <div>
+                        <div class="governance-stat-label">Ended Portfolios</div>
+                        <div class="governance-stat-value">{{ number_format($governanceStats['ended_portfolios']) }}</div>
+                        <small class="text-muted">Marked as ended</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+                    <div>
+                        <h6 class="fw-bold mb-1">Governance Portfolio Cards</h6>
+                        <p class="text-muted small mb-0">Each card shows users and portfolio status totals for that governance node.</p>
+                    </div>
+                    <span class="badge bg-success-subtle text-success">{{ number_format($governanceCards->count()) }} nodes</span>
+                </div>
+
+                <div class="governance-node-grid">
+                    @forelse ($governanceCards as $card)
+                        <div class="governance-node-card">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                <div>
+                                    <div class="governance-node-title">{{ $card['name'] }}</div>
+                                    <div class="governance-node-meta">
+                                        {{ $card['level'] }}
+                                        @if ($card['code'])
+                                            · {{ $card['code'] }}
+                                        @endif
+                                    </div>
+                                </div>
+                                <span class="badge {{ $card['status'] === 'active' ? 'bg-success' : 'bg-secondary' }}">
+                                    {{ ucfirst($card['status']) }}
+                                </span>
+                            </div>
+
+                            <p class="text-muted small mb-3">
+                                {{ Str::limit($card['description'] ?: 'No description added for this governance node.', 96) }}
+                            </p>
+
+                            <div class="d-grid gap-2">
+                                <div class="governance-node-count">
+                                    <span class="small text-muted"><i class="feather-users me-1"></i> Direct users</span>
+                                    <strong>{{ number_format($card['direct_users_count']) }}</strong>
+                                </div>
+                                <div class="governance-node-count">
+                                    <span class="small text-muted"><i class="feather-briefcase me-1"></i> Total portfolios</span>
+                                    <strong>{{ number_format($card['total_portfolios_count']) }}</strong>
+                                </div>
+                                <div class="governance-node-count">
+                                    <span class="small text-muted"><i class="feather-check-circle me-1"></i> Active portfolios</span>
+                                    <strong>{{ number_format($card['active_portfolios_count']) }}</strong>
+                                </div>
+                                <div class="governance-node-count">
+                                    <span class="small text-muted"><i class="feather-archive me-1"></i> Ended portfolios</span>
+                                    <strong>{{ number_format($card['ended_portfolios_count']) }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-muted small">No governance nodes created yet.</div>
+                    @endforelse
+                </div>
             </div>
         </div>
 
@@ -308,6 +555,7 @@
                                     <th style="width: 120px;">Level</th>
                                     <th>Name</th>
                                     <th style="width: 100px;">Code</th>
+                                    <th style="width: 150px;">Users</th>
                                     <th style="width: 100px;" class="text-center">Status</th>
                                     <th style="width: 130px;">Effective Start</th>
                                     <th style="width: 140px;" class="text-center no-sort no-export">Actions</th>
@@ -324,6 +572,10 @@
                                             </div>
                                         </td>
                                         <td><code>{{ $node->code ?? '-' }}</code></td>
+                                        <td>
+                                            <div class="fw-semibold">{{ number_format($node->direct_users_count) }} direct</div>
+                                            <small class="text-muted">{{ number_format($node->assignment_count) }} assignment{{ $node->assignment_count === 1 ? '' : 's' }}</small>
+                                        </td>
                                         <td class="text-center">
                                             <span
                                                 class="badge {{ $node->status === 'active' ? 'bg-success' : 'bg-secondary' }}">

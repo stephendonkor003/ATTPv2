@@ -2,14 +2,13 @@
 
 namespace App\Models;
 
-use App\Models\BaseModel;
-
 class IndicatorTarget extends BaseModel
 {
     protected $table = 'me_indicator_targets';
 
     protected $fillable = [
         'indicator_id',
+        'target_context',
         'period_type',
         'period_label',
         'period_start',

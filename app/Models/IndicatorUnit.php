@@ -9,6 +9,7 @@ class IndicatorUnit extends BaseModel
     protected $table = 'me_indicator_units';
 
     protected $fillable = [
+        'portfolio_id',
         'name',
         'symbol',
         'description',
@@ -26,6 +27,11 @@ class IndicatorUnit extends BaseModel
     public function indicators()
     {
         return $this->hasMany(Indicator::class, 'unit_id');
+    }
+
+    public function portfolio()
+    {
+        return $this->belongsTo(Sector::class, 'portfolio_id');
     }
 
     // Scopes

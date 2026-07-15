@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesSiteVisitsToPortfolio;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\{
     Procurement,
@@ -11,12 +12,15 @@ use Illuminate\Support\Str;
 
 class ProcurementSiteVisitReportController extends Controller
 {
+    use ScopesSiteVisitsToPortfolio;
+
     public function show(Procurement $procurement)
     {
         // Admin / oversight only
         if (!auth()->user()->can('site_visits.approve')) {
             abort(403, 'Unauthorized');
         }
+        $this->assertProcurementInScope($procurement);
 
         $siteVisits = SiteVisit::with([
             'submission.values',
@@ -51,7 +55,9 @@ class ProcurementSiteVisitReportController extends Controller
             abort(403, 'Unauthorized');
         }
 
+        $this->assertProcurementInScope($procurement);
         abort_unless($siteVisit->procurement_id === $procurement->id, 404);
+        $this->assertSiteVisitInPortfolioScope($siteVisit);
 
         $siteVisit->load([
             'procurement',
@@ -97,7 +103,9 @@ class ProcurementSiteVisitReportController extends Controller
         abort(403);
     }
 
-    $procurements = \App\Models\Procurement::orderBy('title')->get();
+    $procurementsQuery = \App\Models\Procurement::orderBy('title');
+    $this->applyProcurementScope($procurementsQuery);
+    $procurements = $procurementsQuery->get();
 
     return view(
         'site-visits.reports.index',

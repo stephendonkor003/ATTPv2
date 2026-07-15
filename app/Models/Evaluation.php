@@ -17,7 +17,13 @@ class Evaluation extends BaseModel
         'description',
         'status',
         'type',
+        'portfolio_id',
+        'is_portfolio_custom',
         'created_by',
+    ];
+
+    protected $casts = [
+        'is_portfolio_custom' => 'boolean',
     ];
 
     /* ===============================
@@ -43,6 +49,11 @@ class Evaluation extends BaseModel
             'evaluation_id',
             'procurement_id'
         );
+    }
+
+    public function portfolio()
+    {
+        return $this->belongsTo(Sector::class, 'portfolio_id');
     }
 
     /**

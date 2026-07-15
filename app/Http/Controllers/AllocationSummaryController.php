@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\Activity;
@@ -11,6 +12,8 @@ use Illuminate\Http\Request;
 
 class AllocationSummaryController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /**
      * =========================================================================
      *  BUDGET DASHBOARD
@@ -35,7 +38,7 @@ class AllocationSummaryController extends Controller
     private function budgetSummaryPayload(): array
     {
         // Load entire budget hierarchy
-        $programs = Program::with([
+        $programs = $this->scopedProgramSummaryQuery()->with([
             'sector',
             'projects.allocations',
             'projects.activities.allocations',
@@ -43,10 +46,13 @@ class AllocationSummaryController extends Controller
         ])->orderBy('name')->get();
 
         // KPI totals
+        $projects = $programs->flatMap->projects;
+        $activities = $projects->flatMap->activities;
+        $subActivities = $activities->flatMap->subActivities;
         $totalPrograms = $programs->count();
-        $totalProjects = Project::count();
-        $totalActivities = Activity::count();
-        $totalSubActivities = SubActivity::count();
+        $totalProjects = $projects->count();
+        $totalActivities = $activities->count();
+        $totalSubActivities = $subActivities->count();
 
         $programRows = $programs->map(function (Program $program) {
             $projects = $program->projects;
@@ -171,7 +177,7 @@ class AllocationSummaryController extends Controller
     private function executiveSummaryPayload(): array
     {
         // Load hierarchy for reporting
-        $programs = Program::with([
+        $programs = $this->scopedProgramSummaryQuery()->with([
             'sector',
             'projects.allocations',
             'projects.activities.allocations',
@@ -179,13 +185,17 @@ class AllocationSummaryController extends Controller
         ])->orderBy('name')->get();
 
         // Rank projects by total allocated amount
-        $projectRankings = Project::with([
+        $projectQuery = Project::with([
             'program.sector',
             'allocations',
             'activities.allocations',
             'activities.subActivities.allocations',
-        ])
-            ->get()
+        ]);
+        if ($this->userHasAssignedPortfolioScope(request()->user())) {
+            $this->applyAssignedPortfolioScopeToProjects($projectQuery, request()->user());
+        }
+
+        $projectRankings = $projectQuery->get()
             ->map(function ($project) {
                 $activityAllocated = (float) $project->activities->sum(
                     fn ($activity) => $activity->allocations->sum('amount')
@@ -214,8 +224,12 @@ class AllocationSummaryController extends Controller
             ->values();
 
         // Rank activities by funding level
-        $activityRankings = Activity::with('allocations', 'subActivities.allocations', 'project.program')
-            ->get()
+        $activityQuery = Activity::with('allocations', 'subActivities.allocations', 'project.program');
+        if ($this->userHasAssignedPortfolioScope(request()->user())) {
+            $this->applyAssignedPortfolioScopeToActivities($activityQuery, request()->user());
+        }
+
+        $activityRankings = $activityQuery->get()
             ->map(function ($activity) {
                 $allocated = (float) $activity->allocations->sum('amount');
                 $subAllocated = (float) $activity->subActivities->sum(
@@ -234,8 +248,12 @@ class AllocationSummaryController extends Controller
             ->values();
 
         // Compare sub-activity allocations
-        $subActivityRankings = SubActivity::with('allocations', 'activity.project')
-            ->get()
+        $subActivityQuery = SubActivity::with('allocations', 'activity.project');
+        if ($this->userHasAssignedPortfolioScope(request()->user())) {
+            $this->applyAssignedPortfolioScopeToSubActivities($subActivityQuery, request()->user());
+        }
+
+        $subActivityRankings = $subActivityQuery->get()
             ->map(function ($sub) {
                 return [
                     'sub' => $sub,
@@ -340,5 +358,17 @@ class AllocationSummaryController extends Controller
         }
 
         return 0.0;
+    }
+
+    private function scopedProgramSummaryQuery()
+    {
+        $query = Program::query();
+        $currentUser = request()->user();
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $this->applyAssignedPortfolioScopeToPrograms($query, $currentUser);
+        }
+
+        return $query;
     }
 }

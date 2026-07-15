@@ -64,6 +64,8 @@
                     <input type="hidden" name="is_survey_methodology" value="1">
                     <input type="hidden" name="from_survey_module" value="1">
 
+                    @include('me.partials.portfolio-scope-field')
+
                     <div class="col-md-6">
                         <label class="form-label">Questionnaire Name <span class="text-danger">*</span></label>
                         <input type="text" name="name" id="methodologyNameInput" class="form-control"

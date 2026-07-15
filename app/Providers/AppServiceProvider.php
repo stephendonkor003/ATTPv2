@@ -12,6 +12,8 @@ use Illuminate\Auth\Events\Logout;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use App\Models\UserLoginOtp;
+use App\Models\DiscussionParticipantToken;
+use App\Models\DiscussionReaction;
 use Illuminate\Pagination\Paginator;
 
 class AppServiceProvider extends ServiceProvider
@@ -115,7 +117,9 @@ private function logModelEvent(string $type, array $data): void
     }
 
     // Avoid logging OTP records (contains sensitive verification material).
-    if ($model instanceof UserLoginOtp) {
+    if ($model instanceof UserLoginOtp
+        || $model instanceof DiscussionParticipantToken
+        || $model instanceof DiscussionReaction) {
         return;
     }
 
@@ -182,6 +186,7 @@ private function redactAuditPayload(array $data): array
         'token',
         'secret',
         'api_token',
+        'token_hash',
     ];
 
     foreach ($redactKeys as $key) {
@@ -250,6 +255,14 @@ private function resolveAuditModule(Model $model): string
         'ConsortiumActivityReport' => 'think_tank_management',
         'ThinkTankResearchOutput' => 'think_tank_management',
         'ThinkTankProcurementPlan' => 'think_tank_management',
+
+        // Public discussion forum
+        'DiscussionParticipant' => 'discussions',
+        'DiscussionTheme' => 'discussions',
+        'DiscussionTopic' => 'discussions',
+        'DiscussionPost' => 'discussions',
+        'DiscussionReaction' => 'discussions',
+        'DiscussionModerationAction' => 'discussions',
     ];
 
     return $map[$class] ?? 'system';

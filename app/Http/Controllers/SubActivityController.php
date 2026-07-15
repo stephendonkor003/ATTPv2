@@ -1,7 +1,8 @@
 <?php
 
- namespace App\Http\Controllers;
+namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\SubActivity;
 use App\Models\Activity;
 use App\Models\SubActivityAllocation;
@@ -13,23 +14,31 @@ use Illuminate\Support\Facades\Validator;
 
 class SubActivityController extends Controller
 {
+    use ScopesAssignedPortfolios;
 
  public function index(Request $request)
 {
     $search = $request->search;
 
+    $currentUser = Auth::user();
+    $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
     $scopedNodeIds = $this->scopedNodeIds();
-    if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+    if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
         abort(403, 'You do not have access to sub-activities.');
     }
 
     $programs = Program::with([
+        'sector',
+        'projects.allocations',
+        'projects.activities.allocations',
         'projects.activities.subActivities.allocations' => function ($q) {
             $q->orderBy('year', 'asc');
         },
-        'projects.activities.allocations'
     ])
-    ->when($scopedNodeIds !== null, function ($q) use ($scopedNodeIds) {
+    ->when($isPortfolioLeader, function ($q) use ($currentUser) {
+        $this->applyAssignedPortfolioScopeToPrograms($q, $currentUser);
+    })
+    ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($q) use ($scopedNodeIds) {
         $q->whereIn('governance_node_id', $scopedNodeIds)
           ->whereNotNull('governance_node_id');
     })
@@ -50,7 +59,29 @@ class SubActivityController extends Controller
     ->orderBy('name')
     ->get();
 
-    return view('subactivities.index', compact('programs', 'search'));
+    $projects = $programs->flatMap->projects;
+    $activities = $projects->flatMap->activities;
+    $subActivities = $activities->flatMap->subActivities;
+
+    $subActivities->each(function (SubActivity $subActivity) {
+        $subActivity->setAttribute('allocation_total', (float) $subActivity->allocations->sum('amount'));
+    });
+
+    $activities->each(function (Activity $activity) {
+        $activity->setAttribute('allocation_total', (float) $activity->allocations->sum('amount'));
+        $activity->setAttribute('sub_activity_allocation_total', (float) $activity->subActivities->sum('allocation_total'));
+        $activity->setAttribute('sub_activities_count', $activity->subActivities->count());
+    });
+
+    $subActivityStats = [
+        'programs' => $programs->count(),
+        'projects' => $projects->count(),
+        'activities' => $activities->count(),
+        'sub_activities' => $subActivities->count(),
+        'allocation_total' => $subActivities->sum('allocation_total'),
+    ];
+
+    return view('subactivities.index', compact('programs', 'search', 'subActivityStats'));
 }
 
 
@@ -306,6 +337,15 @@ public function destroy($id)
 
     private function assertActivityInScope(Activity $activity): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->activityIsInAssignedPortfolio($activity, $currentUser)) {
+                abort(403, 'You do not have access to this activity.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -319,6 +359,15 @@ public function destroy($id)
 
     private function assertSubActivityInScope(SubActivity $sub): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->subActivityIsInAssignedPortfolio($sub, $currentUser)) {
+                abort(403, 'You do not have access to this sub-activity.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;

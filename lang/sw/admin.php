@@ -24,7 +24,7 @@ return [
 
     // Budget Planning
     'budget_structure' => 'Muundo wa Bajeti',
-    'sectors' => 'Sekta',
+    'sectors' => 'Portfolios',
     'programs' => 'Programu',
     'projects' => 'Miradi',
     'activities' => 'Shughuli',

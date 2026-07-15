@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
+use App\Models\Evaluation;
 use App\Models\EvaluationCriteria;
 use App\Models\EvaluationSection;
 use Illuminate\Http\Request;
@@ -10,11 +12,15 @@ use Illuminate\Validation\ValidationException;
 
 class EvaluationCriteriaController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /**
      * Store a new criteria under a section
      */
     public function store(Request $request, EvaluationSection $section)
     {
+        $this->assertCriteriaEvaluationManageable($section->evaluation);
+
         if ($section->evaluation->status !== 'draft') {
             return back()->with('error', 'Cannot modify criteria once evaluation is active.');
         }
@@ -106,6 +112,8 @@ class EvaluationCriteriaController extends Controller
      */
     public function update(Request $request, EvaluationCriteria $criteria)
     {
+        $this->assertCriteriaEvaluationManageable($criteria->section->evaluation);
+
         if ($criteria->section->evaluation->status !== 'draft') {
             return back()->with('error', 'Cannot modify criteria once evaluation is active.');
         }
@@ -147,6 +155,8 @@ class EvaluationCriteriaController extends Controller
      */
     public function destroy(EvaluationCriteria $criteria)
     {
+        $this->assertCriteriaEvaluationManageable($criteria->section->evaluation);
+
         if ($criteria->section->evaluation->status !== 'draft') {
             return back()->with('error', 'Cannot delete criteria once evaluation is active.');
         }
@@ -161,6 +171,26 @@ class EvaluationCriteriaController extends Controller
         }
 
         return back()->with('success', 'Criteria removed successfully.');
+    }
+
+    private function assertCriteriaEvaluationManageable(Evaluation $evaluation): void
+    {
+        abort_unless(
+            in_array($evaluation->type, ['services', 'goods'], true)
+            && in_array($evaluation->status, ['draft', 'active', 'close'], true)
+            && filled($evaluation->portfolio_id),
+            404
+        );
+
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        abort_unless(
+            $this->evaluationIsInAssignedPortfolio($evaluation),
+            403,
+            'This evaluation configuration is not assigned to your portfolio.'
+        );
     }
 
     private function resolveBulkRows(Request $request): array

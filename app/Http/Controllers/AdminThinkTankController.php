@@ -19,6 +19,7 @@ use App\Models\SubActivity;
 use App\Models\SystemAuditLog;
 use App\Models\ThinkDataset;
 use App\Models\User;
+use App\Services\ThinkTankLogoService;
 use App\Support\IpGeo;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -27,6 +28,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class AdminThinkTankController extends Controller
@@ -627,6 +629,7 @@ class AdminThinkTankController extends Controller
         $data['portal_user_id'] = $portalUser?->id;
 
         $member = ConsortiumThinkTank::create($data);
+        $this->linkPrimaryPortalUser($portalUser, $member);
 
         if ($portalUser?->email) {
             $this->sendWelcomeSafely($portalUser, $member, $temporaryPassword);
@@ -692,6 +695,7 @@ class AdminThinkTankController extends Controller
         $data['portal_user_id'] = $portalUser?->id ?? $data['portal_user_id'] ?? null;
 
         $thinkTank->update($data);
+        $this->linkPrimaryPortalUser($portalUser, $thinkTank);
 
         $this->auditAction('think_tank.updated', 'Think tank profile updated', [
             'think_tank_member_id' => $thinkTank->id,
@@ -702,6 +706,50 @@ class AdminThinkTankController extends Controller
         return redirect()
             ->route('think-tanks-admin.show', $thinkTank)
             ->with('success', 'Think tank profile updated.');
+    }
+
+    public function updateLogo(
+        Request $request,
+        ConsortiumThinkTank $thinkTank,
+        ThinkTankLogoService $logos
+    ) {
+        abort_unless(
+            $request->user()?->isAdmin() || $request->user()?->isSuperAdmin(),
+            403,
+            'Only a system administrator can update think tank branding.'
+        );
+
+        $request->validate([
+            'logo' => [
+                'nullable',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'extensions:jpg,jpeg,png,webp',
+                'max:5120',
+                'dimensions:max_width=5000,max_height=5000',
+            ],
+            'remove_logo' => ['nullable', 'boolean'],
+        ]);
+
+        $remove = $request->boolean('remove_logo');
+
+        if (! $request->hasFile('logo') && ! $remove) {
+            throw ValidationException::withMessages([
+                'logo' => 'Choose a PNG, JPEG, or WebP logo to upload.',
+            ]);
+        }
+
+        $result = $logos->replace($thinkTank, $request->file('logo'), $remove);
+        $action = $result['removed'] ? 'think_tank.logo.removed' : 'think_tank.logo.updated';
+        $message = $result['removed'] ? 'Think tank logo removed' : 'Think tank logo updated';
+
+        $this->auditAction($action, $message, [
+            'think_tank_member_id' => $thinkTank->id,
+            'think_tank_name' => $thinkTank->name,
+            'had_previous_logo' => filled($result['previous_path']),
+        ]);
+
+        return back()->with('success', $message . '.');
     }
 
     public function funding(Request $request)
@@ -1149,7 +1197,13 @@ class AdminThinkTankController extends Controller
     private function resolvePortalUser(array $data, bool $createWhenMissing = true): array
     {
         if (! empty($data['portal_user_id'])) {
-            return [User::find($data['portal_user_id']), null];
+            $user = User::find($data['portal_user_id']);
+
+            if ($user && $user->user_type !== 'think_tank') {
+                abort(422, 'This email cannot be used for a think tank portal account.');
+            }
+
+            return [$user, null];
         }
 
         if (! $createWhenMissing || empty($data['email'])) {
@@ -1174,9 +1228,24 @@ class AdminThinkTankController extends Controller
             abort(422, 'This email is already assigned to another account type.');
         }
 
-        $user->update(['role_id' => $user->role_id ?: $roleId]);
+        $user->update([
+            'role_id' => $user->role_id ?: $roleId,
+            'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
+        ]);
 
         return [$user, $user->wasRecentlyCreated ? $password : null];
+    }
+
+    private function linkPrimaryPortalUser(?User $user, ConsortiumThinkTank $member): void
+    {
+        if (! $user) {
+            return;
+        }
+
+        $user->update([
+            'think_tank_member_id' => $member->id,
+            'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
+        ]);
     }
 
     private function sendWelcomeSafely(User $user, ConsortiumThinkTank $member, ?string $temporaryPassword): void

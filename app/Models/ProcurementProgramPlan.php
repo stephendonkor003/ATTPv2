@@ -13,6 +13,7 @@ class ProcurementProgramPlan extends BaseModel
     protected $fillable = [
         'name',
         'description',
+        'governance_node_id',
         'is_active',
         'created_by',
         'start_date',
@@ -28,6 +29,11 @@ class ProcurementProgramPlan extends BaseModel
     public function procurements(): HasMany
     {
         return $this->hasMany(ProcurementPlan::class, 'program_plan_id');
+    }
+
+    public function governanceNode(): BelongsTo
+    {
+        return $this->belongsTo(GovernanceNode::class, 'governance_node_id');
     }
 
     public function creator(): BelongsTo

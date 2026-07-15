@@ -32,6 +32,9 @@
 
                 <form method="POST" action="{{ route('budget.me-configuration.methodologies.store') }}" class="row g-3">
                     @csrf
+
+                    @include('me.partials.portfolio-scope-field')
+
                     <div class="col-md-6">
                         <label class="form-label">Name <span class="text-danger">*</span></label>
                         <input type="text" name="name" id="methodologyNameInput" class="form-control"

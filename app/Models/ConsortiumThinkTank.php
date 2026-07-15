@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ConsortiumThinkTank extends BaseModel
 {
@@ -17,6 +20,7 @@ class ConsortiumThinkTank extends BaseModel
         'vendor_user_id',
         'au_sap_vendor_number',
         'name',
+        'logo_path',
         'country',
         'email',
         'role',
@@ -35,6 +39,17 @@ class ConsortiumThinkTank extends BaseModel
         return $this->belongsTo(Consortium::class, 'consortium_id');
     }
 
+    public function getLogoUrlAttribute(): ?string
+    {
+        $path = str_replace('\\', '/', trim((string) $this->logo_path));
+
+        if ($path === '' || ! Str::startsWith($path, 'think-tank-logos/') || str_contains($path, '../')) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($path);
+    }
+
     public function thinkDataset(): BelongsTo
     {
         return $this->belongsTo(ThinkDataset::class, 'think_dataset_id');
@@ -48,6 +63,15 @@ class ConsortiumThinkTank extends BaseModel
     public function portalUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'portal_user_id');
+    }
+
+    /**
+     * All staff accounts assigned to this think tank. portalUser remains the
+     * backward-compatible pointer to the original primary administrator.
+     */
+    public function portalUsers(): HasMany
+    {
+        return $this->hasMany(User::class, 'think_tank_member_id');
     }
 
     public function vendorUser(): BelongsTo
@@ -108,5 +132,25 @@ class ConsortiumThinkTank extends BaseModel
     public function researchOutputs(): HasMany
     {
         return $this->hasMany(ThinkTankResearchOutput::class, 'think_tank_member_id');
+    }
+
+    public function dataCollectionAssignments(): HasMany
+    {
+        return $this->hasMany(MeDataCollectionAssignment::class, 'think_tank_member_id');
+    }
+
+    public function dataSubmissions(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            MeDataSubmission::class,
+            MeDataCollectionAssignment::class,
+            'think_tank_member_id',
+            'assignment_id'
+        );
+    }
+
+    public function indicatorResults(): HasMany
+    {
+        return $this->hasMany(IndicatorResult::class, 'think_tank_member_id');
     }
 }

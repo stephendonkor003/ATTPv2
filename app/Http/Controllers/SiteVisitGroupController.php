@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesSiteVisitsToPortfolio;
 use App\Models\{
     SiteVisit,
     SiteVisitGroup,
@@ -12,10 +13,13 @@ use Illuminate\Support\Facades\DB;
 
 class SiteVisitGroupController extends Controller
 {
+    use ScopesSiteVisitsToPortfolio;
+
     public function assignGroup(Request $request, SiteVisit $siteVisit)
     {
         $user = auth()->user();
         abort_unless($user && $user->can('site_visits.approve'), 403);
+        $this->assertSiteVisitInPortfolioScope($siteVisit);
 
         $request->validate([
             'group_name' => 'required|string',
@@ -23,6 +27,8 @@ class SiteVisitGroupController extends Controller
             'members'    => 'required|array',
             'members.*'  => 'exists:users,id',
         ]);
+        $this->assertAssignableSiteVisitUserInScope((string) $request->leader_id);
+        $this->assertAssignableSiteVisitUsersInScope($request->members ?? []);
 
         DB::transaction(function () use ($request, $siteVisit) {
 

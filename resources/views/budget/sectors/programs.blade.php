@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Sector Programs')
+@section('title', 'Portfolio Programs')
 
 @section('content')
     <main class="nxl-container">
@@ -8,7 +8,7 @@
             <div class="page-header d-flex justify-content-between align-items-center mb-4">
                 <div>
                     <h4 class="mb-1">Programs under {{ $sector->name }}</h4>
-                    <p class="text-muted mb-0">All programs and projects linked to this sector.</p>
+                    <p class="text-muted mb-0">All programs and projects linked to this portfolio.</p>
                 </div>
                 <a href="{{ route('sectors.index') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left-circle me-1"></i> Back
@@ -29,7 +29,7 @@
                             </div>
                         @endforeach
                     @else
-                        <p class="text-muted mb-0">No programs found for this sector.</p>
+                        <p class="text-muted mb-0">No programs found for this portfolio.</p>
                     @endif
                 </div>
             </div>

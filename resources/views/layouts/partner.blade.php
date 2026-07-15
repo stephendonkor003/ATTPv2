@@ -1082,6 +1082,13 @@
                     </span>
                 </a>
             @endcan
+            <a href="{{ route('grm.submissions.create') }}"
+                class="partner-nav-link {{ request()->routeIs('grm.submissions.*') ? 'active' : '' }}"
+                data-partner-menu-item
+                data-partner-nav-section="workspace"
+                data-partner-menu-label="grievance redress mechanism complaints concerns cases">
+                <i class="feather-alert-octagon"></i> Grievance Redress Mechanism
+            </a>
 
             <div class="partner-nav-label" data-partner-nav-label="account">Account</div>
             @can('partner.profile.edit')

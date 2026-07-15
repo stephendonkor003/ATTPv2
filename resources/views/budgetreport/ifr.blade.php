@@ -127,7 +127,8 @@
             <div class="alert alert-info mt-4">{{ $reportMeta['empty_message'] }}</div>
         @else
             @php
-                $currency = $program->currency
+                $currency = $program->sector?->currency
+                    ?? $program->currency
                     ?? $program->approvedFundings?->first()?->currency
                     ?? $program->fundings?->first()?->currency
                     ?? '';

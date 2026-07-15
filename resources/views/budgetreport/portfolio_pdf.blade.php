@@ -149,7 +149,8 @@
 </head>
 <body>
     @php
-        $money = fn ($value) => number_format((float) $value, 2);
+        $portfolioCurrency = $portfolioCurrency ?? ($portfolioStats['currency'] ?? 'USD');
+        $money = fn ($value, $currency = null) => trim(($currency ?: $portfolioCurrency ?: 'USD') . ' ' . number_format((float) $value, 2));
         $totalBudget = max((float) ($portfolioStats['total_budget'] ?? 0), 1);
         $generatedAt = now()->format('d M Y, H:i');
         $yearLabels = collect($chartData['yearLabels'] ?? []);
@@ -161,7 +162,7 @@
         <div class="title">Portfolio Budget Overview</div>
         <p class="muted">
             Sector funding, program concentration, project ranking, and annual allocation movement.
-            Generated on {{ $generatedAt }}.
+            Reporting currency: {{ $portfolioCurrency }}. Generated on {{ $generatedAt }}.
         </p>
     </div>
 
@@ -233,12 +234,12 @@
                     <tr>
                         <td>
                             <strong>{{ $sector['name'] }}</strong>
-                            <div class="muted">Average project budget: {{ $money($sector['average_project_budget']) }}</div>
+                            <div class="muted">Average project budget: {{ $money($sector['average_project_budget'], $sector['currency'] ?? $portfolioCurrency) }}</div>
                         </td>
                         <td class="center">{{ number_format($sector['programs']) }}</td>
                         <td class="center">{{ number_format($sector['projects']) }}</td>
                         <td class="center">{{ number_format($sector['activities']) }}</td>
-                        <td class="right"><strong>{{ $money($sector['total_budget']) }}</strong></td>
+                        <td class="right"><strong>{{ $money($sector['total_budget'], $sector['currency'] ?? $portfolioCurrency) }}</strong></td>
                         <td>
                             <div class="bar"><span style="width: {{ min(100, $share) }}%;"></span></div>
                             <div class="muted">{{ number_format($share, 1) }}%</div>
@@ -277,7 +278,7 @@
                                             <strong>{{ \Illuminate\Support\Str::limit($program['name'], 54) }}</strong>
                                             <div class="muted">{{ $program['sector'] }} | {{ number_format($program['projects']) }} projects</div>
                                         </td>
-                                        <td class="right">{{ $money($program['total_budget']) }}</td>
+                                        <td class="right">{{ $money($program['total_budget'], $program['currency'] ?? $portfolioCurrency) }}</td>
                                     </tr>
                                 @empty
                                     <tr><td colspan="3" class="center muted">No programs found.</td></tr>
@@ -307,7 +308,7 @@
                                             <strong>{{ \Illuminate\Support\Str::limit($project['name'], 54) }}</strong>
                                             <div class="muted">{{ $project['program'] }} | {{ number_format($project['activities']) }} activities</div>
                                         </td>
-                                        <td class="right">{{ $money($project['total_budget']) }}</td>
+                                        <td class="right">{{ $money($project['total_budget'], $project['currency'] ?? $portfolioCurrency) }}</td>
                                     </tr>
                                 @empty
                                     <tr><td colspan="3" class="center muted">No projects found.</td></tr>

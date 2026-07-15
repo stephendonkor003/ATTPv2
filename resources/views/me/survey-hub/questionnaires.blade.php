@@ -87,6 +87,7 @@
                     <thead>
                         <tr>
                             <th class="ps-3">Questionnaire</th>
+                            <th>Portfolio Scope</th>
                             <th>Structure</th>
                             <th>Coverage</th>
                             <th>Status</th>
@@ -102,6 +103,15 @@
                                     <div class="survey-muted small">{{ data_get($questionnaire, 'survey_summary.title', 'Untitled public survey') }}</div>
                                     @if (!empty(data_get($questionnaire, 'survey_summary.intro')))
                                         <div class="survey-muted small mt-1">{{ \Illuminate\Support\Str::limit(data_get($questionnaire, 'survey_summary.intro'), 110) }}</div>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($questionnaire->portfolio)
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            {{ $questionnaire->portfolio->name }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Portfolio missing</span>
                                     @endif
                                 </td>
                                 <td>
@@ -147,7 +157,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="survey-empty">No questionnaires matched the current search.</td>
+                                <td colspan="7" class="survey-empty">No questionnaires matched the current search.</td>
                             </tr>
                         @endforelse
                     </tbody>

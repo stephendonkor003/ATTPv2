@@ -135,6 +135,11 @@ class SecurityController extends Controller
                 ->with('success', 'Your password has been updated successfully. Your account is now active.');
         }
 
+        if ($user->user_type === 'ttl') {
+            return redirect()->intended(route('ttl.dashboard'))
+                ->with('success', 'Your password has been updated successfully. Your account is now active.');
+        }
+
         return redirect()->intended(route('dashboard'))
             ->with('success', 'Your password has been updated successfully. Your account is now active.');
     }
@@ -240,6 +245,11 @@ class SecurityController extends Controller
 
         if ($user->user_type === 'think_tank') {
             return redirect()->intended(route('think-tank.dashboard'))
+                ->with('success', 'Identity verified successfully. Welcome back!');
+        }
+
+        if ($user->user_type === 'ttl') {
+            return redirect()->intended(route('ttl.dashboard'))
                 ->with('success', 'Identity verified successfully. Welcome back!');
         }
 

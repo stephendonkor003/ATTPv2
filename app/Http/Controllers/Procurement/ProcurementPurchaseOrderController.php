@@ -37,13 +37,18 @@ class ProcurementPurchaseOrderController extends Controller
 
     public function index()
     {
+        $currentUser = auth()->user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to purchase orders.');
         }
 
         $purchaseOrderQuery = ProcurementPurchaseOrder::query()
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToPurchaseOrders($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             });
@@ -151,8 +156,10 @@ class ProcurementPurchaseOrderController extends Controller
 
     private function purchaseOrderFormContext(?ProcurementPurchaseOrder $purchaseOrder = null): array
     {
+        $currentUser = auth()->user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to purchase orders.');
         }
 
@@ -175,7 +182,10 @@ class ProcurementPurchaseOrderController extends Controller
                     ->orderBy('commitment_year'),
             ])
                 ->where('status', 'approved')
-                ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                    $this->applyAssignedPortfolioScopeToPurchaseRequests($query, $currentUser);
+                })
+                ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
                 })
@@ -191,12 +201,10 @@ class ProcurementPurchaseOrderController extends Controller
                 ->values();
         }
 
-        $procurements = Procurement::query()
-            ->with('awardedVendor')
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
-                $query->whereIn('governance_node_id', $scopedNodeIds)
-                    ->whereNotNull('governance_node_id');
-            })
+        $procurementQuery = Procurement::query()->with('awardedVendor');
+        $this->applyProcurementScope($procurementQuery);
+
+        $procurements = $procurementQuery
             ->orderBy('title')
             ->get();
 
@@ -226,7 +234,10 @@ class ProcurementPurchaseOrderController extends Controller
             ->values();
 
         $resourceCategories = ResourceCategory::where('status', 'active')
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToResourceNodes($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
@@ -234,7 +245,10 @@ class ProcurementPurchaseOrderController extends Controller
             ->get(['id', 'name']);
 
         $resourcesByCategory = Resource::where('status', 'active')
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToResourceNodes($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
@@ -1542,6 +1556,15 @@ HTML;
 
     private function assertPurchaseOrderInScope(ProcurementPurchaseOrder $purchaseOrder): void
     {
+        $currentUser = auth()->user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->purchaseOrderIsInAssignedPortfolio($purchaseOrder, $currentUser)) {
+                abort(403, 'You do not have access to this purchase order.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1554,6 +1577,15 @@ HTML;
 
     private function assertCommitmentInScope(BudgetCommitment $commitment): void
     {
+        $currentUser = auth()->user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->commitmentIsInAssignedPortfolio($commitment, $currentUser)) {
+                abort(403, 'You do not have access to this commitment.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1566,6 +1598,15 @@ HTML;
 
     private function assertPurchaseRequestInScope(PurchaseRequest $purchaseRequest): void
     {
+        $currentUser = auth()->user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->purchaseRequestIsInAssignedPortfolio($purchaseRequest, $currentUser)) {
+                abort(403, 'You do not have access to this purchase request.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1590,6 +1631,15 @@ HTML;
 
     private function assertResourceCategoryInScope(ResourceCategory $category): void
     {
+        $currentUser = auth()->user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->resourceCategoryIsInAssignedPortfolioNode($category, $currentUser)) {
+                abort(403, 'You do not have access to this resource category.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;

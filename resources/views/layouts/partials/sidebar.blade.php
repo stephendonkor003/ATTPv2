@@ -63,13 +63,22 @@
         && collect($newsCommunicationSidebarPermissions)->contains(
             fn($permission) => $sidebarUser->hasPermission($permission)
         );
+    $discussionSidebarPermissions = [
+        'discussions.view',
+        'discussions.create',
+        'discussions.manage',
+        'discussions.thematic_areas.manage',
+        'discussions.participants.manage',
+        'discussions.moderate',
+    ];
+    $canSeeDiscussionSidebar = $sidebarUser
+        && collect($discussionSidebarPermissions)->contains(
+            fn($permission) => $sidebarUser->hasPermission($permission)
+        );
     $isAdminSidebarUser = (bool) ($sidebarUser?->isSuperAdmin() || $sidebarUser?->isAdmin());
     $thinkTankFinancePermissions = [
         'think_tanks.funding.view',
         'consortiums.view',
-        'finance.purchase_requests.view',
-        'finance.commitments.create',
-        'finance.purchase_orders.create',
     ];
     $canSeeThinkTankFinance = $sidebarUser
         && collect($thinkTankFinancePermissions)->contains(
@@ -662,6 +671,54 @@
                     </li>
                 @endif
 
+                @if ($sidebarUser)
+                    <li class="nxl-item nxl-caption">
+                        <label>Grievance Redress Mechanism</label>
+                    </li>
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-alert-octagon"></i></span>
+                            <span class="nxl-mtext">Grievance Redress Mechanism</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+                        <ul class="nxl-submenu">
+                            <li class="nxl-item">
+                                <a href="{{ route('grm.submissions.create') }}" class="nxl-link">
+                                    <i class="feather-edit-3 me-2"></i> Log a Grievance
+                                </a>
+                            </li>
+                            @can('grm.configure')
+                                <li class="nxl-item">
+                                    <a href="{{ route('grm.levels.index') }}" class="nxl-link">
+                                        <i class="feather-sliders me-2"></i> Grievance Configuration
+                                    </a>
+                                </li>
+                            @endcan
+                            @can('grm.escalations')
+                                <li class="nxl-item">
+                                    <a href="{{ route('grm.escalations.index') }}" class="nxl-link">
+                                        <i class="feather-clock me-2"></i> Escalation Configuration
+                                    </a>
+                                </li>
+                            @endcan
+                            @can('grm.view')
+                                <li class="nxl-item">
+                                    <a href="{{ route('grm.logs.index') }}" class="nxl-link">
+                                        <i class="feather-clipboard me-2"></i> Grievance Logs
+                                    </a>
+                                </li>
+                            @endcan
+                            @can('grm.reports')
+                                <li class="nxl-item">
+                                    <a href="{{ route('grm.reports.index') }}" class="nxl-link">
+                                        <i class="feather-bar-chart-2 me-2"></i> Metrics and Reports
+                                    </a>
+                                </li>
+                            @endcan
+                        </ul>
+                    </li>
+                @endif
+
                 {{-- ================= NEWS & COMMUNICATIONS ================= --}}
                 @if ($canSeeNewsCommunicationSidebar)
                     <li class="nxl-item nxl-caption">
@@ -696,6 +753,71 @@
                                 <li class="nxl-item">
                                     <a href="{{ route('system.questions.index') }}" class="nxl-link">
                                         <i class="feather-help-circle me-2"></i> Respond to Questions
+                                    </a>
+                                </li>
+                            @endcan
+                        </ul>
+                    </li>
+                @endif
+
+                {{-- ================= DISCUSSION CONTROLS ================= --}}
+                @if ($canSeeDiscussionSidebar)
+                    <li class="nxl-item nxl-caption">
+                        <label>Discussion Controls</label>
+                    </li>
+
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-message-square"></i></span>
+                            <span class="nxl-mtext">Discussion Controls</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+
+                        <ul class="nxl-submenu">
+                            @canany(['discussions.view', 'discussions.create', 'discussions.manage', 'discussions.thematic_areas.manage', 'discussions.participants.manage', 'discussions.moderate'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.discussions.dashboard') }}" class="nxl-link">
+                                        <i class="feather-grid me-2"></i> Discussion Dashboard
+                                    </a>
+                                </li>
+                            @endcanany
+                            @can('discussions.create')
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.discussions.topics.create') }}" class="nxl-link">
+                                        <i class="feather-plus-circle me-2"></i> Create Discussion
+                                    </a>
+                                </li>
+                            @endcan
+                            @canany(['discussions.view', 'discussions.manage'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.discussions.topics.index') }}" class="nxl-link">
+                                        <i class="feather-list me-2"></i> Manage Discussions
+                                    </a>
+                                </li>
+                            @endcanany
+                            @can('discussions.thematic_areas.manage')
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.discussions.themes.index') }}" class="nxl-link">
+                                        <i class="feather-layers me-2"></i> Thematic Areas
+                                    </a>
+                                </li>
+                            @endcan
+                            @can('discussions.participants.manage')
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.discussions.participants.index') }}" class="nxl-link">
+                                        <i class="feather-user-x me-2"></i> Block Participating Users
+                                    </a>
+                                </li>
+                            @endcan
+                            @can('discussions.moderate')
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.discussions.moderation.live') }}" class="nxl-link">
+                                        <i class="feather-radio me-2"></i> Live Discussion Monitor
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('system.discussions.moderation.index') }}" class="nxl-link">
+                                        <i class="feather-shield me-2"></i> Moderation History
                                     </a>
                                 </li>
                             @endcan
@@ -815,7 +937,7 @@
                         <ul class="nxl-submenu">
                             @can('sector.view')
                                 <li class="nxl-item">
-                                    <a href="{{ route('budget.sectors.index') }}" class="nxl-link">
+                                    <a href="{{ route('budget.portfolios.index') }}" class="nxl-link">
                                         <i class="feather-layers me-2"></i> {{ __('admin.sectors') }}
                                     </a>
                                 </li>
@@ -1067,7 +1189,7 @@
                 {{-- ======================================================
                     | MONITORING & EVALUATION
                     ====================================================== --}}
-                @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage'])
+                @canany(['me.configuration.view', 'me.configuration.manage', 'me.data_entry.view', 'me.data_entry.manage', 'world.indicators.manage'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('Monitoring & Evaluation') }}</label>
                     </li>
@@ -1075,110 +1197,52 @@
                     <li class="nxl-item nxl-hasmenu">
                         <a href="javascript:void(0);" class="nxl-link">
                             <span class="nxl-micon"><i class="feather-target"></i></span>
-                            <span class="nxl-mtext">M&E Configuration</span>
+                            <span class="nxl-mtext">Monitoring & Evaluation</span>
                             <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
                         </a>
 
                         <ul class="nxl-submenu">
-                            @canany(['me.configuration.view', 'me.configuration.manage'])
+                            @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.indicators.index') }}" class="nxl-link">
-                                        <i class="feather-target me-2"></i> Indicators
-                                    </a>
-                                </li>
-
-                                <li class="nxl-item">
-                                    <a href="{{ route('budget.me.data-sources.index') }}" class="nxl-link">
-                                        <i class="feather-database me-2"></i> Data Source Controller
-                                    </a>
-                                </li>
-
-                                <li class="nxl-item nxl-hasmenu">
-                                    <a href="javascript:void(0);" class="nxl-link">
-                                        <i class="feather-clipboard me-2"></i> Survey
-                                        <span class="nxl-arrow ms-auto"><i class="feather-chevron-right"></i></span>
-                                    </a>
-
-                                    <ul class="nxl-submenu">
-                                        @canany(['me.configuration.view', 'me.configuration.manage'])
-                                            <li class="nxl-item">
-                                                <a href="{{ route('budget.me.surveys.index') }}" class="nxl-link">
-                                                    <i class="feather-home me-2"></i> Overview
-                                                </a>
-                                            </li>
-                                        @endcanany
-
-                                        @canany(['me.configuration.view', 'me.configuration.manage'])
-                                            <li class="nxl-item">
-                                                <a href="{{ route('budget.me.surveys.responses') }}" class="nxl-link">
-                                                    <i class="feather-inbox me-2"></i> Responses
-                                                </a>
-                                            </li>
-                                        @endcanany
-
-                                        @canany(['me.configuration.view', 'me.configuration.manage'])
-                                            <li class="nxl-item">
-                                                <a href="{{ route('budget.me.surveys.reports') }}" class="nxl-link">
-                                                    <i class="feather-bar-chart-2 me-2"></i> Reports
-                                                </a>
-                                            </li>
-                                        @endcanany
-
-                                        @can('me.configuration.manage')
-                                            <li class="nxl-item">
-                                                <a href="{{ route('budget.me.surveys.questionnaires.create') }}" class="nxl-link">
-                                                    <i class="feather-plus-square me-2"></i> Add Questionnaires
-                                                </a>
-                                            </li>
-                                        @endcan
-
-                                        @canany(['me.configuration.view', 'me.configuration.manage'])
-                                            <li class="nxl-item">
-                                                <a href="{{ route('budget.me.surveys.questionnaires') }}" class="nxl-link">
-                                                    <i class="feather-book-open me-2"></i> Questionnaire Library
-                                                </a>
-                                            </li>
-                                        @endcanany
-
-                                        @canany(['me.configuration.view', 'me.configuration.manage'])
-                                            <li class="nxl-item">
-                                                <a href="{{ route('budget.me.surveys.qr') }}" class="nxl-link">
-                                                    <i class="feather-grid me-2"></i> Generate QR Code
-                                                </a>
-                                            </li>
-                                        @endcanany
-                                    </ul>
-                                </li>
-
-                                <li class="nxl-item">
-                                    <a href="{{ route('budget.me-configuration.indicator-levels.index') }}" class="nxl-link">
-                                        <i class="feather-layers me-2"></i> Indicator Levels
-                                    </a>
-                                </li>
-
-                                <li class="nxl-item">
-                                    <a href="{{ route('budget.me-configuration.frequencies.index') }}" class="nxl-link">
-                                        <i class="feather-clock me-2"></i> Reporting Frequencies
-                                    </a>
-                                </li>
-
-                                <li class="nxl-item">
-                                    <a href="{{ route('budget.me-configuration.units.index') }}" class="nxl-link">
-                                        <i class="feather-sliders me-2"></i> Indicator Units
-                                    </a>
-                                </li>
-                                <li class="nxl-item">
-                                    <a href="{{ route('budget.me-configuration.definitions.index') }}" class="nxl-link">
-                                        <i class="feather-file-text me-2"></i> Definitions / Formulas
-                                    </a>
-                                </li>
-                                <li class="nxl-item">
-                                    <a href="{{ route('budget.me-configuration.methodologies.index') }}" class="nxl-link">
-                                        <i class="feather-book-open me-2"></i> Methodologies
+                                        <i class="feather-target me-2"></i> Results Framework and Indicator Management
                                     </a>
                                 </li>
                             @endcanany
-
+                            @canany(['me.data_entry.view', 'me.data_entry.manage', 'me.configuration.view', 'me.configuration.manage'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.rebuild.data-entry') }}" class="nxl-link">
+                                        <i class="feather-edit-3 me-2"></i> Data Entry and Performance Tracking
+                                    </a>
+                                </li>
+                            @endcanany
+                            @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.rebuild.data-quality') }}" class="nxl-link">
+                                        <i class="feather-check-circle me-2"></i> Data Quality and Approval Workflow
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.rebuild.reporting-dashboard') }}" class="nxl-link">
+                                        <i class="feather-bar-chart-2 me-2"></i> Reporting and Dashboard
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.rebuild.management-dashboard') }}" class="nxl-link">
+                                        <i class="feather-monitor me-2"></i> Management Dashboard
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.rebuild.knowledge-repository') }}" class="nxl-link">
+                                        <i class="feather-folder me-2"></i> Knowledge and Evidence Repository (MEAL plans, TOCs and pertinent documents)
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.rebuild.data-governance') }}" class="nxl-link">
+                                        <i class="feather-shield me-2"></i> Data Governance Framework
+                                    </a>
+                                </li>
+                            @endcanany
                         </ul>
                     </li>
                 @endcanany

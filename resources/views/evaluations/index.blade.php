@@ -32,7 +32,7 @@
             <strong>Lifecycle:</strong>
             <span class="ms-2">Draft → Active → Close</span>
             <div class="small mt-1 text-muted">
-                Create and configure evaluations while in Draft. Activate before assigning to procurements.
+                Each portfolio creates its own evaluation templates. Generic migrated templates are retained only for historical records.
             </div>
         </div>
 
@@ -43,6 +43,7 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-4">Evaluation</th>
+                            <th>Portfolio</th>
                             <th class="text-center">Type</th>
                             <th class="text-center">Sections</th>
                             <th class="text-center">Status</th>
@@ -69,6 +70,18 @@
                                     <small class="text-muted">
                                         {{ \Illuminate\Support\Str::limit($eval->description ?? '', 60) }}
                                     </small>
+                                </td>
+
+                                <td>
+                                    @if ($eval->portfolio)
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            {{ $eval->portfolio->name }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                            Portfolio missing
+                                        </span>
+                                    @endif
                                 </td>
 
                                 <td class="text-center">
@@ -135,6 +148,13 @@
                         @endforeach
                     </tbody>
                 </x-data-table>
+
+                @if ($evaluations->isEmpty())
+                    <div class="border-top text-center text-muted py-4">
+                        <div class="fw-semibold mb-1">No portfolio-owned evaluation templates yet.</div>
+                        <div class="small">Create a new evaluation for this portfolio to begin.</div>
+                    </div>
+                @endif
             </div>
         </div>
 

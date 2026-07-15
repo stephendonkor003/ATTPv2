@@ -429,6 +429,7 @@
 
 
 
+            @if ($callForProposalSubmissionsOpen ?? false)
             <div class="step-indicator mb-4 d-flex justify-content-center gap-3">
                 <div class="step step-1 active"> 1</div>
                 <div class="step step-3"> 2</div>
@@ -1023,6 +1024,14 @@
                 </div>
 
             </form>
+            @else
+                <div class="alert alert-warning border-warning mb-0" role="alert">
+                    <h4 class="alert-heading">Submissions Closed</h4>
+                    <p class="mb-0">
+                        The call for proposals is now closed. New submissions are no longer being accepted.
+                    </p>
+                </div>
+            @endif
 
         </div>
     </div>

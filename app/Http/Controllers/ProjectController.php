@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\ProjectAllocation;
@@ -13,26 +14,56 @@ use Illuminate\Support\Facades\Validator;
 
 class ProjectController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /**
      * Display list of projects
      */
     public function index()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to projects.');
         }
 
-        $projects = Project::with('program')
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+        $projects = Project::with([
+            'program.sector',
+            'governanceNode.level',
+            'activities.subActivities',
+            'allocations',
+            'indicators',
+        ])
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToProjects($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
             ->orderBy('id', 'desc')
-            ->get();
+            ->get()
+            ->each(function (Project $project) {
+                $activities = $project->activities;
+                $subActivities = $activities->flatMap->subActivities;
+
+                $project->setAttribute('activities_count', $activities->count());
+                $project->setAttribute('sub_activities_count', $subActivities->count());
+                $project->setAttribute('allocations_total', $project->allocations->sum(fn ($allocation) => (float) ($allocation->amount ?? 0)));
+                $project->setAttribute('duration_years_display', $project->total_years ?: (($project->start_year && $project->end_year) ? (($project->end_year - $project->start_year) + 1) : null));
+                $project->setAttribute('latest_structure_update_at', collect([
+                    $project->updated_at,
+                    $activities->max('updated_at'),
+                    $subActivities->max('updated_at'),
+                ])->filter()->sortByDesc(fn ($date) => $date->getTimestamp())->first());
+            });
 
         $programSummaries = Program::query()
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToPrograms($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
@@ -52,7 +83,23 @@ class ProjectController extends Controller
                 ];
             });
 
-        return view('budget.projects.index', compact('projects', 'programSummaries'));
+        $projectStats = [
+            'total' => $projects->count(),
+            'programs' => $projects->pluck('program_id')->filter()->unique()->count(),
+            'activities' => $projects->sum('activities_count'),
+            'sub_activities' => $projects->sum('sub_activities_count'),
+            'indicators' => $projects->sum(fn ($project) => $project->indicators->count()),
+            'total_budget' => $projects->sum(fn ($project) => (float) ($project->total_budget ?? 0)),
+            'allocation_total' => $projects->sum('allocations_total'),
+            'governance_assigned' => $projects->filter(fn ($project) => filled($project->governance_node_id))->count(),
+        ];
+
+        $topProjects = $projects
+            ->sortByDesc(fn ($project) => (float) ($project->total_budget ?? 0))
+            ->take(5)
+            ->values();
+
+        return view('budget.projects.index', compact('projects', 'programSummaries', 'projectStats', 'topProjects'));
     }
 
     /**
@@ -60,9 +107,7 @@ class ProjectController extends Controller
      */
     public function create()
     {
-        $sectors = Sector::with(['programs:id,name,sector_id'])
-            ->orderBy('name')
-            ->get(['id', 'name']);
+        $sectors = $this->availableSectorsWithPrograms();
 
         return view('budget.projects.create', compact('sectors'));
     }
@@ -193,18 +238,49 @@ class ProjectController extends Controller
     public function show($id)
     {
         $project = Project::with(
+            'program.sector',
+            'program.governanceNode.level',
             'program.indicators.level',
             'program.indicators.frequency',
             'program.indicators.unit',
             'allocations',
             'activities.allocations',
+            'activities.subActivities.allocations',
             'indicators.level',
             'indicators.frequency',
             'indicators.unit',
             'indicators.parentIndicator'
         )->findOrFail($id);
         $this->assertProjectInScope($project);
-        return view('budget.projects.show', compact('project'));
+
+        $activities = $project->activities;
+        $subActivities = $activities->flatMap->subActivities;
+        $projectBudget = (float) ($project->total_budget ?? 0);
+        $allocationTotal = (float) $project->allocations->sum('amount');
+        $activityAllocationTotal = (float) $activities->flatMap->allocations->sum('amount');
+        $subActivityAllocationTotal = (float) $subActivities->flatMap->allocations->sum('amount');
+
+        $projectStats = [
+            'activities' => $activities->count(),
+            'sub_activities' => $subActivities->count(),
+            'project_indicators' => $project->indicators->count(),
+            'program_indicators' => $project->program?->indicators?->count() ?? 0,
+            'project_budget' => $projectBudget,
+            'allocation_total' => $allocationTotal,
+            'activity_allocation_total' => $activityAllocationTotal,
+            'sub_activity_allocation_total' => $subActivityAllocationTotal,
+            'remaining_allocation' => max($projectBudget - $allocationTotal, 0),
+            'allocation_percent' => $projectBudget > 0 ? min(100, round(($allocationTotal / $projectBudget) * 100)) : 0,
+            'activity_percent' => $allocationTotal > 0 ? min(100, round(($activityAllocationTotal / $allocationTotal) * 100)) : 0,
+        ];
+
+        $activities->each(function ($activity) {
+            $activity->setAttribute('sub_activities_count', $activity->subActivities->count());
+            $activity->setAttribute('allocation_total', $activity->allocations->sum(fn ($allocation) => (float) ($allocation->amount ?? 0)));
+            $activity->setAttribute('sub_activity_allocation_total', $activity->subActivities->flatMap->allocations->sum(fn ($allocation) => (float) ($allocation->amount ?? 0)));
+        });
+
+        return view('budget.projects.show', compact('project', 'projectStats'));
     }
 
     /**
@@ -681,11 +757,15 @@ public function update(Request $request, $id)
 
     private function availablePrograms()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
 
         $query = Program::orderBy('name');
 
-        if ($scopedNodeIds !== null) {
+        if ($isPortfolioLeader) {
+            $this->applyAssignedPortfolioScopeToPrograms($query, $currentUser);
+        } elseif ($scopedNodeIds !== null) {
             $query->whereIn('governance_node_id', $scopedNodeIds)
                 ->whereNotNull('governance_node_id');
         }
@@ -693,8 +773,45 @@ public function update(Request $request, $id)
         return $query->get();
     }
 
+    private function availableSectorsWithPrograms()
+    {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
+        $scopedNodeIds = $this->scopedNodeIds();
+
+        return Sector::with(['programs' => function ($query) use ($currentUser, $isPortfolioLeader, $scopedNodeIds) {
+            $query->select('id', 'name', 'sector_id')
+                ->orderBy('name');
+
+            if ($isPortfolioLeader) {
+                $this->applyAssignedPortfolioScopeToPrograms($query, $currentUser);
+            } elseif ($scopedNodeIds !== null) {
+                $query->whereIn('governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('governance_node_id');
+            }
+        }])
+            ->orderBy('name')
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToSectors($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                $query->whereIn('governance_node_id', $scopedNodeIds)
+                    ->whereNotNull('governance_node_id');
+            })
+            ->get(['id', 'name', 'governance_node_id']);
+    }
+
     private function assertProjectInScope(Project $project): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->projectIsInAssignedPortfolio($project, $currentUser)) {
+                abort(403, 'You do not have access to this project.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -707,6 +824,15 @@ public function update(Request $request, $id)
 
     private function assertProgramInScope(Program $program): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->programIsInAssignedPortfolio($program, $currentUser)) {
+                abort(403, 'You do not have access to this program.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;

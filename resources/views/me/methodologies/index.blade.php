@@ -24,6 +24,7 @@
                 <thead class="table-light">
                     <tr>
                         <th class="ps-4">Name</th>
+                        <th>Portfolio Scope</th>
                         <th>Description</th>
                         <th>Survey Engine</th>
                         <th>Status</th>
@@ -41,6 +42,15 @@
                         @endphp
                         <tr>
                             <td class="ps-4 fw-semibold">{{ $item->name }}</td>
+                            <td>
+                                @if ($item->portfolio)
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                        {{ $item->portfolio->name }}
+                                    </span>
+                                @else
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Portfolio missing</span>
+                                @endif
+                            </td>
                             <td>{{ $item->description ?? '—' }}</td>
                             <td>
                                 @if($surveyEnabled)
@@ -62,7 +72,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="text-center text-muted py-4">No methodologies found.</td></tr>
+                        <tr><td colspan="6" class="text-center text-muted py-4">No methodologies found.</td></tr>
                     @endforelse
                 </tbody>
             </table>

@@ -23,6 +23,7 @@ class ReportingFrequency extends BaseModel
     ];
 
     protected $fillable = [
+        'portfolio_id',
         'name',
         'code',
         'interval_unit',
@@ -45,6 +46,11 @@ class ReportingFrequency extends BaseModel
     public function indicators()
     {
         return $this->hasMany(Indicator::class, 'frequency_of_reporting_id');
+    }
+
+    public function portfolio()
+    {
+        return $this->belongsTo(Sector::class, 'portfolio_id');
     }
 
     // Scopes

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesSiteVisitsToPortfolio;
 use App\Models\{
     SiteVisit,
     SiteVisitObservation
@@ -10,6 +11,8 @@ use Illuminate\Http\Request;
 
 class SiteVisitObservationController extends Controller
 {
+    use ScopesSiteVisitsToPortfolio;
+
     /* =========================
      | SHOW CREATE FORM
      ========================= */
@@ -37,11 +40,15 @@ class SiteVisitObservationController extends Controller
 
         $siteVisit->loadMissing(['submission.values', 'assignment', 'group.members']);
 
+        if ($user->can('site_visits.approve') || $this->userHasSiteVisitPortfolioScope($user)) {
+            $this->assertSiteVisitInPortfolioScope($siteVisit);
+        }
+
         /* =========================
          | ASSIGNMENT CHECK
          ========================= */
 
-        // Admin / approver can always view
+        // Admin / approver can view visits inside their portfolio scope.
         if ($user->can('site_visits.approve')) {
             return view('site-visits.observations.create', compact('siteVisit'));
         }
@@ -94,6 +101,10 @@ class SiteVisitObservationController extends Controller
                 ->withErrors([
                     'status' => 'Observations can only be added while the site visit is in draft status.'
                 ]);
+        }
+
+        if ($user->can('site_visits.approve') || $this->userHasSiteVisitPortfolioScope($user)) {
+            $this->assertSiteVisitInPortfolioScope($siteVisit);
         }
 
         /* =========================

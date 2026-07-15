@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Activity;
 use App\Models\Project;
 use App\Models\Program;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\Validator;
 
 class ActivityController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /**
      * Display all activities (with project & program info)
      */
@@ -20,17 +23,25 @@ class ActivityController extends Controller
 {
     $search = $request->search;
 
+    $currentUser = Auth::user();
+    $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
     $scopedNodeIds = $this->scopedNodeIds();
-    if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+    if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
         abort(403, 'You do not have access to activities.');
     }
 
     $programs = Program::with([
+        'sector',
+        'projects.allocations',
         'projects.activities.allocations' => function ($q) {
             $q->orderBy('year', 'asc');
-        }
+        },
+        'projects.activities.subActivities',
     ])
-    ->when($scopedNodeIds !== null, function ($q) use ($scopedNodeIds) {
+    ->when($isPortfolioLeader, function ($q) use ($currentUser) {
+        $this->applyAssignedPortfolioScopeToPrograms($q, $currentUser);
+    })
+    ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($q) use ($scopedNodeIds) {
         $q->whereIn('governance_node_id', $scopedNodeIds)
           ->whereNotNull('governance_node_id');
     })
@@ -49,7 +60,23 @@ class ActivityController extends Controller
     ->orderBy('name')
     ->get();
 
-    return view('activities.index', compact('programs', 'search'));
+    $projects = $programs->flatMap->projects;
+    $activities = $projects->flatMap->activities;
+
+    $activities->each(function (Activity $activity) {
+        $activity->setAttribute('allocation_total', (float) $activity->allocations->sum('amount'));
+        $activity->setAttribute('sub_activities_count', $activity->subActivities->count());
+    });
+
+    $activityStats = [
+        'programs' => $programs->count(),
+        'projects' => $projects->count(),
+        'activities' => $activities->count(),
+        'sub_activities' => $activities->sum('sub_activities_count'),
+        'allocation_total' => $activities->sum('allocation_total'),
+    ];
+
+    return view('activities.index', compact('programs', 'search', 'activityStats'));
 }
 
 
@@ -251,8 +278,10 @@ class ActivityController extends Controller
  public function show($id)
 {
     $activity = Activity::with([
-        'project.program',
-        'project.sector',
+        'project.program.sector',
+        'project.allocations',
+        'project.activities.allocations',
+        'subActivities.allocations',
         'allocations' => function ($q) {
             $q->orderBy('year', 'asc');
         }
@@ -260,21 +289,42 @@ class ActivityController extends Controller
     $this->assertActivityInScope($activity);
 
     $project = $activity->project;
+    $subActivities = $activity->subActivities;
 
     // Useful calculations for the blade
-    $totalAllocation = $activity->allocations->sum('amount');
-    $projectBudget   = $project->total_budget;
+    $totalAllocation = (float) $activity->allocations->sum('amount');
+    $projectBudget = (float) $project->total_budget;
+    $projectAllocationTotal = (float) $project->allocations->sum('amount');
+    $allActivitiesAllocationTotal = (float) $project->activities->sum(fn ($projectActivity) => $projectActivity->allocations->sum('amount'));
+    $subActivityAllocationTotal = (float) $subActivities->sum(fn ($subActivity) => $subActivity->allocations->sum('amount'));
     $remainingBudget = $projectBudget - $totalAllocation;
-    $percentageUsed  = $projectBudget > 0
-                        ? ($totalAllocation / $projectBudget) * 100
+    $remainingActivityAllocation = max($totalAllocation - $subActivityAllocationTotal, 0);
+    $percentageUsed = $projectBudget > 0
+                        ? min(100, ($totalAllocation / $projectBudget) * 100)
                         : 0;
+    $subActivityUsagePercent = $totalAllocation > 0
+                        ? min(100, ($subActivityAllocationTotal / $totalAllocation) * 100)
+                        : 0;
+
+    $activityStats = [
+        'project_budget' => $projectBudget,
+        'project_allocation_total' => $projectAllocationTotal,
+        'project_activity_total' => $allActivitiesAllocationTotal,
+        'activity_allocation_total' => $totalAllocation,
+        'sub_activity_count' => $subActivities->count(),
+        'sub_activity_allocation_total' => $subActivityAllocationTotal,
+        'remaining_activity_allocation' => $remainingActivityAllocation,
+        'activity_project_percent' => round($percentageUsed, 1),
+        'sub_activity_usage_percent' => round($subActivityUsagePercent, 1),
+    ];
 
     return view('activities.show', compact(
         'activity',
         'project',
         'totalAllocation',
         'remainingBudget',
-        'percentageUsed'
+        'percentageUsed',
+        'activityStats'
     ));
 }
 
@@ -295,6 +345,15 @@ class ActivityController extends Controller
 
     private function assertProjectInScope(Project $project): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->projectIsInAssignedPortfolio($project, $currentUser)) {
+                abort(403, 'You do not have access to this project.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -307,6 +366,15 @@ class ActivityController extends Controller
 
     private function assertActivityInScope(Activity $activity): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->activityIsInAssignedPortfolio($activity, $currentUser)) {
+                abort(403, 'You do not have access to this activity.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;

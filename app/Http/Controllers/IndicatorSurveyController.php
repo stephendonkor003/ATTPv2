@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Indicator;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorSurveyLink;
@@ -13,6 +14,8 @@ use Illuminate\View\View;
 
 class IndicatorSurveyController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     public function __construct()
     {
         $this->middleware(['auth', 'not.funding.partner']);
@@ -22,6 +25,8 @@ class IndicatorSurveyController extends Controller
 
     public function generateLink(Indicator $indicator): RedirectResponse
     {
+        $this->assertIndicatorInCurrentPortfolioScope($indicator);
+
         [$methodology, $surveyConfig] = $this->resolveSurveyMethodologyForIndicator($indicator);
         if (!$methodology || !$surveyConfig) {
             return redirect()
@@ -58,6 +63,8 @@ class IndicatorSurveyController extends Controller
 
     public function responses(Indicator $indicator): View
     {
+        $this->assertIndicatorInCurrentPortfolioScope($indicator);
+
         $indicator->load('surveyLink');
 
         $responses = IndicatorSurveyResponse::query()
@@ -78,9 +85,12 @@ class IndicatorSurveyController extends Controller
             return [null, null];
         }
 
-        $methodology = IndicatorMethodology::query()
+        $methodologyQuery = IndicatorMethodology::query()
             ->where('is_active', true)
-            ->get()
+            ->orderBy('name');
+        $this->scopeSurveyConfigurationQuery($methodologyQuery);
+
+        $methodology = $methodologyQuery->get()
             ->first(function (IndicatorMethodology $item) use ($methodologyName) {
                 return strtolower(trim((string) $item->name)) === $methodologyName;
             });
@@ -99,5 +109,21 @@ class IndicatorSurveyController extends Controller
         }
 
         return [$methodology, $survey];
+    }
+
+    protected function scopeSurveyConfigurationQuery($query): void
+    {
+        $query->whereNotNull('portfolio_id');
+
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToPortfolioOwnedRecords($query);
+        }
+    }
+
+    protected function assertIndicatorInCurrentPortfolioScope(Indicator $indicator): void
+    {
+        if ($this->userHasAssignedPortfolioScope() && ! $this->indicatorIsInAssignedPortfolio($indicator)) {
+            abort(403, 'This indicator is outside your assigned portfolio.');
+        }
     }
 }

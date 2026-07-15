@@ -59,6 +59,16 @@
                             </p>
                         </div>
 
+                        <div class="col-md-6">
+                            <label class="text-muted small">Task Team Leader</label>
+                            <p class="fw-semibold mb-0">
+                                {{ $funding->program?->ttl_name ?: ($funding->program?->ttlUser?->name ?? 'Unassigned') }}
+                                @if($funding->program?->ttl_email || $funding->program?->ttlUser?->email)
+                                    <br><small class="text-muted">{{ $funding->program?->ttl_email ?: $funding->program?->ttlUser?->email }}</small>
+                                @endif
+                            </p>
+                        </div>
+
                         @if($funding->program && $funding->program->description)
                             <div class="col-md-12">
                                 <label class="text-muted small">{{ __('partner.description') }}</label>
@@ -84,6 +94,7 @@
                                         <th>{{ __('partner.governance_node') }}</th>
                                         <th class="text-end">{{ __('partner.budget') }}</th>
                                         <th class="text-center">{{ __('partner.activities') }}</th>
+                                        <th class="text-center">Progress</th>
                                         <th>{{ __('partner.status') }}</th>
                                     </tr>
                                 </thead>
@@ -109,6 +120,9 @@
                                             </td>
                                             <td class="text-center">
                                                 <span class="badge bg-info">{{ $project->activities->count() }}</span>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge bg-success-subtle text-success">{{ $project->partner_progress_percent ?? 0 }}%</span>
                                             </td>
                                             <td>
                                                 <span class="badge bg-info">{{ ucfirst($project->status ?? 'active') }}</span>

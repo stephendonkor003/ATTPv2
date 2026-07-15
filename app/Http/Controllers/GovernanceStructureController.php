@@ -6,6 +6,7 @@ use App\Models\GovernanceLevel;
 use App\Models\GovernanceNode;
 use App\Models\GovernanceReportingLine;
 use App\Models\GovernanceNodeAssignment;
+use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,16 +14,94 @@ use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class GovernanceStructureController extends Controller
 {
     public function index()
     {
+        $sectorHasStatus = Schema::hasColumn('myb_sectors', 'status');
+        $nodeCounts = [
+            'users as direct_users_count',
+            'users as active_direct_users_count' => function ($query) {
+                $query->where(function ($statusQuery) {
+                    $statusQuery->whereNull('is_disabled')
+                        ->orWhere('is_disabled', false);
+                });
+            },
+            'assignments as assignment_count',
+            'assignments as primary_assignment_count' => function ($query) {
+                $query->where('is_primary', true);
+            },
+            'portfolios as total_portfolios_count',
+        ];
+
+        if ($sectorHasStatus) {
+            $nodeCounts['portfolios as active_portfolios_count'] = function ($query) {
+                $query->where(function ($statusQuery) {
+                    $statusQuery->whereNull('status')
+                        ->orWhere('status', 'active');
+                });
+            };
+            $nodeCounts['portfolios as ended_portfolios_count'] = function ($query) {
+                $query->where('status', 'ended');
+            };
+        }
+
         $levels = GovernanceLevel::orderBy('sort_order')->get();
-        $nodes = GovernanceNode::with('level')->orderBy('name')->get();
+        $nodes = GovernanceNode::with('level')
+            ->withCount($nodeCounts)
+            ->orderBy('name')
+            ->get();
         $lines = GovernanceReportingLine::with(['child.level', 'parent.level'])->orderBy('id')->get();
         $assignments = GovernanceNodeAssignment::with(['node.level', 'user'])->orderBy('id')->get();
         $users = User::orderBy('name')->get();
+        $totalPortfolios = Sector::count();
+        $activePortfolios = $sectorHasStatus
+            ? Sector::where(function ($query) {
+                $query->whereNull('status')
+                    ->orWhere('status', 'active');
+            })->count()
+            : $totalPortfolios;
+        $endedPortfolios = $sectorHasStatus
+            ? Sector::where('status', 'ended')->count()
+            : 0;
+
+        $governanceStats = [
+            'levels' => $levels->count(),
+            'nodes' => $nodes->count(),
+            'active_nodes' => $nodes->where('status', 'active')->count(),
+            'direct_users' => $nodes->sum('direct_users_count'),
+            'total_portfolios' => $totalPortfolios,
+            'active_portfolios' => $activePortfolios,
+            'ended_portfolios' => $endedPortfolios,
+            'assignments' => $assignments->count(),
+            'primary_assignments' => $assignments->where('is_primary', true)->count(),
+            'reporting_lines' => $lines->count(),
+        ];
+
+        $governanceCards = $nodes
+            ->map(function ($node) use ($sectorHasStatus) {
+                return [
+                    'id' => $node->id,
+                    'name' => $node->name,
+                    'code' => $node->code,
+                    'status' => $node->status,
+                    'level' => $node->level?->name ?: 'Unassigned',
+                    'description' => $node->description,
+                    'direct_users_count' => (int) $node->direct_users_count,
+                    'active_direct_users_count' => (int) $node->active_direct_users_count,
+                    'total_portfolios_count' => (int) ($node->total_portfolios_count ?? 0),
+                    'active_portfolios_count' => $sectorHasStatus
+                        ? (int) ($node->active_portfolios_count ?? 0)
+                        : (int) ($node->total_portfolios_count ?? 0),
+                    'ended_portfolios_count' => (int) ($node->ended_portfolios_count ?? 0),
+                    'assignment_count' => (int) $node->assignment_count,
+                    'primary_assignment_count' => (int) $node->primary_assignment_count,
+                ];
+            })
+            ->sortByDesc(fn ($card) => $card['direct_users_count'] + $card['total_portfolios_count'])
+            ->values();
 
         $orgNodes = $nodes->map(function ($n) {
             return [
@@ -47,7 +126,9 @@ class GovernanceStructureController extends Controller
             'assignments',
             'users',
             'orgNodes',
-            'orgLines'
+            'orgLines',
+            'governanceStats',
+            'governanceCards'
         ));
     }
 

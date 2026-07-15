@@ -446,6 +446,9 @@
             <a href="{{ route('vendor.clarifications') }}" class="vendor-nav-link {{ request()->routeIs('vendor.clarifications') ? 'active' : '' }}">
                 <i class="feather-message-square"></i> Clarifications
             </a>
+            <a href="{{ route('grm.submissions.create') }}" class="vendor-nav-link {{ request()->routeIs('grm.submissions.*') ? 'active' : '' }}">
+                <i class="feather-alert-octagon"></i> Grievance Redress Mechanism
+            </a>
 
             <div class="vendor-nav-label">Finance</div>
             <a href="{{ route('vendor.payment-details') }}" class="vendor-nav-link {{ request()->routeIs('vendor.payment-details') ? 'active' : '' }}">

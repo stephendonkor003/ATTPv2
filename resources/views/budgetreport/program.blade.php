@@ -28,7 +28,7 @@
                     </tr>
                     <tr>
                         <td><strong>Currency:</strong></td>
-                        <td>{{ $program->currency }}</td>
+                        <td>{{ $program->sector?->currency ?: $program->currency }}</td>
                     </tr>
                 </table>
             </div>

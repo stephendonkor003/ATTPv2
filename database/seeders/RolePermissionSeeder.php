@@ -66,6 +66,7 @@ class RolePermissionSeeder extends Seeder
             'prescreening.access',
             'prescreening.evaluate',
             'me.configuration.view',
+            'me.data_entry.view',
         ]);
 
         // Evaluation Evaluator
@@ -73,7 +74,95 @@ class RolePermissionSeeder extends Seeder
             'evaluations.evaluate',
             'me.configuration.view',
             'me.configuration.manage',
-            'world.indicators.manage',
+            'me.data_entry.view',
+            'me.data_entry.manage',
+        ]);
+
+        $portfolioLeadershipPermissions = [
+            'dashboard.access',
+            'budget.access',
+            'budget.structure.manage',
+            'budget.activities.manage',
+            'budget.allocations.manage',
+            'budget.reports.view',
+            'budget.project_financial_position.view',
+            'budget.summary.view',
+            'sector.view',
+            'sector.edit',
+            'program.view',
+            'program.create',
+            'program.edit',
+            'project.view',
+            'project.create',
+            'project.edit',
+            'activities.view',
+            'activities.create',
+            'activities.edit',
+            'subactivities.view',
+            'subactivities.create',
+            'subactivities.edit',
+            'finance.access',
+            'finance.resources.view',
+            'finance.resources.create',
+            'finance.resources.edit',
+            'finance.resources.delete',
+            'finance.program_funding.view',
+            'finance.commitments.view',
+            'finance.commitments.create',
+            'finance.commitments.edit',
+            'finance.purchase_requests.view',
+            'finance.purchase_requests.view_all',
+            'finance.purchase_requests.send',
+            'finance.purchase_requests.approve',
+            'finance.purchase_orders.create',
+            'finance.awp.view',
+            'finance.awp.create',
+            'finance.awp.edit',
+            'finance.executions.view',
+            'me.configuration.view',
+            'me.configuration.manage',
+            'me.data_entry.view',
+            'me.data_entry.manage',
+            'forms.manage',
+            'forms.submit',
+            'forms.approve',
+            'forms.reject',
+            'evaluations.manage',
+            'evaluations.evaluate',
+            'evaluations.view_all',
+            'site_visits.view',
+            'site_visits.create',
+            'site_visits.observe',
+            'site_visits.submit',
+            'site_visits.approve',
+            'grm.submit',
+            'grm.view',
+            'grm.configure',
+            'grm.escalations',
+            'grm.reports',
+        ];
+
+        // Portfolio Manager / Coordinator
+        $this->syncRolePermissionsByNames('Portfolio Manager', $portfolioLeadershipPermissions);
+        $this->syncRolePermissionsByNames('Portfolio Coordinator', $portfolioLeadershipPermissions);
+
+        // Monitoring and Evaluation Manager
+        $this->syncRolePermissionsByNames('Monitoring and Evaluation Manager', [
+            'me.configuration.view',
+            'me.configuration.manage',
+            'me.data_entry.view',
+            'me.data_entry.manage',
+            'budget.access',
+            'budget.reports.view',
+            'budget.summary.view',
+            'sector.view',
+            'program.view',
+            'project.view',
+            'activities.view',
+            'subactivities.view',
+            'grm.submit',
+            'grm.view',
+            'grm.reports',
         ]);
 
         $communicationOfficerPermissions = [
@@ -85,6 +174,12 @@ class RolePermissionSeeder extends Seeder
             'questions.respond',
             'national_data.review',
             'national_data.approve',
+            'discussions.view',
+            'discussions.create',
+            'discussions.manage',
+            'discussions.thematic_areas.manage',
+            'discussions.participants.manage',
+            'discussions.moderate',
         ];
 
         // Communication Officer

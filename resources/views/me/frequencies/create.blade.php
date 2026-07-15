@@ -18,6 +18,8 @@
                 <form action="{{ route('budget.me-configuration.frequencies.store') }}" method="POST" class="row g-3">
                     @csrf
 
+                    @include('me.partials.portfolio-scope-field')
+
                     <div class="col-md-6">
                         <label class="form-label">Name <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control @error('name') is-invalid @enderror"

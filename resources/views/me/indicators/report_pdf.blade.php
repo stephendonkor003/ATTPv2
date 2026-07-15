@@ -69,6 +69,7 @@
     <table>
         <thead>
             <tr>
+                <th>Portfolio</th>
                 <th>Program</th>
                 <th>Project</th>
                 <th>Activity</th>
@@ -95,6 +96,7 @@
         <tbody>
             @forelse ($rows as $row)
                 <tr>
+                    <td>{{ $row['portfolio'] ?? '—' }}</td>
                     <td>{{ $row['program'] ?? '—' }}</td>
                     <td>{{ $row['project'] ?? '—' }}</td>
                     <td>{{ $row['activity'] ?? '—' }}</td>
@@ -119,7 +121,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="21" class="small">No indicators available for export.</td>
+                    <td colspan="22" class="small">No indicators available for export.</td>
                 </tr>
             @endforelse
         </tbody>

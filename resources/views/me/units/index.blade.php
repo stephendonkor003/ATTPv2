@@ -3,7 +3,6 @@
 
 @section('content')
     <div class="nxl-container">
-
         <div class="page-header d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h4 class="fw-bold mb-1">
@@ -41,6 +40,7 @@
                         <tr>
                             <th class="ps-4">Name</th>
                             <th>Symbol</th>
+                            <th>Portfolio Scope</th>
                             <th>Description</th>
                             <th>Sort</th>
                             <th>Status</th>
@@ -52,6 +52,15 @@
                             <tr>
                                 <td class="ps-4 fw-semibold">{{ $unit->name }}</td>
                                 <td>{{ $unit->symbol ?? '?' }}</td>
+                                <td>
+                                    @if ($unit->portfolio)
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            {{ $unit->portfolio->name }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Portfolio missing</span>
+                                    @endif
+                                </td>
                                 <td>{{ $unit->description ?? '?' }}</td>
                                 <td>{{ $unit->sort_order }}</td>
                                 <td>
@@ -79,7 +88,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-4">No indicator units found.</td>
+                                <td colspan="7" class="text-center text-muted py-4">No indicator units found.</td>
                             </tr>
                         @endforelse
                     </tbody>

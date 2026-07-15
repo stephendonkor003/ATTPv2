@@ -28,11 +28,24 @@
 <body>
 @php
     $currency = $purchaseOrderRecords->first()?->resolved_currency ?? $member->consortium?->currency ?? 'USD';
-    $financePercent = min(100, max(0, (float) ($metrics['utilization'] ?? 0)));
     $receiptRate = min(100, max(0, (float) ($receiptSummary['rate'] ?? 0)));
     $poPaymentRate = (float) ($metrics['po_allocated'] ?? 0) > 0
         ? min(100, ((float) ($metrics['disbursed'] ?? 0) / (float) $metrics['po_allocated']) * 100)
         : 0;
+    $areaAccess = array_merge([
+        'me' => false,
+        'reports' => false,
+        'finance' => false,
+        'procurement_plans' => false,
+    ], (array) ($portalAreaAccess ?? []));
+    $meSummary = array_merge([
+        'total' => 0,
+        'open' => 0,
+        'submitted' => 0,
+        'action_required' => 0,
+    ], (array) data_get($mePerformanceUpdates ?? [], 'summary', []));
+    $financeValues = collect($chartData['finance']['values'] ?? [])->map(fn ($value): float => (float) $value);
+    $financeMaximum = max(1, (float) ($financeValues->max() ?? 0));
 @endphp
 
 <div class="header">
@@ -42,11 +55,12 @@
     <div>Generated {{ now()->format('M d, Y H:i') }}</div>
 </div>
 
+@if ($areaAccess['finance'])
 <table class="grid" style="margin-top: 12px;">
     <tr>
-        <td><div class="metric"><div class="metric-label">PO Allocated</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['po_allocated'], 2) }}</div></div></td>
-        <td><div class="metric"><div class="metric-label">Paid From POs</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['disbursed'], 2) }}</div></div></td>
-        <td><div class="metric"><div class="metric-label">PO Unpaid</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['po_unpaid'], 2) }}</div><div class="muted">{{ number_format($poPaymentRate, 1) }}% paid</div></div></td>
+        <td><div class="metric"><div class="metric-label">Funding Committed</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['po_allocated'], 2) }}</div></div></td>
+        <td><div class="metric"><div class="metric-label">Payments Recorded</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['disbursed'], 2) }}</div></div></td>
+        <td><div class="metric"><div class="metric-label">Remaining Balance</div><div class="metric-value">{{ $currency }} {{ number_format($metrics['po_unpaid'], 2) }}</div><div class="muted">{{ number_format($poPaymentRate, 1) }}% paid</div></div></td>
         <td><div class="metric"><div class="metric-label">Receipt Confirmed</div><div class="metric-value">{{ $currency }} {{ number_format($receiptSummary['confirmed'], 2) }}</div></div></td>
     </tr>
 </table>
@@ -59,8 +73,7 @@
                 @foreach($chartData['finance']['labels'] as $index => $label)
                     @php
                         $value = (float) ($chartData['finance']['values'][$index] ?? 0);
-                        $max = max($chartData['finance']['values'] ?: [1]);
-                        $width = $max > 0 ? min(100, ($value / $max) * 100) : 0;
+                        $width = min(100, ($value / $financeMaximum) * 100);
                     @endphp
                     <div><strong>{{ $label }}</strong> - {{ $currency }} {{ number_format($value, 2) }}</div>
                     <div class="bar"><span style="width: {{ number_format($width, 2, '.', '') }}%;"></span></div>
@@ -78,35 +91,41 @@
         </td>
     </tr>
 </table>
+@endif
 
-<table class="two-col">
-    <tr>
-        <td>
-            <div class="section">
-                <div class="section-title">Report Status</div>
-                @forelse($reportStatusCounts as $status => $count)
-                    <div>{{ ucfirst(str_replace('_', ' ', $status)) }}: <strong>{{ number_format($count) }}</strong></div>
-                @empty
-                    <div class="muted">No reports found.</div>
-                @endforelse
-            </div>
-        </td>
-        <td>
-            <div class="section">
-                <div class="section-title">Procurement and Research</div>
-                <div>Procurement plans: <strong>{{ number_format($metrics['procurement_plans']) }}</strong></div>
-                <div>Opportunities: <strong>{{ number_format($metrics['opportunities']) }}</strong></div>
-                <div>Applications: <strong>{{ number_format($metrics['applications']) }}</strong></div>
-                <div>Research outputs: <strong>{{ number_format($metrics['research']) }}</strong></div>
-            </div>
-        </td>
-    </tr>
-</table>
+@if ($areaAccess['me'])
+    <div class="section">
+        <div class="section-title">M&amp;E Data Assignments</div>
+        <div>Total assigned: <strong>{{ number_format((int) $meSummary['total']) }}</strong></div>
+        <div>Need action: <strong>{{ number_format((int) $meSummary['action_required']) }}</strong></div>
+        <div>Open now: <strong>{{ number_format((int) $meSummary['open']) }}</strong></div>
+        <div>Submitted: <strong>{{ number_format((int) $meSummary['submitted']) }}</strong></div>
+    </div>
+@endif
 
+@if ($areaAccess['reports'])
+    <div class="section">
+        <div class="section-title">Report Upload Status</div>
+        @forelse($reportStatusCounts as $status => $count)
+            <div>{{ ucfirst(str_replace('_', ' ', $status)) }}: <strong>{{ number_format($count) }}</strong></div>
+        @empty
+            <div class="muted">No reports found.</div>
+        @endforelse
+    </div>
+@endif
+
+@if ($areaAccess['procurement_plans'])
+    <div class="section">
+        <div class="section-title">Procurement Plans</div>
+        <div>Plans submitted by this think tank: <strong>{{ number_format((int) $metrics['procurement_plans']) }}</strong></div>
+    </div>
+@endif
+
+@if ($areaAccess['finance'])
 <div class="section">
-    <div class="section-title">Linked Purchase Order Ledger</div>
+    <div class="section-title">Funding Transfer Ledger</div>
     <table>
-        <thead><tr><th>Purchase Order</th><th>Purchase Request</th><th>PO Amount</th><th>Paid</th><th>Unpaid</th><th>Status</th></tr></thead>
+        <thead><tr><th>Reference</th><th>Source Reference</th><th>Committed</th><th>Paid</th><th>Remaining</th><th>Status</th></tr></thead>
         <tbody>
         @forelse($purchaseOrderRecords as $purchaseOrder)
             @php
@@ -115,7 +134,7 @@
                 $unpaidAmount = max((float) $purchaseOrder->amount - $paidAmount, 0);
             @endphp
             <tr>
-                <td>{{ $purchaseOrder->reference_no ?: 'Purchase Order' }}<br><span class="muted">{{ $purchaseOrder->issued_at?->format('M d, Y') ?? '-' }}</span></td>
+                <td>{{ $purchaseOrder->reference_no ?: 'Funding transfer' }}<br><span class="muted">{{ $purchaseOrder->issued_at?->format('M d, Y') ?? '-' }}</span></td>
                 <td>{{ $purchaseRequest?->reference_no ?? '-' }}</td>
                 <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format((float) $purchaseOrder->amount, 2) }}</td>
                 <td>{{ $purchaseOrder->resolved_currency ?? $currency }} {{ number_format($paidAmount, 2) }}</td>
@@ -123,7 +142,7 @@
                 <td><span class="status-pill">{{ ucfirst(str_replace('_', ' ', $purchaseOrder->status ?? 'pending')) }}</span></td>
             </tr>
         @empty
-            <tr><td colspan="6" class="muted">No linked funding purchase orders found for this selected period.</td></tr>
+            <tr><td colspan="6" class="muted">No funding transfers found for this selected period.</td></tr>
         @endforelse
         </tbody>
     </table>
@@ -154,7 +173,9 @@
         </tbody>
     </table>
 </div>
+@endif
 
+@if ($areaAccess['reports'])
 <div class="section">
     <div class="section-title">Recent Activity Reports</div>
     <table>
@@ -173,23 +194,6 @@
         </tbody>
     </table>
 </div>
-
-<div class="section">
-    <div class="section-title">Recent Research Outputs</div>
-    <table>
-        <thead><tr><th>Title</th><th>Type</th><th>Status</th></tr></thead>
-        <tbody>
-        @forelse($recentResearch as $output)
-            <tr>
-                <td>{{ $output->title }}</td>
-                <td>{{ str_replace('_', ' ', ucfirst($output->output_type)) }}</td>
-                <td><span class="status-pill">{{ ucfirst($output->status) }}</span></td>
-            </tr>
-        @empty
-            <tr><td colspan="3" class="muted">No research outputs found for this selected period.</td></tr>
-        @endforelse
-        </tbody>
-    </table>
-</div>
+@endif
 </body>
 </html>

@@ -33,13 +33,18 @@ class ProcurementDisbursementController extends Controller
 
     public function index()
     {
+        $currentUser = auth()->user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to disbursements.');
         }
 
         $baseQuery = ProcurementDisbursement::query()
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToDisbursements($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             });
@@ -117,6 +122,8 @@ class ProcurementDisbursementController extends Controller
         $purchaseOrderId = $request->get('purchase_order_id');
         $paymentMethods = $this->paymentMethods();
 
+        $currentUser = auth()->user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
 
         $purchaseOrders = ProcurementPurchaseOrder::with([
@@ -134,7 +141,10 @@ class ProcurementDisbursementController extends Controller
             'budgetCommitment.purchaseRequest.programFunding.program',
             'budgetCommitment.purchaseRequest.items.deliverable.procurement',
         ])
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToPurchaseOrders($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
@@ -1735,6 +1745,15 @@ class ProcurementDisbursementController extends Controller
 
     private function assertPurchaseOrderInScope(ProcurementPurchaseOrder $purchaseOrder): void
     {
+        $currentUser = auth()->user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->purchaseOrderIsInAssignedPortfolio($purchaseOrder, $currentUser)) {
+                abort(403, 'You do not have access to this purchase order.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1747,6 +1766,15 @@ class ProcurementDisbursementController extends Controller
 
     private function assertDisbursementInScope(ProcurementDisbursement $disbursement): void
     {
+        $currentUser = auth()->user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->disbursementIsInAssignedPortfolio($disbursement, $currentUser)) {
+                abort(403, 'You do not have access to this disbursement.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;

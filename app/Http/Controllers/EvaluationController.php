@@ -2,72 +2,75 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Evaluation;
+use App\Models\Sector;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class EvaluationController extends Controller
 {
-    /**
-     * Display a listing of evaluations
-     */
+    use ScopesAssignedPortfolios;
+
     public function index()
     {
-        $evaluations = Evaluation::withCount('sections')
-            ->orderByDesc('created_at')
-            ->paginate(15);
+        $evaluationsQuery = $this->evaluationTemplateQuery()
+            ->with('portfolio:id,name')
+            ->withCount('sections')
+            ->orderByDesc('created_at');
+        $this->scopeEvaluationTemplateQuery($evaluationsQuery);
+
+        $evaluations = $evaluationsQuery->paginate(15);
 
         return view('evaluations.index', compact('evaluations'));
     }
 
-    /**
-     * Show create form
-     */
     public function create()
     {
-        return view('evaluations.create');
+        return view('evaluations.create', $this->evaluationPortfolioFormData());
     }
 
-    /**
-     * Store evaluation
-     */
     public function store(Request $request)
-{
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'type' => 'required|in:services,goods',
-    ]);
+    {
+        $portfolioId = $this->resolveEvaluationPortfolioId($request);
 
-    Evaluation::create([
-        'name'        => $request->name,
-        'description' => $request->description,
-        'type'        => $request->type, // ✅ IMPORTANT
-        'status'      => 'draft',
-        'created_by'  => auth()->id(),
-    ]);
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'required|in:services,goods',
+            'portfolio_id' => 'required|exists:myb_sectors,id',
+        ]);
 
-    return redirect()
-        ->route('evals.cfg.index')
-        ->with('success', 'Evaluation created successfully.');
-}
+        Evaluation::create([
+            'name' => $request->name,
+            'description' => $request->description,
+            'type' => $request->type,
+            'portfolio_id' => $portfolioId,
+            'is_portfolio_custom' => true,
+            'status' => 'draft',
+            'created_by' => auth()->id(),
+        ]);
 
+        return redirect()
+            ->route('evals.cfg.index')
+            ->with('success', 'Evaluation created successfully.');
+    }
 
-    /**
-     * Show evaluation builder
-     */
     public function show(Evaluation $evaluation)
     {
+        $this->assertEvaluationTemplateManageable($evaluation);
+
         $evaluation->load('sections.criteria');
 
         return view('evaluations.show', compact('evaluation'));
     }
 
-    /**
-     * Preview template structure (sections + criteria)
-     */
     public function preview(Request $request, Evaluation $evaluation)
     {
+        $this->assertEvaluationTemplateManageable($evaluation);
+
         $evaluation->load([
             'sections' => fn ($query) => $query->orderBy('created_at'),
             'sections.criteria' => fn ($query) => $query->orderBy('created_at'),
@@ -77,9 +80,9 @@ class EvaluationController extends Controller
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
-                'success'      => true,
-                'title'        => $evaluation->name,
-                'html'         => $html,
+                'success' => true,
+                'title' => $evaluation->name,
+                'html' => $html,
                 'download_url' => route('evals.cfg.template.pdf', $evaluation),
             ]);
         }
@@ -87,11 +90,10 @@ class EvaluationController extends Controller
         return view('evaluations.preview', compact('evaluation'));
     }
 
-    /**
-     * Download template structure as PDF
-     */
     public function templatePdf(Evaluation $evaluation)
     {
+        $this->assertEvaluationTemplateManageable($evaluation);
+
         $evaluation->load([
             'sections' => fn ($query) => $query->orderBy('created_at'),
             'sections.criteria' => fn ($query) => $query->orderBy('created_at'),
@@ -114,70 +116,65 @@ class EvaluationController extends Controller
         return $pdf->download("{$safeName}-template.pdf");
     }
 
-    /**
-     * Edit evaluation
-     */
     public function edit(Evaluation $evaluation)
     {
-        return view('evaluations.edit', compact('evaluation'));
+        $this->assertEvaluationTemplateManageable($evaluation);
+
+        return view('evaluations.edit', array_merge(
+            compact('evaluation'),
+            $this->evaluationPortfolioFormData($evaluation)
+        ));
     }
 
-    /**
-     * Update evaluation
-     */
     public function update(Request $request, Evaluation $evaluation)
-{
-    // ===============================
-    // STATUS UPDATE (FROM INDEX)
-    // ===============================
-    if ($request->has('status')) {
+    {
+        $this->assertEvaluationTemplateManageable($evaluation);
 
-        $allowedStatuses = ['draft', 'active', 'close'];
+        if ($request->has('status')) {
+            $allowedStatuses = ['draft', 'active', 'close'];
 
-        if (!in_array($request->status, $allowedStatuses)) {
-            return back()->with('error', 'Invalid evaluation status.');
+            if (! in_array($request->status, $allowedStatuses, true)) {
+                return back()->with('error', 'Invalid evaluation status.');
+            }
+
+            if ($evaluation->status === 'close') {
+                return back()->with('error', 'Closed evaluations cannot be modified.');
+            }
+
+            $evaluation->update([
+                'status' => $request->status,
+            ]);
+
+            return back()->with('success', 'Evaluation status updated successfully.');
         }
 
-        // Prevent reopening a closed evaluation
-        if ($evaluation->status === 'close') {
-            return back()->with('error', 'Closed evaluations cannot be modified.');
+        $portfolioId = $this->resolveEvaluationPortfolioId($request, $evaluation);
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'portfolio_id' => 'required|exists:myb_sectors,id',
+        ]);
+
+        if ($evaluation->status !== 'draft') {
+            return back()->with('error', 'Only draft evaluations can be edited.');
         }
 
         $evaluation->update([
-            'status' => $request->status
+            'name' => $request->name,
+            'description' => $request->description,
+            'portfolio_id' => $portfolioId,
         ]);
 
-        return back()->with('success', 'Evaluation status updated successfully.');
+        return redirect()
+            ->route('evals.cfg.index')
+            ->with('success', 'Evaluation updated successfully.');
     }
 
-    // ===============================
-    // FULL UPDATE (EDIT PAGE)
-    // ===============================
-    $request->validate([
-        'name'        => 'required|string|max:255',
-        'description' => 'nullable|string',
-    ]);
-
-    if ($evaluation->status !== 'draft') {
-        return back()->with('error', 'Only draft evaluations can be edited.');
-    }
-
-    $evaluation->update(
-        $request->only('name', 'description')
-    );
-
-    return redirect()
-        ->route('evals.cfg.index')
-        ->with('success', 'Evaluation updated successfully.');
-}
-
-
-
-    /**
-     * Delete evaluation
-     */
     public function destroy(Evaluation $evaluation)
     {
+        $this->assertEvaluationTemplateManageable($evaluation);
+
         if ($evaluation->status !== 'draft') {
             return back()->with('error', 'Only draft evaluations can be deleted.');
         }
@@ -187,5 +184,89 @@ class EvaluationController extends Controller
         return redirect()
             ->route('evals.cfg.index')
             ->with('success', 'Evaluation deleted successfully.');
+    }
+
+    private function evaluationTemplateQuery()
+    {
+        return Evaluation::query()
+            ->whereIn('type', ['services', 'goods'])
+            ->whereIn('status', ['draft', 'active', 'close'])
+            ->whereNotNull('portfolio_id')
+            ->where('is_portfolio_custom', true);
+    }
+
+    private function scopeEvaluationTemplateQuery($query): void
+    {
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToEvaluations($query);
+        }
+    }
+
+    private function assertEvaluationTemplateManageable(Evaluation $evaluation): void
+    {
+        abort_unless(
+            in_array($evaluation->type, ['services', 'goods'], true)
+            && in_array($evaluation->status, ['draft', 'active', 'close'], true)
+            && filled($evaluation->portfolio_id),
+            404
+        );
+
+        abort_unless((bool) $evaluation->is_portfolio_custom, 404);
+
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        abort_unless(
+            $this->evaluationIsInAssignedPortfolio($evaluation),
+            403,
+            'This evaluation configuration is not assigned to your portfolio.'
+        );
+    }
+
+    private function resolveEvaluationPortfolioId(Request $request, ?Evaluation $evaluation = null): string
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            $portfolioId = $request->input('portfolio_id') ?: ($evaluation?->portfolio_id ?? null);
+
+            if (! $portfolioId || ! Sector::query()->whereKey($portfolioId)->exists()) {
+                throw ValidationException::withMessages([
+                    'portfolio_id' => 'Select the portfolio this evaluation belongs to.',
+                ]);
+            }
+
+            return (string) $portfolioId;
+        }
+
+        $portfolioIds = $this->assignedPortfolioIds();
+        $portfolioId = $request->input('portfolio_id') ?: ($evaluation?->portfolio_id ?: ($portfolioIds[0] ?? null));
+
+        if (! $portfolioId || ! in_array((string) $portfolioId, $portfolioIds, true)) {
+            throw ValidationException::withMessages([
+                'portfolio_id' => 'Select a portfolio assigned to your account.',
+            ]);
+        }
+
+        return (string) $portfolioId;
+    }
+
+    private function evaluationPortfolioFormData(?Evaluation $evaluation = null): array
+    {
+        $portfolioQuery = Sector::query()->orderBy('name');
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToSectors($portfolioQuery);
+        }
+
+        $portfolioOptions = $portfolioQuery->get(['id', 'name']);
+        $selectedPortfolioId = old(
+            'portfolio_id',
+            $evaluation?->portfolio_id ?: ($this->userHasAssignedPortfolioScope() ? ($portfolioOptions->first()?->id) : null)
+        );
+
+        return [
+            'portfolioOptions' => $portfolioOptions,
+            'selectedPortfolioId' => $selectedPortfolioId,
+            'portfolioFieldLocked' => $this->userHasAssignedPortfolioScope() || $portfolioOptions->count() === 1,
+        ];
     }
 }

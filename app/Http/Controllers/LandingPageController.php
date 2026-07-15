@@ -35,7 +35,7 @@ class LandingPageController extends Controller
 
     public function contact()
     {
-        return view('contact');
+        return redirect()->to(route('landing.index') . '#contact');
     }
 
     public function africanMap()

@@ -17,6 +17,12 @@
         <div class="accordion" id="procurementAccordion">
 
             @foreach ($procurements as $procurement)
+                @php
+                    $procurementPortfolioId = $procurementPortfolioIds[(string) $procurement->id] ?? null;
+                    $selectableEvaluations = $procurementPortfolioId
+                        ? ($evaluationsByPortfolioId[(string) $procurementPortfolioId] ?? collect())
+                        : $evaluations;
+                @endphp
                 <div class="accordion-item mb-2">
 
                     {{-- ACCORDION HEADER --}}
@@ -42,12 +48,20 @@
                                 <div class="col-md-3">
                                     <select name="evaluation_id" class="form-select" required>
                                         <option value="">Select Evaluation</option>
-                                        @foreach ($evaluations as $eval)
+                                        @foreach ($selectableEvaluations as $eval)
                                             <option value="{{ $eval->id }}">
                                                 {{ $eval->name }}
+                                                @if ($eval->portfolio)
+                                                    - {{ $eval->portfolio->name }}
+                                                @endif
                                             </option>
                                         @endforeach
                                     </select>
+                                    @if ($selectableEvaluations->isEmpty())
+                                        <small class="text-danger">
+                                            No portfolio-owned evaluation template is active for this procurement.
+                                        </small>
+                                    @endif
                                 </div>
 
                                 <div class="col-md-3">
@@ -128,7 +142,7 @@
 
                                                     {{-- Panel Comparison --}}
                                                     @if ($assign->status === 'submitted')
-                                                        <a href="{{ route('eval.assign.compare', $assign->id) }}"
+                                                        <a href="{{ route('my.eval.compare', $assign->id) }}"
                                                             class="btn btn-sm btn-outline-success">
                                                             Compare
                                                         </a>

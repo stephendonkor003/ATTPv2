@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\BudgetCommitment;
 use App\Models\ProgramFunding;
 use App\Models\ResourceCategory;
@@ -23,6 +24,8 @@ use Carbon\Carbon;
 
 class BudgetCommitmentController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /* =========================================================
      | CONSTANTS
      ========================================================= */
@@ -41,11 +44,13 @@ class BudgetCommitmentController extends Controller
      ========================================================= */
 
 
-    public function index()
+public function index()
 {
+    $currentUser = Auth::user();
+    $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
     $canViewAll = Auth::user()?->can('finance.commitments.view_all') === true;
-    $scopedNodeIds = $canViewAll ? null : $this->scopedNodeIds();
-    if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+    $scopedNodeIds = ($canViewAll && ! $isPortfolioLeader) ? null : $this->scopedNodeIds();
+    if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
         abort(403, 'You do not have access to commitments.');
     }
 
@@ -58,7 +63,10 @@ class BudgetCommitmentController extends Controller
             // eager load concrete models
             'programFunding',
         ])
-    ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+    ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+        $this->applyAssignedPortfolioScopeToCommitments($query, $currentUser);
+    })
+    ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
         $query->whereIn('governance_node_id', $scopedNodeIds)
             ->whereNotNull('governance_node_id');
     })
@@ -72,17 +80,27 @@ class BudgetCommitmentController extends Controller
 
     public function create()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
+        $scopedNodeIds = $this->scopedNodeIds();
+
         return view('finance.commitments.create', [
             'creationMode' => 'commitment',
             'fundings' => ProgramFunding::where('status', 'approved')
-                ->when($this->scopedNodeIds() !== null, function ($query) {
-                    $query->whereIn('governance_node_id', $this->scopedNodeIds())
+                ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                    $this->applyAssignedPortfolioScopeToProgramFundings($query, $currentUser);
+                })
+                ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                    $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
                 })
                 ->get(),
             'resourceCategories' => ResourceCategory::where('status', 'active')
-                ->when($this->scopedNodeIds() !== null, function ($query) {
-                    $query->whereIn('governance_node_id', $this->scopedNodeIds())
+                ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                    $this->applyAssignedPortfolioScopeToResourceNodes($query, $currentUser);
+                })
+                ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                    $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
                 })
                 ->get(),
@@ -92,17 +110,27 @@ class BudgetCommitmentController extends Controller
 
     public function createPurchaseRequest()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
+        $scopedNodeIds = $this->scopedNodeIds();
+
         return view('finance.commitments.create', [
             'creationMode' => 'purchase_request',
             'fundings' => ProgramFunding::where('status', 'approved')
-                ->when($this->scopedNodeIds() !== null, function ($query) {
-                    $query->whereIn('governance_node_id', $this->scopedNodeIds())
+                ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                    $this->applyAssignedPortfolioScopeToProgramFundings($query, $currentUser);
+                })
+                ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                    $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
                 })
                 ->get(),
             'resourceCategories' => ResourceCategory::where('status', 'active')
-                ->when($this->scopedNodeIds() !== null, function ($query) {
-                    $query->whereIn('governance_node_id', $this->scopedNodeIds())
+                ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                    $this->applyAssignedPortfolioScopeToResourceNodes($query, $currentUser);
+                })
+                ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                    $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
                 })
                 ->get(),
@@ -1157,15 +1185,20 @@ class BudgetCommitmentController extends Controller
     /** Resource Categories (index + store + update + delete) */
     public function resourceCategories()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to resource categories.');
         }
 
         return view('finance.resources.categories.index', [
             'categories' => ResourceCategory::with('governanceNode')
                 ->latest()
-                ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                    $this->applyAssignedPortfolioScopeToResourceNodes($query, $currentUser);
+                })
+                ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
                 })
@@ -1181,14 +1214,23 @@ class BudgetCommitmentController extends Controller
         ]);
 
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $nodeIds = $this->assignedPortfolioNodeIds($currentUser);
+            if (empty($nodeIds)) {
+                abort(403, 'You do not have access to create resource categories.');
+            }
+            $governanceNodeId = $nodeIds[0];
+        } elseif ($scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to create resource categories.');
+        } else {
+            $governanceNodeId = Auth::user()?->governance_node_id;
         }
 
         ResourceCategory::create([
             'name' => $request->name,
             'description' => $request->description,
-            'governance_node_id' => Auth::user()?->governance_node_id,
+            'governance_node_id' => $governanceNodeId,
             'status' => 'active',
             'created_by' => Auth::id(),
         ]);
@@ -1237,21 +1279,29 @@ class BudgetCommitmentController extends Controller
     /** Resources (items) */
     public function resources()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to resources.');
         }
 
         return view('finance.resources.items.index', [
             'resources' => Resource::with(['category', 'governanceNode'])
-                ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                    $this->applyAssignedPortfolioScopeToResourceNodes($query, $currentUser);
+                })
+                ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
                 })
                 ->latest()
                 ->get(),
             'categories'=> ResourceCategory::where('status','active')
-                ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+                ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                    $this->applyAssignedPortfolioScopeToResourceNodes($query, $currentUser);
+                })
+                ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                     $query->whereIn('governance_node_id', $scopedNodeIds)
                         ->whereNotNull('governance_node_id');
                 })
@@ -1356,6 +1406,14 @@ class BudgetCommitmentController extends Controller
 
     public function projects()
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            return Project::select('id', 'name')
+                ->whereIn('id', $this->assignedProjectIds($currentUser))
+                ->orderBy('name')
+                ->get();
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
             return collect();
@@ -1375,9 +1433,15 @@ class BudgetCommitmentController extends Controller
         $project = Project::findOrFail($projectId);
         $this->assertProjectInScope($project);
 
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
+
         return Activity::where('project_id',$projectId)
             ->select('id','name')
-            ->when($this->scopedNodeIds() !== null, function ($query) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $query->whereIn('id', $this->assignedActivityIds($currentUser));
+            })
+            ->when(! $isPortfolioLeader && $this->scopedNodeIds() !== null, function ($query) {
                 $query->whereIn('governance_node_id', $this->scopedNodeIds())
                     ->whereNotNull('governance_node_id');
             })
@@ -1389,9 +1453,15 @@ class BudgetCommitmentController extends Controller
         $activity = Activity::findOrFail($activityId);
         $this->assertActivityInScope($activity);
 
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
+
         return SubActivity::where('activity_id',$activityId)
             ->select('id','name')
-            ->when($this->scopedNodeIds() !== null, function ($query) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $query->whereIn('id', $this->assignedSubActivityIds($currentUser));
+            })
+            ->when(! $isPortfolioLeader && $this->scopedNodeIds() !== null, function ($query) {
                 $query->whereIn('governance_node_id', $this->scopedNodeIds())
                     ->whereNotNull('governance_node_id');
             })
@@ -1521,10 +1591,15 @@ class BudgetCommitmentController extends Controller
 
 public function executionData()
 {
+    $currentUser = Auth::user();
+    $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
     $scopedNodeIds = $this->scopedNodeIds();
     $programs = ProgramFunding::with('program.projects')
         ->where('status', 'approved')
-        ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+        ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+            $this->applyAssignedPortfolioScopeToProgramFundings($query, $currentUser);
+        })
+        ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
             $query->whereIn('governance_node_id', $scopedNodeIds)
                 ->whereNotNull('governance_node_id');
         })
@@ -1820,10 +1895,15 @@ protected function aiSummary(array $allocated, array $committed)
 		public function resourcesByCategory($categoryId)
 	{
 	    $this->assertResourceCategoryInScope($categoryId);
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
 	    return Resource::where('resource_category_id', $categoryId)
 	        ->where('status', 'active')
 	        ->select('id', 'name')
-        ->when($this->scopedNodeIds() !== null, function ($query) {
+        ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+            $this->applyAssignedPortfolioScopeToResourceNodes($query, $currentUser);
+        })
+        ->when(! $isPortfolioLeader && $this->scopedNodeIds() !== null, function ($query) {
             $query->whereIn('governance_node_id', $this->scopedNodeIds())
                 ->whereNotNull('governance_node_id');
         })
@@ -1896,6 +1976,15 @@ protected function aiSummary(array $allocated, array $committed)
 
     private function assertFundingInScope(ProgramFunding $funding): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->fundingIsInAssignedPortfolio($funding, $currentUser)) {
+                abort(403, 'You do not have access to this funding.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1908,6 +1997,15 @@ protected function aiSummary(array $allocated, array $committed)
 
     private function assertProjectInScope(Project $project): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->projectIsInAssignedPortfolio($project, $currentUser)) {
+                abort(403, 'You do not have access to this project.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1920,6 +2018,15 @@ protected function aiSummary(array $allocated, array $committed)
 
     private function assertActivityInScope(Activity $activity): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->activityIsInAssignedPortfolio($activity, $currentUser)) {
+                abort(403, 'You do not have access to this activity.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1933,6 +2040,15 @@ protected function aiSummary(array $allocated, array $committed)
 
     private function assertSubActivityInScope(SubActivity $sub): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->subActivityIsInAssignedPortfolio($sub, $currentUser)) {
+                abort(403, 'You do not have access to this sub-activity.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1946,6 +2062,15 @@ protected function aiSummary(array $allocated, array $committed)
 
     private function assertAllocationInScope(string $level, string $id): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->allocationIsInAssignedPortfolio($level, $id, $currentUser)) {
+                abort(403, 'You do not have access to this allocation.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -1965,12 +2090,22 @@ protected function aiSummary(array $allocated, array $committed)
 
     private function assertResourceCategoryInScope(string $categoryId): void
     {
+        $category = ResourceCategory::find($categoryId);
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $category || ! $this->resourceCategoryIsInAssignedPortfolioNode($category, $currentUser)) {
+                abort(403, 'You do not have access to this resource category.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
         }
 
-        $nodeId = ResourceCategory::find($categoryId)?->governance_node_id;
+        $nodeId = $category?->governance_node_id;
         if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this resource category.');
         }
@@ -1996,6 +2131,15 @@ protected function aiSummary(array $allocated, array $committed)
 
     private function assertCommitmentInScope(BudgetCommitment $commitment): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->commitmentIsInAssignedPortfolio($commitment, $currentUser)) {
+                abort(403, 'You do not have access to this commitment.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -2008,6 +2152,15 @@ protected function aiSummary(array $allocated, array $committed)
 
     private function assertResourceInScope(Resource $resource): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->resourceIsInAssignedPortfolioNode($resource, $currentUser)) {
+                abort(403, 'You do not have access to this resource.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;

@@ -10,7 +10,9 @@
         <div class="page-header d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h4 class="page-title mb-1">{{ $programPlan->name }} - Procurement Sheet</h4>
-                <p class="text-muted mb-0">This view lists every procurement attached to the program plan in an Excel-style layout.</p>
+                <p class="text-muted mb-0">
+                    {{ $programPlan->governanceNode?->name ?? 'Portfolio not assigned' }} portfolio procurement items in an Excel-style layout.
+                </p>
             </div>
             <a href="{{ route('procurement.plans.sheet') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="feather-arrow-left me-1"></i> Back to Program Plans
@@ -35,7 +37,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse($plans as $plan)
+                            @foreach($plans as $plan)
                                 @php
                                     $delayDays = null;
                                     if (!$plan->is_launched && $plan->estimated_end_date) {
@@ -68,15 +70,15 @@
                                         @endif
                                     </td>
                                 </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="9" class="text-center text-muted py-4">
-                                        No procurements yet attached to this plan.
-                                    </td>
-                                </tr>
-                            @endforelse
+                            @endforeach
                         </tbody>
                     </x-data-table>
+
+                    @if ($plans->isEmpty())
+                        <div class="border-top text-center text-muted py-4">
+                            No procurements yet attached to this plan.
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>

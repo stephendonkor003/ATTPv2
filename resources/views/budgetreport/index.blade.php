@@ -2,7 +2,8 @@
 
 @section('content')
     @php
-        $money = fn ($value) => number_format((float) $value, 2);
+        $portfolioCurrency = $portfolioCurrency ?? ($portfolioStats['currency'] ?? 'USD');
+        $money = fn ($value, $currency = null) => trim(($currency ?: $portfolioCurrency ?: 'USD') . ' ' . number_format((float) $value, 2));
         $totalBudget = max((float) ($portfolioStats['total_budget'] ?? 0), 1);
         $topSector = collect($sectorSummaries)->sortByDesc('total_budget')->first();
     @endphp
@@ -218,6 +219,9 @@
                     <p class="mb-0 text-white-50">
                         Sector funding, program concentration, project ranking, and annual allocation movement.
                     </p>
+                    <div class="mt-3">
+                        <span class="badge bg-light text-dark">{{ $portfolioCurrency }} reporting currency</span>
+                    </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2 align-items-start">
                     <a href="{{ route('budget.reports.portfolio.export.pdf') }}" class="btn br-pdf-btn">
@@ -342,7 +346,7 @@
                             </div>
                             <span class="br-chip">{{ number_format($share, 1) }}%</span>
                         </div>
-                        <div class="h5 fw-bold mb-2">{{ $money($sector['total_budget']) }}</div>
+                        <div class="h5 fw-bold mb-2">{{ $money($sector['total_budget'], $sector['currency'] ?? $portfolioCurrency) }}</div>
                         <div class="br-progress"><span style="width: {{ min(100, $share) }}%;"></span></div>
                     </div>
                 </div>
@@ -553,7 +557,7 @@
                                     <td class="text-center">{{ number_format($sector['programs']) }}</td>
                                     <td class="text-center">{{ number_format($sector['projects']) }}</td>
                                     <td class="text-center">{{ number_format($sector['activities']) }}</td>
-                                    <td class="text-end fw-semibold">{{ $money($sector['total_budget']) }}</td>
+                                    <td class="text-end fw-semibold">{{ $money($sector['total_budget'], $sector['currency'] ?? $portfolioCurrency) }}</td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
                                             <div class="br-progress flex-grow-1"><span style="width: {{ min(100, $share) }}%;"></span></div>
@@ -775,11 +779,12 @@
 
             const charts = @json($chartData);
             const projectProgressChart = @json($projectProgress['chart'] ?? null);
+            const reportCurrency = charts.currency || @json($portfolioCurrency);
             const palette = ['#0f766e', '#2563eb', '#7c3aed', '#ea580c', '#db2777', '#0891b2', '#65a30d', '#334155', '#dc2626', '#4f46e5'];
-            const money = (value) => Number(value || 0).toLocaleString(undefined, {
+            const money = (value) => `${reportCurrency} ${Number(value || 0).toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
-            });
+            })}`;
 
             Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
             Chart.defaults.color = '#475569';

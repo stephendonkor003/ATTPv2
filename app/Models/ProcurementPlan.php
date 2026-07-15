@@ -14,6 +14,7 @@ class ProcurementPlan extends BaseModel
         'is_code_auto_generated',
         'title',
         'description',
+        'governance_node_id',
         'activity_id',
         'sub_activity_id',
         'method_planned_id',
@@ -55,6 +56,11 @@ class ProcurementPlan extends BaseModel
     public function activity(): BelongsTo
     {
         return $this->belongsTo(Activity::class, 'activity_id');
+    }
+
+    public function governanceNode(): BelongsTo
+    {
+        return $this->belongsTo(GovernanceNode::class, 'governance_node_id');
     }
 
     public function subActivity(): BelongsTo

@@ -113,7 +113,8 @@
             <div class="alert alert-info mt-4">Select a program and filter range to generate the commitment report.</div>
         @else
             @php
-                $currency = $program->currency
+                $currency = $program->sector?->currency
+                    ?? $program->currency
                     ?? $program->approvedFundings?->first()?->currency
                     ?? $program->fundings?->first()?->currency
                     ?? '';

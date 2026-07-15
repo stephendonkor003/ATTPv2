@@ -310,6 +310,55 @@
             pointer-events: none;
         }
 
+        @if (request()->is('budget/me*'))
+            .content .nxl-container > .page-header,
+            .content .nxl-container .page-header {
+                background: linear-gradient(130deg, #052e2b 0%, #0f766e 56%, #16a34a 100%) !important;
+                color: #ffffff !important;
+            }
+
+            .content .nxl-container > .page-header h1,
+            .content .nxl-container > .page-header h2,
+            .content .nxl-container > .page-header h3,
+            .content .nxl-container > .page-header h4,
+            .content .nxl-container > .page-header h5,
+            .content .nxl-container > .page-header h6,
+            .content .nxl-container > .page-header p,
+            .content .nxl-container > .page-header small,
+            .content .nxl-container > .page-header .small,
+            .content .nxl-container > .page-header .text-muted,
+            .content .nxl-container > .page-header .text-primary,
+            .content .nxl-container > .page-header .text-secondary,
+            .content .nxl-container > .page-header .breadcrumb,
+            .content .nxl-container > .page-header .breadcrumb-item,
+            .content .nxl-container > .page-header .breadcrumb-item a,
+            .content .nxl-container .survey-hero,
+            .content .nxl-container .survey-hero h1,
+            .content .nxl-container .survey-hero h2,
+            .content .nxl-container .survey-hero h3,
+            .content .nxl-container .survey-hero h4,
+            .content .nxl-container .survey-hero p,
+            .content .nxl-container .survey-hero small,
+            .content .nxl-container .survey-hero .survey-hero__eyebrow,
+            .content .nxl-container .ds-hero,
+            .content .nxl-container .ds-hero .title,
+            .content .nxl-container .ds-hero .subtitle {
+                color: #ffffff !important;
+            }
+
+            .content .nxl-container > .page-header i[class*="text-"],
+            .content .nxl-container .survey-hero i[class*="text-"],
+            .content .nxl-container .ds-hero i[class*="text-"] {
+                color: #ffffff !important;
+            }
+
+            .content .nxl-container > .page-header a:not(.btn),
+            .content .nxl-container .survey-hero a:not(.btn),
+            .content .nxl-container .ds-hero a:not(.btn) {
+                color: #ffffff !important;
+            }
+        @endif
+
         /* Tawk.to Widget Styles - Override Theme Effects */
         #tawkToRight,
         #tawkToLeft,
@@ -367,6 +416,19 @@
     </div>
 
     <!-- Scripts -->
+    @php
+        $useLeanAdminScripts = request()->routeIs('system.discussions.moderation.live')
+            || trim($__env->yieldContent('lean_admin_scripts')) === '1';
+    @endphp
+
+    @if ($useLeanAdminScripts)
+        {{-- The live monitor intentionally avoids duplicate and page-specific bundles.
+             Re-loading jQuery/vendors/common initializers on a polling screen caused
+             competing handlers and substantial main-thread work. --}}
+        <script src="{{ asset('admin/assets/vendors/js/vendors.min.js') }}"></script>
+        <script src="{{ asset('admin/assets/js/common-init.min.js') }}"></script>
+        <script src="{{ asset('admin/assets/js/theme-customizer-init.min.js') }}"></script>
+    @else
     <!--! BEGIN: Vendors JS -->
     <script src="{{ asset('admin/assets/vendors/js/vendors.min.js') }}"></script>
     <script src="{{ asset('admin/assets/vendors/js/daterangepicker.min.js') }}"></script>
@@ -420,6 +482,7 @@
 
     <!-- Custom DataTable Configuration -->
     <script src="{{ asset('admin/assets/js/datatable-config.js') }}"></script>
+    @endif
 
     <!-- Page-specific scripts -->
     @stack('scripts')
@@ -427,7 +490,7 @@
 
     {{-- ATTP AI Guide Integration (Admin Controlled) --}}
     @php
-        $aiGuideSettings = \App\Models\AttpAiGuideSetting::active();
+        $aiGuideSettings = $useLeanAdminScripts ? null : \App\Models\AttpAiGuideSetting::active();
         $showAIGuide = $aiGuideSettings && $aiGuideSettings->isAvailableForUser();
     @endphp
 

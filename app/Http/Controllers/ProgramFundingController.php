@@ -34,14 +34,57 @@ class ProgramFundingController extends Controller
     $fundings = ProgramFunding::with([
             'program',
             'funder',
-            'governanceNode',
+            'governanceNode.level',
+            'documents',
         ])
         ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
             $query->whereIn('governance_node_id', $scopedNodeIds)
                 ->whereNotNull('governance_node_id');
         })
         ->latest()
-        ->paginate(15);
+        ->get();
+
+    $fundingStats = [
+        'total' => $fundings->count(),
+        'funders' => $fundings->pluck('funder_id')->filter()->unique()->count(),
+        'governance_nodes' => $fundings->pluck('governance_node_id')->filter()->unique()->count(),
+        'total_amount' => $fundings->sum(fn ($funding) => (float) ($funding->approved_amount ?? 0)),
+        'approved_amount' => $fundings
+            ->where('status', 'approved')
+            ->sum(fn ($funding) => (float) ($funding->approved_amount ?? 0)),
+        'draft' => $fundings->where('status', 'draft')->count(),
+        'submitted' => $fundings->where('status', 'submitted')->count(),
+        'approved' => $fundings->where('status', 'approved')->count(),
+        'rejected' => $fundings->where('status', 'rejected')->count(),
+        'documents' => $fundings->sum(fn ($funding) => $funding->documents->count()),
+    ];
+
+    $statusBreakdown = $fundings
+        ->groupBy(fn ($funding) => $funding->status ?: 'unknown')
+        ->map(fn ($records) => [
+            'count' => $records->count(),
+            'amount' => $records->sum(fn ($funding) => (float) ($funding->approved_amount ?? 0)),
+        ])
+        ->sortByDesc('count');
+
+    $typeBreakdown = $fundings
+        ->groupBy(fn ($funding) => $funding->funding_type ?: 'unspecified')
+        ->map(fn ($records) => [
+            'count' => $records->count(),
+            'amount' => $records->sum(fn ($funding) => (float) ($funding->approved_amount ?? 0)),
+        ])
+        ->sortByDesc('amount');
+
+    $topFunders = $fundings
+        ->groupBy(fn ($funding) => $funding->funder?->name ?: 'Unassigned')
+        ->map(fn ($records, $name) => (object) [
+            'name' => $name,
+            'count' => $records->count(),
+            'amount' => $records->sum(fn ($funding) => (float) ($funding->approved_amount ?? 0)),
+        ])
+        ->sortByDesc('amount')
+        ->take(5)
+        ->values();
 
     $debug = [
         'user_id' => Auth::id(),
@@ -51,7 +94,14 @@ class ProgramFundingController extends Controller
         'visible_node_ids' => $scopedNodeIds,
     ];
 
-    return view('finance.program-funding.index', compact('fundings', 'debug'));
+    return view('finance.program-funding.index', compact(
+        'fundings',
+        'debug',
+        'fundingStats',
+        'statusBreakdown',
+        'typeBreakdown',
+        'topFunders'
+    ));
 }
 
 

@@ -1,0 +1,2475 @@
+@extends('layouts.app')
+
+@section('title', 'M&E Data Entry and Performance Tracking')
+@section('lean_admin_scripts', '1')
+
+@push('styles')
+    @include('me.indicators.partials.styles')
+
+    <style>
+        .me-data-entry .me-workflow-guide {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .75rem;
+            margin: 1rem 0;
+        }
+
+        .me-data-entry .me-workflow-step {
+            display: flex;
+            align-items: flex-start;
+            gap: .75rem;
+            padding: .9rem;
+            border: 1px solid var(--me-border);
+            border-radius: .8rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-workflow-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            background: var(--me-green-800);
+            color: #fff;
+            font-size: .78rem;
+            font-weight: 800;
+        }
+
+        .me-data-entry .me-workflow-step strong {
+            display: block;
+            color: var(--me-green-950);
+            font-size: .82rem;
+        }
+
+        .me-data-entry .me-workflow-step small {
+            display: block;
+            margin-top: .2rem;
+            color: var(--me-muted);
+            line-height: 1.45;
+        }
+
+        .me-data-entry .me-tabs {
+            display: flex;
+            gap: .35rem;
+            overflow-x: auto;
+            margin-bottom: 1rem;
+            padding: .35rem;
+            border: 1px solid var(--me-border);
+            border-radius: .8rem;
+            background: #fff;
+            scrollbar-width: thin;
+        }
+
+        .me-data-entry .me-tab {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1 0 auto;
+            gap: .4rem;
+            min-height: 40px;
+            padding: .55rem .8rem;
+            border-radius: .55rem;
+            color: #4f635b;
+            font-size: .78rem;
+            font-weight: 750;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .me-data-entry .me-tab:hover,
+        .me-data-entry .me-tab:focus {
+            background: var(--me-green-100);
+            color: var(--me-green-950);
+        }
+
+        .me-data-entry .me-tab.active {
+            background: var(--me-green-800);
+            color: #fff;
+            box-shadow: 0 5px 12px rgba(11, 92, 69, .18);
+        }
+
+        .me-data-entry .me-filter-grid {
+            display: grid;
+            grid-template-columns: minmax(190px, 1.25fr) minmax(150px, .8fr) minmax(130px, .6fr) auto;
+            gap: .65rem;
+            width: min(100%, 820px);
+        }
+
+        .me-data-entry .me-filter-grid .form-control,
+        .me-data-entry .me-filter-grid .form-select,
+        .me-data-entry .me-filter-grid .btn {
+            min-height: 40px;
+        }
+
+        .me-data-entry .me-filter-grid.me-submission-filter-grid {
+            grid-template-columns: minmax(260px, 1.35fr) minmax(170px, .8fr) minmax(150px, .65fr) auto;
+            align-items: end;
+            width: 100%;
+            max-width: 980px;
+        }
+
+        .me-data-entry .me-filter-label {
+            display: block;
+            margin-bottom: .35rem;
+            color: #43584f;
+            font-size: .7rem;
+            font-weight: 800;
+            letter-spacing: .025em;
+        }
+
+        .me-data-entry .me-submission-results-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+            padding: .72rem 1rem;
+            border-bottom: 1px solid var(--me-border);
+            background: #fbfdfc;
+            color: #52665d;
+            font-size: .72rem;
+        }
+
+        .me-data-entry .me-submission-results-summary strong {
+            color: var(--me-green-950);
+            font-size: .76rem;
+        }
+
+        .me-data-entry .me-submission-filter-cue {
+            display: inline-flex;
+            align-items: center;
+            gap: .32rem;
+            color: var(--me-green-700);
+            font-weight: 750;
+        }
+
+        .me-data-entry .me-submission-table {
+            min-width: 1060px;
+        }
+
+        .me-data-entry .me-submission-table tbody tr:hover {
+            background: #fbfdfc;
+        }
+
+        .me-data-entry .me-submission-review {
+            display: flex;
+            align-items: flex-start;
+            gap: .45rem;
+        }
+
+        .me-data-entry .me-submission-review i {
+            margin-top: .12rem;
+            color: var(--me-green-700);
+        }
+
+        .me-data-entry .me-status {
+            display: inline-flex;
+            align-items: center;
+            gap: .28rem;
+            padding: .26rem .55rem;
+            border-radius: 999px;
+            background: #edf2ef;
+            color: #4e635a;
+            font-size: .66rem;
+            font-weight: 800;
+            letter-spacing: .025em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .me-data-entry .me-status.open,
+        .me-data-entry .me-status.active,
+        .me-data-entry .me-status.published,
+        .me-data-entry .me-status.approved,
+        .me-data-entry .me-status.validated {
+            background: #dff3e9;
+            color: #0b6a4c;
+        }
+
+        .me-data-entry .me-status.draft {
+            background: #eef2f7;
+            color: #556477;
+        }
+
+        .me-data-entry .me-status.submitted {
+            background: #e7efff;
+            color: #255ab5;
+        }
+
+        .me-data-entry .me-status.returned {
+            background: #fff2dc;
+            color: #9a5c00;
+        }
+
+        .me-data-entry .me-status.closed,
+        .me-data-entry .me-status.archived {
+            background: #f4e8e8;
+            color: #8c4141;
+        }
+
+        .me-data-entry .me-record-title {
+            color: var(--me-ink);
+            font-size: .84rem;
+            font-weight: 750;
+            line-height: 1.35;
+        }
+
+        .me-data-entry .me-record-meta {
+            margin-top: .25rem;
+            color: var(--me-muted);
+            font-size: .71rem;
+            line-height: 1.45;
+        }
+
+        .me-data-entry .me-code {
+            display: inline-block;
+            margin-bottom: .28rem;
+        }
+
+        .me-data-entry .me-section-builder {
+            --section-color: #EFF6FF;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            border: 1px solid color-mix(in srgb, var(--section-color) 64%, #cad7d1);
+            border-top: 5px solid var(--section-color);
+            border-radius: .9rem;
+            background: #fff;
+            background: color-mix(in srgb, var(--section-color) 35%, #fff);
+            box-shadow: 0 5px 16px rgba(24, 62, 48, .05);
+        }
+
+        .me-data-entry .me-section-builder-header {
+            padding: 1rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--section-color) 58%, #dce5e1);
+        }
+
+        .me-data-entry .me-section-builder-body {
+            padding: 1rem;
+        }
+
+        .me-data-entry .me-section-builder .me-builder-row {
+            background: rgba(255, 255, 255, .92);
+        }
+
+        .me-data-entry .me-section-number {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            margin-bottom: .65rem;
+            color: var(--me-green-950);
+            font-size: .72rem;
+            font-weight: 850;
+            letter-spacing: .035em;
+            text-transform: uppercase;
+        }
+
+        .me-data-entry .me-section-color-control {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+        }
+
+        .me-data-entry .me-section-color-control input[type="color"] {
+            flex: 0 0 auto;
+            width: 48px;
+            height: 40px;
+            padding: .2rem;
+            border: 1px solid var(--me-border);
+            border-radius: .5rem;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .me-data-entry .me-color-presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+        }
+
+        .me-data-entry .me-color-preset {
+            width: 27px;
+            height: 27px;
+            padding: 0;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            background: var(--preset-color);
+            box-shadow: 0 0 0 1px #aebdb6;
+        }
+
+        .me-data-entry .me-color-preset.is-selected {
+            box-shadow: 0 0 0 2px var(--me-green-800);
+        }
+
+        .me-data-entry .me-add-section {
+            width: 100%;
+            min-height: 46px;
+            border: 1px dashed #78a895;
+            border-radius: .75rem;
+            background: #f8fcfa;
+            color: var(--me-green-800);
+            font-size: .78rem;
+            font-weight: 800;
+        }
+
+        .me-data-entry .me-locked-section {
+            overflow: hidden;
+            margin-bottom: .8rem;
+            border: 1px solid color-mix(in srgb, var(--section-color) 60%, #d4dfda);
+            border-left: 7px solid var(--section-color);
+            border-radius: .75rem;
+            background: #fff;
+            background: color-mix(in srgb, var(--section-color) 30%, #fff);
+        }
+
+        .me-data-entry .me-locked-section-header {
+            padding: .85rem 1rem;
+            border-bottom: 1px solid color-mix(in srgb, var(--section-color) 55%, #dce5e1);
+        }
+
+        .me-data-entry .me-builder-row {
+            position: relative;
+            margin-bottom: .8rem;
+            padding: 1rem;
+            border: 1px solid var(--me-border);
+            border-radius: .75rem;
+            background: var(--me-surface);
+        }
+
+        .me-data-entry .me-builder-row.is-dragging {
+            opacity: .65;
+        }
+
+        .me-data-entry .me-builder-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+            margin-bottom: .9rem;
+        }
+
+        .me-data-entry .me-builder-title {
+            margin: 0;
+            color: var(--me-green-950);
+            font-size: .78rem;
+            font-weight: 800;
+        }
+
+        .me-data-entry .me-builder-actions {
+            display: flex;
+            gap: .3rem;
+        }
+
+        .me-data-entry .me-builder-actions .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+        }
+
+        .me-data-entry .me-field-settings {
+            height: 100%;
+            padding: .8rem;
+            border: 1px solid #dce7e1;
+            border-radius: .65rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-field-settings-title {
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+            margin-bottom: .7rem;
+            color: var(--me-green-950);
+            font-size: .72rem;
+            font-weight: 800;
+            letter-spacing: .015em;
+        }
+
+        .me-data-entry .me-field-settings[hidden] {
+            display: none !important;
+        }
+
+        .me-data-entry .me-template-indicator-field {
+            height: 100%;
+            padding: .75rem .85rem;
+            border: 1px solid #d6e5de;
+            border-radius: .65rem;
+            background: #f8fbf9;
+        }
+
+        .me-data-entry .me-template-indicator-label {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+        }
+
+        .me-data-entry .me-template-indicator-label i {
+            color: var(--me-green-800);
+        }
+
+        .me-data-entry .me-lock-note {
+            display: flex;
+            gap: .65rem;
+            margin-bottom: 1rem;
+            padding: .8rem .9rem;
+            border: 1px solid #eed9a5;
+            border-radius: .65rem;
+            background: #fff9e9;
+            color: #765a16;
+            font-size: .76rem;
+            line-height: 1.5;
+        }
+
+        .me-data-entry .me-locked-field {
+            padding: .8rem;
+            border-bottom: 1px solid var(--me-border);
+        }
+
+        .me-data-entry .me-locked-field:last-child {
+            border-bottom: 0;
+        }
+
+        .me-data-entry .me-member-picker {
+            max-height: 330px;
+            overflow-y: auto;
+            border: 1px solid var(--me-border);
+            border-radius: .65rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-member-option {
+            display: flex;
+            align-items: flex-start;
+            gap: .7rem;
+            padding: .72rem .8rem;
+            border-bottom: 1px solid #edf2ef;
+            cursor: pointer;
+        }
+
+        .me-data-entry .me-member-option:last-child {
+            border-bottom: 0;
+        }
+
+        .me-data-entry .me-member-option:hover {
+            background: #f8fbf9;
+        }
+
+        .me-data-entry .me-member-option.is-hidden {
+            display: none;
+        }
+
+        .me-data-entry .me-member-option .form-check-input {
+            flex: 0 0 auto;
+            margin-top: .2rem;
+        }
+
+        .me-data-entry .me-member-name {
+            color: var(--me-ink);
+            font-size: .79rem;
+            font-weight: 700;
+        }
+
+        .me-data-entry .me-member-meta {
+            margin-top: .12rem;
+            color: var(--me-muted);
+            font-size: .68rem;
+        }
+
+        .me-data-entry .me-form-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: .55rem;
+            margin-top: 1.1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--me-border);
+        }
+
+        .me-data-entry .me-pagination-wrap {
+            padding: .85rem 1rem;
+            border-top: 1px solid var(--me-border);
+        }
+
+        .me-data-entry .me-row-actions {
+            flex-wrap: wrap;
+        }
+
+        .me-data-entry .me-mobile-card .me-row-actions .btn,
+        .me-data-entry .me-mobile-card .me-row-actions form {
+            flex: 1 1 auto;
+        }
+
+        .me-data-entry .me-mobile-card .me-row-actions form .btn {
+            width: 100%;
+        }
+
+        @media (max-width: 991.98px) {
+            .me-data-entry .me-filter-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                width: 100%;
+            }
+
+            .me-data-entry .me-filter-grid.me-submission-filter-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .me-data-entry .me-workflow-guide {
+                grid-template-columns: 1fr;
+            }
+
+            .me-data-entry .me-panel-header {
+                align-items: stretch;
+            }
+
+            .me-data-entry .me-filter-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .me-data-entry .me-filter-grid.me-submission-filter-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .me-data-entry .me-submission-results-summary {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .me-data-entry .me-form-footer {
+                align-items: stretch;
+                flex-direction: column-reverse;
+            }
+
+            .me-data-entry .me-form-footer .btn,
+            .me-data-entry .me-form-footer .me-primary-action {
+                width: 100%;
+            }
+        }
+    </style>
+@endpush
+
+@section('content')
+    @php
+        $canManage = auth()->user()->can('me.data_entry.manage') || auth()->user()->can('me.configuration.manage');
+        $tabLabels = [
+            'collections' => ['label' => 'Active Collections', 'icon' => 'feather-inbox'],
+            'forms' => ['label' => 'Form Templates', 'icon' => 'feather-file-text'],
+            'periods' => ['label' => 'Reporting Periods', 'icon' => 'feather-calendar'],
+            'submissions' => ['label' => 'Submissions', 'icon' => 'feather-send'],
+        ];
+        $statusChoices = match ($tab) {
+            'forms' => ['draft' => 'Draft', 'published' => 'Published', 'archived' => 'Archived'],
+            'periods' => ['draft' => 'Draft', 'active' => 'Active', 'closed' => 'Closed'],
+            'submissions' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'returned' => 'Returned', 'validated' => 'Validated', 'approved' => 'Approved'],
+            default => ['draft' => 'Draft', 'open' => 'Open', 'closed' => 'Closed'],
+        };
+        $createTarget = match ($tab) {
+            'forms' => ['query' => ['tab' => 'forms', 'create' => 'form'], 'label' => 'Create form template'],
+            'periods' => ['query' => ['tab' => 'periods', 'create' => 'period'], 'label' => 'Create reporting period'],
+            'collections' => ['query' => ['tab' => 'collections', 'create' => 'collection'], 'label' => 'Create collection'],
+            default => null,
+        };
+    @endphp
+
+    <main class="me-results-framework me-data-entry nxl-container">
+        <header class="me-hero">
+            <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-4">
+                <div>
+                    <div class="me-eyebrow"><i class="feather-edit-3" aria-hidden="true"></i> Monitoring &amp; Evaluation</div>
+                    <h1>Data Entry and Performance Tracking</h1>
+                    <p>
+                        Build reusable collection forms, define reporting windows, assign participating think tanks and monitor submissions from one controlled workspace.
+                    </p>
+                </div>
+
+                @if ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
+                    <div class="me-hero-actions">
+                        <a href="{{ route('budget.me.rebuild.data-entry', $createTarget['query']) }}#data-entry-workspace" class="me-primary-action">
+                            <i class="feather-plus" aria-hidden="true"></i> {{ $createTarget['label'] }}
+                        </a>
+                    </div>
+                @endif
+            </div>
+        </header>
+
+        <section class="me-summary-grid" aria-label="Data entry summary">
+            <article class="me-summary-card">
+                <span class="me-summary-icon"><i class="feather-unlock" aria-hidden="true"></i></span>
+                <div>
+                    <div class="me-summary-value">{{ number_format((int) ($summary['open'] ?? 0)) }}</div>
+                    <div class="me-summary-label">Open collections</div>
+                </div>
+            </article>
+            <article class="me-summary-card">
+                <span class="me-summary-icon"><i class="feather-clock" aria-hidden="true"></i></span>
+                <div>
+                    <div class="me-summary-value">{{ number_format((int) ($summary['due_soon'] ?? 0)) }}</div>
+                    <div class="me-summary-label">Due in the next 7 days</div>
+                </div>
+            </article>
+            <article class="me-summary-card">
+                <span class="me-summary-icon"><i class="feather-send" aria-hidden="true"></i></span>
+                <div>
+                    <div class="me-summary-value">{{ number_format((int) ($summary['submitted'] ?? 0)) }}</div>
+                    <div class="me-summary-label">Submitted for review</div>
+                </div>
+            </article>
+        </section>
+
+        <section class="me-workflow-guide" aria-label="Three-step data collection guide">
+            <article class="me-workflow-step">
+                <span class="me-workflow-number">1</span>
+                <div><strong>Build a form</strong><small>Define the questions and map numeric fields to portfolio indicators.</small></div>
+            </article>
+            <article class="me-workflow-step">
+                <span class="me-workflow-number">2</span>
+                <div><strong>Set a period</strong><small>Create the reporting year, quarter, month or custom measurement window.</small></div>
+            </article>
+            <article class="me-workflow-step">
+                <span class="me-workflow-number">3</span>
+                <div><strong>Open a collection</strong><small>Join a published form to an active period and assign participating think tanks.</small></div>
+            </article>
+        </section>
+
+        @if (session('success'))
+            <div class="alert alert-success border-0 shadow-sm" role="status">
+                <i class="feather-check-circle me-2" aria-hidden="true"></i>{{ session('success') }}
+            </div>
+        @endif
+
+        @if (session('error'))
+            <div class="alert alert-danger border-0 shadow-sm" role="alert">
+                <i class="feather-alert-triangle me-2" aria-hidden="true"></i>{{ session('error') }}
+            </div>
+        @endif
+
+        @if ($errors->any())
+            <div class="alert alert-danger border-0 shadow-sm" role="alert" tabindex="-1" id="data-entry-validation-summary">
+                <div class="fw-bold mb-2"><i class="feather-alert-triangle me-1" aria-hidden="true"></i> Please correct the information below.</div>
+                <ul class="mb-0 ps-3">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <nav class="me-tabs" aria-label="Data entry sections">
+            @foreach ($tabLabels as $tabKey => $tabItem)
+                <a
+                    href="{{ route('budget.me.rebuild.data-entry', ['tab' => $tabKey]) }}"
+                    class="me-tab {{ $tab === $tabKey ? 'active' : '' }}"
+                    @if ($tab === $tabKey) aria-current="page" @endif
+                >
+                    <i class="{{ $tabItem['icon'] }}" aria-hidden="true"></i>{{ $tabItem['label'] }}
+                </a>
+            @endforeach
+        </nav>
+
+        <div id="data-entry-workspace">
+            @if ($canManage && $showFormBuilder)
+                @php
+                    $fieldTypeGroups = [
+                        'Number' => [
+                            'integer' => 'Integer',
+                            'number' => 'Number',
+                            'percentage' => 'Percentage',
+                            'currency' => 'Currency',
+                        ],
+                        'Text / contact' => [
+                            'text' => 'Short text',
+                            'textarea' => 'Long text',
+                            'email' => 'Email',
+                            'phone' => 'Phone',
+                            'url' => 'URL',
+                        ],
+                        'Date / time' => [
+                            'date' => 'Date',
+                            'time' => 'Time',
+                            'datetime' => 'Date and time',
+                            'month' => 'Month',
+                            'year' => 'Year',
+                        ],
+                        'Choice' => [
+                            'select' => 'Dropdown (single choice)',
+                            'radio' => 'Radio',
+                            'multiselect' => 'Multi-select (multiple choices)',
+                            'checkbox' => 'Checkbox group',
+                            'yes_no' => 'Yes / No',
+                            'rating' => 'Rating',
+                            'scale' => 'Scale',
+                        ],
+                        'Upload' => [
+                            'file' => 'File upload',
+                            'image' => 'Image upload',
+                        ],
+                    ];
+                    $fieldTypeLabels = collect($fieldTypeGroups)->collapse();
+                    $numericSettingTypes = ['integer', 'number', 'percentage', 'currency', 'rating', 'scale'];
+                    $mappableFieldTypes = ['integer', 'number', 'percentage', 'currency'];
+                    $textSettingTypes = ['text', 'textarea', 'email', 'phone', 'url'];
+                    $choiceFieldTypes = ['select', 'radio', 'multiselect', 'checkbox'];
+                    $uploadFieldTypes = ['file', 'image'];
+                    $defaultFileExtensions = 'pdf, doc, docx, xls, xlsx, csv, txt';
+                    $defaultImageExtensions = 'jpg, jpeg, png, webp, gif';
+                    $sectionPalette = \App\Models\MeDataEntryFormSection::SOFT_BACKGROUND_COLORS;
+                    $defaultSectionGuidance = 'Complete the questions in this section using the most accurate information available. Review your answers before continuing to the next section.';
+                    $formLocked = (bool) ($editingForm
+                        && $editingForm->status === \App\Models\MeDataEntryForm::STATUS_PUBLISHED
+                        && $editingFormHasSubmissions);
+                    $databaseSections = $editingForm
+                        ? $editingForm->sections->values()->map(fn ($section) => [
+                            'id' => (string) $section->id,
+                            'section_key' => $section->section_key,
+                            'name' => $section->name,
+                            'description' => trim((string) $section->description) ?: $defaultSectionGuidance,
+                            'background_color' => $section->background_color,
+                            'sort_order' => $section->sort_order,
+                        ])->all()
+                        : [];
+                    $databaseRows = $editingForm
+                        ? $editingForm->sections->values()->flatMap(fn ($section) => $section->fields->values()->map(fn ($field) => [
+                            'id' => (string) $field->id,
+                            'field_key' => $field->field_key,
+                            'section_key' => $section->section_key,
+                            'section' => $section->name,
+                            'label' => $field->label,
+                            'field_type' => $field->field_type,
+                            'is_required' => (bool) $field->is_required,
+                            'help_text' => $field->help_text,
+                            'options' => implode(PHP_EOL, $field->options ?? []),
+                            'unit_label' => $field->unit_label,
+                            'indicator_id' => $field->indicator_id ? (string) $field->indicator_id : null,
+                            'validation' => is_array($field->validation) ? $field->validation : [],
+                            'sort_order' => $field->sort_order,
+                        ]))->values()->all()
+                        : [];
+                    $formSections = old('sections');
+                    $formRows = old('fields');
+                    if ($formLocked || !is_array($formSections)) {
+                        $formSections = $editingForm ? $databaseSections : [[
+                            'id' => null,
+                            'section_key' => 'general_information',
+                            'name' => \App\Models\MeDataEntryFormSection::DEFAULT_NAME,
+                            'description' => $defaultSectionGuidance,
+                            'background_color' => \App\Models\MeDataEntryFormSection::DEFAULT_COLOR,
+                            'sort_order' => 10,
+                        ]];
+                    }
+                    if ($formLocked || !is_array($formRows)) {
+                        $formRows = $editingForm ? $databaseRows : [[
+                            'id' => null,
+                            'field_key' => null,
+                            'section_key' => 'general_information',
+                            'label' => '',
+                            'field_type' => 'text',
+                            'is_required' => true,
+                            'help_text' => '',
+                            'options' => '',
+                            'unit_label' => '',
+                            'indicator_id' => null,
+                            'validation' => [],
+                            'sort_order' => 10,
+                        ]];
+                    }
+                    $formRowsBySection = collect($formRows)->groupBy(fn ($row) => (string) ($row['section_key'] ?? ''), true);
+                    $knownSectionKeys = collect($formSections)->pluck('section_key')->map(fn ($key) => (string) $key);
+                    $orphanRows = collect($formRows)->filter(fn ($row) => !$knownSectionKeys->contains((string) ($row['section_key'] ?? '')));
+                    if ($orphanRows->isNotEmpty() && $knownSectionKeys->isNotEmpty()) {
+                        $firstSectionKey = (string) $knownSectionKeys->first();
+                        $formRowsBySection->put(
+                            $firstSectionKey,
+                            $formRowsBySection->get($firstSectionKey, collect())->merge($orphanRows)
+                        );
+                    }
+                    $formPortfolioValue = (string) ($formLocked ? $editingForm->portfolio_id : old('portfolio_id', $editingForm?->portfolio_id));
+                    $formIndicatorValue = (string) ($formLocked ? $editingForm->indicator_id : old('indicator_id', $editingForm?->indicator_id));
+                    $formCodeDisplay = (string) ($editingForm?->code ?? '');
+                @endphp
+
+                <section class="me-panel" aria-labelledby="form-builder-title">
+                    <div class="me-panel-header">
+                        <div>
+                            <h2 class="me-panel-title" id="form-builder-title">{{ $editingForm ? 'Edit form template' : 'Create form template' }}</h2>
+                            <p class="me-panel-subtitle">Design the exact data fields participants will complete. Publish only when the structure is ready.</p>
+                        </div>
+                        @if ($editingForm)
+                            <span class="me-status {{ $editingForm->status }}">{{ $editingForm->status }}</span>
+                        @endif
+                    </div>
+                    <div class="me-panel-body">
+                        @if ($formLocked)
+                            <div class="me-lock-note">
+                                <i class="feather-lock flex-shrink-0 mt-1" aria-hidden="true"></i>
+                                <div><strong>Structure locked.</strong> This published form has submissions, so its linked indicator, portfolio, code, sections and questions are preserved. You can still update its title, description, instructions and responsible person.</div>
+                            </div>
+                        @else
+                            <div class="me-required-note">
+                                <i class="feather-info flex-shrink-0 mt-1" aria-hidden="true"></i>
+                                <div>The linked indicator identifies this template in the think tank portal. Optional question-level result mapping is available only for integer, number, percentage and currency fields, using indicators from the selected portfolio.</div>
+                            </div>
+                        @endif
+
+                        <form
+                            method="POST"
+                            action="{{ $editingForm ? route('budget.me.data-entry.forms.update', $editingForm) : route('budget.me.data-entry.forms.store') }}"
+                            data-form-builder
+                        >
+                            @csrf
+                            @if ($editingForm)
+                                @method('PUT')
+                            @endif
+
+                            <div class="me-form-section">
+                                <div class="me-form-section-title">Template details</div>
+                                <div class="row g-3">
+                                    <div class="col-lg-6">
+                                        <label class="form-label" for="form-portfolio">Portfolio <span class="text-danger">*</span></label>
+                                        @if ($formLocked)
+                                            <input type="hidden" name="portfolio_id" value="{{ $formPortfolioValue }}">
+                                            <select id="form-portfolio" class="form-select" disabled data-form-portfolio>
+                                                @foreach ($portfolios as $portfolio)
+                                                    <option value="{{ $portfolio->id }}" @selected((string) $portfolio->id === $formPortfolioValue)>{{ $portfolio->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        @else
+                                            <select id="form-portfolio" name="portfolio_id" class="form-select @error('portfolio_id') is-invalid @enderror" required data-form-portfolio>
+                                                <option value="">Choose portfolio</option>
+                                                @foreach ($portfolios as $portfolio)
+                                                    <option value="{{ $portfolio->id }}" @selected((string) $portfolio->id === $formPortfolioValue)>{{ $portfolio->name }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('portfolio_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                        @endif
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <div class="me-template-indicator-field">
+                                            <label class="form-label me-template-indicator-label" for="form-indicator">
+                                                <i class="feather-target" aria-hidden="true"></i>
+                                                Linked performance indicator <span class="text-danger">*</span>
+                                            </label>
+                                            @if ($formLocked)
+                                                <input type="hidden" name="indicator_id" value="{{ $formIndicatorValue }}">
+                                            @endif
+                                            <select
+                                                id="form-indicator"
+                                                @unless ($formLocked) name="indicator_id" required @endunless
+                                                class="form-select @error('indicator_id') is-invalid @enderror"
+                                                aria-describedby="form-indicator-help"
+                                                data-template-indicator
+                                                data-locked="{{ $formLocked ? 'true' : 'false' }}"
+                                                @disabled($formLocked)
+                                            >
+                                                <option value="">Choose an indicator</option>
+                                                @foreach ($indicatorOptions as $indicatorOption)
+                                                    <option
+                                                        value="{{ $indicatorOption['id'] }}"
+                                                        data-portfolio="{{ $indicatorOption['portfolio_id'] }}"
+                                                        @selected($formIndicatorValue === (string) $indicatorOption['id'])
+                                                    >{{ $indicatorOption['label'] }}{{ $indicatorOption['unit'] ? ' · '.$indicatorOption['unit'] : '' }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('indicator_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                            <div id="form-indicator-help" class="me-field-help" data-template-indicator-help>
+                                                Choose the indicator this template will collect evidence for. Think tanks will open this template from that indicator in their M&amp;E workspace.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-4">
+                                        <label class="form-label" for="form-code">Template code</label>
+                                        <input
+                                            type="text"
+                                            id="form-code"
+                                            class="form-control text-uppercase"
+                                            value="{{ $formCodeDisplay }}"
+                                            placeholder="Assigned automatically when saved"
+                                            aria-describedby="form-code-help"
+                                            aria-readonly="true"
+                                            readonly
+                                        >
+                                        <div id="form-code-help" class="me-field-help">
+                                            {{ $editingForm ? 'This system-generated code cannot be changed.' : 'A unique code will be generated when you save this template.' }}
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-8">
+                                        <label class="form-label" for="form-responsible">Responsible person <span class="text-danger">*</span></label>
+                                        <select id="form-responsible" name="responsible_user_id" class="form-select @error('responsible_user_id') is-invalid @enderror" required>
+                                            <option value="">Choose responsible person</option>
+                                            @foreach ($responsibleUsers as $responsibleUser)
+                                                <option value="{{ $responsibleUser->id }}" @selected((string) old('responsible_user_id', $editingForm?->responsible_user_id) === (string) $responsibleUser->id)>
+                                                    {{ $responsibleUser->name }}{{ $responsibleUser->email ? ' · '.$responsibleUser->email : '' }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        @error('responsible_user_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label" for="form-title">Form title <span class="text-danger">*</span></label>
+                                        <input type="text" id="form-title" name="title" class="form-control @error('title') is-invalid @enderror" value="{{ old('title', $editingForm?->title) }}" maxlength="255" required>
+                                        @error('title')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <label class="form-label" for="form-description">Description</label>
+                                        <textarea id="form-description" name="description" class="form-control @error('description') is-invalid @enderror" maxlength="2000" placeholder="What this form measures and when it should be used">{{ old('description', $editingForm?->description) }}</textarea>
+                                        @error('description')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <label class="form-label" for="form-instructions">Participant instructions</label>
+                                        <textarea id="form-instructions" name="instructions" class="form-control @error('instructions') is-invalid @enderror" maxlength="5000" placeholder="Guidance shown to assigned think tanks">{{ old('instructions', $editingForm?->instructions) }}</textarea>
+                                        @error('instructions')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="me-form-section">
+                                <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 mb-3">
+                                    <div>
+                                        <div class="me-form-section-title mb-1">Form sections and questions</div>
+                                        <div class="me-field-help mt-0">Group related questions into clearly coloured sections, then arrange them in the order participants should complete them.</div>
+                                    </div>
+                                </div>
+
+                                @if ($formLocked)
+                                    <div data-section-list>
+                                        @foreach ($formSections as $sectionIndex => $sectionRow)
+                                            @php
+                                                $sectionKey = (string) ($sectionRow['section_key'] ?? 'section_'.($sectionIndex + 1));
+                                                $sectionColor = (string) ($sectionRow['background_color'] ?? \App\Models\MeDataEntryFormSection::DEFAULT_COLOR);
+                                                $sectionFields = $formRowsBySection->get($sectionKey, collect());
+                                            @endphp
+                                            <article class="me-locked-section" style="--section-color: {{ $sectionColor }}">
+                                                <input type="hidden" name="sections[{{ $sectionIndex }}][id]" value="{{ $sectionRow['id'] ?? '' }}">
+                                                <input type="hidden" name="sections[{{ $sectionIndex }}][section_key]" value="{{ $sectionKey }}">
+                                                <input type="hidden" name="sections[{{ $sectionIndex }}][name]" value="{{ $sectionRow['name'] ?? '' }}">
+                                                <input type="hidden" name="sections[{{ $sectionIndex }}][description]" value="{{ $sectionRow['description'] ?? '' }}">
+                                                <input type="hidden" name="sections[{{ $sectionIndex }}][background_color]" value="{{ $sectionColor }}">
+                                                <input type="hidden" name="sections[{{ $sectionIndex }}][sort_order]" value="{{ ($sectionIndex + 1) * 10 }}">
+                                                <div class="me-locked-section-header">
+                                                    <div class="me-section-number"><i class="feather-layers" aria-hidden="true"></i>Section {{ $sectionIndex + 1 }}</div>
+                                                    <div class="me-record-title">{{ $sectionRow['name'] ?: 'Untitled section' }}</div>
+                                                    @if (!empty($sectionRow['description']))<div class="me-record-meta">{{ $sectionRow['description'] }}</div>@endif
+                                                </div>
+                                        @foreach ($sectionFields as $index => $row)
+                                            @php
+                                                $rowOptions = is_array($row['options'] ?? null) ? implode(PHP_EOL, $row['options']) : (string) ($row['options'] ?? '');
+                                                $rowValidation = is_array($row['validation'] ?? null) ? $row['validation'] : [];
+                                                $rowExtensions = is_array($rowValidation['allowed_extensions'] ?? null)
+                                                    ? implode(', ', $rowValidation['allowed_extensions'])
+                                                    : (string) ($rowValidation['allowed_extensions'] ?? '');
+                                            @endphp
+                                            <div class="me-locked-field">
+                                                <input type="hidden" name="fields[{{ $index }}][id]" value="{{ $row['id'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][field_key]" value="{{ $row['field_key'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][section_key]" value="{{ $sectionKey }}">
+                                                <input type="hidden" name="fields[{{ $index }}][label]" value="{{ $row['label'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][field_type]" value="{{ $row['field_type'] ?? 'text' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][is_required]" value="{{ !empty($row['is_required']) ? '1' : '0' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][help_text]" value="{{ $row['help_text'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][options]" value="{{ $rowOptions }}">
+                                                <input type="hidden" name="fields[{{ $index }}][unit_label]" value="{{ $row['unit_label'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][indicator_id]" value="{{ $row['indicator_id'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][sort_order]" value="{{ ($index + 1) * 10 }}">
+                                                <input type="hidden" name="fields[{{ $index }}][validation][min]" value="{{ $rowValidation['min'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][validation][max]" value="{{ $rowValidation['max'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][validation][step]" value="{{ $rowValidation['step'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][validation][min_length]" value="{{ $rowValidation['min_length'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][validation][max_length]" value="{{ $rowValidation['max_length'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][validation][allowed_extensions]" value="{{ $rowExtensions }}">
+                                                <input type="hidden" name="fields[{{ $index }}][validation][max_file_size_mb]" value="{{ $rowValidation['max_file_size_mb'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][validation][multiple]" value="{{ !empty($rowValidation['multiple']) ? '1' : '0' }}">
+
+                                                <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                                                    <div>
+                                                        <div class="me-record-title">{{ $row['label'] ?: 'Untitled question' }}</div>
+                                                        <div class="me-record-meta">
+                                                            {{ $fieldTypeLabels[$row['field_type'] ?? 'text'] ?? ucfirst(str_replace('_', ' ', (string) ($row['field_type'] ?? 'text'))) }}{{ !empty($row['is_required']) ? ' · Required' : '' }}
+                                                        </div>
+                                                        @if ($rowExtensions !== '')
+                                                            <div class="me-record-meta">Allowed: {{ $rowExtensions }} · Up to {{ $rowValidation['max_file_size_mb'] ?? 10 }} MB{{ !empty($rowValidation['multiple']) ? ' · Multiple files' : '' }}</div>
+                                                        @endif
+                                                    </div>
+                                                    @if (!empty($row['indicator_id']))
+                                                        @php $mappedIndicator = $indicatorOptions->firstWhere('id', (string) $row['indicator_id']); @endphp
+                                                        <span class="me-chip"><i class="feather-link" aria-hidden="true"></i>{{ $mappedIndicator['label'] ?? 'Mapped indicator' }}</span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                            </article>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <div data-section-list>
+                                        @foreach ($formSections as $sectionIndex => $sectionRow)
+                                            @php
+                                                $sectionKey = (string) ($sectionRow['section_key'] ?? 'section_'.($sectionIndex + 1));
+                                                $sectionColor = (string) ($sectionRow['background_color'] ?? $sectionPalette[$sectionIndex % count($sectionPalette)]);
+                                                $sectionFields = $formRowsBySection->get($sectionKey, collect());
+                                            @endphp
+                                            <article class="me-section-builder" data-section-card style="--section-color: {{ $sectionColor }}">
+                                                <div class="me-section-builder-header">
+                                                    <div class="d-flex align-items-start justify-content-between gap-3">
+                                                        <div class="me-section-number"><i class="feather-layers" aria-hidden="true"></i>Section <span data-section-number>{{ $sectionIndex + 1 }}</span></div>
+                                                        <div class="me-builder-actions">
+                                                            <button type="button" class="btn btn-sm btn-light border" title="Move section up" aria-label="Move section up" data-move-section="up"><i class="feather-arrow-up" aria-hidden="true"></i></button>
+                                                            <button type="button" class="btn btn-sm btn-light border" title="Move section down" aria-label="Move section down" data-move-section="down"><i class="feather-arrow-down" aria-hidden="true"></i></button>
+                                                            <button type="button" class="btn btn-sm btn-outline-danger" title="Remove section" aria-label="Remove section" data-remove-section><i class="feather-trash-2" aria-hidden="true"></i></button>
+                                                        </div>
+                                                    </div>
+                                                    <input type="hidden" name="sections[{{ $sectionIndex }}][id]" value="{{ $sectionRow['id'] ?? '' }}">
+                                                    <input type="hidden" name="sections[{{ $sectionIndex }}][section_key]" value="{{ $sectionKey }}" data-section-key>
+                                                    <input type="hidden" name="sections[{{ $sectionIndex }}][sort_order]" value="{{ ($sectionIndex + 1) * 10 }}" data-section-sort-order>
+                                                    <div class="row g-3">
+                                                        <div class="col-lg-6">
+                                                            <label class="form-label">Section name <span class="text-danger">*</span></label>
+                                                            <input type="text" name="sections[{{ $sectionIndex }}][name]" class="form-control @error('sections.'.$sectionIndex.'.name') is-invalid @enderror" value="{{ $sectionRow['name'] ?? '' }}" maxlength="255" placeholder="e.g. Organisation profile" required data-section-name>
+                                                            @error('sections.'.$sectionIndex.'.name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                        </div>
+                                                        <div class="col-lg-6">
+                                                            <label class="form-label">Background colour</label>
+                                                            <div class="me-section-color-control">
+                                                                <input type="color" name="sections[{{ $sectionIndex }}][background_color]" value="{{ $sectionColor }}" aria-label="Section background colour" data-section-color>
+                                                                <div class="me-color-presets" aria-label="Soft colour presets">
+                                                                    @foreach ($sectionPalette as $presetColor)
+                                                                        <button type="button" class="me-color-preset {{ strtoupper($presetColor) === strtoupper($sectionColor) ? 'is-selected' : '' }}" style="--preset-color: {{ $presetColor }}" title="Use {{ $presetColor }}" aria-label="Use colour {{ $presetColor }}" data-color-preset="{{ $presetColor }}"></button>
+                                                                    @endforeach
+                                                                </div>
+                                                            </div>
+                                                            @error('sections.'.$sectionIndex.'.background_color')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                                                        </div>
+                                                        <div class="col-12">
+                                                            <label class="form-label" for="section-description-{{ $sectionIndex }}">Instructions / explanation <span class="text-danger">*</span></label>
+                                                            <textarea id="section-description-{{ $sectionIndex }}" name="sections[{{ $sectionIndex }}][description]" class="form-control @error('sections.'.$sectionIndex.'.description') is-invalid @enderror" rows="3" maxlength="2000" placeholder="Explain what respondents should provide, which records to consult, and any definitions they need." required aria-describedby="section-description-help-{{ $sectionIndex }}">{{ $sectionRow['description'] ?? $defaultSectionGuidance }}</textarea>
+                                                            @error('sections.'.$sectionIndex.'.description')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                            <div id="section-description-help-{{ $sectionIndex }}" class="me-field-help">This text appears above the section for think-tank respondents. Give them enough guidance to answer the questions correctly.</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="me-section-builder-body">
+                                                    <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                                                        <div><strong class="small text-dark">Questions</strong><div class="me-field-help mt-0">Each section needs at least one question.</div></div>
+                                                        <button type="button" class="btn btn-sm btn-outline-success" data-add-field><i class="feather-plus me-1" aria-hidden="true"></i>Add question</button>
+                                                    </div>
+                                                    <div data-section-fields>
+                                        @foreach ($sectionFields as $index => $row)
+                                            @php
+                                                $rowType = (string) ($row['field_type'] ?? 'text');
+                                                $rowOptions = is_array($row['options'] ?? null) ? implode(PHP_EOL, $row['options']) : (string) ($row['options'] ?? '');
+                                                $rowValidation = is_array($row['validation'] ?? null) ? $row['validation'] : [];
+                                                $rowExtensions = is_array($rowValidation['allowed_extensions'] ?? null)
+                                                    ? implode(', ', $rowValidation['allowed_extensions'])
+                                                    : (string) ($rowValidation['allowed_extensions'] ?? '');
+                                                $rowLengthCap = match ($rowType) {
+                                                    'email' => 255,
+                                                    'phone' => 30,
+                                                    'url' => 2048,
+                                                    default => 20000,
+                                                };
+                                            @endphp
+                                            <article class="me-builder-row" data-field-row>
+                                                <div class="me-builder-heading">
+                                                    <h3 class="me-builder-title">Question <span data-field-number>{{ $loop->iteration }}</span></h3>
+                                                    <div class="me-builder-actions">
+                                                        <button type="button" class="btn btn-sm btn-light border" title="Move question up" aria-label="Move question up" data-move-field="up"><i class="feather-arrow-up" aria-hidden="true"></i></button>
+                                                        <button type="button" class="btn btn-sm btn-light border" title="Move question down" aria-label="Move question down" data-move-field="down"><i class="feather-arrow-down" aria-hidden="true"></i></button>
+                                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Remove question" aria-label="Remove question" data-remove-field><i class="feather-trash-2" aria-hidden="true"></i></button>
+                                                    </div>
+                                                </div>
+                                                <input type="hidden" name="fields[{{ $index }}][id]" value="{{ $row['id'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][field_key]" value="{{ $row['field_key'] ?? '' }}">
+                                                <input type="hidden" name="fields[{{ $index }}][section_key]" value="{{ $sectionKey }}" data-field-section-key>
+                                                <input type="hidden" name="fields[{{ $index }}][sort_order]" value="{{ ($loop->iteration) * 10 }}" data-sort-order>
+                                                <div class="row g-3">
+                                                    <div class="col-lg-8">
+                                                        <label class="form-label">Question <span class="text-danger">*</span></label>
+                                                        <input type="text" name="fields[{{ $index }}][label]" class="form-control @error('fields.'.$index.'.label') is-invalid @enderror" value="{{ $row['label'] ?? '' }}" maxlength="255" placeholder="Question shown to participants" required>
+                                                        @error('fields.'.$index.'.label')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                    </div>
+                                                    <div class="col-lg-4">
+                                                        <label class="form-label">Answer type <span class="text-danger">*</span></label>
+                                                        <select name="fields[{{ $index }}][field_type]" class="form-select @error('fields.'.$index.'.field_type') is-invalid @enderror" required data-field-type>
+                                                            @foreach ($fieldTypeGroups as $groupLabel => $groupTypes)
+                                                                <optgroup label="{{ $groupLabel }}">
+                                                                    @foreach ($groupTypes as $typeValue => $typeLabel)
+                                                                        <option value="{{ $typeValue }}" @selected($rowType === $typeValue)>{{ $typeLabel }}</option>
+                                                                    @endforeach
+                                                                </optgroup>
+                                                            @endforeach
+                                                        </select>
+                                                        @error('fields.'.$index.'.field_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                    </div>
+                                                    <div class="col-lg-6">
+                                                        <label class="form-label">Help text</label>
+                                                        <input type="text" name="fields[{{ $index }}][help_text]" class="form-control @error('fields.'.$index.'.help_text') is-invalid @enderror" value="{{ $row['help_text'] ?? '' }}" maxlength="1000" placeholder="Optional explanation or example">
+                                                        @error('fields.'.$index.'.help_text')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                    </div>
+                                                    <div class="col-lg-3" data-unit-wrap @if (!in_array($rowType, $mappableFieldTypes, true)) hidden @endif>
+                                                        <label class="form-label">Unit label</label>
+                                                        <input type="text" name="fields[{{ $index }}][unit_label]" class="form-control @error('fields.'.$index.'.unit_label') is-invalid @enderror" value="{{ $row['unit_label'] ?? '' }}" maxlength="80" placeholder="%, people, USD">
+                                                        @error('fields.'.$index.'.unit_label')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                    </div>
+                                                    <div class="col-lg-3 d-flex align-items-end">
+                                                        <div class="form-check mb-2">
+                                                            <input type="hidden" name="fields[{{ $index }}][is_required]" value="0">
+                                                            <input class="form-check-input" type="checkbox" name="fields[{{ $index }}][is_required]" value="1" id="field-required-{{ $index }}" @checked(!empty($row['is_required']))>
+                                                            <label class="form-check-label fw-semibold small" for="field-required-{{ $index }}">Required response</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-lg-6" data-numeric-settings @if (!in_array($rowType, $numericSettingTypes, true)) hidden @endif>
+                                                        <div class="me-field-settings">
+                                                            <div class="me-field-settings-title"><i class="feather-sliders" aria-hidden="true"></i>Numeric range and step</div>
+                                                            <div class="row g-2">
+                                                                <div class="col-sm-4">
+                                                                    <label class="form-label">Minimum</label>
+                                                                    <input type="number" @if ($rowType === 'rating') min="1" max="10" step="1" @else step="any" @endif name="fields[{{ $index }}][validation][min]" class="form-control @error('fields.'.$index.'.validation.min') is-invalid @enderror" value="{{ $rowValidation['min'] ?? '' }}" placeholder="No minimum" data-numeric-min-input>
+                                                                    @error('fields.'.$index.'.validation.min')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                                </div>
+                                                                <div class="col-sm-4">
+                                                                    <label class="form-label">Maximum</label>
+                                                                    <input type="number" @if ($rowType === 'rating') min="1" max="10" step="1" @else step="any" @endif name="fields[{{ $index }}][validation][max]" class="form-control @error('fields.'.$index.'.validation.max') is-invalid @enderror" value="{{ $rowValidation['max'] ?? '' }}" placeholder="No maximum" data-numeric-max-input>
+                                                                    @error('fields.'.$index.'.validation.max')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                                </div>
+                                                                <div class="col-sm-4">
+                                                                    <label class="form-label">Step</label>
+                                                                    <input type="number" @if ($rowType === 'rating') min="1" max="10" step="1" @else min="0" step="any" @endif name="fields[{{ $index }}][validation][step]" class="form-control @error('fields.'.$index.'.validation.step') is-invalid @enderror" value="{{ $rowValidation['step'] ?? '' }}" placeholder="Any" data-numeric-step-input>
+                                                                    @error('fields.'.$index.'.validation.step')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-lg-6" data-text-settings @if (!in_array($rowType, $textSettingTypes, true)) hidden @endif>
+                                                        <div class="me-field-settings">
+                                                            <div class="me-field-settings-title"><i class="feather-type" aria-hidden="true"></i>Text length</div>
+                                                            <div class="row g-2">
+                                                                <div class="col-sm-6">
+                                                                    <label class="form-label">Minimum characters</label>
+                                                                    <input type="number" min="0" max="{{ $rowLengthCap }}" step="1" name="fields[{{ $index }}][validation][min_length]" class="form-control @error('fields.'.$index.'.validation.min_length') is-invalid @enderror" value="{{ $rowValidation['min_length'] ?? '' }}" placeholder="No minimum" data-min-length-input>
+                                                                    @error('fields.'.$index.'.validation.min_length')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                                </div>
+                                                                <div class="col-sm-6">
+                                                                    <label class="form-label">Maximum characters</label>
+                                                                    <input type="number" min="0" max="{{ $rowLengthCap }}" step="1" name="fields[{{ $index }}][validation][max_length]" class="form-control @error('fields.'.$index.'.validation.max_length') is-invalid @enderror" value="{{ $rowValidation['max_length'] ?? '' }}" placeholder="Use portal limit" data-max-length-input>
+                                                                    @error('fields.'.$index.'.validation.max_length')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                                </div>
+                                                            </div>
+                                                            <span class="me-field-help" data-text-limit-help>Portal hard limit: {{ number_format($rowLengthCap) }} characters. Leave maximum blank to use this limit.</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-lg-6" data-options-wrap @if (!in_array($rowType, $choiceFieldTypes, true)) hidden @endif>
+                                                        <div class="me-field-settings">
+                                                            <div class="me-field-settings-title"><i class="feather-list" aria-hidden="true"></i>Choice options</div>
+                                                            <textarea name="fields[{{ $index }}][options]" class="form-control @error('fields.'.$index.'.options') is-invalid @enderror" rows="4" placeholder="Enter one option per line">{{ $rowOptions }}</textarea>
+                                                            <span class="me-field-help" data-options-help>Select and radio require at least two options; multi-select and checkbox require at least one.</span>
+                                                            @error('fields.'.$index.'.options')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-12" data-upload-settings @if (!in_array($rowType, $uploadFieldTypes, true)) hidden @endif>
+                                                        <div class="me-field-settings">
+                                                            <div class="me-field-settings-title"><i class="feather-upload-cloud" aria-hidden="true"></i>Upload rules</div>
+                                                            <div class="row g-3 align-items-end">
+                                                                <div class="col-lg-6">
+                                                                    <label class="form-label">Allowed file extensions</label>
+                                                                    <input type="text" name="fields[{{ $index }}][validation][allowed_extensions]" class="form-control @error('fields.'.$index.'.validation.allowed_extensions') is-invalid @enderror" value="{{ $rowExtensions }}" placeholder="{{ $rowType === 'image' ? $defaultImageExtensions : $defaultFileExtensions }}" data-extension-input>
+                                                                    <span class="me-field-help">Separate extensions with commas. Dots and capital letters are cleaned automatically.</span>
+                                                                    @error('fields.'.$index.'.validation.allowed_extensions')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                                </div>
+                                                                <div class="col-lg-3 col-sm-6">
+                                                                    <label class="form-label">Maximum size (MB)</label>
+                                                                    <input type="number" min="1" max="50" step="1" name="fields[{{ $index }}][validation][max_file_size_mb]" class="form-control @error('fields.'.$index.'.validation.max_file_size_mb') is-invalid @enderror" value="{{ $rowValidation['max_file_size_mb'] ?? '' }}" placeholder="10" data-file-size-input>
+                                                                    @error('fields.'.$index.'.validation.max_file_size_mb')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                                </div>
+                                                                <div class="col-lg-3 col-sm-6">
+                                                                    <div class="form-check mb-2">
+                                                                        <input type="hidden" name="fields[{{ $index }}][validation][multiple]" value="0">
+                                                                        <input class="form-check-input" type="checkbox" name="fields[{{ $index }}][validation][multiple]" value="1" id="field-multiple-{{ $index }}" @checked(!empty($rowValidation['multiple']))>
+                                                                        <label class="form-check-label fw-semibold small" for="field-multiple-{{ $index }}">Allow multiple uploads</label>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-lg-6" data-indicator-wrap @if (!in_array($rowType, $mappableFieldTypes, true)) hidden @endif>
+                                                        <div class="me-field-settings">
+                                                            <div class="me-field-settings-title"><i class="feather-link" aria-hidden="true"></i>Performance indicator mapping</div>
+                                                            <label class="form-label">Mapped indicator</label>
+                                                            <select name="fields[{{ $index }}][indicator_id]" class="form-select @error('fields.'.$index.'.indicator_id') is-invalid @enderror" data-indicator-select>
+                                                                <option value="">No indicator mapping</option>
+                                                                @foreach ($indicatorOptions as $indicatorOption)
+                                                                    <option
+                                                                        value="{{ $indicatorOption['id'] }}"
+                                                                        data-portfolio="{{ $indicatorOption['portfolio_id'] }}"
+                                                                        @selected((string) ($row['indicator_id'] ?? '') === (string) $indicatorOption['id'])
+                                                                    >{{ $indicatorOption['label'] }}{{ $indicatorOption['unit'] ? ' · '.$indicatorOption['unit'] : '' }}</option>
+                                                                @endforeach
+                                                            </select>
+                                                            <span class="me-field-help">Available for integer, number, percentage and currency. One indicator can be mapped only once.</span>
+                                                            @error('fields.'.$index.'.indicator_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </article>
+                                        @endforeach
+                                                    </div>
+                                                </div>
+                                            </article>
+                                        @endforeach
+                                    </div>
+                                    <button type="button" class="me-add-section" data-add-section><i class="feather-plus-circle me-1" aria-hidden="true"></i>Add another section</button>
+                                @endif
+                            </div>
+
+                            <div class="me-form-footer">
+                                <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms']) }}" class="btn btn-light border">Cancel</a>
+                                <button type="submit" class="me-primary-action border-0">
+                                    <i class="feather-save" aria-hidden="true"></i>{{ $editingForm ? 'Save changes' : 'Save draft form' }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+            @elseif ($canManage && $showPeriodForm)
+                <section class="me-panel" aria-labelledby="period-form-title">
+                    <div class="me-panel-header">
+                        <div>
+                            <h2 class="me-panel-title" id="period-form-title">{{ $editingPeriod ? 'Edit reporting period' : 'Create reporting period' }}</h2>
+                            <p class="me-panel-subtitle">Periods are portfolio-specific windows used to organise one or more data collections.</p>
+                        </div>
+                        @if ($editingPeriod)<span class="me-status {{ $editingPeriod->status }}">{{ $editingPeriod->status }}</span>@endif
+                    </div>
+                    <div class="me-panel-body">
+                        <form method="POST" action="{{ $editingPeriod ? route('budget.me.data-entry.periods.update', $editingPeriod) : route('budget.me.data-entry.periods.store') }}">
+                            @csrf
+                            @if ($editingPeriod) @method('PUT') @endif
+
+                            <div class="row g-3">
+                                <div class="col-lg-6">
+                                    <label class="form-label" for="period-portfolio">Portfolio <span class="text-danger">*</span></label>
+                                    <select id="period-portfolio" name="portfolio_id" class="form-select @error('portfolio_id') is-invalid @enderror" required>
+                                        <option value="">Choose portfolio</option>
+                                        @foreach ($portfolios as $portfolio)
+                                            <option value="{{ $portfolio->id }}" @selected((string) old('portfolio_id', $editingPeriod?->portfolio_id) === (string) $portfolio->id)>{{ $portfolio->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('portfolio_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3">
+                                    <label class="form-label" for="period-code">Period code <span class="text-danger">*</span></label>
+                                    <input type="text" id="period-code" name="code" class="form-control text-uppercase @error('code') is-invalid @enderror" value="{{ old('code', $editingPeriod?->code) }}" maxlength="50" pattern="[A-Za-z0-9][A-Za-z0-9._-]*" placeholder="2026-Q3" required>
+                                    @error('code')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3">
+                                    <label class="form-label" for="period-type">Period type <span class="text-danger">*</span></label>
+                                    <select id="period-type" name="period_type" class="form-select @error('period_type') is-invalid @enderror" required>
+                                        @foreach (['year' => 'Year', 'quarter' => 'Quarter', 'month' => 'Month', 'custom' => 'Custom'] as $typeValue => $typeLabel)
+                                            <option value="{{ $typeValue }}" @selected(old('period_type', $editingPeriod?->period_type ?? 'quarter') === $typeValue)>{{ $typeLabel }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('period_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-6">
+                                    <label class="form-label" for="period-label">Display label <span class="text-danger">*</span></label>
+                                    <input type="text" id="period-label" name="label" class="form-control @error('label') is-invalid @enderror" value="{{ old('label', $editingPeriod?->label) }}" maxlength="150" placeholder="Quarter 3, 2026" required>
+                                    @error('label')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label" for="period-start">Start date <span class="text-danger">*</span></label>
+                                    <input type="date" id="period-start" name="period_start" class="form-control @error('period_start') is-invalid @enderror" value="{{ old('period_start', $editingPeriod?->period_start?->format('Y-m-d')) }}" required>
+                                    @error('period_start')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label" for="period-end">End date <span class="text-danger">*</span></label>
+                                    <input type="date" id="period-end" name="period_end" class="form-control @error('period_end') is-invalid @enderror" value="{{ old('period_end', $editingPeriod?->period_end?->format('Y-m-d')) }}" required>
+                                    @error('period_end')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label" for="period-status">Status <span class="text-danger">*</span></label>
+                                    <select id="period-status" name="status" class="form-select @error('status') is-invalid @enderror" required>
+                                        @foreach (['draft' => 'Draft', 'active' => 'Active', 'closed' => 'Closed'] as $statusValue => $statusLabel)
+                                            <option value="{{ $statusValue }}" @selected(old('status', $editingPeriod?->status ?? 'draft') === $statusValue)>{{ $statusLabel }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('status')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                            </div>
+
+                            <div class="me-form-footer">
+                                <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods']) }}" class="btn btn-light border">Cancel</a>
+                                <button type="submit" class="me-primary-action border-0"><i class="feather-save" aria-hidden="true"></i>{{ $editingPeriod ? 'Save period' : 'Create period' }}</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+            @elseif ($canManage && $showCollectionForm)
+                @php
+                    $collectionFormValue = (string) old('form_id', $editingCollection?->form_id);
+                    $collectionPeriodValue = (string) old('reporting_period_id', $editingCollection?->reporting_period_id);
+                    $selectedMemberIds = collect(old(
+                        'member_ids',
+                        $editingCollection ? $editingCollection->assignments->pluck('think_tank_member_id')->all() : []
+                    ))->map(fn ($id) => (string) $id);
+                @endphp
+                <section class="me-panel" aria-labelledby="collection-form-title">
+                    <div class="me-panel-header">
+                        <div>
+                            <h2 class="me-panel-title" id="collection-form-title">{{ $editingCollection ? 'Edit data collection' : 'Create data collection' }}</h2>
+                            <p class="me-panel-subtitle">Combine one published form and one active period from the same portfolio, then assign participating think tanks.</p>
+                        </div>
+                        @if ($editingCollection)<span class="me-status {{ $editingCollection->status }}">{{ $editingCollection->status }}</span>@endif
+                    </div>
+                    <div class="me-panel-body">
+                        <form method="POST" action="{{ $editingCollection ? route('budget.me.data-entry.collections.update', $editingCollection) : route('budget.me.data-entry.collections.store') }}" data-collection-form>
+                            @csrf
+                            @if ($editingCollection) @method('PUT') @endif
+
+                            <div class="me-required-note">
+                                <i class="feather-info flex-shrink-0 mt-1" aria-hidden="true"></i>
+                                <div>Assignments with a submission cannot be removed later. Opening the collection makes it visible to assigned participants when the opening date arrives.</div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-lg-6">
+                                    <label class="form-label" for="collection-form">Published form <span class="text-danger">*</span></label>
+                                    <select id="collection-form" name="form_id" class="form-select @error('form_id') is-invalid @enderror" required data-collection-template>
+                                        <option value="">Choose form template</option>
+                                        @foreach ($publishedForms as $publishedForm)
+                                            <option value="{{ $publishedForm->id }}" data-portfolio="{{ $publishedForm->portfolio_id }}" @selected($collectionFormValue === (string) $publishedForm->id)>
+                                                {{ $publishedForm->portfolio?->name }} · {{ $publishedForm->code }} — {{ $publishedForm->title }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @error('form_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-6">
+                                    <label class="form-label" for="collection-period">Active reporting period <span class="text-danger">*</span></label>
+                                    <select id="collection-period" name="reporting_period_id" class="form-select @error('reporting_period_id') is-invalid @enderror" required data-collection-period>
+                                        <option value="">Choose reporting period</option>
+                                        @foreach ($activePeriods as $activePeriod)
+                                            <option value="{{ $activePeriod->id }}" data-portfolio="{{ $activePeriod->portfolio_id }}" @selected($collectionPeriodValue === (string) $activePeriod->id)>
+                                                {{ $activePeriod->portfolio?->name }} · {{ $activePeriod->code }} — {{ $activePeriod->label }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <span class="me-field-help" data-period-help>Select a form first to show periods from the same portfolio.</span>
+                                    @error('reporting_period_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label" for="collection-opens">Opens at <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" id="collection-opens" name="opens_at" class="form-control @error('opens_at') is-invalid @enderror" value="{{ old('opens_at', $editingCollection?->opens_at?->format('Y-m-d\TH:i')) }}" required>
+                                    @error('opens_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label" for="collection-due">Due at <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" id="collection-due" name="due_at" class="form-control @error('due_at') is-invalid @enderror" value="{{ old('due_at', $editingCollection?->due_at?->format('Y-m-d\TH:i')) }}" required>
+                                    @error('due_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label" for="collection-closes">Closes at <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" id="collection-closes" name="closes_at" class="form-control @error('closes_at') is-invalid @enderror" value="{{ old('closes_at', $editingCollection?->closes_at?->format('Y-m-d\TH:i')) }}" required>
+                                    @error('closes_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label" for="collection-status">Status <span class="text-danger">*</span></label>
+                                    <select id="collection-status" name="status" class="form-select @error('status') is-invalid @enderror" required>
+                                        <option value="draft" @selected(old('status', $editingCollection?->status ?? 'draft') === 'draft')>Draft</option>
+                                        <option value="open" @selected(old('status', $editingCollection?->status ?? 'draft') === 'open')>Open</option>
+                                    </select>
+                                    @error('status')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="collection-instructions">Collection-specific instructions</label>
+                                    <textarea id="collection-instructions" name="instructions" class="form-control @error('instructions') is-invalid @enderror" maxlength="5000" placeholder="Deadlines, evidence requirements or notes specific to this collection">{{ old('instructions', $editingCollection?->instructions) }}</textarea>
+                                    @error('instructions')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                            </div>
+
+                            <div class="me-form-section">
+                                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-end gap-2 mb-2">
+                                    <div>
+                                        <div class="me-form-section-title mb-1">Participating think tanks <span class="text-danger">*</span></div>
+                                        <div class="me-field-help mt-0">Assign at least one active think tank.</div>
+                                    </div>
+                                    <div class="w-100" style="max-width: 330px">
+                                        <label class="visually-hidden" for="member-search">Search think tanks</label>
+                                        <input type="search" id="member-search" class="form-control" placeholder="Search think tanks" data-member-search>
+                                    </div>
+                                </div>
+                                <div class="me-member-picker" data-member-list>
+                                    @forelse ($availableThinkTanks as $thinkTank)
+                                        <label class="me-member-option" data-member-option data-search="{{ \Illuminate\Support\Str::lower($thinkTank->name.' '.$thinkTank->country.' '.$thinkTank->consortium?->name) }}">
+                                            <input class="form-check-input" type="checkbox" name="member_ids[]" value="{{ $thinkTank->id }}" @checked($selectedMemberIds->contains((string) $thinkTank->id))>
+                                            <span>
+                                                <span class="me-member-name">{{ $thinkTank->name }}</span>
+                                                <span class="me-member-meta">{{ collect([$thinkTank->country, $thinkTank->consortium?->name])->filter()->join(' · ') ?: 'Think tank member' }}@if ($thinkTank->status !== 'active') · Existing inactive assignment @endif</span>
+                                            </span>
+                                        </label>
+                                    @empty
+                                        <div class="p-4 text-center me-muted small">No active think tanks are available for assignment.</div>
+                                    @endforelse
+                                </div>
+                                @error('member_ids')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
+                                @error('member_ids.*')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
+                            </div>
+
+                            <div class="me-form-footer">
+                                <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections']) }}" class="btn btn-light border">Cancel</a>
+                                <button type="submit" class="me-primary-action border-0"><i class="feather-save" aria-hidden="true"></i>{{ $editingCollection ? 'Save collection' : 'Create collection' }}</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+            @endif
+
+            @php
+                $registerTitle = match ($tab) {
+                    'forms' => 'Form templates',
+                    'periods' => 'Reporting periods',
+                    'submissions' => 'Participant submissions',
+                    default => 'Data collections',
+                };
+                $registerSubtitle = match ($tab) {
+                    'forms' => 'Build, publish and retire reusable reporting forms.',
+                    'periods' => 'Manage the portfolio reporting calendar.',
+                    'submissions' => 'Track participant progress and submissions awaiting review.',
+                    default => 'Monitor open windows, assignments and collection progress.',
+                };
+                $currentPaginator = match ($tab) {
+                    'forms' => $forms,
+                    'periods' => $periods,
+                    'submissions' => $submissions,
+                    default => $collections,
+                };
+                $registerSearch = $tab === 'submissions'
+                    ? (string) ($submissionSearch ?? $search)
+                    : (string) $search;
+                $registerStatusFilter = $tab === 'submissions'
+                    ? (string) ($submissionStatusFilter ?? $statusFilter)
+                    : (string) $statusFilter;
+                $registerHasFilters = $registerSearch !== '' || $portfolioId || $registerStatusFilter !== '';
+            @endphp
+
+            <section class="me-panel" aria-labelledby="data-entry-register-title">
+                <div class="me-panel-header flex-column">
+                    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 w-100">
+                        <div>
+                            <h2 class="me-panel-title" id="data-entry-register-title">{{ $registerTitle }}</h2>
+                            <p class="me-panel-subtitle">{{ $registerSubtitle }}</p>
+                        </div>
+
+                        @if ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
+                            <a href="{{ route('budget.me.rebuild.data-entry', $createTarget['query']) }}#data-entry-workspace" class="btn btn-sm btn-outline-success flex-shrink-0">
+                                <i class="feather-plus me-1" aria-hidden="true"></i>{{ $createTarget['label'] }}
+                            </a>
+                        @endif
+                    </div>
+
+                    <form method="GET" action="{{ route('budget.me.rebuild.data-entry') }}" class="me-filter-grid {{ $tab === 'submissions' ? 'me-submission-filter-grid' : '' }}" role="search" aria-label="Filter {{ strtolower($registerTitle) }}">
+                        <input type="hidden" name="tab" value="{{ $tab }}">
+                        <div>
+                            <label class="{{ $tab === 'submissions' ? 'me-filter-label' : 'visually-hidden' }}" for="data-entry-search">{{ $tab === 'submissions' ? 'Search submissions' : 'Search '.strtolower($registerTitle) }}</label>
+                            <input type="search" id="data-entry-search" name="q" class="form-control" value="{{ $registerSearch }}" placeholder="{{ $tab === 'submissions' ? 'Participant, indicator, template or period' : 'Search code, title or participant' }}">
+                        </div>
+                        <div>
+                            <label class="{{ $tab === 'submissions' ? 'me-filter-label' : 'visually-hidden' }}" for="data-entry-portfolio-filter">{{ $tab === 'submissions' ? 'Portfolio' : 'Filter by portfolio' }}</label>
+                            <select id="data-entry-portfolio-filter" name="portfolio_id" class="form-select">
+                                <option value="">All portfolios</option>
+                                @foreach ($portfolios as $portfolio)
+                                    <option value="{{ $portfolio->id }}" @selected((string) $portfolioId === (string) $portfolio->id)>{{ $portfolio->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="{{ $tab === 'submissions' ? 'me-filter-label' : 'visually-hidden' }}" for="data-entry-status-filter">{{ $tab === 'submissions' ? 'Status' : 'Filter by status' }}</label>
+                            <select id="data-entry-status-filter" name="status" class="form-select">
+                                <option value="">All statuses</option>
+                                @foreach ($statusChoices as $filterStatus => $filterLabel)
+                                    <option value="{{ $filterStatus }}" @selected($registerStatusFilter === $filterStatus)>{{ $filterLabel }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-outline-success flex-grow-1"><i class="feather-search me-1" aria-hidden="true"></i>{{ $tab === 'submissions' ? 'Search submissions' : 'Filter' }}</button>
+                            @if ($registerHasFilters)
+                                <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => $tab]) }}" class="btn btn-light border" aria-label="Clear filters"><i class="feather-x" aria-hidden="true"></i></a>
+                            @endif
+                        </div>
+                    </form>
+                </div>
+
+                @if (! $currentPaginator || $currentPaginator->isEmpty())
+                    <div class="me-empty-state">
+                        <span class="me-empty-icon">
+                            <i class="{{ $tabLabels[$tab]['icon'] }}" aria-hidden="true"></i>
+                        </span>
+                        <h3 class="h6 fw-bold mb-2">
+                            @if ($tab === 'submissions')
+                                {{ $registerHasFilters ? 'No submissions match these filters' : 'No participant submissions yet' }}
+                            @else
+                                {{ $registerHasFilters ? 'No matching records' : 'Nothing here yet' }}
+                            @endif
+                        </h3>
+                        <p class="me-muted small mb-3">
+                            @if ($registerHasFilters)
+                                {{ $tab === 'submissions' ? 'Try a different participant, indicator, template, period, portfolio or status.' : 'Try a different search term, portfolio or status.' }}
+                            @elseif ($tab === 'forms')
+                                Create the first form template to define what participants will report.
+                            @elseif ($tab === 'periods')
+                                Create a reporting period before opening a collection.
+                            @elseif ($tab === 'submissions')
+                                Participant submissions will appear here when collection work begins.
+                            @else
+                                Publish a form and activate a period, then create the first collection.
+                            @endif
+                        </p>
+                        @if ($canManage && $createTarget && $tab !== 'submissions' && ! $registerHasFilters)
+                            <a href="{{ route('budget.me.rebuild.data-entry', $createTarget['query']) }}#data-entry-workspace" class="me-primary-action">
+                                <i class="feather-plus" aria-hidden="true"></i>{{ $createTarget['label'] }}
+                            </a>
+                        @endif
+                    </div>
+                @elseif ($tab === 'forms')
+                    <div class="table-responsive me-register-desktop">
+                        <table class="table me-register-table align-middle">
+                            <caption class="visually-hidden">Collection form templates</caption>
+                            <thead>
+                                <tr>
+                                    <th style="width: 31%">Template</th>
+                                    <th style="width: 18%">Portfolio</th>
+                                    <th style="width: 18%">Ownership</th>
+                                    <th style="width: 18%">Usage</th>
+                                    <th class="text-end" style="width: 15%">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($forms as $form)
+                                    <tr>
+                                        <td>
+                                            <span class="me-code">{{ $form->code }}</span>
+                                            <div class="me-record-title">{{ $form->title }}</div>
+                                            <div class="me-record-meta">Version {{ $form->version }} · {{ \Illuminate\Support\Str::limit($form->description ?: 'No description provided', 90) }}</div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold small text-dark">{{ $form->portfolio?->name ?: 'Portfolio unavailable' }}</div>
+                                            <span class="me-status {{ $form->status }} mt-2">{{ $form->status }}</span>
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">{{ $form->responsiblePerson?->name ?: 'Not assigned' }}</div>
+                                            <div class="me-record-meta">{{ number_format((int) $form->fields_count) }} fields</div>
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">{{ number_format((int) $form->collections_count) }} collections</div>
+                                            <div class="me-record-meta">{{ number_format((int) $form->submitted_collections_count) }} with submissions</div>
+                                        </td>
+                                        <td>
+                                            @if ($canManage)
+                                                <div class="me-row-actions justify-content-end">
+                                                    @if ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
+                                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border" aria-label="Edit {{ $form->title }}"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a>
+                                                    @endif
+                                                    @if ($form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT)
+                                                        <form method="POST" action="{{ route('budget.me.data-entry.forms.publish', $form) }}" data-confirm="Publish this form? It will become available for new collections.">
+                                                            @csrf
+                                                            <button type="submit" class="btn btn-sm btn-outline-success"><i class="feather-upload-cloud" aria-hidden="true"></i> Publish</button>
+                                                        </form>
+                                                    @elseif ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
+                                                        <form method="POST" action="{{ route('budget.me.data-entry.forms.archive', $form) }}" data-confirm="Archive this form? It cannot be used for new collections.">
+                                                            @csrf
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Archive {{ $form->title }}"><i class="feather-archive" aria-hidden="true"></i></button>
+                                                        </form>
+                                                    @endif
+                                                </div>
+                                            @else
+                                                <div class="text-end me-muted small">View only</div>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="me-mobile-register">
+                        @foreach ($forms as $form)
+                            <article class="me-mobile-card">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div><span class="me-code">{{ $form->code }}</span><h3 class="me-record-title mb-0">{{ $form->title }}</h3></div>
+                                    <span class="me-status {{ $form->status }}">{{ $form->status }}</span>
+                                </div>
+                                <div class="me-mobile-facts">
+                                    <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $form->portfolio?->name ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Responsible</small><strong>{{ $form->responsiblePerson?->name ?: 'Not assigned' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Structure</small><strong>{{ $form->fields_count }} fields · v{{ $form->version }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Usage</small><strong>{{ $form->collections_count }} collections</strong></div>
+                                </div>
+                                @if ($canManage && $form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
+                                    <div class="me-row-actions justify-content-start">
+                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
+                                        @if ($form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT)
+                                            <form method="POST" action="{{ route('budget.me.data-entry.forms.publish', $form) }}" data-confirm="Publish this form? It will become available for new collections.">@csrf<button type="submit" class="btn btn-sm btn-outline-success"><i class="feather-upload-cloud me-1" aria-hidden="true"></i>Publish</button></form>
+                                        @else
+                                            <form method="POST" action="{{ route('budget.me.data-entry.forms.archive', $form) }}" data-confirm="Archive this form? It cannot be used for new collections.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-archive me-1" aria-hidden="true"></i>Archive</button></form>
+                                        @endif
+                                    </div>
+                                @endif
+                            </article>
+                        @endforeach
+                    </div>
+                @elseif ($tab === 'periods')
+                    <div class="table-responsive me-register-desktop">
+                        <table class="table me-register-table align-middle">
+                            <caption class="visually-hidden">Portfolio reporting periods</caption>
+                            <thead>
+                                <tr>
+                                    <th style="width: 27%">Reporting period</th>
+                                    <th style="width: 24%">Portfolio</th>
+                                    <th style="width: 24%">Date range</th>
+                                    <th style="width: 13%">Usage</th>
+                                    <th class="text-end" style="width: 12%">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($periods as $period)
+                                    <tr>
+                                        <td><span class="me-code">{{ $period->code }}</span><div class="me-record-title">{{ $period->label }}</div><div class="me-record-meta">{{ ucfirst($period->period_type) }}</div></td>
+                                        <td><div class="small fw-semibold text-dark">{{ $period->portfolio?->name ?: 'Portfolio unavailable' }}</div><span class="me-status {{ $period->status }} mt-2">{{ $period->status }}</span></td>
+                                        <td><div class="small fw-semibold text-dark">{{ $period->period_start?->format('d M Y') }} — {{ $period->period_end?->format('d M Y') }}</div><div class="me-record-meta">{{ $period->period_start && $period->period_end ? $period->period_start->diffInDays($period->period_end) + 1 : 0 }} calendar days</div></td>
+                                        <td><div class="small fw-semibold text-dark">{{ number_format((int) $period->collections_count) }}</div><div class="me-record-meta">Collections</div></td>
+                                        <td>
+                                            @if ($canManage)
+                                                <div class="me-row-actions justify-content-end"><a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a></div>
+                                            @else
+                                                <div class="text-end me-muted small">View only</div>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="me-mobile-register">
+                        @foreach ($periods as $period)
+                            <article class="me-mobile-card">
+                                <div class="d-flex align-items-start justify-content-between gap-2"><div><span class="me-code">{{ $period->code }}</span><h3 class="me-record-title mb-0">{{ $period->label }}</h3></div><span class="me-status {{ $period->status }}">{{ $period->status }}</span></div>
+                                <div class="me-mobile-facts">
+                                    <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $period->portfolio?->name ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Type</small><strong>{{ ucfirst($period->period_type) }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Starts</small><strong>{{ $period->period_start?->format('d M Y') }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Ends</small><strong>{{ $period->period_end?->format('d M Y') }}</strong></div>
+                                </div>
+                                @if ($canManage)<div class="me-row-actions justify-content-start"><a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit period</a></div>@endif
+                            </article>
+                        @endforeach
+                    </div>
+                @elseif ($tab === 'submissions')
+                    <div class="me-submission-results-summary" aria-live="polite">
+                        <strong>
+                            Showing {{ number_format((int) $submissions->firstItem()) }}&ndash;{{ number_format((int) $submissions->lastItem()) }}
+                            of {{ number_format((int) $submissions->total()) }} {{ \Illuminate\Support\Str::plural('submission', $submissions->total()) }}
+                        </strong>
+                        @if ($registerHasFilters)
+                            <span class="me-submission-filter-cue"><i class="feather-filter" aria-hidden="true"></i>Filters applied</span>
+                        @else
+                            <span><i class="feather-clock me-1" aria-hidden="true"></i>Newest activity first</span>
+                        @endif
+                    </div>
+                    <div class="table-responsive me-register-desktop">
+                        <table class="table me-register-table me-submission-table align-middle">
+                            <caption class="visually-hidden">Participant data submissions</caption>
+                            <thead>
+                                <tr>
+                                    <th style="width: 14%">Portfolio</th>
+                                    <th style="width: 18%">Indicator</th>
+                                    <th style="width: 18%">Participant / think tank</th>
+                                    <th style="width: 21%">Template / period</th>
+                                    <th style="width: 16%">Submitted / status</th>
+                                    <th style="width: 13%">Review</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($submissions as $submission)
+                                    @php
+                                        $assignment = $submission->assignment;
+                                        $submissionCollection = $assignment?->collection;
+                                        $submissionForm = $submissionCollection?->form;
+                                        $submissionIndicator = $submissionForm?->indicator;
+                                        $submissionPortfolio = $submissionForm?->portfolio;
+                                        $submissionParticipant = $assignment?->thinkTank;
+                                        $submissionPeriod = $submissionCollection?->reportingPeriod;
+                                        $indicatorUnit = $submissionIndicator?->unit?->symbol ?: $submissionIndicator?->unit?->name;
+                                    @endphp
+                                    <tr>
+                                        <td><div class="me-record-title">{{ $submissionPortfolio?->name ?: 'Portfolio unavailable' }}</div></td>
+                                        <td>
+                                            @if ($submissionIndicator?->indicator_code)<span class="me-code">{{ $submissionIndicator->indicator_code }}</span>@endif
+                                            <div class="me-record-title">{{ $submissionIndicator?->name ?: 'Indicator unavailable' }}</div>
+                                            @if ($indicatorUnit)<div class="me-record-meta">Measured in {{ $indicatorUnit }}</div>@endif
+                                        </td>
+                                        <td>
+                                            <div class="me-record-title">{{ $submissionParticipant?->name ?: 'Participant unavailable' }}</div>
+                                            <div class="me-record-meta">{{ $submissionParticipant?->country ?: 'Country not set' }}</div>
+                                            @if ($submission->submittedBy?->name)
+                                                <div class="me-record-meta">Submitted by {{ $submission->submittedBy->name }}</div>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if ($submissionForm?->code)<span class="me-code">{{ $submissionForm->code }}</span>@endif
+                                            <div class="me-record-title">{{ $submissionForm?->title ?: 'Template unavailable' }}</div>
+                                            <div class="me-record-meta">
+                                                {{ $submissionPeriod?->label ?: 'Reporting period unavailable' }}
+                                                @if ($submissionPeriod?->code)&middot; {{ $submissionPeriod->code }}@endif
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="me-status {{ $submission->status }}">{{ $submission->status }}</span>
+                                            <div class="me-record-meta">
+                                                @if ($submission->submitted_at)
+                                                    Submitted {{ $submission->submitted_at->format('d M Y, H:i') }}
+                                                @else
+                                                    Last saved {{ $submission->updated_at?->format('d M Y, H:i') ?: 'date unavailable' }}
+                                                @endif
+                                                <br>{{ number_format((int) $submission->answers_count) }} {{ \Illuminate\Support\Str::plural('answer', (int) $submission->answers_count) }} &middot; Revision {{ $submission->revision }}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="me-submission-review">
+                                                <i class="{{ $submission->reviewed_at ? 'feather-check-circle' : 'feather-clock' }}" aria-hidden="true"></i>
+                                                <div>
+                                                    <div class="small fw-semibold text-dark">{{ $submission->reviewedBy?->name ?: ($submission->status === 'draft' ? 'Not ready for review' : 'Awaiting review') }}</div>
+                                                    <div class="me-record-meta">{{ $submission->reviewed_at?->format('d M Y, H:i') ?: 'No review recorded' }}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="me-mobile-register">
+                        @foreach ($submissions as $submission)
+                            @php
+                                $submissionCollection = $submission->assignment?->collection;
+                                $submissionForm = $submissionCollection?->form;
+                                $submissionIndicator = $submissionForm?->indicator;
+                                $submissionPortfolio = $submissionForm?->portfolio;
+                                $submissionParticipant = $submission->assignment?->thinkTank;
+                                $submissionPeriod = $submissionCollection?->reportingPeriod;
+                            @endphp
+                            <article class="me-mobile-card">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        @if ($submissionForm?->code)<span class="me-code">{{ $submissionForm->code }}</span>@endif
+                                        <h3 class="me-record-title mb-0">{{ $submissionParticipant?->name ?: 'Participant unavailable' }}</h3>
+                                        <div class="me-record-meta">{{ $submissionParticipant?->country ?: 'Country not set' }}</div>
+                                        @if ($submission->submittedBy?->name)
+                                            <div class="me-record-meta">Submitted by {{ $submission->submittedBy->name }}</div>
+                                        @endif
+                                    </div>
+                                    <span class="me-status {{ $submission->status }}">{{ $submission->status }}</span>
+                                </div>
+                                <div class="me-mobile-facts">
+                                    <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $submissionPortfolio?->name ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Indicator</small><strong>{{ $submissionIndicator?->name ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Template</small><strong>{{ $submissionForm?->title ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Reporting period</small><strong>{{ $submissionPeriod?->label ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Submitted</small><strong>{{ $submission->submitted_at?->format('d M Y, H:i') ?: 'Draft not submitted' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Response</small><strong>{{ number_format((int) $submission->answers_count) }} {{ \Illuminate\Support\Str::plural('answer', (int) $submission->answers_count) }} &middot; Revision {{ $submission->revision }}</strong></div>
+                                </div>
+                                <div class="me-submission-review">
+                                    <i class="{{ $submission->reviewed_at ? 'feather-check-circle' : 'feather-clock' }}" aria-hidden="true"></i>
+                                    <div class="me-record-meta mt-0">
+                                        Reviewer: {{ $submission->reviewedBy?->name ?: ($submission->status === 'draft' ? 'Not ready for review' : 'Awaiting review') }}
+                                        @if ($submission->reviewed_at)<br>{{ $submission->reviewed_at->format('d M Y, H:i') }}@endif
+                                    </div>
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="table-responsive me-register-desktop">
+                        <table class="table me-register-table align-middle">
+                            <caption class="visually-hidden">Data collections and progress</caption>
+                            <thead>
+                                <tr>
+                                    <th style="width: 29%">Collection</th>
+                                    <th style="width: 22%">Schedule</th>
+                                    <th style="width: 19%">Assignments</th>
+                                    <th style="width: 15%">Progress</th>
+                                    <th class="text-end" style="width: 15%">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($collections as $collection)
+                                    @php
+                                        $completion = $collection->assignments_count > 0 ? min(100, round(($collection->submissions_count / $collection->assignments_count) * 100)) : 0;
+                                        $isPastDue = $collection->due_at && now()->isAfter($collection->due_at) && $collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED;
+                                    @endphp
+                                    <tr>
+                                        <td><span class="me-code">{{ $collection->form?->code }}</span><div class="me-record-title">{{ $collection->form?->title ?: 'Form unavailable' }}</div><div class="me-record-meta">{{ $collection->form?->portfolio?->name }} · {{ $collection->reportingPeriod?->label }}</div><span class="me-status {{ $collection->status }} mt-2">{{ $collection->status }}</span></td>
+                                        <td><div class="small fw-semibold text-dark">Due {{ $collection->due_at?->format('d M Y, H:i') }}</div><div class="me-record-meta">Opens {{ $collection->opens_at?->format('d M Y') }} · Closes {{ $collection->closes_at?->format('d M Y') }}</div>@if ($isPastDue)<span class="text-danger small fw-semibold"><i class="feather-alert-circle me-1" aria-hidden="true"></i>Past due</span>@endif</td>
+                                        <td><div class="small fw-semibold text-dark">{{ number_format((int) $collection->assignments_count) }} think tanks</div><div class="me-record-meta">{{ $collection->assignments->take(2)->pluck('thinkTank.name')->filter()->join(', ') }}@if ($collection->assignments_count > 2) +{{ $collection->assignments_count - 2 }} more @endif</div></td>
+                                        <td><div class="small fw-semibold text-dark">{{ $collection->submissions_count }} / {{ $collection->assignments_count }} submitted</div><div class="progress mt-2" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div></td>
+                                        <td>
+                                            @if ($canManage && $collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                                <div class="me-row-actions justify-content-end">
+                                                    <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a>
+                                                    <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock" aria-hidden="true"></i> Close</button></form>
+                                                </div>
+                                            @elseif (! $canManage)
+                                                <div class="text-end me-muted small">View only</div>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="me-mobile-register">
+                        @foreach ($collections as $collection)
+                            @php $completion = $collection->assignments_count > 0 ? min(100, round(($collection->submissions_count / $collection->assignments_count) * 100)) : 0; @endphp
+                            <article class="me-mobile-card">
+                                <div class="d-flex align-items-start justify-content-between gap-2"><div><span class="me-code">{{ $collection->form?->code }}</span><h3 class="me-record-title mb-0">{{ $collection->form?->title ?: 'Form unavailable' }}</h3></div><span class="me-status {{ $collection->status }}">{{ $collection->status }}</span></div>
+                                <div class="me-record-meta mt-2">{{ $collection->form?->portfolio?->name }} · {{ $collection->reportingPeriod?->label }}</div>
+                                <div class="me-mobile-facts">
+                                    <div class="me-mobile-fact"><small>Opens</small><strong>{{ $collection->opens_at?->format('d M Y, H:i') }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Due</small><strong>{{ $collection->due_at?->format('d M Y, H:i') }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Assigned</small><strong>{{ $collection->assignments_count }} think tanks</strong></div>
+                                    <div class="me-mobile-fact"><small>Submitted</small><strong>{{ $collection->submissions_count }} / {{ $collection->assignments_count }}</strong></div>
+                                </div>
+                                <div class="progress mb-3" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div>
+                                @if ($canManage && $collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                    <div class="me-row-actions justify-content-start">
+                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
+                                        <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock me-1" aria-hidden="true"></i>Close</button></form>
+                                    </div>
+                                @endif
+                            </article>
+                        @endforeach
+                    </div>
+                @endif
+
+                @if ($currentPaginator && $currentPaginator->hasPages())
+                    <div class="me-pagination-wrap">{{ $currentPaginator->links() }}</div>
+                @endif
+            </section>
+        </div>
+
+        @if ($canManage && $showFormBuilder && !($formLocked ?? false))
+            <template id="data-entry-field-template">
+                <article class="me-builder-row" data-field-row>
+                    <div class="me-builder-heading">
+                        <h3 class="me-builder-title">Question <span data-field-number></span></h3>
+                        <div class="me-builder-actions">
+                            <button type="button" class="btn btn-sm btn-light border" title="Move question up" aria-label="Move question up" data-move-field="up"><i class="feather-arrow-up" aria-hidden="true"></i></button>
+                            <button type="button" class="btn btn-sm btn-light border" title="Move question down" aria-label="Move question down" data-move-field="down"><i class="feather-arrow-down" aria-hidden="true"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" title="Remove question" aria-label="Remove question" data-remove-field><i class="feather-trash-2" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                    <input type="hidden" name="fields[__INDEX__][id]" value="">
+                    <input type="hidden" name="fields[__INDEX__][field_key]" value="">
+                    <input type="hidden" name="fields[__INDEX__][section_key]" value="__SECTION_KEY__" data-field-section-key>
+                    <input type="hidden" name="fields[__INDEX__][sort_order]" value="" data-sort-order>
+                    <div class="row g-3">
+                        <div class="col-lg-8">
+                            <label class="form-label">Question <span class="text-danger">*</span></label>
+                            <input type="text" name="fields[__INDEX__][label]" class="form-control" maxlength="255" placeholder="Question shown to participants" required>
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label">Answer type <span class="text-danger">*</span></label>
+                            <select name="fields[__INDEX__][field_type]" class="form-select" required data-field-type>
+                                @foreach ($fieldTypeGroups as $groupLabel => $groupTypes)
+                                    <optgroup label="{{ $groupLabel }}">
+                                        @foreach ($groupTypes as $typeValue => $typeLabel)
+                                            <option value="{{ $typeValue }}" @selected($typeValue === 'text')>{{ $typeLabel }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label">Help text</label>
+                            <input type="text" name="fields[__INDEX__][help_text]" class="form-control" maxlength="1000" placeholder="Optional explanation or example">
+                        </div>
+                        <div class="col-lg-3" data-unit-wrap>
+                            <label class="form-label">Unit label</label>
+                            <input type="text" name="fields[__INDEX__][unit_label]" class="form-control" maxlength="80" placeholder="%, people, USD">
+                        </div>
+                        <div class="col-lg-3 d-flex align-items-end">
+                            <div class="form-check mb-2">
+                                <input type="hidden" name="fields[__INDEX__][is_required]" value="0">
+                                <input class="form-check-input" type="checkbox" name="fields[__INDEX__][is_required]" value="1" id="field-required-__INDEX__" checked>
+                                <label class="form-check-label fw-semibold small" for="field-required-__INDEX__">Required response</label>
+                            </div>
+                        </div>
+                        <div class="col-lg-6" data-numeric-settings>
+                            <div class="me-field-settings">
+                                <div class="me-field-settings-title"><i class="feather-sliders" aria-hidden="true"></i>Numeric range and step</div>
+                                <div class="row g-2">
+                                    <div class="col-sm-4"><label class="form-label">Minimum</label><input type="number" step="any" name="fields[__INDEX__][validation][min]" class="form-control" placeholder="No minimum" data-numeric-min-input></div>
+                                    <div class="col-sm-4"><label class="form-label">Maximum</label><input type="number" step="any" name="fields[__INDEX__][validation][max]" class="form-control" placeholder="No maximum" data-numeric-max-input></div>
+                                    <div class="col-sm-4"><label class="form-label">Step</label><input type="number" min="0" step="any" name="fields[__INDEX__][validation][step]" class="form-control" placeholder="Any" data-numeric-step-input></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6" data-text-settings hidden>
+                            <div class="me-field-settings">
+                                <div class="me-field-settings-title"><i class="feather-type" aria-hidden="true"></i>Text length</div>
+                                <div class="row g-2">
+                                    <div class="col-sm-6"><label class="form-label">Minimum characters</label><input type="number" min="0" max="20000" step="1" name="fields[__INDEX__][validation][min_length]" class="form-control" placeholder="No minimum" data-min-length-input></div>
+                                    <div class="col-sm-6"><label class="form-label">Maximum characters</label><input type="number" min="0" max="20000" step="1" name="fields[__INDEX__][validation][max_length]" class="form-control" placeholder="Use portal limit" data-max-length-input></div>
+                                </div>
+                                <span class="me-field-help" data-text-limit-help>Portal hard limit: 20,000 characters. Leave maximum blank to use this limit.</span>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6" data-options-wrap hidden>
+                            <div class="me-field-settings">
+                                <div class="me-field-settings-title"><i class="feather-list" aria-hidden="true"></i>Choice options</div>
+                                <textarea name="fields[__INDEX__][options]" class="form-control" rows="4" placeholder="Enter one option per line"></textarea>
+                                <span class="me-field-help" data-options-help>Select and radio require at least two options; multi-select and checkbox require at least one.</span>
+                            </div>
+                        </div>
+
+                        <div class="col-12" data-upload-settings hidden>
+                            <div class="me-field-settings">
+                                <div class="me-field-settings-title"><i class="feather-upload-cloud" aria-hidden="true"></i>Upload rules</div>
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-lg-6">
+                                        <label class="form-label">Allowed file extensions</label>
+                                        <input type="text" name="fields[__INDEX__][validation][allowed_extensions]" class="form-control" placeholder="{{ $defaultFileExtensions }}" data-extension-input>
+                                        <span class="me-field-help">Separate extensions with commas. Dots and capital letters are cleaned automatically.</span>
+                                    </div>
+                                    <div class="col-lg-3 col-sm-6"><label class="form-label">Maximum size (MB)</label><input type="number" min="1" max="50" step="1" name="fields[__INDEX__][validation][max_file_size_mb]" class="form-control" placeholder="10" data-file-size-input></div>
+                                    <div class="col-lg-3 col-sm-6">
+                                        <div class="form-check mb-2">
+                                            <input type="hidden" name="fields[__INDEX__][validation][multiple]" value="0">
+                                            <input class="form-check-input" type="checkbox" name="fields[__INDEX__][validation][multiple]" value="1" id="field-multiple-__INDEX__">
+                                            <label class="form-check-label fw-semibold small" for="field-multiple-__INDEX__">Allow multiple uploads</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6" data-indicator-wrap>
+                            <div class="me-field-settings">
+                                <div class="me-field-settings-title"><i class="feather-link" aria-hidden="true"></i>Performance indicator mapping</div>
+                                <label class="form-label">Mapped indicator</label>
+                                <select name="fields[__INDEX__][indicator_id]" class="form-select" data-indicator-select>
+                                    <option value="">No indicator mapping</option>
+                                    @foreach ($indicatorOptions as $indicatorOption)
+                                        <option value="{{ $indicatorOption['id'] }}" data-portfolio="{{ $indicatorOption['portfolio_id'] }}">{{ $indicatorOption['label'] }}{{ $indicatorOption['unit'] ? ' · '.$indicatorOption['unit'] : '' }}</option>
+                                    @endforeach
+                                </select>
+                                <span class="me-field-help">Available for integer, number, percentage and currency. One indicator can be mapped only once.</span>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </template>
+            <template id="data-entry-section-template">
+                <article class="me-section-builder" data-section-card style="--section-color: __SECTION_COLOR__">
+                    <div class="me-section-builder-header">
+                        <div class="d-flex align-items-start justify-content-between gap-3">
+                            <div class="me-section-number"><i class="feather-layers" aria-hidden="true"></i>Section <span data-section-number></span></div>
+                            <div class="me-builder-actions">
+                                <button type="button" class="btn btn-sm btn-light border" title="Move section up" aria-label="Move section up" data-move-section="up"><i class="feather-arrow-up" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-sm btn-light border" title="Move section down" aria-label="Move section down" data-move-section="down"><i class="feather-arrow-down" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" title="Remove section" aria-label="Remove section" data-remove-section><i class="feather-trash-2" aria-hidden="true"></i></button>
+                            </div>
+                        </div>
+                        <input type="hidden" name="sections[__SECTION_INDEX__][id]" value="">
+                        <input type="hidden" name="sections[__SECTION_INDEX__][section_key]" value="__SECTION_KEY__" data-section-key>
+                        <input type="hidden" name="sections[__SECTION_INDEX__][sort_order]" value="" data-section-sort-order>
+                        <div class="row g-3">
+                            <div class="col-lg-6">
+                                <label class="form-label">Section name <span class="text-danger">*</span></label>
+                                <input type="text" name="sections[__SECTION_INDEX__][name]" class="form-control" maxlength="255" placeholder="e.g. Performance results" required data-section-name>
+                            </div>
+                            <div class="col-lg-6">
+                                <label class="form-label">Background colour</label>
+                                <div class="me-section-color-control">
+                                    <input type="color" name="sections[__SECTION_INDEX__][background_color]" value="__SECTION_COLOR__" aria-label="Section background colour" data-section-color>
+                                    <div class="me-color-presets" aria-label="Soft colour presets">
+                                        @foreach ($sectionPalette as $presetColor)
+                                            <button type="button" class="me-color-preset" style="--preset-color: {{ $presetColor }}" title="Use {{ $presetColor }}" aria-label="Use colour {{ $presetColor }}" data-color-preset="{{ $presetColor }}"></button>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="section-description-__SECTION_INDEX__">Instructions / explanation <span class="text-danger">*</span></label>
+                                <textarea id="section-description-__SECTION_INDEX__" name="sections[__SECTION_INDEX__][description]" class="form-control" rows="3" maxlength="2000" placeholder="Explain what respondents should provide, which records to consult, and any definitions they need." required aria-describedby="section-description-help-__SECTION_INDEX__">{{ $defaultSectionGuidance }}</textarea>
+                                <div id="section-description-help-__SECTION_INDEX__" class="me-field-help">This text appears above the section for think-tank respondents. Give them enough guidance to answer the questions correctly.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="me-section-builder-body">
+                        <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                            <div><strong class="small text-dark">Questions</strong><div class="me-field-help mt-0">Each section needs at least one question.</div></div>
+                            <button type="button" class="btn btn-sm btn-outline-success" data-add-field><i class="feather-plus me-1" aria-hidden="true"></i>Add question</button>
+                        </div>
+                        <div data-section-fields></div>
+                    </div>
+                </article>
+            </template>
+        @endif
+    </main>
+@endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.me-data-entry form[data-confirm]').forEach((form) => {
+                form.addEventListener('submit', (event) => {
+                    if (!window.confirm(form.dataset.confirm || 'Continue with this action?')) {
+                        event.preventDefault();
+                    }
+                });
+            });
+
+            const firstInvalid = document.querySelector('.me-data-entry .is-invalid');
+            if (firstInvalid) {
+                firstInvalid.focus({ preventScroll: true });
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            const builder = document.querySelector('[data-form-builder]');
+            const sectionList = builder?.querySelector('[data-section-list]');
+            const fieldTemplate = document.getElementById('data-entry-field-template');
+            const sectionTemplate = document.getElementById('data-entry-section-template');
+            const portfolioSelect = builder?.querySelector('[data-form-portfolio]');
+            const templateIndicatorSelect = builder?.querySelector('[data-template-indicator]');
+            const templateIndicatorHelp = builder?.querySelector('[data-template-indicator-help]');
+            const sectionPalette = @json($sectionPalette ?? []);
+
+            const filterTemplateIndicators = () => {
+                if (!templateIndicatorSelect) return;
+
+                const portfolioId = portfolioSelect?.value || '';
+                const locked = templateIndicatorSelect.dataset.locked === 'true';
+                const placeholder = templateIndicatorSelect.options[0];
+                let availableCount = 0;
+                let selectedStillAllowed = !templateIndicatorSelect.value;
+
+                Array.from(templateIndicatorSelect.options).forEach((option) => {
+                    if (!option.value) return;
+                    const allowed = option.dataset.portfolio === portfolioId || (locked && option.selected);
+                    option.hidden = !allowed;
+                    option.disabled = !allowed;
+                    if (allowed) availableCount++;
+                    if (allowed && option.selected) selectedStillAllowed = true;
+                });
+
+                if (!locked && !selectedStillAllowed) templateIndicatorSelect.value = '';
+                templateIndicatorSelect.disabled = locked || portfolioId === '';
+
+                if (placeholder) {
+                    placeholder.textContent = portfolioId === ''
+                        ? 'Choose a portfolio first'
+                        : (availableCount === 0 ? 'No indicators available for this portfolio' : 'Choose an indicator');
+                }
+
+                if (templateIndicatorHelp) {
+                    if (portfolioId === '') {
+                        templateIndicatorHelp.textContent = 'Choose a portfolio first to see its available indicators.';
+                    } else if (availableCount === 0) {
+                        templateIndicatorHelp.textContent = 'No indicators are registered for this portfolio. Create one in Results Framework and Indicator Management before saving this template.';
+                    } else {
+                        const countLabel = `${availableCount} ${availableCount === 1 ? 'indicator' : 'indicators'} available`;
+                        templateIndicatorHelp.textContent = `${countLabel}. The linked template will open from this indicator in the think tank M&E workspace.`;
+                    }
+                }
+            };
+
+            const filterIndicatorOptions = (select) => {
+                if (!select) return;
+                const portfolioId = portfolioSelect?.value || '';
+                let selectedStillAllowed = !select.value;
+
+                Array.from(select.options).forEach((option) => {
+                    if (!option.value) return;
+                    const allowed = portfolioId !== '' && option.dataset.portfolio === portfolioId;
+                    option.hidden = !allowed;
+                    option.disabled = !allowed;
+                    if (allowed && option.selected) selectedStillAllowed = true;
+                });
+
+                if (!selectedStillAllowed) select.value = '';
+            };
+
+            const updateFieldRow = (row, resetDefaults = false) => {
+                const type = row.querySelector('[data-field-type]')?.value || 'text';
+                const numericTypes = ['integer', 'number', 'percentage', 'currency', 'rating', 'scale'];
+                const mappableTypes = ['integer', 'number', 'percentage', 'currency'];
+                const textTypes = ['text', 'textarea', 'email', 'phone', 'url'];
+                const choiceTypes = ['select', 'radio', 'multiselect', 'checkbox'];
+                const uploadTypes = ['file', 'image'];
+                const numeric = numericTypes.includes(type);
+                const mappable = mappableTypes.includes(type);
+                const text = textTypes.includes(type);
+                const choice = choiceTypes.includes(type);
+                const upload = uploadTypes.includes(type);
+                const unitWrap = row.querySelector('[data-unit-wrap]');
+                const indicatorWrap = row.querySelector('[data-indicator-wrap]');
+                const optionsWrap = row.querySelector('[data-options-wrap]');
+                const numericWrap = row.querySelector('[data-numeric-settings]');
+                const textWrap = row.querySelector('[data-text-settings]');
+                const uploadWrap = row.querySelector('[data-upload-settings]');
+                const indicatorSelect = row.querySelector('[data-indicator-select]');
+
+                const setSettingState = (wrap, visible) => {
+                    if (!wrap) return;
+                    wrap.hidden = !visible;
+                    wrap.querySelectorAll('input, select, textarea').forEach((control) => {
+                        control.disabled = !visible;
+                    });
+                };
+
+                setSettingState(unitWrap, mappable);
+                setSettingState(indicatorWrap, mappable);
+                setSettingState(optionsWrap, choice);
+                setSettingState(numericWrap, numeric);
+                setSettingState(textWrap, text);
+                setSettingState(uploadWrap, upload);
+
+                if (indicatorSelect) {
+                    if (!mappable) indicatorSelect.value = '';
+                    filterIndicatorOptions(indicatorSelect);
+                }
+
+                const numericDefaults = {
+                    integer: { min: '', max: '', step: '1' },
+                    number: { min: '', max: '', step: '' },
+                    percentage: { min: '0', max: '100', step: '' },
+                    currency: { min: '', max: '', step: '' },
+                    rating: { min: '1', max: '5', step: '1' },
+                    scale: { min: '1', max: '10', step: '1' },
+                };
+                if (numeric) {
+                    Object.entries(numericDefaults[type]).forEach(([key, defaultValue]) => {
+                        const input = numericWrap?.querySelector(`[name$="[validation][${key}]"]`);
+                        if (input && (resetDefaults || input.value.trim() === '')) input.value = defaultValue;
+                    });
+
+                    const minimumInput = numericWrap?.querySelector('[data-numeric-min-input]');
+                    const maximumInput = numericWrap?.querySelector('[data-numeric-max-input]');
+                    const stepInput = numericWrap?.querySelector('[data-numeric-step-input]');
+                    [minimumInput, maximumInput].forEach((input) => {
+                        if (!input) return;
+                        if (type === 'rating') {
+                            input.min = '1';
+                            input.max = '10';
+                            input.step = '1';
+                        } else {
+                            input.removeAttribute('min');
+                            input.removeAttribute('max');
+                            input.step = 'any';
+                        }
+                    });
+                    if (stepInput) {
+                        stepInput.min = type === 'rating' ? '1' : '0';
+                        stepInput.step = type === 'rating' ? '1' : 'any';
+                        if (type === 'rating') stepInput.max = '10';
+                        else stepInput.removeAttribute('max');
+                    }
+                }
+
+                if (text) {
+                    const textLengthCaps = { text: 20000, textarea: 20000, email: 255, phone: 30, url: 2048 };
+                    const lengthCap = textLengthCaps[type];
+                    const minLengthInput = textWrap?.querySelector('[data-min-length-input]');
+                    const maxLengthInput = textWrap?.querySelector('[data-max-length-input]');
+                    [minLengthInput, maxLengthInput].forEach((input) => {
+                        if (!input) return;
+                        input.max = String(lengthCap);
+                        if (resetDefaults && input.value !== '' && Number(input.value) > lengthCap) {
+                            input.value = String(lengthCap);
+                        }
+                    });
+                    const textLimitHelp = textWrap?.querySelector('[data-text-limit-help]');
+                    if (textLimitHelp) {
+                        textLimitHelp.textContent = `Portal hard limit: ${lengthCap.toLocaleString()} characters. Leave maximum blank to use this limit.`;
+                    }
+                }
+
+                const unitInput = unitWrap?.querySelector('input');
+                if (type === 'percentage' && unitInput && (resetDefaults || unitInput.value.trim() === '')) {
+                    unitInput.value = '%';
+                }
+
+                if (choice) {
+                    const help = optionsWrap?.querySelector('[data-options-help]');
+                    if (help) {
+                        help.textContent = ['select', 'radio'].includes(type)
+                            ? 'Add at least two options, one per line.'
+                            : 'Add at least one option, one per line.';
+                    }
+                }
+
+                if (upload) {
+                    const extensionInput = uploadWrap?.querySelector('[data-extension-input]');
+                    const sizeInput = uploadWrap?.querySelector('[data-file-size-input]');
+                    const multipleInput = uploadWrap?.querySelector('input[type="checkbox"][name$="[validation][multiple]"]');
+                    const extensions = type === 'image'
+                        ? 'jpg, jpeg, png, webp, gif'
+                        : 'pdf, doc, docx, xls, xlsx, csv, txt';
+                    if (extensionInput) {
+                        extensionInput.placeholder = extensions;
+                        if (resetDefaults || extensionInput.value.trim() === '') extensionInput.value = extensions;
+                    }
+                    if (sizeInput && (resetDefaults || sizeInput.value.trim() === '')) sizeInput.value = '10';
+                    if (multipleInput && resetDefaults) multipleInput.checked = false;
+                }
+
+                row.dataset.fieldType = type;
+            };
+
+            const newSectionKey = () => `section_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+            const updateSectionColour = (section) => {
+                const colourInput = section.querySelector('[data-section-color]');
+                if (!colourInput) return;
+                const colour = colourInput.value.toUpperCase();
+                section.style.setProperty('--section-color', colour);
+                section.querySelectorAll('[data-color-preset]').forEach((preset) => {
+                    preset.classList.toggle('is-selected', preset.dataset.colorPreset.toUpperCase() === colour);
+                });
+            };
+
+            const reindexBuilder = () => {
+                if (!sectionList) return;
+                const sections = Array.from(sectionList.querySelectorAll(':scope > [data-section-card]'));
+                let fieldIndex = 0;
+
+                sections.forEach((section, sectionIndex) => {
+                    const sectionKeyInput = section.querySelector('[data-section-key]');
+                    const sectionKey = sectionKeyInput?.value || newSectionKey();
+                    if (sectionKeyInput && !sectionKeyInput.value) sectionKeyInput.value = sectionKey;
+                    const number = section.querySelector('[data-section-number]');
+                    if (number) number.textContent = String(sectionIndex + 1);
+                    section.querySelectorAll('[name^="sections["]').forEach((input) => {
+                        input.name = input.name.replace(/sections\[[^\]]+\]/, `sections[${sectionIndex}]`);
+                    });
+                    const sectionSort = section.querySelector('[data-section-sort-order]');
+                    if (sectionSort) sectionSort.value = String((sectionIndex + 1) * 10);
+
+                    const fields = Array.from(section.querySelectorAll('[data-section-fields] > [data-field-row]'));
+                    fields.forEach((row, fieldPosition) => {
+                        const fieldNumber = row.querySelector('[data-field-number]');
+                        if (fieldNumber) fieldNumber.textContent = String(fieldPosition + 1);
+                        row.querySelectorAll('[name]').forEach((input) => {
+                            input.name = input.name.replace(/fields\[[^\]]+\]/, `fields[${fieldIndex}]`);
+                        });
+                        const fieldSectionKeyInput = row.querySelector('[data-field-section-key]');
+                        if (fieldSectionKeyInput) fieldSectionKeyInput.value = sectionKey;
+                        ['required', 'multiple'].forEach((controlName) => {
+                            row.querySelectorAll(`[id^="field-${controlName}-"]`).forEach((input) => {
+                                input.id = `field-${controlName}-${fieldIndex}`;
+                            });
+                            row.querySelectorAll(`label[for^="field-${controlName}-"]`).forEach((label) => {
+                                label.htmlFor = `field-${controlName}-${fieldIndex}`;
+                            });
+                        });
+                        const sortInput = row.querySelector('[data-sort-order]');
+                        if (sortInput) sortInput.value = String((fieldPosition + 1) * 10);
+                        const upButton = row.querySelector('[data-move-field="up"]');
+                        const downButton = row.querySelector('[data-move-field="down"]');
+                        if (upButton) upButton.disabled = fieldPosition === 0;
+                        if (downButton) downButton.disabled = fieldPosition === fields.length - 1;
+                        fieldIndex++;
+                    });
+
+                    const sectionUp = section.querySelector('[data-move-section="up"]');
+                    const sectionDown = section.querySelector('[data-move-section="down"]');
+                    const sectionRemove = section.querySelector('[data-remove-section]');
+                    if (sectionUp) sectionUp.disabled = sectionIndex === 0;
+                    if (sectionDown) sectionDown.disabled = sectionIndex === sections.length - 1;
+                    if (sectionRemove) sectionRemove.disabled = sections.length === 1;
+                    updateSectionColour(section);
+                });
+            };
+
+            const addQuestion = (section, focus = true) => {
+                const fieldContainer = section.querySelector('[data-section-fields]');
+                const sectionKey = section.querySelector('[data-section-key]')?.value || newSectionKey();
+                if (!fieldContainer || !fieldTemplate) return;
+                if (builder.querySelectorAll('[data-field-row]').length >= 100) {
+                    window.alert('A form can contain up to 100 questions.');
+                    return;
+                }
+                const index = builder.querySelectorAll('[data-field-row]').length;
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = fieldTemplate.innerHTML
+                    .replaceAll('__INDEX__', String(index))
+                    .replaceAll('__SECTION_KEY__', sectionKey)
+                    .trim();
+                const row = wrapper.firstElementChild;
+                fieldContainer.appendChild(row);
+                updateFieldRow(row, true);
+                reindexBuilder();
+                if (focus) row.querySelector('input[name$="[label]"]')?.focus();
+            };
+
+            if (sectionList) {
+                filterTemplateIndicators();
+                sectionList.querySelectorAll('[data-field-row]').forEach(updateFieldRow);
+                reindexBuilder();
+
+                builder.querySelector('[data-add-section]')?.addEventListener('click', () => {
+                    if (!sectionTemplate) return;
+                    const sectionIndex = sectionList.querySelectorAll(':scope > [data-section-card]').length;
+                    if (sectionIndex >= 30) {
+                        window.alert('A form can contain up to 30 sections.');
+                        return;
+                    }
+                    if (builder.querySelectorAll('[data-field-row]').length >= 100) {
+                        window.alert('Every new section starts with a question, and this form already has the maximum of 100 questions.');
+                        return;
+                    }
+                    const sectionKey = newSectionKey();
+                    const colour = sectionPalette[sectionIndex % sectionPalette.length] || '#EFF6FF';
+                    const wrapper = document.createElement('div');
+                    wrapper.innerHTML = sectionTemplate.innerHTML
+                        .replaceAll('__SECTION_INDEX__', String(sectionIndex))
+                        .replaceAll('__SECTION_KEY__', sectionKey)
+                        .replaceAll('__SECTION_COLOR__', colour)
+                        .trim();
+                    const section = wrapper.firstElementChild;
+                    sectionList.appendChild(section);
+                    addQuestion(section, false);
+                    reindexBuilder();
+                    section.querySelector('[data-section-name]')?.focus();
+                });
+
+                sectionList.addEventListener('change', (event) => {
+                    if (event.target.matches('[data-field-type]')) {
+                        updateFieldRow(event.target.closest('[data-field-row]'), true);
+                    }
+                    if (event.target.matches('[data-section-color]')) {
+                        updateSectionColour(event.target.closest('[data-section-card]'));
+                    }
+                });
+
+                sectionList.addEventListener('click', (event) => {
+                    const section = event.target.closest('[data-section-card]');
+                    if (!section) return;
+
+                    const preset = event.target.closest('[data-color-preset]');
+                    if (preset) {
+                        const colourInput = section.querySelector('[data-section-color]');
+                        if (colourInput) colourInput.value = preset.dataset.colorPreset;
+                        updateSectionColour(section);
+                        return;
+                    }
+
+                    if (event.target.closest('[data-add-field]')) {
+                        addQuestion(section);
+                        return;
+                    }
+
+                    const removeField = event.target.closest('[data-remove-field]');
+                    const moveField = event.target.closest('[data-move-field]');
+                    const row = event.target.closest('[data-field-row]');
+                    const fieldContainer = section.querySelector('[data-section-fields]');
+                    if (removeField && row) {
+                        if (fieldContainer.querySelectorAll(':scope > [data-field-row]').length === 1) {
+                            window.alert('Each section needs at least one question. Add another question before removing this one.');
+                            return;
+                        }
+                        row.remove();
+                        reindexBuilder();
+                        return;
+                    }
+                    if (moveField && row) {
+                        const sibling = moveField.dataset.moveField === 'up' ? row.previousElementSibling : row.nextElementSibling;
+                        if (!sibling) return;
+                        if (moveField.dataset.moveField === 'up') fieldContainer.insertBefore(row, sibling);
+                        else fieldContainer.insertBefore(sibling, row);
+                        reindexBuilder();
+                        return;
+                    }
+
+                    const removeSection = event.target.closest('[data-remove-section]');
+                    if (removeSection) {
+                        if (sectionList.querySelectorAll(':scope > [data-section-card]').length === 1) {
+                            window.alert('A form needs at least one section.');
+                            return;
+                        }
+                        const sectionName = section.querySelector('[data-section-name]')?.value.trim() || 'this section';
+                        if (!window.confirm(`Remove ${sectionName} and all of its questions?`)) return;
+                        section.remove();
+                        reindexBuilder();
+                        return;
+                    }
+
+                    const moveSection = event.target.closest('[data-move-section]');
+                    if (moveSection) {
+                        const sibling = moveSection.dataset.moveSection === 'up' ? section.previousElementSibling : section.nextElementSibling;
+                        if (!sibling) return;
+                        if (moveSection.dataset.moveSection === 'up') sectionList.insertBefore(section, sibling);
+                        else sectionList.insertBefore(sibling, section);
+                        reindexBuilder();
+                    }
+                });
+
+                portfolioSelect?.addEventListener('change', () => {
+                    filterTemplateIndicators();
+                    sectionList.querySelectorAll('[data-indicator-select]').forEach(filterIndicatorOptions);
+                });
+            }
+
+            const collectionForm = document.querySelector('[data-collection-form]');
+            const collectionTemplate = collectionForm?.querySelector('[data-collection-template]');
+            const collectionPeriod = collectionForm?.querySelector('[data-collection-period]');
+            const filterPeriods = () => {
+                if (!collectionTemplate || !collectionPeriod) return;
+                const selectedFormOption = collectionTemplate.options[collectionTemplate.selectedIndex];
+                const portfolioId = selectedFormOption?.dataset.portfolio || '';
+                let selectedStillAllowed = !collectionPeriod.value;
+
+                Array.from(collectionPeriod.options).forEach((option) => {
+                    if (!option.value) return;
+                    const allowed = portfolioId !== '' && option.dataset.portfolio === portfolioId;
+                    option.hidden = !allowed;
+                    option.disabled = !allowed;
+                    if (allowed && option.selected) selectedStillAllowed = true;
+                });
+
+                if (!selectedStillAllowed) collectionPeriod.value = '';
+                collectionPeriod.disabled = portfolioId === '';
+            };
+            if (collectionForm) {
+                filterPeriods();
+                collectionTemplate?.addEventListener('change', filterPeriods);
+
+                const opensAt = collectionForm.querySelector('[name="opens_at"]');
+                const dueAt = collectionForm.querySelector('[name="due_at"]');
+                const closesAt = collectionForm.querySelector('[name="closes_at"]');
+                const updateDateLimits = () => {
+                    if (opensAt && dueAt) dueAt.min = opensAt.value;
+                    if (dueAt && closesAt) closesAt.min = dueAt.value;
+                };
+                opensAt?.addEventListener('change', updateDateLimits);
+                dueAt?.addEventListener('change', updateDateLimits);
+                updateDateLimits();
+            }
+
+            const memberSearch = document.querySelector('[data-member-search]');
+            memberSearch?.addEventListener('input', () => {
+                const term = memberSearch.value.trim().toLocaleLowerCase();
+                document.querySelectorAll('[data-member-option]').forEach((option) => {
+                    option.classList.toggle('is-hidden', term !== '' && !option.dataset.search.includes(term));
+                });
+            });
+        });
+    </script>
+@endpush

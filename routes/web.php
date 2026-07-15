@@ -1,6 +1,7 @@
 <?php
 
  use Illuminate\Support\Facades\Route;
+use App\Models\Sector;
 
 /*
 |--------------------------------------------------------------------------
@@ -11,10 +12,12 @@ use App\Http\Controllers\VideoStreamController;
 use App\Http\Controllers\{
     DashboardController,
     LandingPageController,
+    PublicDiscussionController,
     LanguageController,
     ProfileController,
     ChangePasswordController,
     DataWarehouseController,
+    GrmController,
     WebsiteVisitAnalyticsController,
     WebsiteVisitTrackerController,
     UserController,
@@ -94,6 +97,7 @@ use App\Http\Controllers\{
 	    SectorController,
 	    ProgramController,
 	    ProjectController,
+	    TtlPortalController,
 	    ActivityController,
 	    SubActivityController,
 	    // AllocationController,
@@ -105,6 +109,8 @@ use App\Http\Controllers\{
 	    BudgetReportController,
 	    ProjectBudgetController,
 	    MeConfigurationController,
+	    MeModuleController,
+        MeDataEntryController,
         MeIndicatorController,
         MeDataSourceController,
         MeSurveyController,
@@ -157,6 +163,7 @@ use App\Http\Controllers\System\{
     MemberStateCommunicationAdminController,
     MemberStateQuestionAdminController,
     MemberStateNationalDataReviewController,
+    DiscussionAdminController,
 };
 
 use App\Http\Controllers\{
@@ -212,6 +219,9 @@ use App\Http\Controllers\MemberState\{
 Route::post('/language/switch/{locale}', [LanguageController::class, 'switch'])->name('language.switch');
 Route::get('/language/current', [LanguageController::class, 'current'])->name('language.current');
 Route::get('/language/available', [LanguageController::class, 'available'])->name('language.available');
+Route::get('/language/{locale}', [LanguageController::class, 'switch'])
+    ->where('locale', 'en|fr|ar|pt|es|sw')
+    ->name('language.select');
 
 Route::prefix('website-visit-tracker')
     ->name('website-visit-tracker.')
@@ -275,6 +285,78 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
             Route::post('/{entry}/status', [MemberStateNationalDataReviewController::class, 'updateStatus'])
                 ->middleware('permission:national_data.approve')
                 ->name('status.update');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | PUBLIC DISCUSSION FORUM CONTROLS
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('discussions')->name('discussions.')->group(function () {
+            Route::get('/', [DiscussionAdminController::class, 'dashboard'])
+                ->middleware('permission:discussions.view|discussions.create|discussions.manage|discussions.thematic_areas.manage|discussions.participants.manage|discussions.moderate')
+                ->name('dashboard');
+
+            Route::get('/topics', [DiscussionAdminController::class, 'index'])
+                ->middleware('permission:discussions.view|discussions.create|discussions.manage')
+                ->name('topics.index');
+            Route::get('/topics/create', [DiscussionAdminController::class, 'create'])
+                ->middleware('permission:discussions.create')
+                ->name('topics.create');
+            Route::post('/topics', [DiscussionAdminController::class, 'store'])
+                ->middleware('permission:discussions.create')
+                ->name('topics.store');
+            Route::get('/topics/{topic}/edit', [DiscussionAdminController::class, 'edit'])
+                ->middleware('permission:discussions.manage')
+                ->name('topics.edit');
+            Route::put('/topics/{topic}', [DiscussionAdminController::class, 'update'])
+                ->middleware('permission:discussions.manage')
+                ->name('topics.update');
+            Route::patch('/topics/{topic}/status', [DiscussionAdminController::class, 'updateStatus'])
+                ->middleware('permission:discussions.manage')
+                ->name('topics.status');
+            Route::get('/topics/{topic}/documents/{document}', [DiscussionAdminController::class, 'openUploadedDocument'])
+                ->middleware('permission:discussions.manage')
+                ->name('topics.documents.open');
+
+            Route::get('/thematic-areas', [DiscussionAdminController::class, 'themes'])
+                ->middleware('permission:discussions.thematic_areas.manage')
+                ->name('themes.index');
+            Route::post('/thematic-areas', [DiscussionAdminController::class, 'storeTheme'])
+                ->middleware('permission:discussions.thematic_areas.manage')
+                ->name('themes.store');
+            Route::put('/thematic-areas/{theme}', [DiscussionAdminController::class, 'updateTheme'])
+                ->middleware('permission:discussions.thematic_areas.manage')
+                ->name('themes.update');
+            Route::delete('/thematic-areas/{theme}', [DiscussionAdminController::class, 'destroyTheme'])
+                ->middleware('permission:discussions.thematic_areas.manage')
+                ->name('themes.destroy');
+
+            Route::get('/participants', [DiscussionAdminController::class, 'participants'])
+                ->middleware('permission:discussions.participants.manage')
+                ->name('participants.index');
+            Route::patch('/participants/{participant}/block', [DiscussionAdminController::class, 'blockParticipant'])
+                ->middleware('permission:discussions.participants.manage')
+                ->name('participants.block');
+            Route::patch('/participants/{participant}/unblock', [DiscussionAdminController::class, 'unblockParticipant'])
+                ->middleware('permission:discussions.participants.manage')
+                ->name('participants.unblock');
+            Route::delete('/participants/{participant}/sessions', [DiscussionAdminController::class, 'revokeParticipantTokens'])
+                ->middleware('permission:discussions.participants.manage')
+                ->name('participants.revoke');
+
+            Route::get('/moderation', [DiscussionAdminController::class, 'moderation'])
+                ->middleware('permission:discussions.moderate')
+                ->name('moderation.index');
+            Route::get('/moderation/live', [DiscussionAdminController::class, 'liveModeration'])
+                ->middleware('permission:discussions.moderate')
+                ->name('moderation.live');
+            Route::get('/moderation/live/feed', [DiscussionAdminController::class, 'liveModerationFeed'])
+                ->middleware(['permission:discussions.moderate', 'throttle:60,1'])
+                ->name('moderation.live.feed');
+            Route::patch('/moderation/{post}/remove', [DiscussionAdminController::class, 'removePost'])
+                ->middleware('permission:discussions.moderate')
+                ->name('moderation.remove');
         });
 
         /*
@@ -1067,14 +1149,43 @@ Route::middleware(['auth', 'not.funding.partner'])
 
 
         /* =====================================================
-         | STRUCTURE: SECTORS
+         | STRUCTURE: PORTFOLIOS
          ===================================================== */
 
-        Route::get('sectors', [SectorController::class, 'index'])
+        Route::get('portfolios', [SectorController::class, 'index'])
+            ->middleware('permission:sector.view')
+            ->name('portfolios.index');
+
+        Route::get('portfolios/create', [SectorController::class, 'create'])
+            ->middleware('permission:sector.create')
+            ->name('portfolios.create');
+
+        Route::post('portfolios', [SectorController::class, 'store'])
+            ->middleware('permission:sector.create')
+            ->name('portfolios.store');
+
+        Route::get('portfolios/{sector}/edit', [SectorController::class, 'edit'])
+            ->middleware('permission:sector.edit')
+            ->name('portfolios.edit');
+
+        Route::put('portfolios/{sector}', [SectorController::class, 'update'])
+            ->middleware('permission:sector.edit')
+            ->name('portfolios.update');
+
+        Route::delete('portfolios/{sector}', [SectorController::class, 'destroy'])
+            ->middleware('permission:sector.delete')
+            ->name('portfolios.destroy');
+
+        Route::get('portfolios/{sector}', [SectorController::class, 'show'])
+            ->middleware('permission:sector.view')
+            ->name('portfolios.show');
+
+        /* Legacy sector URLs kept to avoid breaking bookmarked/admin links. */
+        Route::get('sectors', fn () => redirect()->route('budget.portfolios.index'))
             ->middleware('permission:sector.view')
             ->name('sectors.index');
 
-        Route::get('sectors/create', [SectorController::class, 'create'])
+        Route::get('sectors/create', fn () => redirect()->route('budget.portfolios.create'))
             ->middleware('permission:sector.create')
             ->name('sectors.create');
 
@@ -1082,7 +1193,7 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:sector.create')
             ->name('sectors.store');
 
-        Route::get('sectors/{sector}/edit', [SectorController::class, 'edit'])
+        Route::get('sectors/{sector}/edit', fn (Sector $sector) => redirect()->route('budget.portfolios.edit', $sector))
             ->middleware('permission:sector.edit')
             ->name('sectors.edit');
 
@@ -1093,6 +1204,10 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::delete('sectors/{sector}', [SectorController::class, 'destroy'])
             ->middleware('permission:sector.delete')
             ->name('sectors.destroy');
+
+        Route::get('sectors/{sector}', fn (Sector $sector) => redirect()->route('budget.portfolios.show', $sector))
+            ->middleware('permission:sector.view')
+            ->name('sectors.show');
 
 
         /* =====================================================
@@ -1163,6 +1278,45 @@ Route::middleware(['auth', 'not.funding.partner'])
          | M&E CONFIGURATION
          ===================================================== */
 
+        Route::middleware('permission:me.configuration.view|me.configuration.manage|world.indicators.manage')
+            ->prefix('me/rebuild')
+            ->name('me.rebuild.')
+            ->group(function () {
+                Route::get('results-framework-and-indicator-management', [MeModuleController::class, 'resultsFramework'])
+                    ->name('results-framework');
+                Route::get('data-quality-and-approval-workflow', [MeModuleController::class, 'dataQuality'])
+                    ->name('data-quality');
+                Route::get('reporting-and-dashboard', [MeModuleController::class, 'reportingDashboard'])
+                    ->name('reporting-dashboard');
+                Route::get('management-dashboard', [MeModuleController::class, 'managementDashboard'])
+                    ->name('management-dashboard');
+                Route::get('knowledge-and-evidence-repository', [MeModuleController::class, 'knowledgeRepository'])
+                    ->name('knowledge-repository');
+                Route::get('data-governance-framework', [MeModuleController::class, 'dataGovernance'])
+                    ->name('data-governance');
+            });
+
+        Route::get('me/rebuild/data-entry-and-performance-tracking', [MeDataEntryController::class, 'index'])
+            ->middleware('permission:me.data_entry.view|me.data_entry.manage|me.configuration.view|me.configuration.manage')
+            ->name('me.rebuild.data-entry');
+
+        Route::prefix('me/data-entry')
+            ->name('me.data-entry.')
+            ->controller(MeDataEntryController::class)
+            ->group(function () {
+                Route::post('forms', 'storeForm')->name('forms.store');
+                Route::put('forms/{form}', 'updateForm')->name('forms.update');
+                Route::post('forms/{form}/publish', 'publishForm')->name('forms.publish');
+                Route::post('forms/{form}/archive', 'archiveForm')->name('forms.archive');
+
+                Route::post('reporting-periods', 'storePeriod')->name('periods.store');
+                Route::put('reporting-periods/{period}', 'updatePeriod')->name('periods.update');
+
+                Route::post('collections', 'storeCollection')->name('collections.store');
+                Route::put('collections/{collection}', 'updateCollection')->name('collections.update');
+                Route::post('collections/{collection}/close', 'closeCollection')->name('collections.close');
+            });
+
         // Indicators (centralized setup page)
         Route::get('me/indicators', [MeIndicatorController::class, 'index'])
             ->name('me.indicators.index');
@@ -1172,6 +1326,12 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('me.indicators.update');
         Route::delete('me/indicators/{indicator}', [MeIndicatorController::class, 'destroy'])
             ->name('me.indicators.destroy');
+        Route::post('me/indicators/{indicator}/data', [MeIndicatorController::class, 'storeData'])
+            ->name('me.indicators.data.store');
+        Route::post('me/indicator-results/{result}/validate', [MeIndicatorController::class, 'validateData'])
+            ->name('me.indicators.data.validate');
+        Route::post('me/indicator-results/{result}/approve', [MeIndicatorController::class, 'approveData'])
+            ->name('me.indicators.data.approve');
         Route::get('me/indicators/report/excel', [MeIndicatorController::class, 'exportManagementExcel'])
             ->name('me.indicators.report.excel');
         Route::get('me/indicators/report/pdf', [MeIndicatorController::class, 'exportManagementPdf'])
@@ -1577,7 +1737,6 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])->group(function (
                 ->name('activity');
         });
 
-
     /* =====================================================
      | USER PROFILE (SELF-SERVICE)
      | No extra permission needed
@@ -1604,6 +1763,55 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])->group(function (
     Route::post('/change-password', [ChangePasswordController::class, 'update'])
         ->name('password.change.update');
 });
+
+Route::middleware(['auth'])
+    ->prefix('grm')
+    ->name('grm.')
+    ->group(function () {
+        Route::get('/submissions/create', [GrmController::class, 'createSubmission'])
+            ->name('submissions.create');
+        Route::post('/submissions', [GrmController::class, 'storeSubmission'])
+            ->name('submissions.store');
+
+        Route::middleware(['verified', 'not.funding.partner'])->group(function () {
+            Route::get('/configuration/levels', [GrmController::class, 'levels'])
+                ->middleware('permission:grm.configure')
+                ->name('levels.index');
+            Route::post('/configuration/levels', [GrmController::class, 'storeLevel'])
+                ->middleware('permission:grm.configure')
+                ->name('levels.store');
+            Route::put('/configuration/levels/{level}', [GrmController::class, 'updateLevel'])
+                ->middleware('permission:grm.configure')
+                ->name('levels.update');
+
+            Route::get('/configuration/escalations', [GrmController::class, 'escalations'])
+                ->middleware('permission:grm.escalations')
+                ->name('escalations.index');
+            Route::post('/configuration/escalations', [GrmController::class, 'storeEscalation'])
+                ->middleware('permission:grm.escalations')
+                ->name('escalations.store');
+            Route::put('/configuration/escalations/{rule}', [GrmController::class, 'updateEscalation'])
+                ->middleware('permission:grm.escalations')
+                ->name('escalations.update');
+
+            Route::get('/logs', [GrmController::class, 'logs'])
+                ->middleware('permission:grm.view')
+                ->name('logs.index');
+            Route::get('/logs/{grievance}', [GrmController::class, 'show'])
+                ->middleware('permission:grm.view')
+                ->name('logs.show');
+            Route::get('/logs/{grievance}/attachments/{attachment}', [GrmController::class, 'downloadAttachment'])
+                ->middleware('permission:grm.view')
+                ->name('logs.attachments.download');
+            Route::post('/logs/{grievance}/status', [GrmController::class, 'updateStatus'])
+                ->middleware('permission:grm.view')
+                ->name('logs.status');
+
+            Route::get('/reports', [GrmController::class, 'reports'])
+                ->middleware('permission:grm.reports')
+                ->name('reports.index');
+        });
+    });
 
 
 /* =====================================================
@@ -2610,6 +2818,17 @@ Route::get('/stream/{filename}', [VideoStreamController::class, 'stream'])
     ->name('video.stream');
 Route::get('/contact', [LandingPageController::class, 'contact'])->name('landing.contact');
 Route::get('/african-map', [LandingPageController::class, 'africanMap'])->name('landing.african_map');
+Route::prefix('discussion')->name('discussion.')->group(function () {
+    Route::get('/thematic-areas', [PublicDiscussionController::class, 'thematicAreas'])->name('thematic-areas');
+    Route::get('/current', [PublicDiscussionController::class, 'current'])->name('current');
+    Route::get('/join', [PublicDiscussionController::class, 'join'])->name('join');
+    Route::get('/documents/{document}/read', [PublicDiscussionController::class, 'readDocument'])
+        ->middleware('throttle:120,1')
+        ->name('documents.read');
+    Route::get('/documents/{document}/download', [PublicDiscussionController::class, 'downloadDocument'])
+        ->middleware('throttle:120,1')
+        ->name('documents.download');
+});
 Route::post('/impact-map/request-information', [LandingPageController::class, 'submitInformationRequest'])
     ->middleware('throttle:20,1')
     ->name('impact.request');
@@ -2799,6 +3018,26 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:vendor.requests.ma
         Route::post('/information/{requestRecord}/respond', [VendorRequestManagementController::class, 'informationRespond'])
             ->middleware('permission:vendor.requests.respond')
             ->name('information.respond');
+    });
+
+
+/*
+|--------------------------------------------------------------------------
+| TASK TEAM LEADER PORTAL
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])
+    ->prefix('ttl')
+    ->name('ttl.')
+    ->group(function () {
+        Route::get('/dashboard', [TtlPortalController::class, 'dashboard'])
+            ->name('dashboard');
+
+        Route::get('/programs/{program}', [TtlPortalController::class, 'showProgram'])
+            ->name('programs.show');
+
+        Route::get('/projects/{project}', [TtlPortalController::class, 'showProject'])
+            ->name('projects.show');
     });
 
 
@@ -3352,6 +3591,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:think_tanks.direct
         Route::post('/funding', [\App\Http\Controllers\AdminThinkTankController::class, 'storeFunding'])->middleware('permission:think_tanks.funding.transfer.create')->name('funding.store');
         Route::get('/funding/history', [\App\Http\Controllers\AdminThinkTankController::class, 'fundingHistory'])->middleware('permission:think_tanks.funding.history.view')->name('funding.history');
         Route::put('/funding/transfers/{transfer}', [\App\Http\Controllers\AdminThinkTankController::class, 'updateFundingTransfer'])->middleware('permission:think_tanks.funding.transfer.edit')->name('funding.transfers.update');
+        Route::put('/{thinkTank}/logo', [\App\Http\Controllers\AdminThinkTankController::class, 'updateLogo'])->middleware('permission:think_tanks.directory.edit')->name('logo.update');
         Route::get('/{thinkTank}', [\App\Http\Controllers\AdminThinkTankController::class, 'show'])->middleware('permission:think_tanks.directory.view')->name('show');
         Route::put('/{thinkTank}', [\App\Http\Controllers\AdminThinkTankController::class, 'update'])->middleware('permission:think_tanks.directory.edit')->name('update');
     });
@@ -3380,27 +3620,102 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
     ->name('think-tank.')
     ->controller(\App\Http\Controllers\ThinkTankPortalController::class)
     ->group(function () {
-        Route::get('/dashboard', 'dashboard')->name('dashboard');
-        Route::get('/dashboard/download', 'downloadDashboardReport')->middleware('permission:think_tank.dashboard.download')->name('dashboard.download');
-        Route::get('/upload-report-finding', 'uploadReportFinding')->middleware('permission:think_tank.reports.submit')->name('upload-report-finding');
-        Route::get('/reports', 'reports')->middleware('permission:think_tank.reports.view|think_tank.reports.submit')->name('reports');
-        Route::get('/reports/download', 'downloadReports')->middleware('permission:think_tank.reports.download')->name('reports.download');
-        Route::post('/reports', 'storeReport')->middleware('permission:think_tank.reports.submit')->name('reports.store');
-        Route::get('/research', 'research')->middleware('permission:think_tank.research.view|think_tank.research.submit')->name('research');
-        Route::get('/research/download', 'downloadResearch')->middleware('permission:think_tank.research.download')->name('research.download');
-        Route::get('/research/{output}/qasc-preview', 'previewResearchQasc')->middleware('permission:think_tank.research.view|think_tank.research.submit')->name('research.qasc.preview');
-        Route::post('/research', 'storeResearch')->middleware('permission:think_tank.research.submit')->name('research.store');
-        Route::get('/purchase-orders', 'purchaseOrders')->name('purchase-orders');
-        Route::post('/purchase-orders', 'storePurchaseOrder')->middleware('permission:think_tank.procurement.manage')->name('purchase-orders.store');
-        Route::get('/purchase-orders/{purchaseOrder}', 'showPurchaseOrder')->name('purchase-orders.show');
-        Route::post('/purchase-orders/{purchaseOrder}/disbursements/{disbursement}/confirm', 'confirmDisbursementReceipt')->name('purchase-orders.disbursements.confirm');
-        Route::get('/purchase-orders/{purchaseOrder}/pdf', 'purchaseOrderPdf')->name('purchase-orders.pdf');
-        Route::get('/purchase-orders/{purchaseOrder}/download', 'downloadPurchaseOrder')->name('purchase-orders.download');
-        Route::get('/procurement', 'procurement')->middleware('permission:think_tank.procurement.view|think_tank.procurement.manage|think_tank.procurement.evaluate|think_tank.procurement.select')->name('procurement');
-        Route::get('/procurement/download', 'downloadProcurement')->middleware('permission:think_tank.procurement.download')->name('procurement.download');
-        Route::post('/procurement/plans', 'storeProcurementPlan')->middleware('permission:think_tank.procurement.manage')->name('procurement.plans.store');
-        Route::post('/procurement', 'storeProcurement')->middleware('permission:think_tank.procurement.manage')->name('procurement.store');
-        Route::get('/procurement/{procurement}/submissions', 'submissions')->middleware('permission:think_tank.procurement.evaluate')->name('procurement.submissions');
-        Route::post('/procurement/{procurement}/submissions/{submission}/review', 'reviewSubmission')->middleware('permission:think_tank.procurement.evaluate')->name('procurement.submissions.review');
-        Route::post('/procurement/{procurement}/submissions/{submission}/select', 'selectSubmission')->middleware('permission:think_tank.procurement.select')->name('procurement.submissions.select');
+        Route::get('/dashboard', 'dashboard')
+            ->middleware('think.tank.area:dashboard')
+            ->name('dashboard');
+        Route::get('/dashboard/download', 'downloadDashboardReport')
+            ->middleware(['think.tank.area:dashboard', 'permission:think_tank.dashboard.download'])
+            ->name('dashboard.download');
+
+        Route::get('/report-uploads', 'reportUploads')
+            ->middleware(['think.tank.area:report_uploads', 'permission:think_tank.reports.submit'])
+            ->name('report-uploads');
+        Route::post('/report-uploads', 'storeReport')
+            ->middleware(['think.tank.area:report_uploads', 'permission:think_tank.reports.submit'])
+            ->name('report-uploads.store');
+        Route::get('/upload-report-finding', 'uploadReportFinding')
+            ->middleware(['think.tank.area:report_uploads', 'permission:think_tank.reports.submit'])
+            ->name('upload-report-finding');
+        Route::post('/reports', 'storeReport')
+            ->middleware(['think.tank.area:report_uploads', 'permission:think_tank.reports.submit'])
+            ->name('reports.store');
+
+        Route::get('/reports', 'reports')
+            ->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.reports.view|think_tank.reports.submit'])
+            ->name('reports');
+        Route::get('/reports/download', 'downloadReports')
+            ->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.reports.download'])
+            ->name('reports.download');
+        Route::get('/me-data', [\App\Http\Controllers\ThinkTankMeDataController::class, 'index'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.view|think_tank.me.submit'])
+            ->name('me-data.index');
+        Route::get('/me-data/{assignment}', [\App\Http\Controllers\ThinkTankMeDataController::class, 'show'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.view|think_tank.me.submit'])
+            ->name('me-data.show');
+        Route::get('/me-data/{assignment}/answers/{answer}/files/{fileIndex}', [\App\Http\Controllers\ThinkTankMeDataController::class, 'download'])
+            ->whereNumber('fileIndex')
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.view|think_tank.me.submit', 'signed'])
+            ->name('me-data.download');
+        Route::post('/me-data/{assignment}/draft', [\App\Http\Controllers\ThinkTankMeDataController::class, 'saveDraft'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.submit'])
+            ->name('me-data.save-draft');
+        Route::post('/me-data/{assignment}/submit', [\App\Http\Controllers\ThinkTankMeDataController::class, 'submit'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.submit'])
+            ->name('me-data.submit');
+
+        Route::get('/finance', 'finance')
+            ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.view'])
+            ->name('finance');
+        Route::get('/purchase-orders', 'purchaseOrders')
+            ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.view'])
+            ->name('purchase-orders');
+        Route::post('/purchase-orders', 'storePurchaseOrder')
+            ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.manage'])
+            ->name('purchase-orders.store');
+        Route::get('/purchase-orders/{purchaseOrder}', 'showPurchaseOrder')
+            ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.view'])
+            ->name('purchase-orders.show');
+        Route::post('/purchase-orders/{purchaseOrder}/disbursements/{disbursement}/confirm', 'confirmDisbursementReceipt')
+            ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.manage'])
+            ->name('purchase-orders.disbursements.confirm');
+        Route::get('/purchase-orders/{purchaseOrder}/pdf', 'purchaseOrderPdf')
+            ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.view'])
+            ->name('purchase-orders.pdf');
+        Route::get('/purchase-orders/{purchaseOrder}/download', 'downloadPurchaseOrder')
+            ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.view'])
+            ->name('purchase-orders.download');
+
+        Route::get('/procurement-plans', 'procurementPlans')
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.view'])
+            ->name('procurement-plans');
+        Route::post('/procurement-plans', 'storeProcurementPlan')
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.store');
+        Route::post('/procurement/plans', 'storeProcurementPlan')
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement.plans.store');
+
+        Route::get('/team-access', 'teamAccess')
+            ->middleware(['think.tank.area:team', 'permission:think_tank.team.manage'])
+            ->name('team-access');
+        Route::post('/team-access', 'storeTeamMember')
+            ->middleware(['think.tank.area:team', 'permission:think_tank.team.manage'])
+            ->name('team-access.store');
+        Route::match(['put', 'patch'], '/team-access/{teamUser}', 'updateTeamMember')
+            ->middleware(['think.tank.area:team', 'permission:think_tank.team.manage'])
+            ->name('team-access.update');
+        Route::put('/branding/logo', 'updateLogo')
+            ->middleware(['think.tank.area:team', 'permission:think_tank.team.manage'])
+            ->name('branding.logo.update');
+
+        Route::get('/research', 'research')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.research.view|think_tank.research.submit'])->name('research');
+        Route::get('/research/download', 'downloadResearch')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.research.download'])->name('research.download');
+        Route::get('/research/{output}/qasc-preview', 'previewResearchQasc')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.research.view|think_tank.research.submit'])->name('research.qasc.preview');
+        Route::post('/research', 'storeResearch')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.research.submit'])->name('research.store');
+        Route::get('/procurement', 'procurement')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.view|think_tank.procurement.manage|think_tank.procurement.evaluate|think_tank.procurement.select'])->name('procurement');
+        Route::get('/procurement/download', 'downloadProcurement')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.download'])->name('procurement.download');
+        Route::post('/procurement', 'storeProcurement')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.manage'])->name('procurement.store');
+        Route::get('/procurement/{procurement}/submissions', 'submissions')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.evaluate'])->name('procurement.submissions');
+        Route::post('/procurement/{procurement}/submissions/{submission}/review', 'reviewSubmission')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.evaluate'])->name('procurement.submissions.review');
+        Route::post('/procurement/{procurement}/submissions/{submission}/select', 'selectSubmission')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.select'])->name('procurement.submissions.select');
     });

@@ -7,41 +7,89 @@
 
 @section('content')
     <style>
+        .project-form-workspace {
+            color: #0f172a;
+        }
+
+        .project-form-hero {
+            border-radius: 8px;
+            padding: 20px;
+            color: #ffffff;
+            background: linear-gradient(135deg, #063f36 0%, #0f766e 56%, #522b39 100%);
+            box-shadow: 0 18px 36px rgba(6, 63, 54, 0.16);
+        }
+
+        .project-form-hero h4,
+        .project-form-hero p {
+            color: #ffffff;
+        }
+
+        .project-kicker {
+            color: #d9fff4;
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
         .project-chip {
             display: inline-flex;
             align-items: center;
+            gap: 0.4rem;
             border-radius: 999px;
-            padding: 0.22rem 0.62rem;
-            font-size: 0.72rem;
-            font-weight: 600;
-            border: 1px solid rgba(248, 250, 252, 0.38);
-            background: rgba(248, 250, 252, 0.18);
-            color: #f8fafc;
+            padding: 0.35rem 0.7rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.1);
+            color: #effff9;
         }
+
         .section-card {
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+            border: 1px solid #dbe3ea;
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        }
+
+        .project-section-heading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #0f172a;
+        }
+
+        .project-section-heading span {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #065f46;
+            background: #d1fae5;
         }
 
     </style>
-    <main class="nxl-container">
+    <main class="nxl-container project-form-workspace">
         <div class="nxl-content">
 
-            <!-- Header -->
-            <div class="page-header">
-                <div class="page-header-left">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="project-chip">Budget - Projects</span>
-                        <span class="project-chip">Create</span>
+            <div class="project-form-hero mb-3">
+                <div class="d-flex flex-column flex-xl-row justify-content-between gap-3">
+                    <div>
+                        <div class="project-kicker mb-2">Project Setup</div>
+                        <h4 class="fw-bold mb-2">Create New Project</h4>
+                        <p class="mb-0">Assign the project to a portfolio program, define the delivery period, and prepare yearly budget splits.</p>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <span class="project-chip"><i class="feather-briefcase"></i> Portfolio</span>
+                            <span class="project-chip"><i class="feather-layers"></i> Program</span>
+                            <span class="project-chip"><i class="feather-dollar-sign"></i> Allocations</span>
+                        </div>
                     </div>
-                    <h5 class="m-b-10">Create New Project</h5>
-                    <p class="mb-0">Assign under a program and set duration, budget and outcomes.</p>
-                </div>
-                <div class="page-header-right ms-auto">
-                    <a href="{{ route('budget.projects.index') }}" class="btn btn-light text-primary border-0 shadow-sm">
-                        <i class="bi bi-arrow-left-circle me-1"></i> Back to Projects
-                    </a>
+                    <div class="d-flex flex-wrap align-content-start justify-content-xl-end gap-2">
+                        <a href="{{ route('budget.projects.index') }}" class="btn btn-light">
+                            <i class="feather-arrow-left me-1"></i> Projects
+                        </a>
+                    </div>
                 </div>
             </div>
 
@@ -67,12 +115,14 @@
 
                         {{-- SECTION 1: Project Information --}}
                         <div class="mb-4">
-                            <h5 class="fw-bold text-dark mb-3">Project Information</h5>
+                            <h5 class="project-section-heading fw-bold mb-3">
+                                <span><i class="feather-folder"></i></span> Project Information
+                            </h5>
                             <div class="row g-4">
                                 <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Sector <span class="text-danger">*</span></label>
+                                    <label class="form-label fw-semibold">Portfolio <span class="text-danger">*</span></label>
                                     <select id="sectorSelect" name="sector_id" class="form-select" required>
-                                        <option value="">-- Select Sector --</option>
+                                        <option value="">-- Select Portfolio --</option>
                                         @foreach ($sectors as $sector)
                                             <option value="{{ $sector->id }}">{{ $sector->name }}</option>
                                         @endforeach
@@ -147,8 +197,8 @@
 
                         {{-- SECTION 2: Allocations --}}
                         <div class="mb-4">
-                            <h5 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
-                                <i class="bi bi-wallet2 text-primary"></i> Allocations
+                            <h5 class="project-section-heading fw-bold mb-3">
+                                <span><i class="feather-pie-chart"></i></span> Allocations
                                 <small class="text-muted fw-normal" id="allocationsHint">Enter budget & years to generate yearly splits.</small>
                             </h5>
                             <div id="allocationsSection" class="d-none">
@@ -188,7 +238,7 @@
                         <div class="mt-4 text-end">
                             <a href="{{ route('budget.projects.index') }}" class="btn btn-light border">Cancel</a>
                             <button type="submit" class="btn btn-success">
-                                <i class="bi bi-check2-circle me-1"></i> Save Project
+                                <i class="feather-check-circle me-1"></i> Save Project
                             </button>
                         </div>
                     </form>
@@ -337,4 +387,3 @@
     </script>
 
 @endsection
-

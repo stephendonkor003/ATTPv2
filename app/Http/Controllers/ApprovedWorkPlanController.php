@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\ApprovedWorkPlanRegistryExport;
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\ApprovedWorkPlan;
 use App\Models\ApprovedWorkPlanItemReview;
 use App\Models\BudgetCommitment;
@@ -29,6 +30,8 @@ use Throwable;
 
 class ApprovedWorkPlanController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     public function index(Request $request)
     {
         return view('finance.awp.registry', $this->workPlanRegistryData($request));
@@ -59,16 +62,33 @@ class ApprovedWorkPlanController extends Controller
 
     private function workPlanRegistryData(Request $request): array
     {
-        $programs = Program::orderBy('name')->get();
+        $currentUser = $request->user();
+        $programsQuery = Program::query()->orderBy('name');
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $this->applyAssignedPortfolioScopeToPrograms($programsQuery, $currentUser);
+        }
+
+        $programs = $programsQuery->get();
         $selectedProgramId = $request->input('program_id');
         $selectedYear = $request->input('year');
 
-        $requests = PurchaseRequest::with([
+        if ($selectedProgramId && ! $programs->pluck('id')->map(fn ($id) => (string) $id)->contains((string) $selectedProgramId)) {
+            $selectedProgramId = null;
+        }
+
+        $requestsQuery = PurchaseRequest::with([
             'programFunding.program',
             'items.resource',
             'commitments.approvedWorkPlans',
         ])
-            ->whereNotNull('work_plan_source')
+            ->whereNotNull('work_plan_source');
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $this->applyAssignedPortfolioScopeToPurchaseRequests($requestsQuery, $currentUser);
+        }
+
+        $requests = $requestsQuery
             ->when($selectedProgramId, function ($query) use ($selectedProgramId) {
                 $query->whereHas('programFunding', fn ($fundingQuery) => $fundingQuery->where('program_id', $selectedProgramId));
             })
@@ -207,8 +227,19 @@ class ApprovedWorkPlanController extends Controller
 
     public function create(Request $request)
     {
-        $programs = Program::orderBy('name')->get();
+        $currentUser = $request->user();
+        $programsQuery = Program::query()->orderBy('name');
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $this->applyAssignedPortfolioScopeToPrograms($programsQuery, $currentUser);
+        }
+
+        $programs = $programsQuery->get();
         $selectedProgramId = $request->input('program_id') ?: $programs->first()?->id;
+        if ($selectedProgramId && ! $programs->pluck('id')->map(fn ($id) => (string) $id)->contains((string) $selectedProgramId)) {
+            $selectedProgramId = $programs->first()?->id;
+        }
+
         $program = null;
         $funding = null;
         $fundings = collect();
@@ -226,6 +257,7 @@ class ApprovedWorkPlanController extends Controller
                 'approvedFundings.funder',
                 'fundings.funder',
             ])->findOrFail($selectedProgramId);
+            $this->assertProgramInAwpScope($program, $currentUser);
 
             $fundings = $this->programWorkPlanFundings($program);
             $funding = $fundings->first();
@@ -275,6 +307,8 @@ class ApprovedWorkPlanController extends Controller
             'approvedFundings',
             'fundings',
         ])->findOrFail($data['program_id']);
+        $this->assertProgramInAwpScope($program, $request->user());
+
         $funding = $this->programWorkPlanFundings($program)->first();
 
         if (! $funding) {
@@ -334,14 +368,20 @@ class ApprovedWorkPlanController extends Controller
 
                 $activity = $subActivity->activity;
                 $project = $activity?->project;
-                $category = $this->resourceCategoryForObjectType('Work Plan Allocation', request()->user()?->id);
+                $requestGovernanceNodeId = $subActivity->governance_node_id ?: $funding->governance_node_id;
+                $resourceGovernanceNodeId = $this->workPlanResourceGovernanceNodeId($subActivity, $funding, request()->user());
+                $category = $this->resourceCategoryForObjectType(
+                    'Work Plan Allocation',
+                    request()->user()?->id,
+                    $resourceGovernanceNodeId
+                );
                 $resource = Resource::firstOrCreate(
                     [
                         'resource_category_id' => $category->id,
                         'name' => $subActivity->name,
                     ],
                     [
-                        'governance_node_id' => $subActivity->governance_node_id ?: $funding->governance_node_id,
+                        'governance_node_id' => $resourceGovernanceNodeId,
                         'reference_code' => 'AWP-' . $year . '-' . Str::upper(Str::random(5)),
                         'description' => $subActivity->description ?: $activity?->name,
                         'status' => 'active',
@@ -353,7 +393,7 @@ class ApprovedWorkPlanController extends Controller
                 $purchaseRequest = PurchaseRequest::create([
                     'reference_no' => $this->nextPurchaseRequestReference('AWP'),
                     'program_funding_id' => $funding->id,
-                    'governance_node_id' => $subActivity->governance_node_id ?: $funding->governance_node_id,
+                    'governance_node_id' => $requestGovernanceNodeId,
                     'allocation_level' => 'sub_activity',
                     'allocation_id' => $subActivity->id,
                     'start_year' => $year,
@@ -473,6 +513,8 @@ class ApprovedWorkPlanController extends Controller
             'approvedFundings',
             'fundings',
         ])->findOrFail($data['program_id']);
+        $this->assertProgramInAwpScope($program, $request->user());
+
         $funding = $this->programWorkPlanFundings($program)->first();
 
         if (! $funding) {
@@ -518,10 +560,16 @@ class ApprovedWorkPlanController extends Controller
                 $activity = $subActivity->activity;
                 $project = $activity?->project;
                 $objectType = trim((string) ($row['object_type'] ?? '')) ?: 'Manual Work Plan';
-                $category = $this->resourceCategoryForObjectType($objectType, request()->user()?->id);
+                $requestGovernanceNodeId = $subActivity->governance_node_id ?: $funding->governance_node_id;
+                $resourceGovernanceNodeId = $this->workPlanResourceGovernanceNodeId($subActivity, $funding, request()->user());
+                $category = $this->resourceCategoryForObjectType(
+                    $objectType,
+                    request()->user()?->id,
+                    $resourceGovernanceNodeId
+                );
                 $resource = Resource::create([
                     'resource_category_id' => $category->id,
-                    'governance_node_id' => $subActivity->governance_node_id ?: $funding->governance_node_id,
+                    'governance_node_id' => $resourceGovernanceNodeId,
                     'name' => $title,
                     'reference_code' => ($row['budget_code'] ?? null) ?: 'AWP-' . $year . '-' . Str::upper(Str::random(5)),
                     'description' => ($row['result_indicator'] ?? null) ?: $subActivity->name,
@@ -533,7 +581,7 @@ class ApprovedWorkPlanController extends Controller
                 $purchaseRequest = PurchaseRequest::create([
                     'reference_no' => $this->nextPurchaseRequestReference('AWP'),
                     'program_funding_id' => $funding->id,
-                    'governance_node_id' => $subActivity->governance_node_id ?: $funding->governance_node_id,
+                    'governance_node_id' => $requestGovernanceNodeId,
                     'allocation_level' => 'sub_activity',
                     'allocation_id' => $subActivity->id,
                     'start_year' => $year,
@@ -633,6 +681,8 @@ class ApprovedWorkPlanController extends Controller
         ]);
 
         $program = Program::with(['approvedFundings', 'fundings'])->findOrFail($data['program_id']);
+        $this->assertProgramInAwpScope($program, $request->user());
+
         $fundingIds = $this->programWorkPlanFundings($program)->pluck('id')->all();
 
         if (empty($fundingIds)) {
@@ -681,6 +731,7 @@ class ApprovedWorkPlanController extends Controller
     public function reviewItem(Request $request, PurchaseRequestItem $item)
     {
         abort_unless($this->canReviewAwpItems($request), 403);
+        $this->assertAwpItemInScope($item, $request->user());
 
         $data = $request->validate([
             'status' => 'required|in:pending,approved,rejected,needs_revision',
@@ -791,6 +842,7 @@ class ApprovedWorkPlanController extends Controller
     public function updateItem(Request $request, PurchaseRequestItem $item)
     {
         abort_unless($request->user()?->hasPermission('finance.awp.edit'), 403);
+        $this->assertAwpItemInScope($item, $request->user());
 
         $item->loadMissing([
             'awpReview',
@@ -851,6 +903,8 @@ class ApprovedWorkPlanController extends Controller
 
         $purchaseRequest = $item->purchaseRequest;
         $selectedSubActivity = SubActivity::with('activity.project')->findOrFail($data['sub_activity_id']);
+        $this->assertSubActivityInAwpScope($selectedSubActivity, $request->user());
+
         $programId = $purchaseRequest?->programFunding?->program_id;
         if ($programId && (string) $selectedSubActivity->activity?->project?->program_id !== (string) $programId) {
             throw ValidationException::withMessages([
@@ -884,8 +938,23 @@ class ApprovedWorkPlanController extends Controller
         $monthlyAmount = $monthlyAmount !== null && $monthlyAmount !== ''
             ? round((float) $monthlyAmount, 2)
             : (($paymentBasis === 'monthly' && $personMonths > 0) ? round($amount / $personMonths, 2) : null);
-        $category = $this->resourceCategoryForObjectType($data['object_type'] ?? null, $request->user()?->id);
-        $resource = $this->syncWorkPlanResource($item, $category, $data, $request->user()?->id);
+        $resourceGovernanceNodeId = $this->workPlanResourceGovernanceNodeId(
+            $selectedSubActivity,
+            $purchaseRequest?->programFunding,
+            $request->user()
+        );
+        $category = $this->resourceCategoryForObjectType(
+            $data['object_type'] ?? null,
+            $request->user()?->id,
+            $resourceGovernanceNodeId
+        );
+        $resource = $this->syncWorkPlanResource(
+            $item,
+            $category,
+            $data,
+            $request->user()?->id,
+            $resourceGovernanceNodeId
+        );
 
         $item->update([
             'resource_category_id' => $category->id,
@@ -940,6 +1009,7 @@ class ApprovedWorkPlanController extends Controller
     public function updateSheetItem(Request $request, PurchaseRequestItem $item)
     {
         abort_unless($request->user()?->hasPermission('finance.awp.edit'), 403);
+        $this->assertAwpItemInScope($item, $request->user());
 
         $item->loadMissing([
             'awpReview',
@@ -983,12 +1053,23 @@ class ApprovedWorkPlanController extends Controller
             $commitmentIds
         );
 
-        $category = $item->resourceCategory
-            ?: $this->resourceCategoryForObjectType($data['object_type'] ?? null, $request->user()?->id);
+        $resourceGovernanceNodeId = $this->workPlanResourceGovernanceNodeId(
+            $purchaseRequest->subActivity,
+            $purchaseRequest->programFunding,
+            $request->user()
+        );
+        $category = $item->resourceCategory;
+        if (! $category || ($this->userHasAssignedPortfolioScope($request->user()) && ! $this->resourceCategoryIsInAssignedPortfolioNode($category, $request->user()))) {
+            $category = $this->resourceCategoryForObjectType(
+                $data['object_type'] ?? null,
+                $request->user()?->id,
+                $resourceGovernanceNodeId
+            );
+        }
         $resource = $item->resource ?: new Resource();
         $resource->fill([
             'resource_category_id' => $category->id,
-            'governance_node_id' => $resource->governance_node_id ?: $purchaseRequest->governance_node_id,
+            'governance_node_id' => $resource->governance_node_id ?: $resourceGovernanceNodeId,
             'name' => $data['activity'],
             'reference_code' => $resource->reference_code ?: $data['budget_code'] ?: 'AWP-' . $year . '-' . Str::upper(Str::random(5)),
             'description' => $data['result_indicator'] ?: null,
@@ -1048,6 +1129,7 @@ class ApprovedWorkPlanController extends Controller
     public function destroyItem(Request $request, PurchaseRequestItem $item)
     {
         abort_unless($request->user()?->hasPermission('finance.awp.edit'), 403);
+        $this->assertAwpItemInScope($item, $request->user());
 
         $item->loadMissing([
             'awpReview',
@@ -1098,6 +1180,10 @@ class ApprovedWorkPlanController extends Controller
 
     public function downloadItemDocument(PurchaseRequestItem $item)
     {
+        if (request()->user()?->hasPermission('finance.awp.view')) {
+            $this->assertAwpItemInScope($item, request()->user());
+        }
+
         $review = $item->awpReview;
 
         $type = request('type');
@@ -1202,6 +1288,7 @@ class ApprovedWorkPlanController extends Controller
     {
         $data = $this->validated($request);
         $this->hydrateFromCommitment($data);
+        $this->assertAwpPayloadInScope($data, $request->user());
 
         ApprovedWorkPlan::create([
             ...$data,
@@ -1215,10 +1302,12 @@ class ApprovedWorkPlanController extends Controller
 
     public function update(Request $request, ApprovedWorkPlan $awp)
     {
+        $this->assertApprovedWorkPlanInScope($awp, $request->user());
         abort_if($awp->status === 'approved' && ! $request->user()?->can('finance.awp.approve'), 403);
 
         $data = $this->validated($request, $awp);
         $this->hydrateFromCommitment($data);
+        $this->assertAwpPayloadInScope($data, $request->user());
 
         $awp->update([
             ...$data,
@@ -1230,6 +1319,8 @@ class ApprovedWorkPlanController extends Controller
 
     public function approve(Request $request, ApprovedWorkPlan $awp)
     {
+        $this->assertApprovedWorkPlanInScope($awp, $request->user());
+
         $data = $request->validate([
             'review_notes' => 'nullable|string|max:2000',
         ]);
@@ -1246,6 +1337,8 @@ class ApprovedWorkPlanController extends Controller
 
     public function close(Request $request, ApprovedWorkPlan $awp)
     {
+        $this->assertApprovedWorkPlanInScope($awp, $request->user());
+
         $data = $request->validate([
             'review_notes' => 'nullable|string|max:2000',
         ]);
@@ -1260,6 +1353,7 @@ class ApprovedWorkPlanController extends Controller
 
     public function destroy(ApprovedWorkPlan $awp)
     {
+        $this->assertApprovedWorkPlanInScope($awp, request()->user());
         abort_if($awp->status === 'approved', 403, 'Approved work plans cannot be deleted.');
 
         $awp->delete();
@@ -1923,7 +2017,7 @@ class ApprovedWorkPlanController extends Controller
             ->values();
     }
 
-    private function resourceCategoryForObjectType(?string $objectType, ?string $createdBy): ResourceCategory
+    private function resourceCategoryForObjectType(?string $objectType, ?string $createdBy, ?string $preferredGovernanceNodeId = null): ResourceCategory
     {
         $normalized = $this->normalizeWorkPlanText((string) $objectType);
         $name = match (true) {
@@ -1933,6 +2027,32 @@ class ApprovedWorkPlanController extends Controller
             str_contains($normalized, 'staff') || str_contains($normalized, 'translation') || str_contains($normalized, 'communication') || str_contains($normalized, 'ioc') => 'Implementation/Operational Costs (IOC)',
             default => 'Consulting Services',
         };
+
+        $currentUser = request()->user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $assignedNodeIds = $this->assignedPortfolioNodeIds($currentUser);
+            $nodeId = $preferredGovernanceNodeId && in_array((string) $preferredGovernanceNodeId, $assignedNodeIds, true)
+                ? (string) $preferredGovernanceNodeId
+                : ($assignedNodeIds[0] ?? null);
+
+            if (! $nodeId) {
+                throw ValidationException::withMessages([
+                    'object_type' => 'Your portfolio is missing a governance mapping, so work plan resources cannot be created yet.',
+                ]);
+            }
+
+            return ResourceCategory::firstOrCreate(
+                [
+                    'name' => $name,
+                    'governance_node_id' => $nodeId,
+                ],
+                [
+                    'description' => $name . ' for ATTP work plan items',
+                    'status' => 'active',
+                    'created_by' => $createdBy,
+                ]
+            );
+        }
 
         return ResourceCategory::firstOrCreate(
             ['name' => $name],
@@ -1944,11 +2064,13 @@ class ApprovedWorkPlanController extends Controller
         );
     }
 
-    private function syncWorkPlanResource(PurchaseRequestItem $item, ResourceCategory $category, array $data, ?string $createdBy): Resource
+    private function syncWorkPlanResource(PurchaseRequestItem $item, ResourceCategory $category, array $data, ?string $createdBy, ?string $governanceNodeId = null): Resource
     {
+        $item->loadMissing('purchaseRequest');
         $resource = $item->resource ?: new Resource();
         $resource->fill([
             'resource_category_id' => $category->id,
+            'governance_node_id' => $resource->governance_node_id ?: $governanceNodeId ?: $item->purchaseRequest?->governance_node_id,
             'name' => $data['activity'],
             'reference_code' => $data['budget_code'] ?: $resource->reference_code ?: 'AWP-' . now()->year . '-' . Str::upper(Str::random(5)),
             'description' => $data['intermediate_indicator'] ?: $data['result_indicator'] ?: null,
@@ -2106,6 +2228,100 @@ class ApprovedWorkPlanController extends Controller
         $user = $request->user();
 
         return (bool) ($user && ($user->hasPermission('finance.awp.approve') || $user->hasPermission('partner.workplan.review')));
+    }
+
+    private function assertProgramInAwpScope(Program $program, $user): void
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return;
+        }
+
+        abort_unless($this->programIsInAssignedPortfolio($program, $user), 403, 'This program is not assigned to your portfolio.');
+    }
+
+    private function assertSubActivityInAwpScope(SubActivity $subActivity, $user): void
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return;
+        }
+
+        abort_unless($this->subActivityIsInAssignedPortfolio($subActivity, $user), 403, 'This sub-activity is not assigned to your portfolio.');
+    }
+
+    private function assertAwpItemInScope(PurchaseRequestItem $item, $user): void
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return;
+        }
+
+        $item->loadMissing('purchaseRequest');
+
+        abort_unless(
+            $item->purchaseRequest && $this->purchaseRequestIsInAssignedPortfolio($item->purchaseRequest, $user),
+            403,
+            'This work plan item is not assigned to your portfolio.'
+        );
+    }
+
+    private function assertApprovedWorkPlanInScope(ApprovedWorkPlan $awp, $user): void
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return;
+        }
+
+        abort_unless(
+            $this->approvedWorkPlanIsInAssignedPortfolio($awp, $user),
+            403,
+            'This approved work plan is not assigned to your portfolio.'
+        );
+    }
+
+    private function assertAwpPayloadInScope(array $data, $user): void
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return;
+        }
+
+        if (! empty($data['budget_commitment_id'])) {
+            $commitment = BudgetCommitment::find($data['budget_commitment_id']);
+            abort_unless(
+                $commitment && $this->commitmentIsInAssignedPortfolio($commitment, $user),
+                403,
+                'This commitment is not assigned to your portfolio.'
+            );
+
+            return;
+        }
+
+        if (! empty($data['program_funding_id'])) {
+            $funding = ProgramFunding::find($data['program_funding_id']);
+            abort_unless(
+                $funding && $this->fundingIsInAssignedPortfolio($funding, $user),
+                403,
+                'This funding source is not assigned to your portfolio.'
+            );
+
+            return;
+        }
+
+        abort_if(true, 403, 'A portfolio-linked commitment or funding source is required.');
+    }
+
+    private function workPlanResourceGovernanceNodeId($subActivity, ?ProgramFunding $funding, $user): ?string
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return $subActivity->governance_node_id ?: $funding?->governance_node_id;
+        }
+
+        $subActivity->loadMissing('activity.project.program.sector');
+        $assignedNodeIds = $this->assignedPortfolioNodeIds($user);
+        $portfolioNodeId = $subActivity->activity?->project?->program?->sector?->governance_node_id;
+
+        if ($portfolioNodeId && in_array((string) $portfolioNodeId, $assignedNodeIds, true)) {
+            return (string) $portfolioNodeId;
+        }
+
+        return $assignedNodeIds[0] ?? null;
     }
 
     private function partnerFunder(Request $request): Funder

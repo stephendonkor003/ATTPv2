@@ -2,16 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
+use App\Jobs\NotifyProgramTtlAssigned;
 use App\Models\Sector;
 use App\Models\Program;
 use App\Models\ProgramFunding;
 use App\Models\GovernanceNode;
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Throwable;
 
 class ProgramController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /**
      * PROGRAM RBAC
      * Matches routes:
@@ -40,20 +50,63 @@ class ProgramController extends Controller
      */
     public function index()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to programs.');
         }
 
-        $programs = Program::with(['sector', 'governanceNode', 'projects'])
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+        $programs = Program::with([
+            'sector',
+            'governanceNode.level',
+            'ttlUser:id,name,email',
+            'projects.activities.subActivities',
+        ])
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToPrograms($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
             ->latest()
-            ->get();
+            ->get()
+            ->each(function (Program $program) {
+                $projects = $program->projects;
+                $activities = $projects->flatMap->activities;
 
-        return view('budget.programs.index', compact('programs'));
+                $program->setAttribute('projects_count', $projects->count());
+                $program->setAttribute('activities_count', $activities->count());
+                $program->setAttribute('sub_activities_count', $activities->flatMap->subActivities->count());
+                $program->setAttribute('project_budget_value', $projects->sum(fn ($project) => (float) ($project->total_budget ?? 0)));
+                $program->setAttribute('budget_utilization_percent', (float) ($program->total_budget ?? 0) > 0
+                    ? min(100, round(($program->project_budget_value / (float) $program->total_budget) * 100))
+                    : 0);
+                $program->setAttribute('latest_structure_update_at', collect([
+                    $program->updated_at,
+                    $projects->max('updated_at'),
+                    $activities->max('updated_at'),
+                ])->filter()->sortByDesc(fn ($date) => $date->getTimestamp())->first());
+            });
+
+        $programStats = [
+            'total' => $programs->count(),
+            'portfolios' => $programs->pluck('sector_id')->filter()->unique()->count(),
+            'projects' => $programs->sum('projects_count'),
+            'activities' => $programs->sum('activities_count'),
+            'sub_activities' => $programs->sum('sub_activities_count'),
+            'total_budget' => $programs->sum(fn ($program) => (float) ($program->total_budget ?? 0)),
+            'project_budget' => $programs->sum('project_budget_value'),
+            'governance_assigned' => $programs->filter(fn ($program) => filled($program->governance_node_id))->count(),
+        ];
+
+        $topPrograms = $programs
+            ->sortByDesc(fn ($program) => (float) ($program->total_budget ?? 0))
+            ->take(5)
+            ->values();
+
+        return view('budget.programs.index', compact('programs', 'programStats', 'topPrograms'));
     }
 
     /**
@@ -81,6 +134,8 @@ class ProgramController extends Controller
             'sector_id'   => 'required|exists:myb_sectors,id',
             'program_id'  => 'required|string|max:50|unique:myb_programs,program_id',
             'program_name' => 'required|string|max:255',
+            'ttl_name' => 'required|string|max:255',
+            'ttl_email' => 'required|email|max:255',
             'expected_outcome_type' => 'required|in:percentage,text',
             'expected_outcome_percentage' => 'nullable|numeric|min:0|max:100',
             'expected_outcome_text' => 'nullable|string|max:2000',
@@ -94,6 +149,7 @@ class ProgramController extends Controller
 
         try {
             $this->assertSectorInScope($validated['sector_id']);
+            $sector = Sector::findOrFail($validated['sector_id']);
             $this->assertProgramNameAllowed($validated['program_name']);
 
             $fundingMap = $this->approvedProgramFundingMap();
@@ -111,7 +167,8 @@ class ProgramController extends Controller
                 ($validated['end_year'] - $validated['start_year']) + 1;
 
             $validated['created_by'] = auth()->id();
-            $validated['governance_node_id'] = Auth::user()?->governance_node_id;
+            $validated['governance_node_id'] = $sector->governance_node_id ?: Auth::user()?->governance_node_id;
+            $ttlAssignment = $this->persistProgramTtl($validated);
 
             $expectedOutcomeValue = $validated['expected_outcome_type'] === 'percentage'
                 ? (string) ($validated['expected_outcome_percentage'] ?? '')
@@ -139,15 +196,26 @@ class ProgramController extends Controller
                 'total_years' => $validated['total_years'],
                 'created_by' => $validated['created_by'],
                 'governance_node_id' => $validated['governance_node_id'],
+                'ttl_user_id' => $ttlAssignment['user']->id,
+                'ttl_name' => $validated['ttl_name'],
+                'ttl_email' => Str::lower($validated['ttl_email']),
             ]);
 
             DB::commit();
 
+            $mailSent = $this->sendProgramTtlMailSafely(
+                $program,
+                $ttlAssignment['user'],
+                $ttlAssignment['plain_password']
+            );
+
             return redirect()
                 ->route('budget.programs.index')
-                ->with('success', 'Program created successfully.');
+                ->with('success', $mailSent
+                    ? 'Program created successfully. TTL access email has been sent.'
+                    : 'Program created successfully, but the TTL access email could not be sent. Check the Laravel log or update the TTL assignment.');
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             DB::rollBack();
 
             return back()
@@ -164,13 +232,39 @@ class ProgramController extends Controller
         $this->assertProgramInScope($program);
         $program->load([
             'sector',
+            'governanceNode.level',
+            'ttlUser:id,name,email',
             'projects.activities.subActivities',
             'indicators.level',
             'indicators.frequency',
             'indicators.unit',
         ]);
 
-        return view('budget.programs.show', compact('program'));
+        $projects = $program->projects;
+        $activities = $projects->flatMap->activities;
+        $subActivities = $activities->flatMap->subActivities;
+        $projectBudget = $projects->sum(fn ($project) => (float) ($project->total_budget ?? 0));
+        $programBudget = (float) ($program->total_budget ?? 0);
+
+        $programStats = [
+            'projects' => $projects->count(),
+            'activities' => $activities->count(),
+            'sub_activities' => $subActivities->count(),
+            'indicators' => $program->indicators->count(),
+            'program_budget' => $programBudget,
+            'project_budget' => $projectBudget,
+            'remaining_budget' => max($programBudget - $projectBudget, 0),
+            'budget_utilization_percent' => $programBudget > 0 ? min(100, round(($projectBudget / $programBudget) * 100)) : 0,
+        ];
+
+        $projects->each(function ($project) {
+            $activities = $project->activities;
+            $project->setAttribute('activities_count', $activities->count());
+            $project->setAttribute('sub_activities_count', $activities->flatMap->subActivities->count());
+            $project->setAttribute('duration_years_display', $project->total_years ?: (($project->start_year && $project->end_year) ? (($project->end_year - $project->start_year) + 1) : null));
+        });
+
+        return view('budget.programs.show', compact('program', 'programStats'));
     }
 
     /**
@@ -202,6 +296,8 @@ class ProgramController extends Controller
         $validated = $request->validate([
             'sector_id'   => 'required|exists:myb_sectors,id',
             'program_name' => 'required|string|max:255',
+            'ttl_name' => 'required|string|max:255',
+            'ttl_email' => 'required|email|max:255',
             'expected_outcome_type' => 'required|in:percentage,text',
             'expected_outcome_percentage' => 'nullable|numeric|min:0|max:100',
             'expected_outcome_text' => 'nullable|string|max:2000',
@@ -232,6 +328,9 @@ class ProgramController extends Controller
             ($validated['end_year'] - $validated['start_year']) + 1;
 
         $validated['updated_by'] = auth()->id();
+        $previousTtlUserId = $program->ttl_user_id;
+        $previousTtlEmail = Str::lower((string) $program->ttl_email);
+        $ttlAssignment = $this->persistProgramTtl($validated);
 
         $expectedOutcomeValue = $validated['expected_outcome_type'] === 'percentage'
             ? (string) ($validated['expected_outcome_percentage'] ?? '')
@@ -258,11 +357,29 @@ class ProgramController extends Controller
             'total_years' => $validated['total_years'],
             'updated_by' => $validated['updated_by'],
             'governance_node_id' => $validated['governance_node_id'],
+            'ttl_user_id' => $ttlAssignment['user']->id,
+            'ttl_name' => $validated['ttl_name'],
+            'ttl_email' => Str::lower($validated['ttl_email']),
         ]);
+
+        $shouldNotifyTtl = $ttlAssignment['created']
+            || (string) $previousTtlUserId !== (string) $ttlAssignment['user']->id
+            || $previousTtlEmail !== Str::lower($validated['ttl_email']);
+
+        $mailSent = true;
+        if ($shouldNotifyTtl) {
+            $mailSent = $this->sendProgramTtlMailSafely(
+                $program->fresh(['sector', 'governanceNode.level', 'ttlUser']),
+                $ttlAssignment['user'],
+                $ttlAssignment['plain_password']
+            );
+        }
 
         return redirect()
             ->route('budget.programs.index')
-            ->with('success', 'Program updated successfully.');
+            ->with('success', $mailSent
+                ? 'Program updated successfully.'
+                : 'Program updated successfully, but the TTL access email could not be sent. Check the Laravel log.');
     }
 
     /**
@@ -318,10 +435,15 @@ class ProgramController extends Controller
 
     private function availableSectors()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
 
         return Sector::orderBy('name')
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToSectors($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
@@ -330,6 +452,14 @@ class ProgramController extends Controller
 
     private function availableNodes()
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            return GovernanceNode::with('level')
+                ->whereIn('id', $this->assignedPortfolioNodeIds($currentUser))
+                ->orderBy('name')
+                ->get();
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
 
         return GovernanceNode::with('level')
@@ -369,15 +499,34 @@ class ProgramController extends Controller
             $query->whereIn('governance_node_id', $scopedNodeIds);
         }
 
-        $fundings = $query->get(['program_name', 'currency', 'start_year', 'end_year', 'approved_amount']);
+        $fundings = $query
+            ->with('funder:id,name')
+            ->get(['id', 'program_name', 'currency', 'start_year', 'end_year', 'approved_amount', 'funder_id', 'funding_type', 'approved_at']);
 
         $map = $fundings->groupBy('program_name')->map(function ($rows) {
             $row = $rows->first();
+            $funders = $rows
+                ->map(function (ProgramFunding $funding) {
+                    return [
+                        'name' => $funding->funder?->name ?? 'Unassigned funding partner',
+                        'amount' => (float) ($funding->approved_amount ?? 0),
+                        'currency' => $funding->currency ?: 'USD',
+                        'funding_type' => $funding->funding_type ?: 'grant',
+                        'period' => trim(($funding->start_year ?: 'N/A') . ' - ' . ($funding->end_year ?: 'N/A')),
+                        'approved_at' => $funding->approved_at?->format('d M Y'),
+                    ];
+                })
+                ->values();
+
             return [
                 'currency' => $row->currency,
                 'start_year' => $row->start_year,
                 'end_year' => $row->end_year,
                 'total_budget' => $row->approved_amount,
+                'funders' => $funders->all(),
+                'funder_summary' => $funders->pluck('name')->unique()->implode(', '),
+                'funding_type' => $row->funding_type ?: 'grant',
+                'approved_at' => $row->approved_at?->format('d M Y'),
             ];
         });
 
@@ -387,6 +536,10 @@ class ProgramController extends Controller
                 'start_year' => $program?->start_year,
                 'end_year' => $program?->end_year,
                 'total_budget' => null,
+                'funders' => [],
+                'funder_summary' => 'No approved funding partner linked',
+                'funding_type' => null,
+                'approved_at' => null,
             ]);
         }
 
@@ -423,6 +576,15 @@ class ProgramController extends Controller
 
     private function assertProgramInScope(Program $program): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->programIsInAssignedPortfolio($program, $currentUser)) {
+                abort(403, 'You do not have access to this program.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -435,6 +597,15 @@ class ProgramController extends Controller
 
     private function assertSectorInScope(string $sectorId): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->sectorIsAssignedToUser($sectorId, $currentUser)) {
+                abort(403, 'You do not have access to this portfolio.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -442,12 +613,21 @@ class ProgramController extends Controller
 
         $sector = Sector::find($sectorId);
         if (!$sector || !$sector->governance_node_id || !in_array($sector->governance_node_id, $scopedNodeIds, true)) {
-            abort(403, 'You do not have access to this sector.');
+            abort(403, 'You do not have access to this portfolio.');
         }
     }
 
     private function assertNodeInScope(string $nodeId): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! in_array((string) $nodeId, $this->assignedPortfolioNodeIds($currentUser), true)) {
+                abort(403, 'You do not have access to assign this governance node.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;
@@ -463,7 +643,91 @@ class ProgramController extends Controller
         $sector = Sector::find($sectorId);
 
         if (!$sector || (string) $sector->governance_node_id !== (string) $nodeId) {
-            abort(422, 'Selected sector does not belong to the selected governance node.');
+            abort(422, 'Selected portfolio does not belong to the selected governance node.');
+        }
+    }
+
+    private function persistProgramTtl(array $validated): array
+    {
+        $ttlRole = Role::firstOrCreate(
+            ['name' => 'Task Team Leader'],
+            ['description' => 'Program-level TTL workspace access for assigned programs, projects, activities, budgets and partner-facing progress.']
+        );
+
+        $email = Str::lower(trim((string) $validated['ttl_email']));
+        $name = trim((string) $validated['ttl_name']);
+
+        $user = User::with('role')
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->first();
+
+        if ($user) {
+            if ($user->isSuperAdmin() || $user->role?->name === 'Super Admin') {
+                abort(422, 'Super Admin accounts cannot be assigned as program TTLs from this form.');
+            }
+
+            if ((bool) $user->is_disabled || (bool) $user->is_blacklisted) {
+                abort(422, 'The selected TTL email belongs to a blocked user. Please reactivate the account or use another email.');
+            }
+
+            $updates = ['name' => $name];
+
+            if ($user->user_type === 'ttl' || (! $user->role_id && in_array($user->user_type, [null, 'staff'], true))) {
+                $updates['role_id'] = $ttlRole->id;
+            }
+
+            if (! $user->user_type) {
+                $updates['user_type'] = 'ttl';
+            }
+
+            if (! $user->governance_node_id && ! empty($validated['governance_node_id'])) {
+                $updates['governance_node_id'] = $validated['governance_node_id'];
+            }
+
+            $user->update($updates);
+
+            return [
+                'user' => $user->fresh(['role']),
+                'plain_password' => null,
+                'created' => false,
+            ];
+        }
+
+        $plainPassword = Str::password(12);
+
+        $user = User::create([
+            'name' => $name,
+            'email' => $email,
+            'password' => Hash::make($plainPassword),
+            'role_id' => $ttlRole->id,
+            'governance_node_id' => $validated['governance_node_id'] ?? null,
+            'member_state_id' => null,
+            'user_type' => 'ttl',
+            'must_change_password' => true,
+        ]);
+
+        return [
+            'user' => $user->fresh(['role']),
+            'plain_password' => $plainPassword,
+            'created' => true,
+        ];
+    }
+
+    private function sendProgramTtlMailSafely(Program $program, User $user, ?string $plainPassword): bool
+    {
+        try {
+            NotifyProgramTtlAssigned::dispatchSync($program->id, $user->id, $plainPassword);
+
+            return true;
+        } catch (Throwable $e) {
+            Log::warning('Program TTL assignment notification could not be sent.', [
+                'program_id' => $program->id,
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'message' => $e->getMessage(),
+            ]);
+
+            return false;
         }
     }
 }

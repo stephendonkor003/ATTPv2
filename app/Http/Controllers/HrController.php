@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\{
     HrPosition,
     HrVacancy,
@@ -22,6 +23,8 @@ use Illuminate\Support\Str;
 
 class HrController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /* =====================================================
         GOVERNANCE SCOPING HELPERS
     ===================================================== */
@@ -43,6 +46,10 @@ class HrController extends Controller
         // Admin bypass
         if ($currentUser->isAdmin()) {
             return null;
+        }
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            return $this->assignedPortfolioNodeIds($currentUser);
         }
 
         // Special permission to view all governance nodes

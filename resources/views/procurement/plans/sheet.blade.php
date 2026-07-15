@@ -19,6 +19,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Plan Name</th>
+                                <th>Portfolio</th>
                                 <th>Duration</th>
                                 <th>Timeline</th>
                                 <th class="text-center">Procurements</th>
@@ -29,6 +30,7 @@
                             @forelse($programPlans as $plan)
                                 <tr>
                                     <td class="fw-semibold">{{ $plan->name }}</td>
+                                    <td>{{ $plan->governanceNode?->name ?? '-' }}</td>
                                     <td>
                                         @if($plan->duration_days !== null)
                                             {{ $plan->duration_days }} days
@@ -50,7 +52,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">
+                                    <td colspan="6" class="text-center text-muted py-4">
                                         No program plans available yet. Create one to start scheduling procurements.
                                     </td>
                                 </tr>

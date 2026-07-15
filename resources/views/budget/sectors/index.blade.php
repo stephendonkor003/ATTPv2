@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Sectors')
+@section('title', 'Portfolios')
 
 @section('content')
     <main class="nxl-container">
@@ -8,15 +8,17 @@
             <!-- Header -->
             <div class="page-header d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <h4 class="mb-1">All Sectors</h4>
-                    <p class="text-muted mb-0">View and manage all available sectors in the system.</p>
+                    <h4 class="mb-1">All Portfolios</h4>
+                    <p class="text-muted mb-0">View and manage all available portfolios in the system.</p>
                 </div>
-                <a href="{{ route('sectors.create') }}" class="btn btn-success">
-                    <i class="bi bi-plus-circle me-1"></i> Add New Sector
-                </a>
+                @can('sector.create')
+                    <a href="{{ route('budget.portfolios.create') }}" class="btn btn-success">
+                        <i class="bi bi-plus-circle me-1"></i> Add New Portfolio
+                    </a>
+                @endcan
             </div>
 
-            <!-- Sector Table -->
+            <!-- Portfolio Table -->
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <x-data-table
@@ -65,7 +67,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th width="50">#</th>
-                                <th>Sector Name</th>
+                                <th>Portfolio Name</th>
                                 <th>Description</th>
                                 <th width="100">Programs</th>
                                 <th width="120">Created</th>
@@ -100,7 +102,7 @@
                                         <form action="{{ route('sectors.destroy', $sector->id) }}"
                                               method="POST"
                                               class="d-inline"
-                                              onsubmit="return confirm('Delete this sector? This action cannot be undone.')">
+                                              onsubmit="return confirm('Delete this portfolio? This action cannot be undone.')">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit"
@@ -113,7 +115,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">No sectors found.</td>
+                                    <td colspan="6" class="text-center text-muted py-4">No portfolios found.</td>
                                 </tr>
                             @endforelse
                         </tbody>

@@ -27,6 +27,7 @@
                     <tr>
                         <th class="ps-4">Name</th>
                         <th>Code</th>
+                        <th>Portfolio Scope</th>
                         <th>Status</th>
                         <th class="text-end pe-4">Actions</th>
                     </tr>
@@ -36,6 +37,15 @@
                         <tr>
                             <td class="ps-4 fw-semibold">{{ $def->name }}</td>
                             <td>{{ $def->code ?? '—' }}</td>
+                            <td>
+                                @if ($def->portfolio)
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                        {{ $def->portfolio->name }}
+                                    </span>
+                                @else
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Portfolio missing</span>
+                                @endif
+                            </td>
                             <td><span class="badge {{ $def->is_active ? 'bg-success' : 'bg-secondary' }}">{{ $def->is_active ? 'Active' : 'Inactive' }}</span></td>
                             <td class="text-end pe-4">
                                 <div class="d-inline-flex gap-1">

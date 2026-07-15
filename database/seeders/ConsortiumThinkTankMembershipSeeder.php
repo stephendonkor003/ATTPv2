@@ -113,7 +113,7 @@ class ConsortiumThinkTankMembershipSeeder extends Seeder
                     ]
                 );
 
-                ConsortiumThinkTank::updateOrCreate(
+                $membership = ConsortiumThinkTank::updateOrCreate(
                     [
                         'consortium_id' => $consortium->id,
                         'name' => $memberData['name'],
@@ -128,6 +128,11 @@ class ConsortiumThinkTankMembershipSeeder extends Seeder
                         'joined_at' => now()->toDateString(),
                     ]
                 );
+
+                $portalUser->update([
+                    'think_tank_member_id' => $membership->id,
+                    'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
+                ]);
             }
         }
     }

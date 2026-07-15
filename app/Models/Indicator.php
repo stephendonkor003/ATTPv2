@@ -2,13 +2,17 @@
 
 namespace App\Models;
 
-use App\Models\BaseModel;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Indicator extends BaseModel
 {
+    public const SETUP_TARGET_CONTEXT = 'setup';
+
     protected $table = 'myb_indicators';
 
     protected $fillable = [
+        'indicator_code',
         'indicatorable_type',
         'indicatorable_id',
         'name',
@@ -18,6 +22,7 @@ class Indicator extends BaseModel
         'indicator_level_id',
         'methodology',
         'notes',
+        'responsible_user_id',
         'responsible_party',
         'frequency_of_reporting_id',
         'unit_id',
@@ -29,6 +34,30 @@ class Indicator extends BaseModel
     protected $casts = [
         'baseline_type' => 'string',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Indicator $indicator): void {
+            if (blank($indicator->indicator_code)) {
+                $indicator->indicator_code = static::generateIndicatorCode();
+            }
+        });
+
+        static::updating(function (Indicator $indicator): void {
+            if ($indicator->isDirty('indicator_code')) {
+                $indicator->indicator_code = $indicator->getOriginal('indicator_code');
+            }
+        });
+    }
+
+    public static function generateIndicatorCode(): string
+    {
+        do {
+            $code = 'IND-'.now()->format('Y').'-'.Str::upper(Str::random(8));
+        } while (static::query()->where('indicator_code', $code)->exists());
+
+        return $code;
+    }
 
     // Polymorphic relationship to parent (Program, Project, Activity, SubActivity)
     public function indicatorable()
@@ -70,9 +99,30 @@ class Indicator extends BaseModel
         return $this->hasMany(IndicatorTarget::class);
     }
 
+    public function setupTarget()
+    {
+        return $this->hasOne(IndicatorTarget::class)
+            ->where('target_context', self::SETUP_TARGET_CONTEXT);
+    }
+
+    public function responsiblePerson()
+    {
+        return $this->belongsTo(User::class, 'responsible_user_id');
+    }
+
     public function results()
     {
         return $this->hasMany(IndicatorResult::class);
+    }
+
+    public function dataEntryFields()
+    {
+        return $this->hasMany(MeDataEntryFormField::class, 'indicator_id');
+    }
+
+    public function dataEntryForms(): HasMany
+    {
+        return $this->hasMany(MeDataEntryForm::class, 'indicator_id');
     }
 
     public function surveyLink()

@@ -34,7 +34,8 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Procurement</label>
-                                    <select name="procurement_id" class="form-control" required>
+                                    <select name="procurement_id" id="procurement_id" class="form-control" required>
+                                        <option value="">-- Select Procurement --</option>
                                         @foreach ($procurements as $procurement)
                                             <option value="{{ $procurement->id }}"
                                                 {{ old('procurement_id') == $procurement->id ? 'selected' : '' }}>
@@ -46,16 +47,26 @@
 
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Applicant</label>
-                                    <select name="form_submission_id" class="form-control" required>
+                                    <select name="form_submission_id" id="form_submission_id" class="form-control" required>
+                                        <option value="">-- Select Applicant --</option>
                                         @foreach ($submissions as $submission)
                                             <option value="{{ $submission->id }}"
+                                                data-procurement-id="{{ $submission->procurement_id }}"
                                                 {{ old('form_submission_id') == $submission->id ? 'selected' : '' }}>
-                                                {{ $submission->display_name }}
+                                                {{ $submission->display_name }} @if($submission->procurement)
+                                                    - {{ $submission->procurement->title }}
+                                                @endif
                                             </option>
                                         @endforeach
                                     </select>
                                 </div>
                             </div>
+
+                            @if ($procurements->isEmpty())
+                                <div class="alert alert-warning">
+                                    No procurement records are available inside your portfolio scope.
+                                </div>
+                            @endif
 
                             <div class="row">
                                 <div class="col-md-6 mb-3">
@@ -160,6 +171,8 @@
     {{-- ================= JAVASCRIPT ================= --}}
     <script>
         const assignmentType = document.getElementById('assignment_type');
+        const procurementSelect = document.getElementById('procurement_id');
+        const submissionSelect = document.getElementById('form_submission_id');
         const individualSection = document.getElementById('individual_section');
         const groupSection = document.getElementById('group_section');
         const groupSelect = document.getElementById('group_user_select');
@@ -177,6 +190,33 @@
 
         assignmentType.addEventListener('change', toggleAssignment);
         toggleAssignment();
+
+        function filterSubmissionsByProcurement() {
+            const procurementId = procurementSelect.value;
+            const currentValue = submissionSelect.value;
+            let currentStillAvailable = false;
+
+            Array.from(submissionSelect.options).forEach(option => {
+                if (!option.value) {
+                    option.hidden = false;
+                    return;
+                }
+
+                const matches = option.dataset.procurementId === procurementId;
+                option.hidden = !matches;
+
+                if (matches && option.value === currentValue) {
+                    currentStillAvailable = true;
+                }
+            });
+
+            if (!currentStillAvailable) {
+                submissionSelect.value = '';
+            }
+        }
+
+        procurementSelect.addEventListener('change', filterSubmissionsByProcurement);
+        filterSubmissionsByProcurement();
 
         function addMember() {
             const userId = groupSelect.value;

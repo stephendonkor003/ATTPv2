@@ -10,13 +10,14 @@ $app = require __DIR__ . '/../../bootstrap/app.php';
 $app->make(ConsoleKernel::class)->bootstrap();
 
 $paths = [
-    '/' => ['ATTP', 'News', 'Login'],
-    '/events' => ['Events', 'Login'],
-    '/news' => ['News', 'Subscribe'],
-    '/careers' => ['Careers', 'Login'],
+    '/' => ['ATTP', 'News', 'Login', 'Thematic Areas'],
+    '/events' => ['Events', 'Login', 'Thematic Areas'],
+    '/news' => ['News', 'Subscribe', 'Thematic Areas'],
+    '/careers' => ['Careers', 'Login', 'Thematic Areas'],
+    '/gallery' => ['Gallery', 'Thematic Areas'],
     '/public/procurement' => ['Procurement', 'Login'],
-    '/impact-map' => ['Impact'],
-    '/world-indicators-performance' => ['World'],
+    '/impact-map' => ['Impact', 'Thematic Areas'],
+    '/world-indicators-performance' => ['World', 'Thematic Areas'],
 ];
 
 foreach ($paths as $path => $needles) {

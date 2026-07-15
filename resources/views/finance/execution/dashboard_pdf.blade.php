@@ -192,10 +192,27 @@
             margin-left: 8px;
             margin-right: 0;
         }
+
+        .component-label strong {
+            display: block;
+        }
+
+        .component-label span {
+            color: #64748b;
+            display: block;
+            font-size: 9px;
+            margin-top: 2px;
+        }
+
+        .total-row th,
+        .total-row td {
+            background: #eef6ff;
+        }
     </style>
 </head>
 <body>
     @php
+        $componentRows = collect($componentBreakdownRows ?? []);
         $money = fn ($value) => number_format((float) $value, 2);
         $rate = fn ($value) => number_format((float) $value, 1) . '%';
         $scopeLabel = match ($scopeType) {
@@ -264,6 +281,64 @@
                     <div class="muted">Global commitments minus planned commitments</div>
                 </td>
             </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Component Breakdown</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Component</th>
+                    <th class="right">Global Commitments</th>
+                    <th class="right">Planned Commitments</th>
+                    <th class="right">Disbursed Amount</th>
+                    <th class="right">Remaining</th>
+                    <th class="center">Commitment Rate</th>
+                    <th class="center">Disbursement Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                @php
+                    $totalBadgeClass = $totalPercent < 50 ? 'badge-bad' : ($totalPercent < 80 ? 'badge-warn' : 'badge-good');
+                    $totalDisbursementBadgeClass = $totalDisbursementPercent < 50 ? 'badge-bad' : ($totalDisbursementPercent < 80 ? 'badge-warn' : 'badge-good');
+                @endphp
+                <tr class="total-row">
+                    <th class="component-label">
+                        <strong>Total</strong>
+                        <span>All selected components</span>
+                    </th>
+                    <th class="right">{{ $money($breakdownTotals['allocation']) }}</th>
+                    <th class="right">{{ $money($breakdownTotals['commitment']) }}</th>
+                    <th class="right">{{ $money($breakdownTotals['disbursement']) }}</th>
+                    <th class="right {{ $totalRemain < 0 ? 'negative' : 'positive' }}">{{ $money($totalRemain) }}</th>
+                    <th class="center"><span class="badge {{ $totalBadgeClass }}">{{ $rate($totalPercent) }}</span></th>
+                    <th class="center"><span class="badge {{ $totalDisbursementBadgeClass }}">{{ $rate($totalDisbursementPercent) }}</span></th>
+                </tr>
+                @foreach ($componentRows as $component)
+                    @php
+                        $percent = max(0, (float) ($component['execution_rate'] ?? 0));
+                        $disbursementPercent = max(0, (float) ($component['disbursement_rate'] ?? 0));
+                        $badgeClass = $percent < 50 ? 'badge-bad' : ($percent < 80 ? 'badge-warn' : 'badge-good');
+                        $disbursementBadgeClass = $disbursementPercent < 50 ? 'badge-bad' : ($disbursementPercent < 80 ? 'badge-warn' : 'badge-good');
+                        $remainingClass = ($component['remaining'] ?? 0) < 0 ? 'negative' : 'positive';
+                    @endphp
+                    <tr>
+                        <td class="component-label">
+                            <strong>{{ $component['label'] }}</strong>
+                            @if (!empty($component['description']))
+                                <span>{{ $component['description'] }}</span>
+                            @endif
+                        </td>
+                        <td class="right">{{ $money($component['allocation']) }}</td>
+                        <td class="right">{{ $money($component['commitment']) }}</td>
+                        <td class="right">{{ $money($component['disbursement']) }}</td>
+                        <td class="right {{ $remainingClass }}">{{ $money($component['remaining']) }}</td>
+                        <td class="center"><span class="badge {{ $badgeClass }}">{{ $rate($percent) }}</span></td>
+                        <td class="center"><span class="badge {{ $disbursementBadgeClass }}">{{ $rate($disbursementPercent) }}</span></td>
+                    </tr>
+                @endforeach
+            </tbody>
         </table>
     </div>
 

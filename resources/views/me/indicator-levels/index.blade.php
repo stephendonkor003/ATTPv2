@@ -3,7 +3,6 @@
 
 @section('content')
     <div class="nxl-container">
-
         {{-- PAGE HEADER --}}
         <div class="page-header d-flex justify-content-between align-items-center mb-4">
             <div>
@@ -42,6 +41,7 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-4">Name</th>
+                            <th>Portfolio Scope</th>
                             <th>Description</th>
                             <th>Sort</th>
                             <th>Status</th>
@@ -52,6 +52,15 @@
                         @forelse ($levels as $level)
                             <tr>
                                 <td class="ps-4 fw-semibold">{{ $level->name }}</td>
+                                <td>
+                                    @if ($level->portfolio)
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            {{ $level->portfolio->name }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Portfolio missing</span>
+                                    @endif
+                                </td>
                                 <td>{{ $level->description ?? '—' }}</td>
                                 <td>{{ $level->sort_order }}</td>
                                 <td>
@@ -79,7 +88,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="text-center text-muted py-4">No indicator levels found.</td>
+                                <td colspan="6" class="text-center text-muted py-4">No indicator levels found.</td>
                             </tr>
                         @endforelse
                     </tbody>

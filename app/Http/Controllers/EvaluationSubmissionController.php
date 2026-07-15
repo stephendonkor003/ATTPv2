@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
 use App\Models\FormSubmission;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\Storage;
 
 class EvaluationSubmissionController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /* =====================================================
      * EVALUATION HUB
      * ===================================================== */
@@ -22,6 +25,10 @@ class EvaluationSubmissionController extends Controller
         $user = auth()->user();
 
         $assignments = EvaluationAssignment::with(['procurement', 'evaluation'])
+            ->when(
+                $this->userHasAssignedPortfolioScope($user),
+                fn ($q) => $this->applyAssignedPortfolioScopeToEvaluationAssignments($q, $user)
+            )
             ->when(
                 !$user->can('evaluations.view_all'),
                 fn ($q) => $q->where('user_id', $user->id)
@@ -39,17 +46,19 @@ class EvaluationSubmissionController extends Controller
             ->pluck('procurement_id')
             ->unique();
 
-        $submissions = FormSubmission::with(['form', 'submitter'])
-            ->where(function ($q) use ($submissionIds, $procurementIds) {
-                if ($submissionIds->isNotEmpty()) {
-                    $q->orWhereIn('id', $submissionIds);
-                }
-                if ($procurementIds->isNotEmpty()) {
-                    $q->orWhereIn('procurement_id', $procurementIds);
-                }
-            })
-            ->latest()
-            ->get();
+        $submissions = ($submissionIds->isEmpty() && $procurementIds->isEmpty())
+            ? collect()
+            : FormSubmission::with(['form', 'submitter'])
+                ->where(function ($q) use ($submissionIds, $procurementIds) {
+                    if ($submissionIds->isNotEmpty()) {
+                        $q->orWhereIn('id', $submissionIds);
+                    }
+                    if ($procurementIds->isNotEmpty()) {
+                        $q->orWhereIn('procurement_id', $procurementIds);
+                    }
+                })
+                ->latest()
+                ->get();
 
         return view('evaluations.my', compact('assignments', 'submissions'));
     }
@@ -397,6 +406,7 @@ class EvaluationSubmissionController extends Controller
     public function view(EvaluationAssignment $assignment, FormSubmission $applicant)
     {
         abort_if(!$this->canAccessAssignment($assignment), 403);
+        abort_if($applicant->procurement_id !== $assignment->procurement_id, 404);
         if ($assignment->form_submission_id) {
             abort_if($assignment->form_submission_id !== $applicant->id, 403);
         }
@@ -468,6 +478,75 @@ class EvaluationSubmissionController extends Controller
         return $privateDisk->response($path, null, $headers);
     }
 
+    public function compare(EvaluationAssignment $assignment)
+    {
+        abort_if(! $this->canAccessAssignment($assignment), 403);
+
+        $submissionQuery = EvaluationSubmission::with(['evaluator', 'applicant'])
+            ->where('evaluation_id', $assignment->evaluation_id)
+            ->where('procurement_id', $assignment->procurement_id)
+            ->whereNotNull('submitted_at');
+
+        if ($assignment->form_submission_id) {
+            $submissionQuery->where('form_submission_id', $assignment->form_submission_id);
+        }
+
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToEvaluationSubmissions($submissionQuery);
+        }
+
+        $comparisons = $submissionQuery
+            ->get()
+            ->groupBy('form_submission_id')
+            ->map(function ($group) {
+                $scores = $group->whereNotNull('overall_score')->pluck('overall_score');
+                $average = $scores->count() ? round($scores->avg(), 2) : 0;
+                $highest = $scores->count() ? round($scores->max(), 2) : 0;
+                $lowest = $scores->count() ? round($scores->min(), 2) : 0;
+                $first = $group->first();
+
+                return [
+                    'submission_code' => $first->applicant?->procurement_submission_code ?: (string) $first->form_submission_id,
+                    'average' => $average,
+                    'highest' => $highest,
+                    'lowest' => $lowest,
+                    'spread' => round($highest - $lowest, 2),
+                    'evaluations' => $group->values(),
+                ];
+            })
+            ->sortByDesc('average')
+            ->values();
+
+        return view('evaluations.compare', compact('assignment', 'comparisons'));
+    }
+
+    public function compareRedirect()
+    {
+        $user = auth()->user();
+
+        $assignmentQuery = EvaluationAssignment::query()
+            ->where('status', 'submitted')
+            ->latest();
+
+        if ($this->userHasAssignedPortfolioScope($user)) {
+            $this->applyAssignedPortfolioScopeToEvaluationAssignments($assignmentQuery, $user);
+        }
+
+        if (! $user->can('evaluations.view_all')) {
+            $assignmentQuery->where('user_id', $user->id);
+        }
+
+        $assignment = $assignmentQuery->first();
+
+        if (! $assignment) {
+            return redirect()
+                ->route('my.eval.index')
+                ->with('warning', 'No submitted evaluations are available for comparison yet.');
+        }
+
+        return redirect()->route('my.eval.compare', $assignment);
+    }
+
     /* =====================================================
      * ACCESS CONTROL
      * ===================================================== */
@@ -475,8 +554,12 @@ class EvaluationSubmissionController extends Controller
     {
         $user = auth()->user();
 
-        return $user->can('evaluations.view_all')
-            || $assignment->user_id === $user->id;
+        if ($this->userHasAssignedPortfolioScope($user)
+            && ! $this->evaluationAssignmentIsInAssignedPortfolio($assignment, $user)) {
+            return false;
+        }
+
+        return $user->can('evaluations.view_all') || $assignment->user_id === $user->id;
     }
 
 
@@ -491,6 +574,10 @@ class EvaluationSubmissionController extends Controller
             'procurement',
             'evaluation'
         ])
+        ->when(
+            $this->userHasAssignedPortfolioScope($user),
+            fn ($q) => $this->applyAssignedPortfolioScopeToEvaluationAssignments($q, $user)
+        )
         ->when(
             !$user->can('evaluations.view_all'),
             fn ($q) => $q->where('user_id', $user->id)

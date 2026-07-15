@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Exports\SurveyQuestionResponsesExport;
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Indicator;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorSurveyResponse;
+use App\Models\Sector;
 use App\Support\MeSurveyCleanup;
 use App\Support\MeSurvey;
 use Carbon\Carbon;
@@ -22,6 +24,8 @@ use PDF;
 
 class MeSurveyController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     public function __construct()
     {
         $this->middleware('auth');
@@ -50,20 +54,22 @@ class MeSurveyController extends Controller
             ->sortByDesc(fn (IndicatorMethodology $methodology) => optional($methodology->updated_at)->timestamp ?? 0)
             ->values();
 
-        $recentLinks = IndicatorSurveyLink::query()
+        $recentLinksQuery = IndicatorSurveyLink::query()
             ->with(['indicator:id,name', 'methodology:id,name'])
             ->withCount('responses')
             ->withMax('responses', 'submitted_at')
             ->latest()
-            ->take(6)
-            ->get()
+            ->take(6);
+        $this->scopeSurveyLinkQuery($recentLinksQuery);
+        $recentLinks = $recentLinksQuery->get()
             ->map(fn (IndicatorSurveyLink $surveyLink) => $this->decorateSurveyLink($surveyLink));
 
-        $recentResponses = IndicatorSurveyResponse::query()
+        $recentResponsesQuery = IndicatorSurveyResponse::query()
             ->with(['indicator:id,name', 'methodology:id,name', 'surveyLink:id,public_token'])
             ->latest('submitted_at')
-            ->take(6)
-            ->get();
+            ->take(6);
+        $this->scopeSurveyResponseQuery($recentResponsesQuery);
+        $recentResponses = $recentResponsesQuery->get();
 
         return view('me.survey-hub.index', [
             'stats' => $this->globalSurveyStats($questionnaires),
@@ -77,7 +83,7 @@ class MeSurveyController extends Controller
     {
         $search = trim((string) $request->query('q', ''));
 
-        $surveyLinks = IndicatorSurveyLink::query()
+        $surveyLinkQuery = IndicatorSurveyLink::query()
             ->with(['indicator:id,name', 'methodology:id,name'])
             ->withCount('responses')
             ->withMax('responses', 'submitted_at')
@@ -88,7 +94,9 @@ class MeSurveyController extends Controller
                         ->orWhereHas('indicator', fn ($indicatorQuery) => $indicatorQuery->where('name', 'like', '%' . $search . '%'))
                         ->orWhereHas('methodology', fn ($methodologyQuery) => $methodologyQuery->where('name', 'like', '%' . $search . '%'));
                 });
-            })
+            });
+        $this->scopeSurveyLinkQuery($surveyLinkQuery);
+        $surveyLinks = $surveyLinkQuery
             ->latest()
             ->paginate(12)
             ->withQueryString();
@@ -97,13 +105,22 @@ class MeSurveyController extends Controller
             $surveyLinks->getCollection()->map(fn (IndicatorSurveyLink $surveyLink) => $this->decorateSurveyLink($surveyLink))
         );
 
+        $responseCountQuery = IndicatorSurveyResponse::query();
+        $activeLinksQuery = IndicatorSurveyLink::query()->where('is_active', true);
+        $linksWithResponsesQuery = IndicatorSurveyLink::query()->has('responses');
+        $lastResponseQuery = IndicatorSurveyResponse::query();
+        $this->scopeSurveyResponseQuery($responseCountQuery);
+        $this->scopeSurveyLinkQuery($activeLinksQuery);
+        $this->scopeSurveyLinkQuery($linksWithResponsesQuery);
+        $this->scopeSurveyResponseQuery($lastResponseQuery);
+
         return view('me.survey-hub.responses', [
             'search' => $search,
             'stats' => [
-                'responses' => IndicatorSurveyResponse::query()->count(),
-                'active_links' => IndicatorSurveyLink::query()->where('is_active', true)->count(),
-                'surveys_with_responses' => IndicatorSurveyLink::query()->has('responses')->count(),
-                'last_response' => optional(IndicatorSurveyResponse::query()->latest('submitted_at')->first())->submitted_at,
+                'responses' => $responseCountQuery->count(),
+                'active_links' => $activeLinksQuery->count(),
+                'surveys_with_responses' => $linksWithResponsesQuery->count(),
+                'last_response' => optional($lastResponseQuery->latest('submitted_at')->first())->submitted_at,
             ],
             'surveyLinks' => $surveyLinks,
         ]);
@@ -136,6 +153,8 @@ class MeSurveyController extends Controller
 
     protected function responseDetailsPayload(Request $request, IndicatorSurveyLink $surveyLink): array
     {
+        $this->assertSurveyLinkInScope($surveyLink);
+
         $surveyLink->loadMissing([
             'indicator:id,name',
             'methodology:id,name,description,metadata',
@@ -154,7 +173,11 @@ class MeSurveyController extends Controller
         $methodology = $surveyLink->methodology;
         if (!$methodology) {
             $methodologyId = $responses->pluck('methodology_id')->filter()->unique()->first();
-            $methodology = $methodologyId ? IndicatorMethodology::query()->find($methodologyId) : null;
+            if ($methodologyId) {
+                $methodologyQuery = IndicatorMethodology::query()->whereKey($methodologyId);
+                $this->scopeSurveyMethodologyQuery($methodologyQuery);
+                $methodology = $methodologyQuery->first();
+            }
         }
 
         $questionCatalog = $this->buildQuestionCatalog($methodology, $responses);
@@ -316,11 +339,13 @@ class MeSurveyController extends Controller
 
     public function create()
     {
-        return view('me.survey-hub.create');
+        return view('me.survey-hub.create', $this->surveyConfigurationFormData());
     }
 
     public function edit(IndicatorMethodology $methodology)
     {
+        $this->assertSurveyMethodologyManageable($methodology);
+
         if (!$this->isSurveyMethodology($methodology)) {
             return redirect()
                 ->route('budget.me.surveys.questionnaires')
@@ -329,11 +354,13 @@ class MeSurveyController extends Controller
 
         return view('me.survey-hub.edit', [
             'methodology' => $methodology,
-        ]);
+        ] + $this->surveyConfigurationFormData($methodology));
     }
 
     public function destroySurvey(IndicatorSurveyLink $surveyLink): RedirectResponse
     {
+        $this->assertSurveyLinkInScope($surveyLink);
+
         $attachmentPaths = DB::transaction(function () use ($surveyLink) {
             $responses = IndicatorSurveyResponse::query()
                 ->where('survey_link_id', $surveyLink->id)
@@ -361,6 +388,8 @@ class MeSurveyController extends Controller
 
     public function destroyResponse(IndicatorSurveyResponse $response): RedirectResponse
     {
+        $this->assertSurveyResponseInScope($response);
+
         $attachmentPaths = MeSurveyCleanup::attachmentPathsFromResponse($response);
 
         $response->delete();
@@ -376,7 +405,7 @@ class MeSurveyController extends Controller
     {
         $search = trim((string) $request->query('q', ''));
 
-        $surveyLinks = IndicatorSurveyLink::query()
+        $surveyLinkQuery = IndicatorSurveyLink::query()
             ->with(['indicator:id,name', 'methodology:id,name'])
             ->withCount('responses')
             ->withMax('responses', 'submitted_at')
@@ -387,7 +416,9 @@ class MeSurveyController extends Controller
                         ->orWhereHas('indicator', fn ($indicatorQuery) => $indicatorQuery->where('name', 'like', '%' . $search . '%'))
                         ->orWhereHas('methodology', fn ($methodologyQuery) => $methodologyQuery->where('name', 'like', '%' . $search . '%'));
                 });
-            })
+            });
+        $this->scopeSurveyLinkQuery($surveyLinkQuery);
+        $surveyLinks = $surveyLinkQuery
             ->latest()
             ->paginate(9)
             ->withQueryString();
@@ -396,13 +427,15 @@ class MeSurveyController extends Controller
             $surveyLinks->getCollection()->map(fn (IndicatorSurveyLink $surveyLink) => $this->decorateSurveyLink($surveyLink))
         );
 
+        $stats = $this->globalSurveyStats($this->surveyMethodologiesCollection());
+
         return view('me.survey-hub.qr-codes', [
             'search' => $search,
             'stats' => [
-                'active_links' => IndicatorSurveyLink::query()->where('is_active', true)->count(),
-                'responses' => IndicatorSurveyResponse::query()->count(),
-                'questionnaires' => $this->surveyMethodologiesCollection()->filter(fn (IndicatorMethodology $methodology) => (bool) data_get($methodology, 'survey_summary.enabled', false))->count(),
-                'last_response' => optional(IndicatorSurveyResponse::query()->latest('submitted_at')->first())->submitted_at,
+                'active_links' => $stats['active_links'],
+                'responses' => $stats['responses'],
+                'questionnaires' => $stats['published_questionnaires'],
+                'last_response' => $stats['last_response'],
             ],
             'surveyLinks' => $surveyLinks,
         ]);
@@ -451,23 +484,28 @@ class MeSurveyController extends Controller
         $dateFrom = trim((string) $request->input('date_from', $request->query('date_from', '')));
         $dateTo = trim((string) $request->input('date_to', $request->query('date_to', '')));
 
-        $surveyLinks = IndicatorSurveyLink::query()
+        $surveyLinkQuery = IndicatorSurveyLink::query()
             ->with(['indicator:id,name', 'methodology:id,name'])
             ->withCount('responses')
             ->when($selectedMethodologyId !== '', fn ($query) => $query->where('methodology_id', $selectedMethodologyId))
             ->when($selectedIndicatorId !== '', fn ($query) => $query->where('indicator_id', $selectedIndicatorId))
-            ->latest()
-            ->get()
+            ->latest();
+        $this->scopeSurveyLinkQuery($surveyLinkQuery);
+        $surveyLinks = $surveyLinkQuery->get()
             ->map(fn (IndicatorSurveyLink $surveyLink) => $this->decorateSurveyLink($surveyLink))
             ->values();
 
-        $indicators = Indicator::query()
-            ->whereIn('id', IndicatorSurveyLink::query()->pluck('indicator_id'))
+        $indicatorIdsQuery = IndicatorSurveyLink::query()->select('indicator_id');
+        $this->scopeSurveyLinkQuery($indicatorIdsQuery);
+        $indicatorQuery = Indicator::query()
+            ->whereIn('id', $indicatorIdsQuery)
             ->orderBy('name')
-            ->get(['id', 'name'])
+            ->select(['id', 'name']);
+        $this->scopeSurveyIndicatorQuery($indicatorQuery);
+        $indicators = $indicatorQuery->get()
             ->values();
 
-        $responses = IndicatorSurveyResponse::query()
+        $responseQuery = IndicatorSurveyResponse::query()
             ->with([
                 'indicator:id,name',
                 'methodology:id,name',
@@ -478,8 +516,9 @@ class MeSurveyController extends Controller
             ->when($selectedIndicatorId !== '', fn ($query) => $query->where('indicator_id', $selectedIndicatorId))
             ->when($dateFrom !== '', fn ($query) => $query->whereDate('submitted_at', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($query) => $query->whereDate('submitted_at', '<=', $dateTo))
-            ->orderBy('submitted_at')
-            ->get();
+            ->orderBy('submitted_at');
+        $this->scopeSurveyResponseQuery($responseQuery);
+        $responses = $responseQuery->get();
 
         $resolvedSurveyLink = $surveyLinks->firstWhere('id', $selectedSurveyLinkId);
         $resolvedMethodology = $methodologies->firstWhere('id', $selectedMethodologyId);
@@ -566,21 +605,33 @@ class MeSurveyController extends Controller
 
     protected function surveyMethodologiesCollection(): Collection
     {
-        $indicatorCounts = Indicator::query()
+        $indicatorCountQuery = Indicator::query()
             ->selectRaw('LOWER(TRIM(methodology)) as methodology_key, COUNT(*) as aggregate')
             ->whereNotNull('methodology')
             ->whereRaw("TRIM(methodology) <> ''")
-            ->groupByRaw('LOWER(TRIM(methodology))')
+            ->groupByRaw('LOWER(TRIM(methodology))');
+        $this->scopeSurveyIndicatorQuery($indicatorCountQuery);
+        $indicatorCounts = $indicatorCountQuery
             ->pluck('aggregate', 'methodology_key');
 
-        return IndicatorMethodology::query()
+        $methodologyQuery = IndicatorMethodology::query()
+            ->with('portfolio:id,name')
             ->withCount([
-                'surveyLinks',
-                'surveyResponses',
-                'surveyLinks as active_survey_links_count' => fn ($query) => $query->where('is_active', true),
+                'surveyLinks' => function ($query) {
+                    $this->scopeSurveyLinkQuery($query);
+                },
+                'surveyResponses' => function ($query) {
+                    $this->scopeSurveyResponseQuery($query);
+                },
+                'surveyLinks as active_survey_links_count' => function ($query) {
+                    $query->where('is_active', true);
+                    $this->scopeSurveyLinkQuery($query);
+                },
             ])
-            ->orderByDesc('updated_at')
-            ->get()
+            ->orderByDesc('updated_at');
+        $this->scopeSurveyMethodologyQuery($methodologyQuery);
+
+        return $methodologyQuery->get()
             ->filter(fn (IndicatorMethodology $methodology) => $this->isSurveyMethodology($methodology))
             ->map(function (IndicatorMethodology $methodology) use ($indicatorCounts) {
                 $methodology->survey_summary = $this->summarizeSurveyMethodology($methodology);
@@ -647,13 +698,115 @@ class MeSurveyController extends Controller
     {
         $questionnaires = $questionnaires ?? $this->surveyMethodologiesCollection();
 
+        $activeLinksQuery = IndicatorSurveyLink::query()->where('is_active', true);
+        $responsesQuery = IndicatorSurveyResponse::query();
+        $lastResponseQuery = IndicatorSurveyResponse::query();
+        $this->scopeSurveyLinkQuery($activeLinksQuery);
+        $this->scopeSurveyResponseQuery($responsesQuery);
+        $this->scopeSurveyResponseQuery($lastResponseQuery);
+
         return [
             'questionnaires' => $questionnaires->count(),
             'published_questionnaires' => $questionnaires->filter(fn (IndicatorMethodology $methodology) => (bool) data_get($methodology, 'survey_summary.enabled', false))->count(),
-            'active_links' => IndicatorSurveyLink::query()->where('is_active', true)->count(),
-            'responses' => IndicatorSurveyResponse::query()->count(),
-            'last_response' => optional(IndicatorSurveyResponse::query()->latest('submitted_at')->first())->submitted_at,
+            'active_links' => $activeLinksQuery->count(),
+            'responses' => $responsesQuery->count(),
+            'last_response' => optional($lastResponseQuery->latest('submitted_at')->first())->submitted_at,
         ];
+    }
+
+    protected function scopeSurveyIndicatorQuery($query): void
+    {
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToIndicators($query);
+        }
+    }
+
+    protected function scopeSurveyLinkQuery($query): void
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        $query->whereHas('indicator', function ($indicatorQuery) {
+            $this->applyAssignedPortfolioScopeToIndicators($indicatorQuery);
+        });
+    }
+
+    protected function scopeSurveyResponseQuery($query): void
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        $query->whereHas('indicator', function ($indicatorQuery) {
+            $this->applyAssignedPortfolioScopeToIndicators($indicatorQuery);
+        });
+    }
+
+    protected function scopeSurveyMethodologyQuery($query): void
+    {
+        $query->whereNotNull('portfolio_id');
+
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        $this->applyAssignedPortfolioScopeToPortfolioOwnedRecords($query);
+    }
+
+    protected function assertSurveyMethodologyManageable(IndicatorMethodology $methodology): void
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        if (! $methodology->portfolio_id || ! $this->portfolioOwnedRecordIsInAssignedPortfolio($methodology)) {
+            abort(403, 'This questionnaire is outside your assigned portfolio.');
+        }
+    }
+
+    protected function surveyConfigurationFormData(?IndicatorMethodology $methodology = null): array
+    {
+        $portfolioOptionsQuery = Sector::query()->orderBy('name');
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToSectors($portfolioOptionsQuery);
+        }
+
+        $portfolioOptions = $portfolioOptionsQuery->get(['id', 'name']);
+        $selectedPortfolioId = old(
+            'portfolio_id',
+            $methodology?->portfolio_id ?: ($this->userHasAssignedPortfolioScope() ? ($portfolioOptions->first()?->id) : null)
+        );
+
+        return [
+            'portfolioOptions' => $portfolioOptions,
+            'selectedPortfolioId' => $selectedPortfolioId,
+            'portfolioFieldLocked' => $this->userHasAssignedPortfolioScope() || $portfolioOptions->count() === 1,
+        ];
+    }
+
+    protected function assertSurveyLinkInScope(IndicatorSurveyLink $surveyLink): void
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        $surveyLink->loadMissing('indicator');
+        if (! $surveyLink->indicator || ! $this->indicatorIsInAssignedPortfolio($surveyLink->indicator)) {
+            abort(403, 'This survey is outside your assigned portfolio.');
+        }
+    }
+
+    protected function assertSurveyResponseInScope(IndicatorSurveyResponse $response): void
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        $response->loadMissing('indicator');
+        if (! $response->indicator || ! $this->indicatorIsInAssignedPortfolio($response->indicator)) {
+            abort(403, 'This survey response is outside your assigned portfolio.');
+        }
     }
 
     protected function decorateSurveyLink(IndicatorSurveyLink $surveyLink): IndicatorSurveyLink

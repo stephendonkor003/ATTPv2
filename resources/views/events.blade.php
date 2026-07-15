@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
 
 <head>
     <meta charset="UTF-8" />
@@ -277,7 +277,7 @@
     </style>
 </head>
 
-<body>
+<body class="public-mobile-nav" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
     <!-- ====== MOBILE NAV OVERLAY ====== -->
     <div class="mobile-nav-overlay" id="navOverlay" onclick="closeMobileNav()"></div>
 
@@ -290,7 +290,7 @@
         <a href="{{ route('landing.index') }}" onclick="closeMobileNav()">{{ __('navigation.home') }}</a>
 
         <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
-            Programs <span class="mobile-dropdown-arrow">▾</span>
+            {{ __('navigation.programs') }} <span class="mobile-dropdown-arrow">▾</span>
         </button>
         <div class="mobile-dropdown-items">
             <a href="{{ route('events') }}" class="active" onclick="closeMobileNav()">{{ __('landing.events_webinars') }}</a>
@@ -298,15 +298,24 @@
         </div>
 
         <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
-            Analytics <span class="mobile-dropdown-arrow">▾</span>
+            {{ __('navigation.analytics') }} <span class="mobile-dropdown-arrow">▾</span>
         </button>
         <div class="mobile-dropdown-items">
             <a href="{{ route('impact.map') }}" onclick="closeMobileNav()">{{ __('navigation.impact_map') }}</a>
             <a href="{{ route('world.indicators.performance') }}" onclick="closeMobileNav()">{{ __('navigation.world_indicators_performance') }}</a>
         </div>
 
-        <a href="{{ route('news.index') }}" onclick="closeMobileNav()">News &amp; Updates</a>
-        <a href="{{ route('gallery') }}" onclick="closeMobileNav()">Gallery</a>
+        <button class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)">
+            {{ __('navigation.discussion') }} <span class="mobile-dropdown-arrow">▾</span>
+        </button>
+        <div class="mobile-dropdown-items">
+            <a href="{{ route('discussion.thematic-areas') }}" onclick="closeMobileNav()">{{ __('navigation.thematic_areas') }}</a>
+            <a href="{{ route('discussion.current') }}" onclick="closeMobileNav()">{{ __('navigation.current_discussions') }}</a>
+            <a href="{{ route('discussion.join') }}" onclick="closeMobileNav()">{{ __('navigation.join_discussion') }}</a>
+        </div>
+
+        <a href="{{ route('news.index') }}" onclick="closeMobileNav()">{{ __('navigation.news_updates') }}</a>
+        <a href="{{ route('gallery') }}" onclick="closeMobileNav()">{{ __('navigation.gallery') }}</a>
         <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
         <div class="mobile-nav-actions">
             <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
@@ -325,7 +334,7 @@
             <a href="{{ route('landing.index') }}">{{ __('navigation.home') }}</a>
 
             <div class="has-dropdown">
-                <a href="#" class="active">Programs</a>
+                <a href="#" class="active">{{ __('navigation.programs') }}</a>
                 <ul class="nav-dropdown">
                     <li><a href="{{ route('events') }}" class="active">{{ __('landing.events_webinars') }}</a></li>
                     <li><a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a></li>
@@ -333,15 +342,24 @@
             </div>
 
             <div class="has-dropdown">
-                <a href="#">Analytics</a>
+                <a href="#">{{ __('navigation.analytics') }}</a>
                 <ul class="nav-dropdown">
                     <li><a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a></li>
                     <li><a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a></li>
                 </ul>
             </div>
 
-            <a href="{{ route('news.index') }}">News &amp; Updates</a>
-            <a href="{{ route('gallery') }}">Gallery</a>
+            <div class="has-dropdown">
+                <a href="#">{{ __('navigation.discussion') }}</a>
+                <ul class="nav-dropdown">
+                    <li><a href="{{ route('discussion.thematic-areas') }}">{{ __('navigation.thematic_areas') }}</a></li>
+                    <li><a href="{{ route('discussion.current') }}">{{ __('navigation.current_discussions') }}</a></li>
+                    <li><a href="{{ route('discussion.join') }}">{{ __('navigation.join_discussion') }}</a></li>
+                </ul>
+            </div>
+
+            <a href="{{ route('news.index') }}">{{ __('navigation.news_updates') }}</a>
+            <a href="{{ route('gallery') }}">{{ __('navigation.gallery') }}</a>
             <a href="#contact">{{ __('navigation.contact') }}</a>
         </nav>
 

@@ -32,6 +32,13 @@ class ConsortiumOperationsPermissionsSeeder extends Seeder
             ['name' => 'think_tank.reports.view', 'module' => 'Think Tank Portal', 'description' => 'View think tank activity reporting dashboard'],
             ['name' => 'think_tank.reports.download', 'module' => 'Think Tank Portal', 'description' => 'Download think tank activity reporting PDFs'],
             ['name' => 'think_tank.reports.submit', 'module' => 'Think Tank Portal', 'description' => 'Submit activity reports from a think tank portal'],
+            ['name' => 'think_tank.me.view', 'module' => 'Think Tank Portal', 'description' => 'View M&E data collections assigned to the think tank'],
+            ['name' => 'think_tank.me.submit', 'module' => 'Think Tank Portal', 'description' => 'Save and submit assigned M&E data collections'],
+            ['name' => 'think_tank.finance.view', 'module' => 'Think Tank Portal', 'description' => 'View think tank finance records and funding transfers'],
+            ['name' => 'think_tank.finance.manage', 'module' => 'Think Tank Portal', 'description' => 'Manage think tank finance confirmations and records'],
+            ['name' => 'think_tank.procurement_plans.view', 'module' => 'Think Tank Portal', 'description' => 'View procurement plans for the assigned think tank'],
+            ['name' => 'think_tank.procurement_plans.manage', 'module' => 'Think Tank Portal', 'description' => 'Create and maintain procurement plans for the assigned think tank'],
+            ['name' => 'think_tank.team.manage', 'module' => 'Think Tank Portal', 'description' => 'Manage portal staff and access levels for the assigned think tank'],
             ['name' => 'think_tank.research.view', 'module' => 'Think Tank Portal', 'description' => 'View think tank research output dashboard'],
             ['name' => 'think_tank.research.download', 'module' => 'Think Tank Portal', 'description' => 'Download think tank research output PDFs'],
             ['name' => 'think_tank.research.submit', 'module' => 'Think Tank Portal', 'description' => 'Submit research outputs from a think tank portal'],
@@ -88,23 +95,8 @@ class ConsortiumOperationsPermissionsSeeder extends Seeder
         );
 
         $this->syncRole('Think Tank User', $created->whereIn('name', [
-            'consortiums.view',
-            'consortiums.reports.submit',
-            'consortiums.disbursements.request',
-            'consortiums.expenses.submit',
             'think_tank.portal.access',
             'think_tank.dashboard.download',
-            'think_tank.reports.view',
-            'think_tank.reports.download',
-            'think_tank.reports.submit',
-            'think_tank.research.view',
-            'think_tank.research.download',
-            'think_tank.research.submit',
-            'think_tank.procurement.view',
-            'think_tank.procurement.download',
-            'think_tank.procurement.manage',
-            'think_tank.procurement.evaluate',
-            'think_tank.procurement.select',
         ])->pluck('id')->all(), false);
     }
 

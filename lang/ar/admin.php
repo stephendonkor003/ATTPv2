@@ -24,7 +24,7 @@ return [
 
     // Budget Planning
     'budget_structure' => 'هيكل الموازنة',
-    'sectors' => 'القطاعات',
+    'sectors' => 'Portfolios',
     'programs' => 'البرامج',
     'projects' => 'المشاريع',
     'activities' => 'الأنشطة',

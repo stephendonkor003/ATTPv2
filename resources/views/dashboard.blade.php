@@ -159,13 +159,9 @@
 
         $quickLinks = [
             ['label' => 'New Project', 'route' => 'budget.projects.create', 'icon' => 'plus-circle', 'accent' => 'text-primary', 'permissions' => ['project.create']],
-            ['label' => 'Indicators Hub', 'route' => 'budget.me.indicators.index', 'icon' => 'target', 'accent' => 'text-danger', 'permissions' => ['me.configuration.view']],
-            ['label' => 'Indicator Levels', 'route' => 'budget.me-configuration.indicator-levels.index', 'icon' => 'layers', 'accent' => 'text-success', 'permissions' => ['me.configuration.view']],
-            ['label' => 'Frequencies', 'route' => 'budget.me-configuration.frequencies.index', 'icon' => 'clock', 'accent' => 'text-primary', 'permissions' => ['me.configuration.view']],
-            ['label' => 'Indicator Units', 'route' => 'budget.me-configuration.units.index', 'icon' => 'sliders', 'accent' => 'text-warning', 'permissions' => ['me.configuration.view']],
-            ['label' => 'Data Sources', 'route' => 'budget.me.data-sources.index', 'icon' => 'database', 'accent' => 'text-success', 'permissions' => ['me.configuration.view']],
-            ['label' => 'M&E Report (Excel)', 'route' => 'budget.me.indicators.report.excel', 'icon' => 'download', 'accent' => 'text-info', 'permissions' => ['me.configuration.view']],
-            ['label' => 'M&E Report (PDF)', 'route' => 'budget.me.indicators.report.pdf', 'icon' => 'file-text', 'accent' => 'text-danger', 'permissions' => ['me.configuration.view']],
+            ['label' => 'Results Framework', 'route' => 'budget.me.rebuild.results-framework', 'icon' => 'target', 'accent' => 'text-danger', 'permissions' => ['me.configuration.view']],
+            ['label' => 'Performance Tracking', 'route' => 'budget.me.rebuild.data-entry', 'icon' => 'edit-3', 'accent' => 'text-success', 'permissions' => ['me.configuration.view']],
+            ['label' => 'M&E Management Dashboard', 'route' => 'budget.me.rebuild.management-dashboard', 'icon' => 'monitor', 'accent' => 'text-primary', 'permissions' => ['me.configuration.view']],
             ['label' => 'Vendors', 'route' => 'vendors.index', 'icon' => 'briefcase', 'accent' => 'text-warning', 'permissions' => ['vendor.manage']],
             ['label' => 'Users', 'route' => 'system.users.index', 'icon' => 'users', 'accent' => 'text-info', 'permissions' => ['users.manage']],
         ];
@@ -184,7 +180,7 @@
             ],
             [
                 'title' => 'Budget Structure',
-                'desc' => 'Manage sectors, programs, and projects.',
+                'desc' => 'Manage portfolios, programs, and projects.',
                 'icon' => 'grid',
                 'card_style' => 'background: linear-gradient(150deg, #22c55e1a 0%, #ffffff 68%); border-color: #22c55e2e;',
                 'icon_style' => 'background: linear-gradient(145deg, #22c55e2e 0%, #22c55e4d 100%); color: #0f172a;',
@@ -217,13 +213,13 @@
             ],
             [
                 'title' => 'Monitoring & Evaluation',
-                'desc' => 'Indicators, frequencies, and survey links.',
+                'desc' => 'Results framework, performance tracking, data quality, reporting, and evidence.',
                 'icon' => 'target',
                 'card_style' => 'background: linear-gradient(150deg, #0ea5e91a 0%, #ffffff 68%); border-color: #0ea5e92e;',
                 'icon_style' => 'background: linear-gradient(145deg, #0ea5e92e 0%, #0ea5e94d 100%); color: #0f172a;',
                 'links' => [
-                    ['label' => 'Indicators', 'route' => 'budget.me.indicators.index', 'permissions' => ['me.configuration.view']],
-                    ['label' => 'Frequencies', 'route' => 'budget.me-configuration.frequencies.index', 'permissions' => ['me.configuration.view']],
+                    ['label' => 'Results Framework', 'route' => 'budget.me.rebuild.results-framework', 'permissions' => ['me.configuration.view']],
+                    ['label' => 'Management Dashboard', 'route' => 'budget.me.rebuild.management-dashboard', 'permissions' => ['me.configuration.view']],
                 ],
             ],
             [
@@ -261,12 +257,13 @@
             ],
             [
                 'title' => 'Data Source & Cleaning',
-                'desc' => 'Bridge templates, sync status, and raw data review.',
+                'desc' => 'Data entry, performance tracking, quality review, and approval workflow.',
                 'icon' => 'database',
                 'card_style' => 'background: linear-gradient(150deg, #0ea5e91a 0%, #ffffff 68%); border-color: #0ea5e92e;',
                 'icon_style' => 'background: linear-gradient(145deg, #0ea5e92e 0%, #0ea5e94d 100%); color: #0f172a;',
                 'links' => [
-                    ['label' => 'Data Sources', 'route' => 'budget.me.data-sources.index', 'permissions' => ['me.configuration.view']],
+                    ['label' => 'Performance Tracking', 'route' => 'budget.me.rebuild.data-entry', 'permissions' => ['me.configuration.view']],
+                    ['label' => 'Quality Workflow', 'route' => 'budget.me.rebuild.data-quality', 'permissions' => ['me.configuration.view']],
                 ],
             ],
             [

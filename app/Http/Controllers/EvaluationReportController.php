@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -9,11 +10,15 @@ use Illuminate\Support\Str;
 
 class EvaluationReportController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     public function index()
     {
-        $procurements = Procurement::orderBy('title')->get();
+        $procurementQuery = Procurement::query()->orderBy('title');
+        $this->applyEvaluationReportProcurementScope($procurementQuery);
+        $procurements = $procurementQuery->get();
 
-        $submissions = EvaluationSubmission::with([
+        $submissionQuery = EvaluationSubmission::with([
                 'procurement',
                 'applicant.submitter',
                 'applicant.values',
@@ -21,14 +26,16 @@ class EvaluationReportController extends Controller
                 'evaluator',
             ])
             ->whereNotNull('submitted_at')
-            ->orderByDesc('submitted_at')
-            ->get();
+            ->orderByDesc('submitted_at');
+        $this->applyEvaluationReportSubmissionScope($submissionQuery);
+        $submissions = $submissionQuery->get();
 
         return view('reports.evaluations.index', compact('procurements', 'submissions'));
     }
 
     public function submission(EvaluationSubmission $submission)
     {
+        $this->assertEvaluationSubmissionScope($submission);
         $submission->load([
             'procurement',
             'applicant.submitter',
@@ -46,11 +53,13 @@ class EvaluationReportController extends Controller
 
     public function submissionPdf(EvaluationSubmission $submission)
     {
+        $this->assertEvaluationSubmissionScope($submission);
         return $this->downloadSubmissionReport($submission);
     }
 
     public function submissionAnonymisedPdf(EvaluationSubmission $submission)
     {
+        $this->assertEvaluationSubmissionScope($submission);
         return $this->downloadSubmissionReport($submission, true);
     }
 
@@ -97,6 +106,8 @@ class EvaluationReportController extends Controller
 
     public function procurement(Procurement $procurement)
     {
+        $this->assertEvaluationProcurementScope($procurement);
+
         $submissions = EvaluationSubmission::with([
                 'procurement',
                 'applicant.submitter',
@@ -127,6 +138,8 @@ class EvaluationReportController extends Controller
 
     public function procurementPdf(Procurement $procurement)
     {
+        $this->assertEvaluationProcurementScope($procurement);
+
         $submissions = EvaluationSubmission::with([
                 'procurement',
                 'applicant.submitter',
@@ -159,15 +172,16 @@ class EvaluationReportController extends Controller
 
     public function consolidated()
     {
-        $submissions = EvaluationSubmission::with([
+        $submissionQuery = EvaluationSubmission::with([
                 'procurement',
                 'applicant.submitter',
                 'evaluation',
                 'evaluator',
             ])
             ->whereNotNull('submitted_at')
-            ->orderByDesc('submitted_at')
-            ->get();
+            ->orderByDesc('submitted_at');
+        $this->applyEvaluationReportSubmissionScope($submissionQuery);
+        $submissions = $submissionQuery->get();
 
         $summary = $this->buildSummary($submissions);
         $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
@@ -183,15 +197,16 @@ class EvaluationReportController extends Controller
 
     public function consolidatedPdf()
     {
-        $submissions = EvaluationSubmission::with([
+        $submissionQuery = EvaluationSubmission::with([
                 'procurement',
                 'applicant.submitter',
                 'evaluation',
                 'evaluator',
             ])
             ->whereNotNull('submitted_at')
-            ->orderByDesc('submitted_at')
-            ->get();
+            ->orderByDesc('submitted_at');
+        $this->applyEvaluationReportSubmissionScope($submissionQuery);
+        $submissions = $submissionQuery->get();
 
         $summary = $this->buildSummary($submissions);
         $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
@@ -205,6 +220,60 @@ class EvaluationReportController extends Controller
         ));
 
         return $pdf->download('evaluation-consolidated.pdf');
+    }
+
+    private function applyEvaluationReportProcurementScope($query): void
+    {
+        $currentUser = request()->user();
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $this->applyAssignedPortfolioScopeToProcurements($query, $currentUser);
+        }
+    }
+
+    private function applyEvaluationReportSubmissionScope($query): void
+    {
+        $currentUser = request()->user();
+
+        if (! $this->userHasAssignedPortfolioScope($currentUser)) {
+            return;
+        }
+
+        $query->whereHas('procurement', function ($procurementQuery) use ($currentUser) {
+            $this->applyAssignedPortfolioScopeToProcurements($procurementQuery, $currentUser);
+        });
+    }
+
+    private function assertEvaluationProcurementScope(Procurement $procurement): void
+    {
+        $currentUser = request()->user();
+
+        if (! $this->userHasAssignedPortfolioScope($currentUser)) {
+            return;
+        }
+
+        abort_unless(
+            $this->procurementIsInAssignedPortfolio($procurement, $currentUser),
+            403,
+            'This evaluation report is not assigned to your portfolio.'
+        );
+    }
+
+    private function assertEvaluationSubmissionScope(EvaluationSubmission $submission): void
+    {
+        $currentUser = request()->user();
+
+        if (! $this->userHasAssignedPortfolioScope($currentUser)) {
+            return;
+        }
+
+        $submission->loadMissing('procurement');
+
+        abort_unless(
+            $submission->procurement && $this->procurementIsInAssignedPortfolio($submission->procurement, $currentUser),
+            403,
+            'This evaluation report is not assigned to your portfolio.'
+        );
     }
 
     private function overallMax(EvaluationSubmission $submission): ?float

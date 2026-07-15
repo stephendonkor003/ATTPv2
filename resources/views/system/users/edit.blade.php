@@ -212,6 +212,7 @@
                                         <option value="">-- Select Role --</option>
                                         @foreach ($roles as $role)
                                             <option value="{{ $role->id }}"
+                                                data-role-name="{{ $role->name }}"
                                                 {{ old('role_id', $user->role_id) == $role->id ? 'selected' : '' }}>
                                                 {{ $role->name }}
                                             </option>
@@ -237,6 +238,7 @@
                                         'funding_partner' => 'Funding Partner',
                                         'think_tank' => 'Think Tank',
                                         'evaluator' => 'Evaluator',
+                                        'ttl' => 'Task Team Leader',
                                         'admin' => 'Admin',
                                     ] as $typeValue => $typeLabel)
                                         <option value="{{ $typeValue }}"
@@ -320,6 +322,7 @@
                                 style="{{ $isMemberStateType || $isVendorType ? 'display: none;' : '' }}">
                                 <label class="form-label fw-semibold" id="governance-node-label">
                                     Governance Node
+                                    <span class="text-danger d-none" id="governance-node-required">*</span>
                                 </label>
                                 <select name="governance_node_id" id="governance_node_id" class="form-select"
                                     {{ $user->role && $user->role->name === 'Super Admin' ? 'disabled' : '' }}>
@@ -332,7 +335,7 @@
                                     @endforeach
                                 </select>
                                 <small class="text-muted">
-                                    Optional. Use this only when the user should be scoped to a governance node.
+                                    Required for Monitoring and Evaluation Manager users. Other back-office users may be scoped here when needed.
                                 </small>
                             </div>
 
@@ -439,6 +442,7 @@
             const userTypeConversionQuestion = document.getElementById('userTypeConversionQuestion');
             const userTypeConversionImpact = document.getElementById('userTypeConversionImpact');
             const confirmUserTypeConversionBtn = document.getElementById('confirmUserTypeConversionBtn');
+            const governanceRequiredMarker = document.getElementById('governance-node-required');
             const originalUserType = @json($user->user_type);
             const originalUserTypeLabel = @json(ucfirst(str_replace('_', ' ', (string) $user->user_type)));
             const originalRoleName = @json($user->role?->name);
@@ -468,6 +472,14 @@
                 }
 
                 return (select.options[select.selectedIndex]?.textContent || '').trim();
+            }
+
+            function selectedRoleName() {
+                if (!roleSelect || !roleSelect.value) {
+                    return '';
+                }
+
+                return roleSelect.options[roleSelect.selectedIndex]?.dataset.roleName || '';
             }
 
             function currentAccountLabel() {
@@ -648,8 +660,11 @@
                     }
                 }
 
+                const requiresGovernance = selectedRoleName() === 'Monitoring and Evaluation Manager';
+
                 governanceGroup.style.display = (isMemberState || isVendor) ? 'none' : '';
-                governanceSelect.required = false;
+                governanceSelect.required = !(isMemberState || isVendor) && requiresGovernance;
+                governanceRequiredMarker?.classList.toggle('d-none', !governanceSelect.required);
                 if (isMemberState || isVendor) {
                     governanceSelect.value = '';
                 }
@@ -671,6 +686,7 @@
             }
 
             userTypeSelect.addEventListener('change', toggleUserTypeFields);
+            roleSelect?.addEventListener('change', toggleUserTypeFields);
             [userTypeSelect, roleSelect, vendorCategorySelect, governanceSelect, memberStateSelect].forEach((field) => {
                 field?.addEventListener('change', resetConversionConfirmation);
             });

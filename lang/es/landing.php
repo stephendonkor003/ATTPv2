@@ -11,8 +11,10 @@ return [
     'policy_programs' => 'Programas de Políticas e Investigación',
 
     // Hero Section
+    'hero_title' => 'Administración de la Plataforma Africana de Think Tank',
     'hero_subtitle' => 'Fortaleciendo el ecosistema de políticas de África mediante el apoyo a las instituciones de la Unión Africana, think tanks y socios a través de gobernanza coordinada y visión estratégica.',
     'hero_cta' => 'Explorar Programas e Iniciativas de Políticas',
+    'hero_media_badge' => 'ATTP en Acción',
 
     // Institutional Process Flow
     'process_title' => 'Flujo de Procesos Institucionales',
@@ -52,6 +54,12 @@ return [
     'download_es' => 'Descargue el documento oficial de Anuncio de Subvenciones y Premios ATTP en español.',
     'download_sw' => 'Descargue el documento oficial de Anuncio de Subvenciones y Premios ATTP en suajili.',
     'download_version' => 'Descargar Versión en :language',
+    'language_en' => 'Inglés',
+    'language_fr' => 'Francés',
+    'language_ar' => 'Árabe',
+    'language_pt' => 'Portugués',
+    'language_es' => 'Español',
+    'language_sw' => 'Suajili',
 
     // Centralized Governance
     'governance_title' => 'Gobernanza Centralizada y Supervisión Estratégica',
@@ -61,6 +69,15 @@ return [
     'governance_item3' => 'Visibilidad a nivel ejecutivo de programas y proyectos financiados',
     'governance_item4' => 'Paneles consolidados para desempeño, finanzas y cumplimiento',
     'governance_item5' => 'Acceso seguro basado en roles alineado con estructuras de gobernanza',
+
+    // Contenido multimedia
+    'gallery_title' => 'Nuestra Galería',
+    'gallery_subtitle' => 'Momentos de nuestros eventos, seminarios web y actividades en toda África',
+    'gallery_view_all' => 'Ver Todas las Fotos',
+    'gallery_image_alt' => 'Foto de un evento de ATTP',
+    'watch_story_title' => 'Conozca Nuestra Historia',
+    'watch_story_subtitle' => 'Vea el impacto y las actividades de ATTP en toda África',
+    'supporting_statement' => 'Apoyando la coordinación de políticas de la Unión Africana, la reforma de la gobernanza y la toma de decisiones basada en evidencia en todo el continente.',
 
     // Footer
     'footer_description' => 'Administración de la Plataforma Africana de Think Tank – apoyando a las instituciones de la Unión Africana a través de gobernanza centralizada, coordinación de políticas y supervisión estratégica de programas e iniciativas financiadas.',

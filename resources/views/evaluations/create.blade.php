@@ -31,6 +31,8 @@
                         <input type="text" name="name" class="form-control" value="{{ old('name') }}" required>
                     </div>
 
+                    @include('evaluations.partials.portfolio-field')
+
                     {{-- DESCRIPTION --}}
                     <div class="mb-3">
                         <label class="form-label">Description</label>

@@ -11,8 +11,10 @@ return [
     'policy_programs' => 'Programu za Sera na Utafiti',
 
     // Hero Section
+    'hero_title' => 'Usimamizi wa Jukwaa la Utafiti wa Afrika',
     'hero_subtitle' => 'Kuimarisha mfumo wa sera wa Afrika kwa kusaidia taasisi za Umoja wa Afrika, vikundi vya utafiti na washirika kupitia utawala ulioshirikiana na ufahamu wa kimkakati.',
     'hero_cta' => 'Gundua Programu na Mipango ya Sera',
+    'hero_media_badge' => 'ATTP kwa Vitendo',
 
     // Institutional Process Flow
     'process_title' => 'Mtiririko wa Michakato ya Kitaasisi',
@@ -52,6 +54,12 @@ return [
     'download_es' => 'Pakua hati rasmi ya Tangazo la Ruzuku na Tuzo za ATTP kwa Kihispania.',
     'download_sw' => 'Pakua hati rasmi ya Tangazo la Ruzuku na Tuzo za ATTP kwa Kiswahili.',
     'download_version' => 'Pakua Toleo la :language',
+    'language_en' => 'Kiingereza',
+    'language_fr' => 'Kifaransa',
+    'language_ar' => 'Kiarabu',
+    'language_pt' => 'Kireno',
+    'language_es' => 'Kihispania',
+    'language_sw' => 'Kiswahili',
 
     // Centralized Governance
     'governance_title' => 'Utawala Ulioandaliwa Pamoja na Usimamizi wa Kimkakati',
@@ -61,6 +69,15 @@ return [
     'governance_item3' => 'Mwonekano wa kiwango cha utekelezaji wa programu na miradi inayofadhiliwa',
     'governance_item4' => 'Dashibodi zilizounganishwa kwa utendaji, fedha na uzingatiaji',
     'governance_item5' => 'Ufikiaji salama unaotegemea majukumu unaooana na miundo ya utawala',
+
+    // Vyombo vya habari
+    'gallery_title' => 'Matunzio Yetu',
+    'gallery_subtitle' => 'Matukio kutoka kwenye shughuli na semina zetu kote Afrika',
+    'gallery_view_all' => 'Tazama Picha Zote',
+    'gallery_image_alt' => 'Picha ya tukio la ATTP',
+    'watch_story_title' => 'Tazama Hadithi Yetu',
+    'watch_story_subtitle' => 'Tazama athari na shughuli za ATTP kote Afrika',
+    'supporting_statement' => 'Kusaidia uratibu wa sera za Umoja wa Afrika, mageuzi ya utawala na maamuzi yanayotegemea ushahidi kote barani.',
 
     // Footer
     'footer_description' => 'Usimamizi wa Jukwaa la Utafiti wa Afrika – kusaidia taasisi za Umoja wa Afrika kupitia utawala uliounganishwa, uratibu wa sera na usimamizi wa kimkakati wa programu na mipango inayofadhiliwa.',

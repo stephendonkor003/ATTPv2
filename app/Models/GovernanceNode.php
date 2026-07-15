@@ -43,4 +43,14 @@ class GovernanceNode extends BaseModel
     {
         return $this->hasMany(GovernanceNodeAssignment::class, 'node_id');
     }
+
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class, 'governance_node_id');
+    }
+
+    public function portfolios(): HasMany
+    {
+        return $this->hasMany(Sector::class, 'governance_node_id');
+    }
 }

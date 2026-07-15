@@ -24,7 +24,7 @@ return [
 
     // Budget Planning
     'budget_structure' => 'Estructura Presupuestaria',
-    'sectors' => 'Sectores',
+    'sectors' => 'Portfolios',
     'programs' => 'Programas',
     'projects' => 'Proyectos',
     'activities' => 'Actividades',

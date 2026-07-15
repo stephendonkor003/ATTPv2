@@ -15,6 +15,7 @@
                 <thead>
                     <tr>
                         <th style="width: 50px;" class="text-center">#</th>
+                        <th>Task Team Leader</th>
                         <th>{{ __('partner.program_name') }}</th>
                         <th>{{ __('partner.governance_node') }}</th>
                         <th style="width: 150px;" class="text-end">{{ __('partner.amount') }}</th>
@@ -26,6 +27,10 @@
                     @forelse($fundings as $funding)
                     <tr>
                         <td class="text-center">{{ $loop->iteration }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ $funding->program?->ttl_name ?: ($funding->program?->ttlUser?->name ?? 'Unassigned') }}</div>
+                            <div class="text-muted small">{{ $funding->program?->ttl_email ?: ($funding->program?->ttlUser?->email ?? 'No email') }}</div>
+                        </td>
                         <td><strong>{{ $funding->program_name ?? ($funding->program?->name ?? '—') }}</strong></td>
                         <td>
                             <div class="fw-semibold">{{ $funding->governanceNode->name ?? '-' }}</div>
@@ -48,7 +53,7 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-4">{{ __('partner.no_programs') }}</td>
+                        <td colspan="7" class="text-center text-muted py-4">{{ __('partner.no_programs') }}</td>
                     </tr>
                     @endforelse
                 </tbody>

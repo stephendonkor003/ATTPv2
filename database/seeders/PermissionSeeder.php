@@ -54,6 +54,8 @@ class PermissionSeeder extends Seeder
             ['name' => 'finance.access', 'module' => 'Finance', 'description' => 'Access finance module'],
             ['name' => 'finance.resources.view', 'module' => 'Finance', 'description' => 'View finance resources'],
             ['name' => 'finance.resources.create', 'module' => 'Finance', 'description' => 'Create finance resources'],
+            ['name' => 'finance.resources.edit', 'module' => 'Finance', 'description' => 'Edit finance resources'],
+            ['name' => 'finance.resources.delete', 'module' => 'Finance', 'description' => 'Delete finance resources'],
             ['name' => 'finance.resources.manage', 'module' => 'Finance', 'description' => 'Manage finance resources'],
             ['name' => 'finance.funders.view', 'module' => 'Finance', 'description' => 'View finance funders'],
             ['name' => 'finance.funders.create', 'module' => 'Finance', 'description' => 'Create finance funders'],
@@ -103,10 +105,10 @@ class PermissionSeeder extends Seeder
             ['name' => 'budget.reports.view', 'module' => 'Budget', 'description' => 'View budget reports'],
             ['name' => 'budget.project_financial_position.view', 'module' => 'Budget', 'description' => 'View project financial position report'],
             ['name' => 'budget.summary.view', 'module' => 'Budget', 'description' => 'View budget summary dashboard'],
-            ['name' => 'sector.view', 'module' => 'Budget', 'description' => 'View sectors'],
-            ['name' => 'sector.create', 'module' => 'Budget', 'description' => 'Create sectors'],
-            ['name' => 'sector.edit', 'module' => 'Budget', 'description' => 'Edit sectors'],
-            ['name' => 'sector.delete', 'module' => 'Budget', 'description' => 'Delete sectors'],
+            ['name' => 'sector.view', 'module' => 'Budget', 'description' => 'View portfolios'],
+            ['name' => 'sector.create', 'module' => 'Budget', 'description' => 'Create portfolios'],
+            ['name' => 'sector.edit', 'module' => 'Budget', 'description' => 'Edit portfolios'],
+            ['name' => 'sector.delete', 'module' => 'Budget', 'description' => 'Delete portfolios'],
             ['name' => 'program.view', 'module' => 'Budget', 'description' => 'View programs'],
             ['name' => 'program.create', 'module' => 'Budget', 'description' => 'Create programs'],
             ['name' => 'program.edit', 'module' => 'Budget', 'description' => 'Edit programs'],
@@ -132,8 +134,25 @@ class PermissionSeeder extends Seeder
             // Monitoring & Evaluation (M&E)
             ['name' => 'me.configuration.view', 'module' => 'M&E', 'description' => 'View M&E configuration, indicators, and data-source dashboards'],
             ['name' => 'me.configuration.manage', 'module' => 'M&E', 'description' => 'Create, update, delete, and sync M&E configuration and indicator data'],
+            ['name' => 'me.data_entry.view', 'module' => 'M&E', 'description' => 'View M&E data-entry forms, reporting periods, collections, and submissions'],
+            ['name' => 'me.data_entry.manage', 'module' => 'M&E', 'description' => 'Define M&E collection forms and periods, assign think tanks, and manage collection windows'],
             ['name' => 'world.indicators.manage', 'module' => 'M&E', 'description' => 'Manage World Indicators / Performance public page settings and source endpoints'],
             ['name' => 'website_visits.view', 'module' => 'analytics', 'description' => 'View website visit dashboard and visitor activity analytics'],
+
+            // Grievance Redress Mechanism
+            ['name' => 'grm.submit', 'module' => 'GRM', 'description' => 'Submit grievances and generate case numbers'],
+            ['name' => 'grm.view', 'module' => 'GRM', 'description' => 'View grievance logs and case details'],
+            ['name' => 'grm.configure', 'module' => 'GRM', 'description' => 'Manage grievance levels and configuration'],
+            ['name' => 'grm.escalations', 'module' => 'GRM', 'description' => 'Manage grievance escalation timing, reminders, and email responses'],
+            ['name' => 'grm.reports', 'module' => 'GRM', 'description' => 'View grievance metrics and reports'],
+
+            // Public Discussion Forum
+            ['name' => 'discussions.view', 'module' => 'Discussions', 'description' => 'View discussion forum administration dashboards and discussions'],
+            ['name' => 'discussions.create', 'module' => 'Discussions', 'description' => 'Create public discussions'],
+            ['name' => 'discussions.manage', 'module' => 'Discussions', 'description' => 'Edit, publish, close, and archive public discussions'],
+            ['name' => 'discussions.thematic_areas.manage', 'module' => 'Discussions', 'description' => 'Create and manage discussion thematic areas'],
+            ['name' => 'discussions.participants.manage', 'module' => 'Discussions', 'description' => 'View participants and block or restore forum participation'],
+            ['name' => 'discussions.moderate', 'module' => 'Discussions', 'description' => 'Review and moderate participant contributions'],
 
             // Evaluations
             ['name' => 'evaluations.manage', 'module' => 'evaluations', 'description' => 'Manage evaluations and assignments'],

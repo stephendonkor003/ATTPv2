@@ -26,7 +26,8 @@
     </div>
 
     @php
-        $currency = $program->currency
+        $currency = $program->sector?->currency
+            ?? $program->currency
             ?? $program->approvedFundings?->first()?->currency
             ?? $program->fundings?->first()?->currency
             ?? '';

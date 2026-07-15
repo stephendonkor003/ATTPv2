@@ -5,9 +5,8 @@
         <div class="page-header d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h4 class="page-title mb-1">My Procurement Plan</h4>
-                <p class="text-muted mb-0">Create a procurement on Any Progarm or Project and track its duration before
-                    attaching
-                    procurements.</p>
+                <p class="text-muted mb-0">Create portfolio-owned procurement plan sheets and track their duration before
+                    attaching procurements.</p>
             </div>
         </div>
 
@@ -19,6 +18,30 @@
             <div class="card-body">
                 <form action="{{ route('procurement.structure.store') }}" method="POST" class="row g-3">
                     @csrf
+                    @if ($canChoosePortfolio)
+                        <div class="col-md-6">
+                            <label class="form-label" for="governance_node_id">Portfolio <span class="text-danger">*</span></label>
+                            <select name="governance_node_id" id="governance_node_id"
+                                class="form-control @error('governance_node_id') is-invalid @enderror" required>
+                                <option value="">Select portfolio</option>
+                                @foreach ($governanceNodes as $node)
+                                    <option value="{{ $node->id }}"
+                                        {{ old('governance_node_id') == $node->id ? 'selected' : '' }}>
+                                        {{ $node->name }} @if($node->code) ({{ $node->code }}) @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('governance_node_id')
+                                <small class="text-danger">{{ $message }}</small>
+                            @enderror
+                        </div>
+                    @else
+                        <div class="col-md-6">
+                            <label class="form-label">Portfolio</label>
+                            <input type="text" class="form-control" value="{{ $currentGovernanceNodeName }}" readonly>
+                        </div>
+                    @endif
+
                     <div class="col-md-6">
                         <label class="form-label" for="name">Plan Name <span class="text-danger">*</span></label>
                         <input type="text" name="name" id="name"
@@ -77,6 +100,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Plan Name</th>
+                                <th>Portfolio</th>
                                 <th>Duration</th>
                                 <th>Created By</th>
                                 <th>Created At</th>
@@ -88,6 +112,7 @@
                             @forelse($plans as $plan)
                                 <tr>
                                     <td class="fw-semibold">{{ $plan->name }}</td>
+                                    <td>{{ $plan->governanceNode?->name ?? '-' }}</td>
                                     <td>
                                         @if ($plan->duration_days !== null)
                                             {{ $plan->duration_days }} days
@@ -109,7 +134,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-3">
+                                    <td colspan="7" class="text-center text-muted py-3">
                                         No program plans yet. Create one to start populating procurements.
                                     </td>
                                 </tr>

@@ -2,17 +2,87 @@
 
 namespace App\Models;
 
+use App\Support\DiscussionAccountEmailPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Validation\ValidationException;
 
 class User extends Authenticatable
 {
     use HasFactory, HasUuids, Notifiable;
+
+    public const THINK_TANK_ACCESS_ADMIN = 'think_tank_admin';
+
+    public const THINK_TANK_ACCESS_PROCUREMENT = 'procurement_officer';
+
+    public const THINK_TANK_ACCESS_ME = 'me_officer';
+
+    public const THINK_TANK_ACCESS_FINANCE = 'finance_officer';
+
+    public const THINK_TANK_ACCESS_LEVELS = [
+        self::THINK_TANK_ACCESS_ADMIN => 'Think Tank Admin',
+        self::THINK_TANK_ACCESS_PROCUREMENT => 'Procurement Officer',
+        self::THINK_TANK_ACCESS_ME => 'M&E Officer',
+        self::THINK_TANK_ACCESS_FINANCE => 'Finance Officer',
+    ];
+
+    private const THINK_TANK_AREA_ACCESS = [
+        'dashboard' => [
+            self::THINK_TANK_ACCESS_ADMIN,
+            self::THINK_TANK_ACCESS_PROCUREMENT,
+            self::THINK_TANK_ACCESS_ME,
+            self::THINK_TANK_ACCESS_FINANCE,
+        ],
+        'me' => [self::THINK_TANK_ACCESS_ADMIN, self::THINK_TANK_ACCESS_ME],
+        'reports' => [self::THINK_TANK_ACCESS_ADMIN, self::THINK_TANK_ACCESS_ME],
+        'finance' => [self::THINK_TANK_ACCESS_ADMIN, self::THINK_TANK_ACCESS_FINANCE],
+        'procurement_plans' => [self::THINK_TANK_ACCESS_ADMIN, self::THINK_TANK_ACCESS_PROCUREMENT],
+        'team' => [self::THINK_TANK_ACCESS_ADMIN],
+        // Retained only for system/super-administrator oversight of retired
+        // screens. No think tank access level is allowed into legacy areas.
+        'legacy_admin' => [],
+    ];
+
+    private const THINK_TANK_ACCESS_PERMISSIONS = [
+        self::THINK_TANK_ACCESS_ADMIN => [
+            'think_tank.portal.access',
+            'think_tank.dashboard.download',
+            'think_tank.reports.submit',
+            'think_tank.me.view',
+            'think_tank.me.submit',
+            'think_tank.finance.view',
+            'think_tank.finance.manage',
+            'think_tank.procurement_plans.view',
+            'think_tank.procurement_plans.manage',
+            'think_tank.team.manage',
+        ],
+        self::THINK_TANK_ACCESS_PROCUREMENT => [
+            'think_tank.portal.access',
+            'think_tank.dashboard.download',
+            'think_tank.procurement_plans.view',
+            'think_tank.procurement_plans.manage',
+        ],
+        self::THINK_TANK_ACCESS_ME => [
+            'think_tank.portal.access',
+            'think_tank.dashboard.download',
+            'think_tank.reports.submit',
+            'think_tank.me.view',
+            'think_tank.me.submit',
+        ],
+        self::THINK_TANK_ACCESS_FINANCE => [
+            'think_tank.portal.access',
+            'think_tank.dashboard.download',
+            'think_tank.finance.view',
+            'think_tank.finance.manage',
+        ],
+    ];
 
     public $incrementing = false;
 
@@ -50,6 +120,8 @@ class User extends Authenticatable
         'role_id',
         'governance_node_id',
         'member_state_id',
+        'think_tank_member_id',
+        'think_tank_access_level',
     ];
 
     /**
@@ -77,6 +149,30 @@ class User extends Authenticatable
             'is_blacklisted' => 'boolean',
             'blacklisted_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (User $user): void {
+            if (
+                filled($user->think_tank_access_level)
+                && ! array_key_exists((string) $user->think_tank_access_level, self::THINK_TANK_ACCESS_LEVELS)
+            ) {
+                throw ValidationException::withMessages([
+                    'think_tank_access_level' => ['The selected think tank access level is invalid.'],
+                ]);
+            }
+
+            if (! $user->isDirty('email') || blank($user->email)) {
+                return;
+            }
+
+            if (DiscussionAccountEmailPolicy::participantEmailExists($user->email)) {
+                throw ValidationException::withMessages([
+                    'email' => [DiscussionAccountEmailPolicy::UNAVAILABLE_MESSAGE],
+                ]);
+            }
+        });
     }
 
     /* =====================================================
@@ -164,14 +260,71 @@ class User extends Authenticatable
         return $funder ?: $this->funderPortal;
     }
 
-    public function thinkTankMembership()
+    public function thinkTankMembership(): HasOne
     {
         return $this->hasOne(ConsortiumThinkTank::class, 'portal_user_id');
+    }
+
+    /**
+     * The explicit membership used by every think tank staff account.
+     *
+     * The older portal_user_id link is retained as a compatibility pointer to
+     * the original primary account; this relation supports multiple users in
+     * one think tank without creating a second identity table.
+     */
+    public function assignedThinkTankMembership(): BelongsTo
+    {
+        return $this->belongsTo(ConsortiumThinkTank::class, 'think_tank_member_id');
+    }
+
+    public function resolvedThinkTankMembership(): ?ConsortiumThinkTank
+    {
+        $assigned = $this->relationLoaded('assignedThinkTankMembership')
+            ? $this->assignedThinkTankMembership
+            : $this->assignedThinkTankMembership()->first();
+
+        if ($assigned) {
+            return $assigned;
+        }
+
+        return $this->relationLoaded('thinkTankMembership')
+            ? $this->thinkTankMembership
+            : $this->thinkTankMembership()->first();
     }
 
     public function vendorThinkTankMembership()
     {
         return $this->hasOne(ConsortiumThinkTank::class, 'vendor_user_id');
+    }
+
+    public function responsibleDataEntryForms(): HasMany
+    {
+        return $this->hasMany(MeDataEntryForm::class, 'responsible_user_id');
+    }
+
+    public function createdDataEntryForms(): HasMany
+    {
+        return $this->hasMany(MeDataEntryForm::class, 'created_by');
+    }
+
+    public function createdReportingPeriods(): HasMany
+    {
+        return $this->hasMany(MeReportingPeriod::class, 'created_by');
+    }
+
+    public function assignedDataCollections(): HasMany
+    {
+        return $this->hasMany(MeDataCollectionAssignment::class, 'assigned_by');
+    }
+
+    public function submittedDataSubmissions(): HasMany
+    {
+        return $this->hasMany(MeDataSubmission::class, 'submitted_by');
+    }
+
+    public function reviewedDataSubmissions(): HasMany
+    {
+        return $this->hasMany(MeDataSubmission::class, 'reviewed_by');
     }
 
     public function vendorSubActivityAssignments(): HasMany
@@ -211,6 +364,14 @@ class User extends Authenticatable
             return true;
         }
 
+        // The legacy Think Tank User role historically held every portal
+        // permission. Keep access-level boundaries authoritative so a broad
+        // role or direct grant cannot bypass area restrictions.
+        if ($this->isThinkTankUser()) {
+            return str_starts_with($permission, 'think_tank.')
+                && in_array($permission, $this->thinkTankPermissionNames(), true);
+        }
+
         // 1️⃣ Direct user permission override
         if ($this->permissions->contains('name', $permission)) {
             return true;
@@ -243,6 +404,68 @@ class User extends Authenticatable
     public function isThinkTankUser(): bool
     {
         return $this->user_type === 'think_tank';
+    }
+
+    public function resolvedThinkTankAccessLevel(): ?string
+    {
+        $accessLevel = trim((string) $this->think_tank_access_level);
+
+        if (array_key_exists($accessLevel, self::THINK_TANK_ACCESS_LEVELS)) {
+            return $accessLevel;
+        }
+
+        // Existing primary portal users remain administrators until the
+        // migration/backfill is run. Unlinked accounts never receive a role.
+        if ($this->isThinkTankUser() && $this->resolvedThinkTankMembership()) {
+            $legacyPrimary = $this->relationLoaded('thinkTankMembership')
+                ? $this->thinkTankMembership
+                : $this->thinkTankMembership()->first();
+
+            if ($legacyPrimary) {
+                return self::THINK_TANK_ACCESS_ADMIN;
+            }
+        }
+
+        return null;
+    }
+
+    public function thinkTankAccessLabel(): string
+    {
+        $level = $this->resolvedThinkTankAccessLevel();
+
+        return self::THINK_TANK_ACCESS_LEVELS[$level] ?? 'Unassigned';
+    }
+
+    public function canAccessThinkTankArea(string $area): bool
+    {
+        if ($this->isSuperAdmin() || $this->isAdmin()) {
+            return true;
+        }
+
+        if (! $this->isThinkTankUser()) {
+            return false;
+        }
+
+        $area = match ($area) {
+            'procurement', 'procurement-plans' => 'procurement_plans',
+            'report', 'report_uploads', 'report-uploads' => 'reports',
+            'm&e', 'm_and_e' => 'me',
+            'admin', 'legacy' => 'legacy_admin',
+            default => $area,
+        };
+
+        return in_array(
+            $this->resolvedThinkTankAccessLevel(),
+            self::THINK_TANK_AREA_ACCESS[$area] ?? [],
+            true
+        );
+    }
+
+    public function thinkTankPermissionNames(): array
+    {
+        $accessLevel = $this->resolvedThinkTankAccessLevel();
+
+        return self::THINK_TANK_ACCESS_PERMISSIONS[$accessLevel] ?? [];
     }
 
     public function hasActiveLoginBlock(): bool

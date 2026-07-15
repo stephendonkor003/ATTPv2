@@ -9,6 +9,7 @@ class IndicatorLevel extends BaseModel
     protected $table = 'me_indicator_levels';
 
     protected $fillable = [
+        'portfolio_id',
         'name',
         'description',
         'sort_order',
@@ -25,6 +26,11 @@ class IndicatorLevel extends BaseModel
     public function indicators()
     {
         return $this->hasMany(Indicator::class, 'indicator_level_id');
+    }
+
+    public function portfolio()
+    {
+        return $this->belongsTo(Sector::class, 'portfolio_id');
     }
 
     // Scopes

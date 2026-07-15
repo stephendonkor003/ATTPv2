@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Sector;
 use App\Models\Program;
 use App\Models\Project;
@@ -28,6 +29,8 @@ use Throwable;
 
 class BudgetReportController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /* ================================
        SECTOR OVERVIEW
     ================================== */
@@ -36,9 +39,9 @@ class BudgetReportController extends Controller
         return view('budgetreport.index', $this->buildPortfolioBudgetOverviewData($request));
     }
 
-    public function exportPortfolioPdf()
+    public function exportPortfolioPdf(Request $request)
     {
-        $data = $this->buildPortfolioBudgetOverviewData();
+        $data = $this->buildPortfolioBudgetOverviewData($request);
         $filename = 'portfolio-budget-overview-' . now()->format('Ymd-His') . '.pdf';
 
         return PDF::loadView('budgetreport.portfolio_pdf', $data)
@@ -48,11 +51,15 @@ class BudgetReportController extends Controller
 
     private function buildPortfolioBudgetOverviewData(?Request $request = null): array
     {
-        $sectors = Sector::with([
+        $sectors = $this->scopedSectorReportQuery()->with([
+            'programs.approvedFundings',
+            'programs.fundings',
             'programs.projects.allocations',
             'programs.projects.activities.allocations',
             'programs.projects.activities.subActivities.allocations'
         ])->orderBy('name')->get();
+
+        $portfolioCurrency = $this->resolvePortfolioReportCurrency($sectors);
 
         $allProjects = $sectors
             ->flatMap(fn (Sector $sector) => $sector->programs->flatMap->projects)
@@ -67,6 +74,7 @@ class BudgetReportController extends Controller
             return [
                 'id' => (string) $sector->id,
                 'name' => $sector->name,
+                'currency' => $this->resolveSectorReportCurrency($sector),
                 'programs' => $sector->programs->count(),
                 'projects' => $projects->count(),
                 'activities' => $activityCount,
@@ -83,6 +91,7 @@ class BudgetReportController extends Controller
                     'id' => (string) $program->id,
                     'name' => $program->name,
                     'sector' => $sector->name,
+                    'currency' => $this->resolveSectorReportCurrency($sector),
                     'projects' => $program->projects->count(),
                     'total_budget' => round($totalBudget, 2),
                 ];
@@ -97,6 +106,7 @@ class BudgetReportController extends Controller
                     'name' => $project->name,
                     'program' => $program->name,
                     'sector' => $sector->name,
+                    'currency' => $this->resolveSectorReportCurrency($sector),
                     'activities' => $project->activities->count(),
                     'total_budget' => $this->projectBudgetAmount($project),
                 ];
@@ -139,6 +149,7 @@ class BudgetReportController extends Controller
             'projects' => $projectSummaries->count(),
             'activities' => $sectorSummaries->sum('activities'),
             'total_budget' => $totalBudget,
+            'currency' => $portfolioCurrency,
             'average_project_budget' => $averageProjectBudget,
             'funded_sectors' => $sectorSummaries->where('total_budget', '>', 0)->count(),
             'largest_sector' => $largestSector['name'] ?? null,
@@ -169,6 +180,7 @@ class BudgetReportController extends Controller
                 'label' => $project['name'],
                 'sector' => $project['sector'],
             ])->values(),
+            'currency' => $portfolioCurrency,
         ];
 
         $projectOptions = $projectSummaries
@@ -199,13 +211,55 @@ class BudgetReportController extends Controller
             'projectProgress',
             'activeReportTab',
             'portfolioStats',
-            'chartData'
+            'chartData',
+            'portfolioCurrency'
         );
     }
 
     private function programBudgetAmount(Program $program): float
     {
         return round((float) ($program->total_budget ?? 0), 2);
+    }
+
+    private function resolvePortfolioReportCurrency($sectors): string
+    {
+        $currencies = collect($sectors)
+            ->flatMap(fn (Sector $sector) => [$this->resolveSectorReportCurrency($sector)])
+            ->filter(fn ($currency) => filled($currency))
+            ->map(fn ($currency) => strtoupper((string) $currency))
+            ->unique()
+            ->values();
+
+        if ($currencies->count() === 0) {
+            return 'USD';
+        }
+
+        if ($currencies->count() === 1) {
+            return $currencies->first();
+        }
+
+        return 'Mixed: ' . $currencies->take(3)->implode(', ');
+    }
+
+    private function resolveSectorReportCurrency(Sector $sector): string
+    {
+        $programCurrencies = $sector->relationLoaded('programs')
+            ? $sector->programs
+                ->flatMap(function (Program $program) {
+                    return [
+                        $program->currency,
+                        $program->approvedFundings?->first()?->currency,
+                        $program->fundings?->first()?->currency,
+                        $program->projects?->first()?->currency,
+                    ];
+                })
+            : collect();
+
+        return strtoupper((string) (
+            $sector->currency
+            ?: $programCurrencies->first(fn ($currency) => filled($currency))
+            ?: 'USD'
+        ));
     }
 
     private function projectBudgetAmount(Project $project): float
@@ -226,7 +280,7 @@ class BudgetReportController extends Controller
         }
 
         $project->loadMissing([
-            'program',
+            'program.sector',
             'allocations',
             'activities.allocations',
             'activities.subActivities.allocations',
@@ -269,7 +323,7 @@ class BudgetReportController extends Controller
                 'name' => $project->name,
                 'code' => $project->project_id,
                 'program' => $project->program?->name,
-                'currency' => $project->currency ?: $project->program?->currency ?: 'USD',
+                'currency' => $project->program?->sector?->currency ?: $project->currency ?: $project->program?->currency ?: 'USD',
                 'start_year' => $project->start_year,
                 'end_year' => $project->end_year,
             ],
@@ -300,9 +354,11 @@ class BudgetReportController extends Controller
     public function programReport($id)
     {
         $program = Program::with([
+            'sector',
             'projects.allocations',
             'projects.activities.subActivities'
         ])->findOrFail($id);
+        $this->assertProgramReportScope($program);
 
         return view('budgetreport.program', compact('program'));
     }
@@ -318,6 +374,7 @@ class BudgetReportController extends Controller
             'activities.allocations',
             'activities.subActivities'
         ])->findOrFail($id);
+        $this->assertProjectReportScope($project);
 
         return view('budgetreport.project', compact('project'));
     }
@@ -332,6 +389,7 @@ class BudgetReportController extends Controller
             'allocations',
             'subActivities.allocations'
         ])->findOrFail($id);
+        $this->assertActivityReportScope($activity);
 
         return view('budgetreport.activity', compact('activity'));
     }
@@ -344,16 +402,19 @@ class BudgetReportController extends Controller
     {
         if ($type === 'program') {
             $data = Program::with('projects.activities.subActivities')->findOrFail($id);
+            $this->assertProgramReportScope($data);
             $view = 'exports.program_pdf';
         }
 
         if ($type === 'project') {
             $data = Project::with('activities.subActivities')->findOrFail($id);
+            $this->assertProjectReportScope($data);
             $view = 'exports.project_pdf';
         }
 
         if ($type === 'activity') {
             $data = Activity::with('subActivities')->findOrFail($id);
+            $this->assertActivityReportScope($data);
             $view = 'exports.activity_pdf';
         }
 
@@ -369,14 +430,17 @@ class BudgetReportController extends Controller
     public function exportExcel($type, $id)
     {
         if ($type === 'program') {
+            $this->assertProgramReportScope(Program::findOrFail($id));
             return Excel::download(new ProgramExport($id), "program-$id.xlsx");
         }
 
         if ($type === 'project') {
+            $this->assertProjectReportScope(Project::findOrFail($id));
             return Excel::download(new ProjectExport($id), "project-$id.xlsx");
         }
 
         if ($type === 'activity') {
+            $this->assertActivityReportScope(Activity::findOrFail($id));
             return Excel::download(new ActivityExport($id), "activity-$id.xlsx");
         }
     }
@@ -387,7 +451,7 @@ class BudgetReportController extends Controller
     ================================== */
     public function dashboard()
     {
-        $sectors = Sector::with([
+        $sectors = $this->scopedSectorReportQuery()->with([
             'programs.projects.allocations',
             'programs.projects.activities'
         ])->get();
@@ -400,7 +464,7 @@ class BudgetReportController extends Controller
     ================================== */
     public function commitmentReport(Request $request)
     {
-        $programs = Program::orderBy('name')->get();
+        $programs = $this->scopedProgramReportQuery()->orderBy('name')->get();
         $programId = $request->input('program_id');
 
         $report = null;
@@ -413,10 +477,12 @@ class BudgetReportController extends Controller
 
         if ($programId) {
             $program = Program::with([
+                'sector',
                 'projects.activities.subActivities.allocations',
                 'approvedFundings.funder',
                 'fundings.funder',
             ])->findOrFail($programId);
+            $this->assertProgramReportScope($program);
 
             $filters = $this->resolveCommitmentFilter($request, $program);
 
@@ -533,10 +599,12 @@ class BudgetReportController extends Controller
         }
 
         $program = Program::with([
+            'sector',
             'projects.activities.subActivities.allocations',
             'approvedFundings.funder',
             'fundings.funder',
         ])->findOrFail($programId);
+        $this->assertProgramReportScope($program);
 
         $filters = $this->resolveCommitmentFilter($request, $program);
 
@@ -623,7 +691,7 @@ class BudgetReportController extends Controller
     ================================== */
     public function ifrReport(Request $request)
     {
-        $programs = Program::orderBy('name')->get();
+        $programs = $this->scopedProgramReportQuery()->orderBy('name')->get();
         $programId = $request->input('program_id');
 
         $report = null;
@@ -636,10 +704,12 @@ class BudgetReportController extends Controller
 
         if ($programId) {
             $program = Program::with([
+                'sector',
                 'projects.activities.subActivities.allocations',
                 'approvedFundings.funder',
                 'fundings.funder',
             ])->findOrFail($programId);
+            $this->assertProgramReportScope($program);
 
             $filters = $this->resolveCommitmentFilter($request, $program);
 
@@ -794,7 +864,7 @@ class BudgetReportController extends Controller
 
     private function buildProjectFinancialPositionReportData(Request $request): array
     {
-        $programs = Program::orderBy('name')->get();
+        $programs = $this->scopedProgramReportQuery()->orderBy('name')->get();
         $selectedProgramId = $request->input('program_id') ?: $programs->first()?->id;
         $program = null;
         $position = null;
@@ -810,12 +880,14 @@ class BudgetReportController extends Controller
 
         if ($selectedProgramId) {
             $program = Program::with([
+                'sector',
                 'projects.allocations',
                 'projects.activities.allocations',
                 'projects.activities.subActivities.allocations',
-                'approvedFundings.funder',
-                'fundings.funder',
-            ])->findOrFail($selectedProgramId);
+            'approvedFundings.funder',
+            'fundings.funder',
+        ])->findOrFail($selectedProgramId);
+            $this->assertProgramReportScope($program);
 
             $filters = $this->resolveProjectFinancialPositionFilters($request, $program);
             $structureOptions = $this->buildProjectFinancialPositionStructureOptions($program);
@@ -921,10 +993,12 @@ class BudgetReportController extends Controller
         }
 
         $program = Program::with([
+            'sector',
             'projects.activities.subActivities.allocations',
             'approvedFundings.funder',
             'fundings.funder',
         ])->findOrFail($programId);
+        $this->assertProgramReportScope($program);
 
         $filters = $this->resolveCommitmentFilter($request, $program);
 
@@ -1938,7 +2012,7 @@ class BudgetReportController extends Controller
         $totals['disbursement_rate'] = $totals['committed'] > 0 ? min(100, round(($totals['disbursed'] / $totals['committed']) * 100, 1)) : 0;
 
         return [
-            'currency' => $fundings->first()?->currency ?? $program->currency ?? 'USD',
+            'currency' => $program->sector?->currency ?? $fundings->first()?->currency ?? $program->currency ?? 'USD',
             'rows' => $displayRows,
             'all_rows' => $projectRows,
             'totals' => $totals,
@@ -2901,6 +2975,60 @@ class BudgetReportController extends Controller
             'display' => $references[0] . ' (+' . (count($references) - 1) . ')',
             'full' => implode(', ', $references),
         ];
+    }
+
+    private function scopedSectorReportQuery()
+    {
+        $query = Sector::query();
+        $currentUser = request()->user();
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $this->applyAssignedPortfolioScopeToSectors($query, $currentUser);
+        }
+
+        return $query;
+    }
+
+    private function scopedProgramReportQuery()
+    {
+        $query = Program::query();
+        $currentUser = request()->user();
+
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            $this->applyAssignedPortfolioScopeToPrograms($query, $currentUser);
+        }
+
+        return $query;
+    }
+
+    private function assertProgramReportScope(Program $program): void
+    {
+        $currentUser = request()->user();
+        if (! $this->userHasAssignedPortfolioScope($currentUser)) {
+            return;
+        }
+
+        abort_unless($this->programIsInAssignedPortfolio($program, $currentUser), 403, 'This report is not assigned to your portfolio.');
+    }
+
+    private function assertProjectReportScope(Project $project): void
+    {
+        $currentUser = request()->user();
+        if (! $this->userHasAssignedPortfolioScope($currentUser)) {
+            return;
+        }
+
+        abort_unless($this->projectIsInAssignedPortfolio($project, $currentUser), 403, 'This report is not assigned to your portfolio.');
+    }
+
+    private function assertActivityReportScope(Activity $activity): void
+    {
+        $currentUser = request()->user();
+        if (! $this->userHasAssignedPortfolioScope($currentUser)) {
+            return;
+        }
+
+        abort_unless($this->activityIsInAssignedPortfolio($activity, $currentUser), 403, 'This report is not assigned to your portfolio.');
     }
 
     private function auditReportAction(string $action, string $message, array $payload = []): void

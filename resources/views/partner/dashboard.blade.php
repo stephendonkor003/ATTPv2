@@ -595,8 +595,10 @@
                         <tr>
                             <th>Project</th>
                             <th>Program</th>
+                            <th>TTL</th>
                             <th>Governance Node</th>
                             <th class="text-end">Activities</th>
+                            <th class="text-center">Progress</th>
                             <th class="text-center">Access</th>
                         </tr>
                     </thead>
@@ -608,6 +610,10 @@
                             <tr>
                                 <td class="fw-semibold">{{ $project->name }}</td>
                                 <td>{{ $project->program?->name ?? 'N/A' }}</td>
+                                <td>
+                                    <div class="fw-semibold">{{ $project->program?->ttl_name ?: ($project->program?->ttlUser?->name ?? 'Unassigned') }}</div>
+                                    <small class="text-muted">{{ $project->program?->ttl_email ?: ($project->program?->ttlUser?->email ?? 'No email') }}</small>
+                                </td>
                                 <td>
                                     <div>{{ $project->governanceNode?->name ?? 'N/A' }}</div>
                                     @if($project->governanceNode?->level)
@@ -621,6 +627,9 @@
                                     </div>
                                 </td>
                                 <td class="text-center">
+                                    <span class="badge bg-success-subtle text-success">{{ $project->partner_progress_percent ?? 0 }}%</span>
+                                </td>
+                                <td class="text-center">
                                     <a href="{{ route('partner.projects.show', $project) }}" class="btn btn-sm btn-outline-success">
                                         <i class="feather-eye me-1"></i> View
                                     </a>
@@ -628,7 +637,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5">
+                                <td colspan="7">
                                     <div class="partner-empty-state">No funded projects are linked yet.</div>
                                 </td>
                             </tr>
@@ -701,6 +710,7 @@
                     <thead>
                         <tr>
                             <th>{{ __('partner.program_name') }}</th>
+                            <th>TTL</th>
                             <th>{{ __('partner.governance_node') }}</th>
                             <th class="text-end">{{ __('partner.approved_amount') }}</th>
                             <th>{{ __('partner.period') }}</th>
@@ -711,6 +721,10 @@
                         @forelse($fundings->take(5) as $funding)
                             <tr>
                                 <td><strong>{{ $funding->program_name ?? ($funding->program?->name ?? 'N/A') }}</strong></td>
+                                <td>
+                                    <div class="fw-semibold">{{ $funding->program?->ttl_name ?: ($funding->program?->ttlUser?->name ?? 'Unassigned') }}</div>
+                                    <small class="text-muted">{{ $funding->program?->ttl_email ?: ($funding->program?->ttlUser?->email ?? 'No email') }}</small>
+                                </td>
                                 <td>
                                     <div>{{ $funding->governanceNode->name ?? '-' }}</div>
                                     @if($funding->governanceNode)
@@ -730,7 +744,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5">
+                                <td colspan="6">
                                     <div class="partner-empty-state">{{ __('partner.no_programs') }}</div>
                                 </td>
                             </tr>

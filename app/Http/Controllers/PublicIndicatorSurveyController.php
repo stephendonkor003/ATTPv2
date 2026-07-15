@@ -2,9 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Activity;
+use App\Models\Indicator;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorSurveyResponse;
+use App\Models\Program;
+use App\Models\Project;
+use App\Models\Sector;
+use App\Models\SubActivity;
 use App\Models\User;
 use App\Support\MeSurvey;
 use Illuminate\Http\UploadedFile;
@@ -162,9 +168,18 @@ class PublicIndicatorSurveyController extends Controller
         $methodology = $link->methodology;
         if (!$methodology && $link->indicator->methodology) {
             $methodologyName = strtolower(trim((string) $link->indicator->methodology));
-            $methodology = IndicatorMethodology::query()
+            $methodologyQuery = IndicatorMethodology::query()
                 ->where('is_active', true)
-                ->get()
+                ->whereNotNull('portfolio_id');
+
+            $portfolioIds = $this->portfolioIdsForIndicator($link->indicator);
+            if (empty($portfolioIds)) {
+                $methodologyQuery->whereRaw('1 = 0');
+            } else {
+                $methodologyQuery->whereIn('portfolio_id', $portfolioIds);
+            }
+
+            $methodology = $methodologyQuery->get()
                 ->first(function (IndicatorMethodology $item) use ($methodologyName) {
                     return strtolower(trim((string) $item->name)) === $methodologyName;
                 });
@@ -187,6 +202,36 @@ class PublicIndicatorSurveyController extends Controller
         $questions = (array) ($surveyConfig['questions'] ?? []);
 
         return [$link, $methodology, $surveyConfig, $sections, $questions];
+    }
+
+    protected function portfolioIdsForIndicator(Indicator $indicator): array
+    {
+        $indicator->loadMissing('indicatorable');
+        $owner = $indicator->indicatorable;
+
+        if ($owner instanceof Sector) {
+            $ids = [$owner->id];
+        } elseif ($owner instanceof Program) {
+            $ids = [$owner->sector_id];
+        } elseif ($owner instanceof Project) {
+            $owner->loadMissing('program:id,sector_id');
+            $ids = [$owner->program?->sector_id];
+        } elseif ($owner instanceof Activity) {
+            $owner->loadMissing('project.program:id,sector_id');
+            $ids = [$owner->project?->program?->sector_id];
+        } elseif ($owner instanceof SubActivity) {
+            $owner->loadMissing('activity.project.program:id,sector_id');
+            $ids = [$owner->activity?->project?->program?->sector_id];
+        } else {
+            $ids = [];
+        }
+
+        return collect($ids)
+            ->filter()
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     protected function buildResponsibleSnapshot(string $responsiblePartyJson): array

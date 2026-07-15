@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Procurement;
 
+use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\BudgetCommitment;
@@ -15,16 +16,18 @@ use App\Models\ProcurementStepApproval;
 use App\Models\ProcurementStepStage;
 use App\Models\SubActivity;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
+
 class ProcurementPlanController extends Controller
 {
+    use GovernanceScope;
+
     /**
      * Display a listing of procurement plans.
      */
     public function index(Request $request)
     {
-        $query = ProcurementPlan::with([
+        $query = $this->applyProcurementPlanScope(ProcurementPlan::with([
             'activity',
             'subActivity',
             'methodPlanned',
@@ -33,13 +36,9 @@ class ProcurementPlanController extends Controller
             'status',
             'stepStage',
             'stepApproval',
-            'creator'
-        ]);
-
-        // Filter by user unless they have 'procurement.view_all' permission
-        if (!auth()->user()->can('procurement.view_all')) {
-            $query->where('created_by', auth()->id());
-        }
+            'creator',
+            'governanceNode',
+        ]));
 
         // Filter by launch status
         if ($request->filled('launched')) {
@@ -60,7 +59,9 @@ class ProcurementPlanController extends Controller
 
         // Get filter options
         $stages = ProcurementStage::active()->ordered()->get();
-        $fiscalYears = ProcurementPlan::whereNotNull('fiscal_year')
+        $fiscalYears = $this->applyProcurementPlanScope(
+            ProcurementPlan::whereNotNull('fiscal_year')
+        )
             ->distinct()
             ->orderBy('fiscal_year', 'desc')
             ->pluck('fiscal_year');
@@ -70,11 +71,12 @@ class ProcurementPlanController extends Controller
 
     public function sheet(Request $request)
     {
-        $query = ProcurementProgramPlan::where('is_active', true);
+        $query = $this->applyProcurementProgramPlanScope(
+            ProcurementProgramPlan::with('governanceNode')->where('is_active', true)
+        );
 
-        // Filter by user unless they have 'procurement.view_all' permission
-        if (!auth()->user()->can('procurement.view_all')) {
-            $query->where('created_by', auth()->id());
+        if ($request->filled('program_plan_id')) {
+            $query->whereKey($request->input('program_plan_id'));
         }
 
         $programPlans = $query->withCount('procurements')
@@ -89,17 +91,18 @@ class ProcurementPlanController extends Controller
      */
     public function create()
     {
-        $activities = Activity::with('project')->orderBy('name')->get();
+        $activities = $this->scopedActivitiesQuery()->orderBy('name')->get();
         $methods = ProcurementMethodPlanned::active()->orderBy('method_name')->get();
         $geographics = ProcurementGeographic::active()->orderBy('name')->get();
         $stages = ProcurementStage::active()->ordered()->get();
         $statuses = ProcurementStatus::active()->orderBy('sort_order')->get();
         $stepStages = ProcurementStepStage::active()->ordered()->get();
-        $stepApprovals = ProcurementStepApproval::with('governanceNode')
-            ->where('is_active', true)
+        $stepApprovals = $this->scopedStepApprovalsQuery()
             ->orderBy('approval_order')
             ->get();
-        $programPlans = ProcurementProgramPlan::where('is_active', true)
+        $programPlans = $this->applyProcurementProgramPlanScope(
+            ProcurementProgramPlan::where('is_active', true)
+        )
             ->orderBy('name')
             ->get();
 
@@ -148,6 +151,7 @@ class ProcurementPlanController extends Controller
         ]);
 
         $this->ensureSubActivityIsApprovedCommittedInScope($request);
+        $validated['governance_node_id'] = $this->resolveProcurementPlanNodeId($validated);
 
         $validated['is_code_auto_generated'] = $request->has('is_code_auto_generated');
         $validated['is_launched'] = $request->has('is_launched');
@@ -179,6 +183,8 @@ class ProcurementPlanController extends Controller
      */
     public function show(ProcurementPlan $plan)
     {
+        $this->assertProcurementPlanInScope($plan);
+
         $plan->load([
             'activity.project',
             'subActivity',
@@ -200,20 +206,23 @@ class ProcurementPlanController extends Controller
      */
     public function edit(ProcurementPlan $plan)
     {
-        $activities = Activity::with('project')->orderBy('name')->get();
+        $this->assertProcurementPlanInScope($plan);
+
+        $activities = $this->scopedActivitiesQuery()->orderBy('name')->get();
         $subActivities = $plan->activity_id
-            ? SubActivity::where('activity_id', $plan->activity_id)->orderBy('name')->get()
+            ? $this->scopedSubActivitiesQuery()->where('activity_id', $plan->activity_id)->orderBy('name')->get()
             : collect();
         $methods = ProcurementMethodPlanned::active()->orderBy('method_name')->get();
         $geographics = ProcurementGeographic::active()->orderBy('name')->get();
         $stages = ProcurementStage::active()->ordered()->get();
         $statuses = ProcurementStatus::active()->orderBy('sort_order')->get();
         $stepStages = ProcurementStepStage::active()->ordered()->get();
-        $stepApprovals = ProcurementStepApproval::with('governanceNode')
-            ->where('is_active', true)
+        $stepApprovals = $this->scopedStepApprovalsQuery()
             ->orderBy('approval_order')
             ->get();
-        $programPlans = ProcurementProgramPlan::where('is_active', true)
+        $programPlans = $this->applyProcurementProgramPlanScope(
+            ProcurementProgramPlan::where('is_active', true)
+        )
             ->orderBy('name')
             ->get();
 
@@ -236,6 +245,8 @@ class ProcurementPlanController extends Controller
      */
     public function update(Request $request, ProcurementPlan $plan)
     {
+        $this->assertProcurementPlanInScope($plan);
+
         $validated = $request->validate([
             'procurement_code' => 'required|string|max:50|unique:myb_procurement_plans,procurement_code,' . $plan->id,
             'title' => 'required|string|max:255',
@@ -268,6 +279,7 @@ class ProcurementPlanController extends Controller
             $this->ensureSubActivityIsApprovedCommittedInScope($request);
         }
 
+        $validated['governance_node_id'] = $this->resolveProcurementPlanNodeId($validated);
         $validated['is_launched'] = $request->has('is_launched');
         $validated['updated_by'] = auth()->id();
 
@@ -297,6 +309,8 @@ class ProcurementPlanController extends Controller
      */
     public function destroy(ProcurementPlan $plan)
     {
+        $this->assertProcurementPlanInScope($plan);
+
         $plan->delete();
 
         return redirect()->route('procurement.plans.index')
@@ -308,6 +322,8 @@ class ProcurementPlanController extends Controller
      */
     public function toggleLaunch(ProcurementPlan $plan)
     {
+        $this->assertProcurementPlanInScope($plan);
+
         $plan->is_launched = !$plan->is_launched;
 
         if ($plan->is_launched) {
@@ -392,6 +408,113 @@ class ProcurementPlanController extends Controller
         ]);
     }
 
+    private function scopedActivitiesQuery()
+    {
+        $query = Activity::with('project');
+        $scopedNodeIds = $this->scopedNodeIds();
+
+        if ($scopedNodeIds === null) {
+            return $query;
+        }
+
+        if (empty($scopedNodeIds)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function ($scope) use ($scopedNodeIds) {
+            $scope->whereIn('governance_node_id', $scopedNodeIds)
+                ->orWhereHas('project', function ($projectQuery) use ($scopedNodeIds) {
+                    $projectQuery->whereIn('governance_node_id', $scopedNodeIds)
+                        ->whereNotNull('governance_node_id');
+                });
+        });
+    }
+
+    private function scopedSubActivitiesQuery()
+    {
+        $query = SubActivity::with('activity.project');
+        $scopedNodeIds = $this->scopedNodeIds();
+
+        if ($scopedNodeIds === null) {
+            return $query;
+        }
+
+        if (empty($scopedNodeIds)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function ($scope) use ($scopedNodeIds) {
+            $scope->whereIn('governance_node_id', $scopedNodeIds)
+                ->orWhereHas('activity', function ($activityQuery) use ($scopedNodeIds) {
+                    $activityQuery->whereIn('governance_node_id', $scopedNodeIds)
+                        ->whereNotNull('governance_node_id')
+                        ->orWhereHas('project', function ($projectQuery) use ($scopedNodeIds) {
+                            $projectQuery->whereIn('governance_node_id', $scopedNodeIds)
+                                ->whereNotNull('governance_node_id');
+                        });
+                });
+        });
+    }
+
+    private function scopedStepApprovalsQuery()
+    {
+        $query = ProcurementStepApproval::with('governanceNode')
+            ->where('is_active', true);
+
+        return $this->applyGovernanceNodeScope($query);
+    }
+
+    private function resolveProcurementPlanNodeId(array $data): string
+    {
+        $programPlan = ProcurementProgramPlan::findOrFail($data['program_plan_id']);
+        $this->assertProcurementProgramPlanInScope($programPlan);
+
+        $nodeId = $programPlan->governance_node_id;
+
+        if (! empty($data['activity_id'])) {
+            $activity = Activity::with('project')->findOrFail($data['activity_id']);
+            $this->assertActivityInScope($activity);
+            $activityNodeId = $activity->governance_node_id ?? $activity->project?->governance_node_id;
+
+            if ($activityNodeId) {
+                $nodeId = $this->sameOrSelectedNode($nodeId, $activityNodeId, 'Selected activity belongs to a different portfolio than the procurement plan sheet.');
+            }
+        }
+
+        if (! empty($data['sub_activity_id'])) {
+            $subActivity = SubActivity::with('activity.project')->findOrFail($data['sub_activity_id']);
+            $this->assertSubActivityInScope($subActivity);
+            $subActivityNodeId = $subActivity->governance_node_id
+                ?? $subActivity->activity?->governance_node_id
+                ?? $subActivity->activity?->project?->governance_node_id;
+
+            if ($subActivityNodeId) {
+                $nodeId = $this->sameOrSelectedNode($nodeId, $subActivityNodeId, 'Selected sub activity belongs to a different portfolio than the procurement plan sheet.');
+            }
+        }
+
+        if (! $nodeId) {
+            throw ValidationException::withMessages([
+                'program_plan_id' => 'Unable to determine the portfolio for this procurement plan item.',
+            ]);
+        }
+
+        $this->assertGovernanceNodeInScope((string) $nodeId, 'You do not have access to this portfolio.');
+
+        return (string) $nodeId;
+    }
+
+    private function sameOrSelectedNode(?string $currentNodeId, string $candidateNodeId, string $message): string
+    {
+        if ($currentNodeId && (string) $currentNodeId !== (string) $candidateNodeId) {
+            throw ValidationException::withMessages([
+                'governance_node_id' => $message,
+            ]);
+        }
+
+        return (string) ($currentNodeId ?: $candidateNodeId);
+    }
+
     /**
      * Lookup procurement plan codes for selection.
      */
@@ -401,7 +524,7 @@ class ProcurementPlanController extends Controller
             'q' => 'nullable|string|max:100',
         ]);
 
-        $query = ProcurementPlan::query()
+        $query = $this->applyProcurementPlanScope(ProcurementPlan::query()
             ->with([
                 'activity:id,name',
                 'subActivity:id,name',
@@ -410,11 +533,7 @@ class ProcurementPlanController extends Controller
                 'geographic:id,name',
                 'stage:id,stage_name',
                 'status:id,name',
-            ]);
-
-        if (!auth()->user()->can('procurement.view_all')) {
-            $query->where('created_by', auth()->id());
-        }
+            ]));
 
         if ($request->filled('q')) {
             $term = $request->input('q');
@@ -452,7 +571,10 @@ class ProcurementPlanController extends Controller
 
     public function programPlanSheet(ProcurementProgramPlan $programPlan)
     {
-        $plans = $programPlan->procurements()->with([
+        $this->assertProcurementProgramPlanInScope($programPlan);
+        $programPlan->loadMissing('governanceNode');
+
+        $plans = $this->applyProcurementPlanScope($programPlan->procurements()->with([
             'activity',
             'subActivity',
             'methodPlanned',
@@ -460,39 +582,9 @@ class ProcurementPlanController extends Controller
             'stage',
             'status',
             'creator',
-        ])->orderBy('procurement_code')->get();
+        ]))->orderBy('procurement_code')->get();
 
         return view('procurement.plans.program-plan-sheet', compact('programPlan', 'plans'));
-    }
-
-    private function scopedNodeIds(): ?array
-    {
-        $currentUser = Auth::user();
-
-        if (!$currentUser || $currentUser->isAdmin()) {
-            return null;
-        }
-
-        if (!$currentUser->governance_node_id) {
-            return [];
-        }
-
-        return [$currentUser->governance_node_id];
-    }
-
-    private function assertActivityInScope(Activity $activity): void
-    {
-        $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds === null) {
-            return;
-        }
-
-        $activity->loadMissing('project');
-
-        $nodeId = $activity->governance_node_id ?? $activity->project?->governance_node_id;
-        if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
-            abort(403, 'You do not have access to this activity.');
-        }
     }
 
     private function ensureSubActivityIsApprovedCommittedInScope(Request $request): void

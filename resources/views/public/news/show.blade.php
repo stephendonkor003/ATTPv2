@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -190,7 +190,7 @@
         }
     </style>
 </head>
-<body>
+<body dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
 
 <!-- ── NAVBAR ── -->
 <header class="navbar">
@@ -198,27 +198,35 @@
         <img src="{{ asset('assets/images/au.png') }}" alt="ATTP" class="logo logo-sm">
     </div>
     <nav class="nav-links">
-        <a href="{{ route('landing.index') }}">Home</a>
+        <a href="{{ route('landing.index') }}">{{ __('navigation.home') }}</a>
         <div class="has-dropdown">
-            <a href="#">Programs</a>
+            <a href="#">{{ __('navigation.programs') }}</a>
             <ul class="nav-dropdown">
-                <li><a href="{{ route('events') }}">Events / Webinars</a></li>
-                <li><a href="{{ route('careers.index') }}">Careers</a></li>
+                <li><a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a></li>
+                <li><a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a></li>
             </ul>
         </div>
         <div class="has-dropdown">
-            <a href="#">Analytics</a>
+            <a href="#">{{ __('navigation.analytics') }}</a>
             <ul class="nav-dropdown">
-                <li><a href="{{ route('impact.map') }}">Impact Map</a></li>
-                <li><a href="{{ route('world.indicators.performance') }}">World Indicators / Performance</a></li>
+                <li><a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a></li>
+                <li><a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a></li>
             </ul>
         </div>
-        <a href="{{ route('news.index') }}" class="active">News &amp; Updates</a>
-        <a href="#contact">Contact</a>
+        <div class="has-dropdown">
+            <a href="#">{{ __('navigation.discussion') }}</a>
+            <ul class="nav-dropdown">
+                <li><a href="{{ route('discussion.thematic-areas') }}">{{ __('navigation.thematic_areas') }}</a></li>
+                <li><a href="{{ route('discussion.current') }}">{{ __('navigation.current_discussions') }}</a></li>
+                <li><a href="{{ route('discussion.join') }}">{{ __('navigation.join_discussion') }}</a></li>
+            </ul>
+        </div>
+        <a href="{{ route('news.index') }}" class="active">{{ __('navigation.news_updates') }}</a>
+        <a href="#contact">{{ __('navigation.contact') }}</a>
     </nav>
     <div class="nav-actions">
-        <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">Policy Programs &amp; Research</a>
-        <a href="{{ route('login') }}" class="btn btn-login">Login</a>
+        <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
+        <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
         <x-language-selector style="news-show" />
     </div>
 </header>

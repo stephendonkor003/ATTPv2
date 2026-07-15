@@ -23,13 +23,18 @@ class ProcurementInvoiceController extends Controller
 
     public function index()
     {
+        $currentUser = auth()->user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $scopedNodeIds = $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to invoices.');
         }
 
         $invoices = ProcurementInvoice::with(['procurement', 'vendor', 'subActivity', 'purchaseOrder.thinkTankMember'])
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToInvoices($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
@@ -210,6 +215,15 @@ class ProcurementInvoiceController extends Controller
 
     private function assertInvoiceInScope(ProcurementInvoice $invoice): void
     {
+        $currentUser = auth()->user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->invoiceIsInAssignedPortfolio($invoice, $currentUser)) {
+                abort(403, 'You do not have access to this invoice.');
+            }
+
+            return;
+        }
+
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds === null) {
             return;

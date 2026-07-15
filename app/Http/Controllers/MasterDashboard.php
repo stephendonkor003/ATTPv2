@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -17,6 +18,8 @@ use App\Services\ExecutionInsightBuilder;
 
 class MasterDashboard extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     /**
      * ============================================================
      * EXECUTION DASHBOARD (MASTER)
@@ -45,19 +48,35 @@ class MasterDashboard extends Controller
         $sectorId  = $request->get('sector_id');
         $programId = $request->get('program_id');
         $projectId = $request->get('project_id');
+        $currentUser = $request->user();
+        $hasPortfolioScope = $this->userHasAssignedPortfolioScope($currentUser);
 
         /* ============================================================
          * 2. FILTER DATA (FOR DROPDOWNS)
          * ============================================================ */
-        $sectors = Sector::orderBy('name')->get();
+        $sectorQuery = Sector::query()->orderBy('name');
+        if ($hasPortfolioScope) {
+            $this->applyAssignedPortfolioScopeToSectors($sectorQuery, $currentUser);
+        }
+        $sectors = $sectorQuery->get();
 
-        $programs = $sectorId
-            ? Program::where('sector_id', $sectorId)->orderBy('name')->get()
-            : Program::orderBy('name')->get();
+        $programQuery = Program::query()->orderBy('name');
+        if ($sectorId) {
+            $programQuery->where('sector_id', $sectorId);
+        }
+        if ($hasPortfolioScope) {
+            $this->applyAssignedPortfolioScopeToPrograms($programQuery, $currentUser);
+        }
+        $programs = $programQuery->get();
 
-        $projects = $programId
-            ? Project::where('program_id', $programId)->orderBy('name')->get()
-            : collect();
+        $projectQuery = Project::query()->orderBy('name');
+        if ($programId) {
+            $projectQuery->where('program_id', $programId);
+        }
+        if ($hasPortfolioScope) {
+            $this->applyAssignedPortfolioScopeToProjects($projectQuery, $currentUser);
+        }
+        $projects = $programId ? $projectQuery->get() : collect();
 
         /* ============================================================
          * 3. RESOLVE EXECUTION SCOPE
@@ -65,35 +84,46 @@ class MasterDashboard extends Controller
         if ($projectId) {
             $scopeType = 'project';
             $scope = Project::with('program')->findOrFail($projectId);
+            $this->assertExecutionProjectScope($scope, $currentUser);
             $years = $scope->years();
 
         } elseif ($programId) {
             $scopeType = 'program';
             $scope = Program::findOrFail($programId);
+            $this->assertExecutionProgramScope($scope, $currentUser);
             $years = $scope->years();
 
         } elseif ($sectorId) {
             $scopeType = 'sector';
             $scope = Sector::findOrFail($sectorId);
+            $this->assertExecutionSectorScope($scope, $currentUser);
 
-            $range = Program::where('sector_id', $sectorId)
+            $rangeQuery = Program::where('sector_id', $sectorId);
+            if ($hasPortfolioScope) {
+                $this->applyAssignedPortfolioScopeToPrograms($rangeQuery, $currentUser);
+            }
+            $range = $rangeQuery
                 ->select(
                     DB::raw('MIN(start_year) as start'),
                     DB::raw('MAX(end_year) as end')
                 )->first();
 
-            $years = range($range->start, $range->end);
+            $years = $this->normaliseExecutionYears($range?->start, $range?->end);
 
         } else {
             $scopeType = 'global';
             $scope = null;
 
-            $range = Program::select(
+            $rangeQuery = Program::query();
+            if ($hasPortfolioScope) {
+                $this->applyAssignedPortfolioScopeToPrograms($rangeQuery, $currentUser);
+            }
+            $range = $rangeQuery->select(
                 DB::raw('MIN(start_year) as start'),
                 DB::raw('MAX(end_year) as end')
             )->first();
 
-            $years = range($range->start, $range->end);
+            $years = $this->normaliseExecutionYears($range?->start, $range?->end);
         }
 
         /* ============================================================
@@ -112,13 +142,18 @@ class MasterDashboard extends Controller
         /* ============================================================
          * 5. YEARLY COMMITMENTS (ACTUAL)
          * ============================================================ */
-        $commitmentByYear = BudgetCommitment::whereIn(
+        $commitmentQuery = BudgetCommitment::whereIn(
                 'status',
                 [
                     BudgetCommitment::STATUS_SUBMITTED,
                     BudgetCommitment::STATUS_APPROVED
                 ]
-            )
+            );
+        if ($hasPortfolioScope) {
+            $this->applyAssignedPortfolioScopeToCommitments($commitmentQuery, $currentUser);
+        }
+
+        $commitmentByYear = $commitmentQuery
             ->when($scopeType === 'program', function ($q) use ($scope) {
                 $q->where(function ($scopeQuery) use ($scope) {
                     $scopeQuery
@@ -172,6 +207,9 @@ class MasterDashboard extends Controller
                     $this->applyExecutionScopeToPurchaseOrderQuery($poQuery, $scopeType, $scope);
                 });
             });
+        if ($hasPortfolioScope) {
+            $this->applyAssignedPortfolioScopeToDisbursements($disbursementQuery, $currentUser);
+        }
 
         $disbursementByYear = (clone $disbursementQuery)
             ->get(['paid_at', 'amount'])
@@ -263,6 +301,15 @@ class MasterDashboard extends Controller
             'execution_rate' => max(0, round($executionRate, 1)),
             'disbursement_rate' => max(0, round($disbursementRate, 1)),
         ];
+
+        $componentBreakdownRows = $this->componentExecutionBreakdown(
+            $scopeType,
+            $scope,
+            $currentUser,
+            $hasPortfolioScope,
+            $yearStart,
+            $yearEnd
+        );
 
         $peakCommitmentRow = $executionBreakdownRows
             ->sortByDesc('commitment')
@@ -361,11 +408,238 @@ class MasterDashboard extends Controller
             'heatmap',
             'executionBreakdownRows',
             'executionBreakdownTotals',
+            'componentBreakdownRows',
             'executionSummary',
             'currency',
             'radarMetrics',
             'aiInsights'
         );
+    }
+
+    private function componentExecutionBreakdown(
+        string $scopeType,
+        $scope,
+        $currentUser,
+        bool $hasPortfolioScope,
+        ?int $yearStart,
+        ?int $yearEnd
+    ) {
+        $componentQuery = Project::query()
+            ->select(['id', 'program_id', 'name', 'total_budget']);
+
+        if ($scopeType === 'project') {
+            $componentQuery->where('id', $scope->id);
+        } elseif ($scopeType === 'program') {
+            $componentQuery->where('program_id', $scope->id);
+        } elseif ($scopeType === 'sector') {
+            $componentQuery->whereHas('program', fn ($q) => $q->where('sector_id', $scope->id));
+        }
+
+        if ($hasPortfolioScope) {
+            $this->applyAssignedPortfolioScopeToProjects($componentQuery, $currentUser);
+        }
+
+        $components = $componentQuery
+            ->get()
+            ->sortBy(fn ($component) => $this->executionComponentSortKey((string) $component->name))
+            ->values();
+
+        $componentIds = $components
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        if (empty($componentIds)) {
+            return collect();
+        }
+
+        $allocationByComponent = DB::table('myb_project_allocations')
+            ->whereIn('project_id', $componentIds)
+            ->when($yearStart && $yearEnd, fn ($q) => $q->whereBetween('year', [$yearStart, $yearEnd]))
+            ->select('project_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('project_id')
+            ->pluck('total', 'project_id');
+
+        $commitmentByComponent = $this->commitmentsByExecutionComponent($componentIds);
+        $disbursementByComponent = $this->disbursementsByExecutionComponent($componentIds, $yearStart, $yearEnd);
+
+        return $components->map(function (Project $component) use (
+            $allocationByComponent,
+            $commitmentByComponent,
+            $disbursementByComponent
+        ) {
+            $componentId = (string) $component->id;
+            $allocation = round((float) $allocationByComponent->get($componentId, 0), 2);
+            $commitment = round((float) $commitmentByComponent->get($componentId, 0), 2);
+            $disbursement = round((float) $disbursementByComponent->get($componentId, 0), 2);
+            [$label, $description] = $this->executionComponentLabel((string) $component->name);
+
+            return [
+                'component_id' => $componentId,
+                'label' => $label,
+                'description' => $description,
+                'name' => (string) $component->name,
+                'allocation' => $allocation,
+                'commitment' => $commitment,
+                'disbursement' => $disbursement,
+                'remaining' => round($allocation - $commitment, 2),
+                'execution_rate' => $allocation > 0
+                    ? max(0, round(($commitment / $allocation) * 100, 1))
+                    : 0,
+                'disbursement_rate' => $allocation > 0
+                    ? max(0, round(($disbursement / $allocation) * 100, 1))
+                    : 0,
+            ];
+        })->values();
+    }
+
+    private function commitmentsByExecutionComponent(array $componentIds)
+    {
+        $projectExpression = "
+            CASE
+                WHEN c.allocation_level = 'project' THEN c.allocation_id
+                WHEN c.allocation_level = 'activity' THEN c_activity.project_id
+                WHEN c.allocation_level = 'sub_activity' THEN c_sub_activity_project.project_id
+                WHEN pr.allocation_level = 'project' THEN pr.allocation_id
+                WHEN pr.allocation_level = 'activity' THEN pr_activity.project_id
+                WHEN pr.allocation_level = 'sub_activity' THEN pr_sub_activity_project.project_id
+                ELSE NULL
+            END
+        ";
+
+        return DB::table('myb_budget_commitments as c')
+            ->leftJoin('myb_purchase_requests as pr', 'pr.id', '=', 'c.purchase_request_id')
+            ->leftJoin('myb_activities as c_activity', function ($join) {
+                $join->on('c_activity.id', '=', 'c.allocation_id')
+                    ->where('c.allocation_level', '=', 'activity');
+            })
+            ->leftJoin('myb_sub_activities as c_sub_activity', function ($join) {
+                $join->on('c_sub_activity.id', '=', 'c.allocation_id')
+                    ->where('c.allocation_level', '=', 'sub_activity');
+            })
+            ->leftJoin('myb_activities as c_sub_activity_project', 'c_sub_activity_project.id', '=', 'c_sub_activity.activity_id')
+            ->leftJoin('myb_activities as pr_activity', function ($join) {
+                $join->on('pr_activity.id', '=', 'pr.allocation_id')
+                    ->where('pr.allocation_level', '=', 'activity');
+            })
+            ->leftJoin('myb_sub_activities as pr_sub_activity', function ($join) {
+                $join->on('pr_sub_activity.id', '=', 'pr.allocation_id')
+                    ->where('pr.allocation_level', '=', 'sub_activity');
+            })
+            ->leftJoin('myb_activities as pr_sub_activity_project', 'pr_sub_activity_project.id', '=', 'pr_sub_activity.activity_id')
+            ->whereIn('c.status', [
+                BudgetCommitment::STATUS_SUBMITTED,
+                BudgetCommitment::STATUS_APPROVED,
+            ])
+            ->whereIn(DB::raw("({$projectExpression})"), $componentIds)
+            ->selectRaw("{$projectExpression} as component_id")
+            ->selectRaw('SUM(c.commitment_amount) as total')
+            ->groupByRaw($projectExpression)
+            ->pluck('total', 'component_id');
+    }
+
+    private function disbursementsByExecutionComponent(array $componentIds, ?int $yearStart, ?int $yearEnd)
+    {
+        $purchaseRequestProjectExpression = fn (string $alias, string $activityAlias, string $subActivityProjectAlias) => "
+            CASE
+                WHEN {$alias}.allocation_level = 'project' THEN {$alias}.allocation_id
+                WHEN {$alias}.allocation_level = 'activity' THEN {$activityAlias}.project_id
+                WHEN {$alias}.allocation_level = 'sub_activity' THEN {$subActivityProjectAlias}.project_id
+                ELSE NULL
+            END
+        ";
+
+        $commitmentProjectExpression = "
+            CASE
+                WHEN bc.allocation_level = 'project' THEN bc.allocation_id
+                WHEN bc.allocation_level = 'activity' THEN bc_activity.project_id
+                WHEN bc.allocation_level = 'sub_activity' THEN bc_sub_activity_project.project_id
+                ELSE NULL
+            END
+        ";
+
+        $prProjectExpression = $purchaseRequestProjectExpression('pr', 'pr_activity', 'pr_sub_activity_project');
+        $bcPrProjectExpression = $purchaseRequestProjectExpression('bc_pr', 'bc_pr_activity', 'bc_pr_sub_activity_project');
+
+        $projectExpression = "
+            COALESCE(
+                d_sub_activity_project.project_id,
+                po_sub_activity_project.project_id,
+                {$prProjectExpression},
+                {$commitmentProjectExpression},
+                {$bcPrProjectExpression}
+            )
+        ";
+
+        return DB::table('procurement_disbursements as d')
+            ->leftJoin('procurement_purchase_orders as po', 'po.id', '=', 'd.purchase_order_id')
+            ->leftJoin('myb_purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
+            ->leftJoin('myb_budget_commitments as bc', 'bc.id', '=', 'po.budget_commitment_id')
+            ->leftJoin('myb_purchase_requests as bc_pr', 'bc_pr.id', '=', 'bc.purchase_request_id')
+            ->leftJoin('myb_sub_activities as d_sub_activity', 'd_sub_activity.id', '=', 'd.sub_activity_id')
+            ->leftJoin('myb_activities as d_sub_activity_project', 'd_sub_activity_project.id', '=', 'd_sub_activity.activity_id')
+            ->leftJoin('myb_sub_activities as po_sub_activity', 'po_sub_activity.id', '=', 'po.sub_activity_id')
+            ->leftJoin('myb_activities as po_sub_activity_project', 'po_sub_activity_project.id', '=', 'po_sub_activity.activity_id')
+            ->leftJoin('myb_activities as pr_activity', function ($join) {
+                $join->on('pr_activity.id', '=', 'pr.allocation_id')
+                    ->where('pr.allocation_level', '=', 'activity');
+            })
+            ->leftJoin('myb_sub_activities as pr_sub_activity', function ($join) {
+                $join->on('pr_sub_activity.id', '=', 'pr.allocation_id')
+                    ->where('pr.allocation_level', '=', 'sub_activity');
+            })
+            ->leftJoin('myb_activities as pr_sub_activity_project', 'pr_sub_activity_project.id', '=', 'pr_sub_activity.activity_id')
+            ->leftJoin('myb_activities as bc_activity', function ($join) {
+                $join->on('bc_activity.id', '=', 'bc.allocation_id')
+                    ->where('bc.allocation_level', '=', 'activity');
+            })
+            ->leftJoin('myb_sub_activities as bc_sub_activity', function ($join) {
+                $join->on('bc_sub_activity.id', '=', 'bc.allocation_id')
+                    ->where('bc.allocation_level', '=', 'sub_activity');
+            })
+            ->leftJoin('myb_activities as bc_sub_activity_project', 'bc_sub_activity_project.id', '=', 'bc_sub_activity.activity_id')
+            ->leftJoin('myb_activities as bc_pr_activity', function ($join) {
+                $join->on('bc_pr_activity.id', '=', 'bc_pr.allocation_id')
+                    ->where('bc_pr.allocation_level', '=', 'activity');
+            })
+            ->leftJoin('myb_sub_activities as bc_pr_sub_activity', function ($join) {
+                $join->on('bc_pr_sub_activity.id', '=', 'bc_pr.allocation_id')
+                    ->where('bc_pr.allocation_level', '=', 'sub_activity');
+            })
+            ->leftJoin('myb_activities as bc_pr_sub_activity_project', 'bc_pr_sub_activity_project.id', '=', 'bc_pr_sub_activity.activity_id')
+            ->whereNotNull('d.paid_at')
+            ->whereIn('d.status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+            ->when($yearStart && $yearEnd, function ($q) use ($yearStart, $yearEnd) {
+                $q->whereBetween('d.paid_at', [
+                    Carbon::create((int) $yearStart, 1, 1)->startOfDay(),
+                    Carbon::create((int) $yearEnd, 12, 31)->endOfDay(),
+                ]);
+            })
+            ->whereIn(DB::raw("({$projectExpression})"), $componentIds)
+            ->selectRaw("{$projectExpression} as component_id")
+            ->selectRaw('SUM(d.amount) as total')
+            ->groupByRaw($projectExpression)
+            ->pluck('total', 'component_id');
+    }
+
+    private function executionComponentSortKey(string $name): string
+    {
+        if (preg_match('/component\s*#?\s*(\d+)/i', $name, $matches)) {
+            return sprintf('%03d-%s', (int) $matches[1], mb_strtolower($name));
+        }
+
+        return '999-' . mb_strtolower($name);
+    }
+
+    private function executionComponentLabel(string $name): array
+    {
+        if (preg_match('/component\s*#?\s*(\d+)/i', $name, $matches)) {
+            $description = trim((string) preg_replace('/^\s*component\s*#?\s*\d+\s*[:.\-]?\s*/i', '', $name));
+
+            return ['Component ' . (int) $matches[1], $description];
+        }
+
+        return [$name, null];
     }
 
     /**
@@ -483,12 +757,21 @@ class MasterDashboard extends Controller
         }
 
         if ($scopeType === 'sector' && $scope?->id) {
-            return Program::where('sector_id', $scope->id)
-                ->whereNotNull('currency')
+            $query = Program::where('sector_id', $scope->id)->whereNotNull('currency');
+            if ($this->userHasAssignedPortfolioScope(request()->user())) {
+                $this->applyAssignedPortfolioScopeToPrograms($query, request()->user());
+            }
+
+            return $query
                 ->value('currency') ?: 'USD';
         }
 
-        return Program::whereNotNull('currency')->value('currency') ?: 'USD';
+        $query = Program::whereNotNull('currency');
+        if ($this->userHasAssignedPortfolioScope(request()->user())) {
+            $this->applyAssignedPortfolioScopeToPrograms($query, request()->user());
+        }
+
+        return $query->value('currency') ?: 'USD';
     }
 
     /**
@@ -528,9 +811,63 @@ class MasterDashboard extends Controller
                     ->sum('amount'),
 
             default =>
-                DB::table('myb_project_allocations')
-                    ->where('year', $year)
-                    ->sum('amount'),
+                $this->resolveScopedGlobalAllocation($year),
         };
+    }
+
+    private function resolveScopedGlobalAllocation(int $year): float
+    {
+        $query = DB::table('myb_project_allocations')->where('year', $year);
+
+        if ($this->userHasAssignedPortfolioScope(request()->user())) {
+            $projectIds = $this->assignedProjectIds(request()->user());
+
+            if (empty($projectIds)) {
+                return 0.0;
+            }
+
+            $query->whereIn('project_id', $projectIds);
+        }
+
+        return (float) $query->sum('amount');
+    }
+
+    private function normaliseExecutionYears($start, $end): array
+    {
+        $start = (int) ($start ?: now()->year);
+        $end = (int) ($end ?: $start);
+
+        if ($end < $start) {
+            [$start, $end] = [$end, $start];
+        }
+
+        return range($start, $end);
+    }
+
+    private function assertExecutionSectorScope(Sector $sector, $user): void
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return;
+        }
+
+        abort_unless($this->sectorIsAssignedToUser($sector, $user), 403, 'This report is not assigned to your portfolio.');
+    }
+
+    private function assertExecutionProgramScope(Program $program, $user): void
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return;
+        }
+
+        abort_unless($this->programIsInAssignedPortfolio($program, $user), 403, 'This report is not assigned to your portfolio.');
+    }
+
+    private function assertExecutionProjectScope(Project $project, $user): void
+    {
+        if (! $this->userHasAssignedPortfolioScope($user)) {
+            return;
+        }
+
+        abort_unless($this->projectIsInAssignedPortfolio($project, $user), 403, 'This report is not assigned to your portfolio.');
     }
 }

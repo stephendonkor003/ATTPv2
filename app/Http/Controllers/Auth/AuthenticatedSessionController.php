@@ -126,6 +126,10 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('think-tank.dashboard', absolute: false));
         }
 
+        if ($user->user_type === 'ttl') {
+            return redirect()->intended(route('ttl.dashboard', absolute: false));
+        }
+
         // Default redirect to admin dashboard for all other users
         return redirect()->intended(route('dashboard', absolute: false));
     }

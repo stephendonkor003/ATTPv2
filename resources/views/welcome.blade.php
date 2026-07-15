@@ -9,15 +9,14 @@
 
     <title>{{ __('landing.page_title') }}</title>
 
-    <meta name="description"
-        content="ATTP (African Think Tank Platform Administration) is a pan-African knowledge and policy coordination platform supporting African Union institutions, think tanks, and development partners." />
+    <meta name="description" content="{{ __('landing.meta_description') }}" />
 
     <meta name="keywords"
         content="ATTP, African Think Tank Platform, African Union policy, Africa governance, policy research Africa, AU think tanks, development policy Africa, public policy Africa, African institutions, research platform Africa" />
 
     <meta name="author" content="African Think Tank Platform Administration (ATTP)" />
     <meta name="robots" content="index, follow" />
-    <meta name="language" content="en" />
+    <meta name="language" content="{{ app()->getLocale() }}" />
     <meta name="theme-color" content="#006B3F" />
 
     <!-- Favicon -->
@@ -25,23 +24,21 @@
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="ATTP ? African Think Tank Platform Administration" />
-    <meta property="og:description"
-        content="Strengthening Africa?s policy ecosystem through collaboration, research, and institutional coordination in support of the African Union." />
-    <meta property="og:image" content="https://africathinktankplatform.africa/assets/images/au3.jpg" />
-    <meta property="og:url" content="https://africathinktankplatform.africa/" />
+    <meta property="og:title" content="{{ __('landing.page_title') }}" />
+    <meta property="og:description" content="{{ __('landing.meta_description') }}" />
+    <meta property="og:image" content="{{ asset('assets/images/au3.jpg') }}" />
+    <meta property="og:url" content="{{ route('landing.index') }}" />
     <meta property="og:site_name" content="ATTP" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="ATTP ? African Think Tank Platform Administration" />
-    <meta name="twitter:description"
-        content="A pan-African platform advancing policy research, governance, and institutional collaboration across Africa." />
-    <meta name="twitter:image" content="https://africathinktankplatform.africa/assets/images/au.png" />
+    <meta name="twitter:title" content="{{ __('landing.page_title') }}" />
+    <meta name="twitter:description" content="{{ __('landing.meta_description') }}" />
+    <meta name="twitter:image" content="{{ asset('assets/images/au.png') }}" />
     <meta name="twitter:site" content="@ATTP_Africa" />
 
     <!-- Canonical URL -->
-    <link rel="canonical" href="https://africathinktankplatform.africa/" />
+    <link rel="canonical" href="{{ route('landing.index') }}" />
 
     <!-- Fonts & Styles -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -75,7 +72,7 @@
 
 
 
-<body>
+<body class="public-mobile-nav" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
     <!-- ====== MOBILE NAV OVERLAY ====== -->
     <div class="mobile-nav-overlay" id="navOverlay" onclick="closeMobileNav()"></div>
 
@@ -83,12 +80,12 @@
     <nav class="mobile-nav" id="mobileNav">
         <div class="mobile-nav-header">
             <img src="{{ asset('assets/images/au.png') }}" alt="ATTP">
-            <button class="mobile-nav-close" onclick="closeMobileNav()" aria-label="Close menu">&times;</button>
+            <button class="mobile-nav-close" onclick="closeMobileNav()" aria-label="{{ __('navigation.close_menu') }}">&times;</button>
         </div>
         <a href="{{ route('landing.index') }}" onclick="closeMobileNav()">{{ __('navigation.home') }}</a>
 
         <button type="button" class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)" aria-expanded="false">
-            Programs <span class="mobile-dropdown-arrow">▾</span>
+            {{ __('navigation.programs') }} <span class="mobile-dropdown-arrow">▾</span>
         </button>
         <div class="mobile-dropdown-items" aria-hidden="true">
             <a href="{{ route('events') }}" onclick="closeMobileNav()">{{ __('landing.events_webinars') }}</a>
@@ -96,19 +93,29 @@
         </div>
 
         <button type="button" class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)" aria-expanded="false">
-            Analytics <span class="mobile-dropdown-arrow">▾</span>
+            {{ __('navigation.analytics') }} <span class="mobile-dropdown-arrow">▾</span>
         </button>
         <div class="mobile-dropdown-items" aria-hidden="true">
             <a href="{{ route('impact.map') }}" onclick="closeMobileNav()">{{ __('navigation.impact_map') }}</a>
             <a href="{{ route('world.indicators.performance') }}" onclick="closeMobileNav()">{{ __('navigation.world_indicators_performance') }}</a>
         </div>
 
-        <a href="{{ route('news.index') }}" onclick="closeMobileNav()">News &amp; Updates</a>
-        <a href="{{ route('gallery') }}" onclick="closeMobileNav()">Gallery</a>
+        <button type="button" class="mobile-dropdown-toggle" onclick="toggleMobileDropdown(this)" aria-expanded="false">
+            {{ __('navigation.discussion') }} <span class="mobile-dropdown-arrow">▾</span>
+        </button>
+        <div class="mobile-dropdown-items" aria-hidden="true">
+            <a href="{{ route('discussion.thematic-areas') }}" onclick="closeMobileNav()">{{ __('navigation.thematic_areas') }}</a>
+            <a href="{{ route('discussion.current') }}" onclick="closeMobileNav()">{{ __('navigation.current_discussions') }}</a>
+            <a href="{{ route('discussion.join') }}" onclick="closeMobileNav()">{{ __('navigation.join_discussion') }}</a>
+        </div>
+
+        <a href="{{ route('news.index') }}" onclick="closeMobileNav()">{{ __('navigation.news_updates') }}</a>
+        <a href="{{ route('gallery') }}" onclick="closeMobileNav()">{{ __('navigation.gallery') }}</a>
         <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
         <div class="mobile-nav-actions">
             <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
             <a href="{{ route('login') }}" class="btn btn-login">{{ __('navigation.login') }}</a>
+            <x-language-selector style="landing-mobile" />
         </div>
     </nav>
 
@@ -118,11 +125,11 @@
             <img src="{{ asset('assets/images/au.png') }}" alt="African Think Tank Platform" class="logo-sm">
         </a>
 
-        <nav class="nav-links" aria-label="Main navigation">
+        <nav class="nav-links" aria-label="{{ __('navigation.main_navigation') }}">
             <a href="{{ route('landing.index') }}" class="active">{{ __('navigation.home') }}</a>
 
             <div class="has-dropdown">
-                <a href="#">Programs</a>
+                <a href="#">{{ __('navigation.programs') }}</a>
                 <ul class="nav-dropdown">
                     <li><a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a></li>
                     <li><a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a></li>
@@ -130,15 +137,24 @@
             </div>
 
             <div class="has-dropdown">
-                <a href="#">Analytics</a>
+                <a href="#">{{ __('navigation.analytics') }}</a>
                 <ul class="nav-dropdown">
                     <li><a href="{{ route('impact.map') }}">{{ __('navigation.impact_map') }}</a></li>
                     <li><a href="{{ route('world.indicators.performance') }}">{{ __('navigation.world_indicators_performance') }}</a></li>
                 </ul>
             </div>
 
-            <a href="{{ route('news.index') }}">News &amp; Updates</a>
-            <a href="{{ route('gallery') }}">Gallery</a>
+            <div class="has-dropdown">
+                <a href="#">{{ __('navigation.discussion') }}</a>
+                <ul class="nav-dropdown">
+                    <li><a href="{{ route('discussion.thematic-areas') }}">{{ __('navigation.thematic_areas') }}</a></li>
+                    <li><a href="{{ route('discussion.current') }}">{{ __('navigation.current_discussions') }}</a></li>
+                    <li><a href="{{ route('discussion.join') }}">{{ __('navigation.join_discussion') }}</a></li>
+                </ul>
+            </div>
+
+            <a href="{{ route('news.index') }}">{{ __('navigation.news_updates') }}</a>
+            <a href="{{ route('gallery') }}">{{ __('navigation.gallery') }}</a>
             <a href="#contact">{{ __('navigation.contact') }}</a>
         </nav>
 
@@ -150,7 +166,7 @@
             <x-language-selector style="landing" />
         </div>
 
-        <button class="hamburger-btn" id="hamburgerBtn" onclick="openMobileNav()" aria-label="Open menu" aria-expanded="false">
+        <button class="hamburger-btn" id="hamburgerBtn" onclick="openMobileNav()" aria-label="{{ __('navigation.open_menu') }}" aria-expanded="false">
             <span></span>
             <span></span>
             <span></span>
@@ -175,12 +191,12 @@
 
         {{-- Live-video badge shown only when video slide is active --}}
         <div class="hero-video-badge">
-            <span></span> LIVE FOOTAGE
+            <span></span> {{ __('landing.hero_media_badge') }}
         </div>
 
         <div class="hero-content">
-            <h1 id="typewriter" class="typing-text"></h1>
-            <p id="hero-subtitle" class="hero-subtitle-text"></p>
+            <h1 class="typing-text">{{ __('landing.hero_title') }}</h1>
+            <p class="hero-subtitle-text sub-visible">{{ __('landing.hero_subtitle') }}</p>
 
             <a href="{{ route('public.procurement.index') }}" class="cta-btn">
                 {{ __('landing.hero_cta') }}
@@ -275,73 +291,73 @@
 
             <div class="flow-card">
                 <span>1</span>
-                <h3>English (EN)</h3>
+                <h3>{{ __('landing.language_en') }} (EN)</h3>
                 <p>
                     {{ __('landing.download_en') }}
                 </p>
                 <a href="{{ asset('assets/award/ATTP_Award_Announcement_EN.pdf') }}" class="btn-view"
                     target="_blank" rel="noopener noreferrer">
-                    {{ __('landing.download_version', ['language' => 'English']) }}
+                    {{ __('landing.download_version', ['language' => __('landing.language_en')]) }}
                 </a>
             </div>
 
             <div class="flow-card">
                 <span>2</span>
-                <h3>French (FR)</h3>
+                <h3>{{ __('landing.language_fr') }} (FR)</h3>
                 <p>
                     {{ __('landing.download_fr') }}
                 </p>
                 <a href="{{ asset('assets/award/ATTP_Award_Announcement_FR.pdf') }}" class="btn-view"
                     target="_blank" rel="noopener noreferrer">
-                    {{ __('landing.download_version', ['language' => 'French']) }}
+                    {{ __('landing.download_version', ['language' => __('landing.language_fr')]) }}
                 </a>
             </div>
 
             <div class="flow-card">
                 <span>3</span>
-                <h3>Arabic (AR)</h3>
+                <h3>{{ __('landing.language_ar') }} (AR)</h3>
                 <p>
                     {{ __('landing.download_ar') }}
                 </p>
                 <a href="{{ asset('assets/award/ATTP_Award_Announcement_AR.pdf') }}" class="btn-view"
                     target="_blank" rel="noopener noreferrer">
-                    {{ __('landing.download_version', ['language' => 'Arabic']) }}
+                    {{ __('landing.download_version', ['language' => __('landing.language_ar')]) }}
                 </a>
             </div>
 
             <div class="flow-card">
                 <span>4</span>
-                <h3>Portuguese (PT)</h3>
+                <h3>{{ __('landing.language_pt') }} (PT)</h3>
                 <p>
                     {{ __('landing.download_pt') }}
                 </p>
                 <a href="{{ asset('assets/award/ATTP_Award_Announcement_PT.pdf') }}" class="btn-view"
                     target="_blank" rel="noopener noreferrer">
-                    {{ __('landing.download_version', ['language' => 'Portuguese']) }}
+                    {{ __('landing.download_version', ['language' => __('landing.language_pt')]) }}
                 </a>
             </div>
 
             <div class="flow-card">
                 <span>5</span>
-                <h3>Spanish (ES)</h3>
+                <h3>{{ __('landing.language_es') }} (ES)</h3>
                 <p>
                     {{ __('landing.download_es') }}
                 </p>
                 <a href="{{ asset('assets/award/ATTP_Award_Announcement_ES.pdf') }}" class="btn-view"
                     target="_blank" rel="noopener noreferrer">
-                    {{ __('landing.download_version', ['language' => 'Spanish']) }}
+                    {{ __('landing.download_version', ['language' => __('landing.language_es')]) }}
                 </a>
             </div>
 
             <div class="flow-card">
                 <span>6</span>
-                <h3>Swahili (SW)</h3>
+                <h3>{{ __('landing.language_sw') }} (SW)</h3>
                 <p>
                     {{ __('landing.download_sw') }}
                 </p>
                 <a href="{{ asset('assets/award/ATTP_Award_Announcement_SW.pdf') }}" class="btn-view"
                     target="_blank" rel="noopener noreferrer">
-                    {{ __('landing.download_version', ['language' => 'Swahili']) }}
+                    {{ __('landing.download_version', ['language' => __('landing.language_sw')]) }}
                 </a>
             </div>
 
@@ -378,20 +394,20 @@
     @if(!empty($galleryImages))
     <section id="gallery" class="gallery-section">
         <div class="gallery-section-header">
-            <h2>Our Gallery</h2>
-            <p>Moments from our events, webinars, and activities across Africa</p>
-            <a href="{{ route('gallery') }}" class="btn-gallery-all">View All Photos</a>
+            <h2>{{ __('landing.gallery_title') }}</h2>
+            <p>{{ __('landing.gallery_subtitle') }}</p>
+            <a href="{{ route('gallery') }}" class="btn-gallery-all">{{ __('landing.gallery_view_all') }}</a>
         </div>
         <div class="gallery-scroller-wrapper">
             <div class="gallery-scroller">
                 @foreach($galleryImages as $i => $img)
                 <div class="gallery-scroller-item" onclick="openMainLightbox({{ $i }})">
-                    <img src="{{ $img['thumb'] }}" alt="ATTP Gallery" loading="lazy" decoding="async" onerror="this.parentElement.style.display='none'">
+                    <img src="{{ $img['thumb'] }}" alt="{{ __('landing.gallery_image_alt') }}" loading="lazy" decoding="async" onerror="this.parentElement.style.display='none'">
                 </div>
                 @endforeach
                 @foreach($galleryImages as $i => $img)
                 <div class="gallery-scroller-item" onclick="openMainLightbox({{ $i }})">
-                    <img src="{{ $img['thumb'] }}" alt="ATTP Gallery" loading="lazy" decoding="async" onerror="this.parentElement.style.display='none'">
+                    <img src="{{ $img['thumb'] }}" alt="{{ __('landing.gallery_image_alt') }}" loading="lazy" decoding="async" onerror="this.parentElement.style.display='none'">
                 </div>
                 @endforeach
             </div>
@@ -404,7 +420,7 @@
             <button class="gallery-lightbox-btn" onclick="prevMainImage()">&#8249;</button>
             <div class="gallery-lightbox-img-wrap">
                 <button class="gallery-lightbox-close" onclick="closeMainLightbox()">&times;</button>
-                <img id="mainLightboxImg" src="" alt="Gallery Image">
+                <img id="mainLightboxImg" src="" alt="{{ __('landing.gallery_image_alt') }}">
                 <div class="gallery-lightbox-counter" id="mainLightboxCounter"></div>
             </div>
             <button class="gallery-lightbox-btn" onclick="nextMainImage()">&#8250;</button>
@@ -416,8 +432,8 @@
     <section class="video-feature-section">
         <div class="video-feature-inner">
             <div class="video-feature-header">
-                <h2>Watch Our Story</h2>
-                <p>See ATTP's impact and activities across Africa in action</p>
+                <h2>{{ __('landing.watch_story_title') }}</h2>
+                <p>{{ __('landing.watch_story_subtitle') }}</p>
             </div>
             <div class="video-feature-player" id="vfPlayer">
                 <video id="vfVideo" preload="none" controls poster="{{ asset('assets/images/au3.jpg') }}">
@@ -445,7 +461,7 @@
                 <h4>{{ __('landing.footer_links_title') }}</h4>
                 <a href="{{ route('landing.index') }}">{{ __('landing.footer_link_home') }}</a>
                 <a href="#process">{{ __('landing.footer_link_process') }}</a>
-                <a href="#gallery">Gallery</a>
+                <a href="{{ route('gallery') }}">{{ __('navigation.gallery') }}</a>
                 <a href="#customization">{{ __('landing.footer_link_oversight') }}</a>
                 <a href="#contact">{{ __('navigation.contact') }}</a>
                 <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>
@@ -460,7 +476,7 @@
         </div>
 
         <div class="footer-bottom">
-            <p>Supporting African Union policy coordination, governance reform, and evidence-based decision-making across the continent.</p>
+            <p>{{ __('landing.supporting_statement') }}</p>
         </div>
     </footer>
 
@@ -588,8 +604,6 @@
         });
     </script>
     <!--Start of Tawk.to Script-->
-    <!--Start of Tawk.to Script-->
-    <!--Start of Tawk.to Script-->
     <script type="text/javascript">
         var Tawk_API = Tawk_API || {},
             Tawk_LoadStart = new Date();
@@ -603,8 +617,6 @@
             s0.parentNode.insertBefore(s1, s0);
         })();
     </script>
-    <!--End of Tawk.to Script-->
-    <!--End of Tawk.to Script-->
     <!--End of Tawk.to Script-->
 </body>
 

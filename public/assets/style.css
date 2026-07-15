@@ -1124,7 +1124,25 @@ html {
 }
 
 /* =========================================================
-   RESPONSIVE – TABLET (max 992px)
+   RESPONSIVE NAVIGATION (additional menu support)
+========================================================= */
+@media (max-width: 1240px) {
+    .public-mobile-nav .nav-links {
+        display: none;
+    }
+
+    .public-mobile-nav .hamburger-btn {
+        display: flex;
+    }
+
+    .public-mobile-nav .mobile-nav {
+        display: flex;
+    }
+
+}
+
+/* =========================================================
+   RESPONSIVE — TABLET (max 992px)
 ========================================================= */
 @media (max-width: 992px) {
     .nav-links {
@@ -1137,10 +1155,6 @@ html {
 
     .mobile-nav {
         display: flex;
-    }
-
-    .mobile-nav-overlay {
-        display: block;
     }
 
     .process-flow {

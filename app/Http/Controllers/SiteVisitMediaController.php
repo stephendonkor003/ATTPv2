@@ -2,17 +2,24 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesSiteVisitsToPortfolio;
 use App\Models\{SiteVisit, SiteVisitMedia};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class SiteVisitMediaController extends Controller
 {
+    use ScopesSiteVisitsToPortfolio;
+
     public function store(Request $request, SiteVisit $siteVisit)
     {
         $user = auth()->user();
 
         abort_unless($user && ($user->can('site_visits.observe') || $user->can('site_visits.approve')), 403);
+        if ($user->can('site_visits.approve') || $this->userHasSiteVisitPortfolioScope($user)) {
+            $this->assertSiteVisitInPortfolioScope($siteVisit);
+        }
 
         // Only allow uploads while the visit is being worked on.
         abort_if($siteVisit->status !== 'draft', 400, 'Media can only be uploaded while the site visit is in draft status.');
@@ -39,7 +46,11 @@ class SiteVisitMediaController extends Controller
 
         $request->validate([
             'file'           => 'required|file|mimes:jpg,jpeg,png,pdf,doc,docx|max:10240',
-            'observation_id' => 'nullable|exists:site_visit_observations,id',
+            'observation_id' => [
+                'nullable',
+                Rule::exists('site_visit_observations', 'id')
+                    ->where(fn ($query) => $query->where('site_visit_id', $siteVisit->id)),
+            ],
         ]);
 
         $path = $request->file('file')->store('site-visits');
@@ -63,11 +74,11 @@ class SiteVisitMediaController extends Controller
         abort_unless($media->site_visit_id === $siteVisit->id, 404);
 
         // Same access rule as the SiteVisit "show" page.
-        $isAssigned =
-            $siteVisit->assignment?->user_id === $user->id ||
-            $siteVisit->group?->members()->where('user_id', $user->id)->exists();
-
-        abort_unless($user->can('site_visits.approve') || $isAssigned, 403);
+        if ($user->can('site_visits.approve') || $this->userHasSiteVisitPortfolioScope($user)) {
+            $this->assertSiteVisitInPortfolioScope($siteVisit);
+        } else {
+            abort_unless($this->userCanAccessSiteVisitAssignment($siteVisit, $user), 403);
+        }
 
         $path = (string) ($media->file_path ?? '');
         abort_if($path === '', 404, 'File not found.');

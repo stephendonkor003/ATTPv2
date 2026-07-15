@@ -34,6 +34,10 @@ require __DIR__ . '/../../vendor/autoload.php';
 $app = require __DIR__ . '/../../bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
 
+// Standalone smoke scripts do not enter PHPUnit's regular CLI bootstrap.
+// Initialize its configuration so Laravel response assertions can run.
+(new PHPUnit\TextUI\Configuration\Builder)->build(['phpunit']);
+
 class ThinkTankPortalSmoke
 {
     use MakesHttpRequests;
@@ -72,14 +76,20 @@ class ThinkTankPortalSmoke
             $this->asThinkTank($data['thinkTankUser'])
                 ->get('/think-tank/dashboard')
                 ->assertOk()
-                ->assertSee('Think Tank Report Search')
-                ->assertSee('Run Search')
-                ->assertSee('Download Report');
+                ->assertSee('Your workspace')
+                ->assertSee('Indicator performance updates')
+                ->assertSee('Periodic performance updates')
+                ->assertSee('Filter report period')
+                ->assertSee('Finance at a glance')
+                ->assertSee('Download report');
 
             $qascDate = now()->toDateString();
 
-            $this->asThinkTank($data['thinkTankUser'])
-                ->postWithCsrf('/think-tank/research', [
+            // Research is retained as a Secretariat-only legacy workflow. Keep
+            // its end-to-end coverage through the System Admin preview path.
+            $this->asAdmin($data['adminUser'])
+                ->postWithCsrf(route('think-tank.research.store'), [
+                    'think_tank_member_id' => $data['member']->id,
                     'title' => 'E2E Agricultural Policy Research ' . Str::random(5),
                     'output_type' => 'research',
                     'published_on' => $qascDate,
@@ -115,14 +125,7 @@ class ThinkTankPortalSmoke
             );
 
             $this->asThinkTank($data['thinkTankUser'])
-                ->get('/think-tank/research')
-                ->assertOk()
-                ->assertSee('Research Output Search')
-                ->assertSee('Run Search')
-                ->assertSee('Download Report');
-
-            $this->asThinkTank($data['thinkTankUser'])
-                ->postWithCsrf('/think-tank/procurement/plans', [
+                ->postWithCsrf(route('think-tank.procurement-plans.store'), [
                     'title' => 'E2E Procurement Plan ' . Str::random(5),
                     'fiscal_year' => '2026',
                     'estimated_budget' => 25000,
@@ -136,7 +139,16 @@ class ThinkTankPortalSmoke
             $this->assertTrue((bool) $plan, 'Procurement plan was not created.');
 
             $this->asThinkTank($data['thinkTankUser'])
-                ->postWithCsrf('/think-tank/procurement', [
+                ->get(route('think-tank.procurement-plans'))
+                ->assertOk()
+                ->assertSee('Procurement plans')
+                ->assertSee($plan->title);
+
+            // Public opportunities and evaluations are no longer part of the
+            // five-area think-tank portal. Exercise that legacy flow as admin.
+            $this->asAdmin($data['adminUser'])
+                ->postWithCsrf(route('think-tank.procurement.store'), [
+                    'think_tank_member_id' => $data['member']->id,
                     'think_tank_procurement_plan_id' => $plan->id,
                     'title' => 'E2E Procurement Opportunity ' . Str::random(5),
                     'reference_no' => 'E2E-' . Str::upper(Str::random(5)),
@@ -151,14 +163,6 @@ class ThinkTankPortalSmoke
 
             $procurement = Procurement::where('think_tank_member_id', $data['member']->id)->latest()->first();
             $this->assertTrue((bool) $procurement, 'Procurement opportunity was not created.');
-
-            $this->asThinkTank($data['thinkTankUser'])
-                ->get('/think-tank/procurement')
-                ->assertOk()
-                ->assertSee('Procurement Search')
-                ->assertSee('Run Search')
-                ->assertSee('Download Report')
-                ->assertSee($procurement->title);
 
             $this->get(route('public.procurement.show', $procurement))
                 ->assertOk()
@@ -177,13 +181,13 @@ class ThinkTankPortalSmoke
             $submission = FormSubmission::where('procurement_id', $procurement->id)->latest()->first();
             $this->assertTrue((bool) $submission, 'Public procurement application was not created.');
 
-            $this->asThinkTank($data['thinkTankUser'])
+            $this->asAdmin($data['adminUser'])
                 ->get(route('think-tank.procurement.submissions', $procurement))
                 ->assertOk()
                 ->assertSee('Applications')
                 ->assertSee('E2E Vendor');
 
-            $this->asThinkTank($data['thinkTankUser'])
+            $this->asAdmin($data['adminUser'])
                 ->postWithCsrf(route('think-tank.procurement.submissions.review', [$procurement, $submission]), [
                     'technical_score' => 82,
                     'financial_score' => 76,
@@ -192,7 +196,7 @@ class ThinkTankPortalSmoke
                 ])
                 ->assertRedirect();
 
-            $this->asThinkTank($data['thinkTankUser'])
+            $this->asAdmin($data['adminUser'])
                 ->postWithCsrf(route('think-tank.procurement.submissions.select', [$procurement, $submission]))
                 ->assertRedirect();
 
@@ -200,7 +204,7 @@ class ThinkTankPortalSmoke
             $this->assertSame($submission->id, $procurement->awarded_submission_id, 'Winning submission was not selected.');
 
             $this->asThinkTank($data['thinkTankUser'])
-                ->postWithCsrf('/think-tank/reports', [
+                ->postWithCsrf(route('think-tank.report-uploads.store'), [
                     'title' => 'E2E Monthly Activity Report',
                     'reporting_period_start' => now()->startOfMonth()->toDateString(),
                     'reporting_period_end' => now()->endOfMonth()->toDateString(),
@@ -216,20 +220,11 @@ class ThinkTankPortalSmoke
                 ->assertRedirect();
 
             $this->asThinkTank($data['thinkTankUser'])
-                ->get('/think-tank/reports')
+                ->get(route('think-tank.report-uploads'))
                 ->assertOk()
-                ->assertSee('Activity Report Search')
-                ->assertSee('Run Search')
-                ->assertSee('Download Report');
-
-            $this->asThinkTank($data['thinkTankUser'])
-                ->get('/think-tank/upload-report-finding')
-                ->assertOk()
-                ->assertSee('Upload Report and Finding')
-                ->assertSee('Upload Reports')
-                ->assertSee('Upload Research Finding')
-                ->assertSee('Annex B: ATTP Quality Assurance Self-Certification')
-                ->assertSee('Submit Upload');
+                ->assertSee('Upload an activity report')
+                ->assertSee('Recent uploads')
+                ->assertSee('E2E Monthly Activity Report');
 
             $this->asAdmin($data['adminUser'])
                 ->get(route('consortium-operations.show', $data['consortium']))
@@ -311,8 +306,9 @@ class ThinkTankPortalSmoke
             $this->asAdmin($data['adminUser'])
                 ->get(route('think-tank.dashboard', ['think_tank_member_id' => $data['member']->id]))
                 ->assertOk()
-                ->assertSee('Think Tank Report Search')
-                ->assertSee('Graphs and Analysis')
+                ->assertSee('Your workspace')
+                ->assertSee('Periodic performance updates')
+                ->assertSee('Finance at a glance')
                 ->assertSee($data['member']->name);
 
             $this->asAdmin($data['adminUser'])
@@ -468,6 +464,11 @@ class ThinkTankPortalSmoke
             'status' => 'active',
             'joined_at' => now()->toDateString(),
         ]);
+
+        $thinkTankUser->forceFill([
+            'think_tank_member_id' => $member->id,
+            'think_tank_access_level' => User::THINK_TANK_ACCESS_ADMIN,
+        ])->save();
 
         ConsortiumFundAllocation::create([
             'consortium_id' => $consortium->id,

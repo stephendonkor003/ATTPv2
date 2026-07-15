@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
 use App\Models\Procurement;
+use App\Models\ProcurementPlan;
 use App\Models\Resource;
 use App\Models\DynamicForm;
 use App\Models\User;
@@ -80,12 +81,7 @@ class ProcurementController extends Controller
             'nullable',
             'string',
             'max:50',
-            Rule::exists('myb_procurement_plans', 'procurement_code')
-                ->where(function ($query) {
-                    if (!auth()->user()->can('procurement.view_all')) {
-                        $query->where('created_by', auth()->id());
-                    }
-                }),
+            Rule::exists('myb_procurement_plans', 'procurement_code'),
             Rule::unique('procurements', 'reference_no'),
         ],
         'estimated_budget'  => 'nullable|numeric',
@@ -98,6 +94,21 @@ class ProcurementController extends Controller
 
     $resource = Resource::findOrFail($data['resource_id']);
     $this->assertResourceInScope($resource);
+
+    if (! empty($data['reference_no'])) {
+        $plan = ProcurementPlan::where('procurement_code', $data['reference_no'])->firstOrFail();
+        $this->assertProcurementPlanInScope($plan);
+
+        if (
+            $plan->governance_node_id
+            && $resource->governance_node_id
+            && (string) $plan->governance_node_id !== (string) $resource->governance_node_id
+        ) {
+            return back()
+                ->withErrors(['reference_no' => 'Selected procurement plan item belongs to a different portfolio than the selected resource.'])
+                ->withInput();
+        }
+    }
 
     $data['created_by'] = auth()->id();
     $data['status']     = 'draft';

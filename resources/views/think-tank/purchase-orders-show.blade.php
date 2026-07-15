@@ -1,4 +1,4 @@
-<x-think-tank.partials.shell :member="$member" title="Purchase Order">
+<x-think-tank.partials.shell :member="$member" title="Funding Transfer">
     @php
         $portalRouteParams = (auth()->user()?->isSuperAdmin() || auth()->user()?->isAdmin())
             ? ['think_tank_member_id' => $member->id]
@@ -8,9 +8,9 @@
     <div class="card">
         <div class="card-body d-flex flex-column flex-md-row justify-content-between gap-3">
             <div>
-                <div class="label">Purchase Order Reference</div>
+                <div class="label">Funding Transfer Reference</div>
                 <h4 class="fw-bold mb-1">{{ $purchaseOrder->reference_no }}</h4>
-                <p class="text-muted mb-0">Submitted to ATTP Secretariat for fund disbursement.</p>
+                <p class="text-muted mb-0">Review the ATTP funding record and confirm each payment received.</p>
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-start">
                 <a href="{{ route('think-tank.purchase-orders.pdf', array_merge($portalRouteParams, ['purchaseOrder' => $purchaseOrder])) }}" class="btn btn-light">
@@ -19,8 +19,8 @@
                 <a href="{{ route('think-tank.purchase-orders.download', array_merge($portalRouteParams, ['purchaseOrder' => $purchaseOrder])) }}" class="btn btn-primary">
                     <i class="feather-download me-1"></i> Download PDF
                 </a>
-                <a href="{{ route('think-tank.purchase-orders', $portalRouteParams) }}" class="btn light">
-                    <i class="feather-arrow-left me-1"></i> Back
+                <a href="{{ route('think-tank.finance', $portalRouteParams) }}" class="btn btn-light border">
+                    <i class="feather-arrow-left me-1"></i> Back to Finance
                 </a>
             </div>
         </div>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Activity;
 use App\Models\Indicator;
 use App\Models\IndicatorDataSourceSyncLog;
@@ -10,6 +11,7 @@ use App\Models\IndicatorSurveyResponse;
 use App\Models\IndicatorResult;
 use App\Models\Program;
 use App\Models\Project;
+use App\Models\Sector;
 use App\Models\SubActivity;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +27,8 @@ use PDF;
 
 class MeDataSourceController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     protected const SUPPORTED_SYNC_FILE_EXTENSIONS = ['csv', 'xlsx', 'xls'];
 
     public function __construct()
@@ -50,7 +54,7 @@ class MeDataSourceController extends Controller
     {
         $search = trim((string) $request->query('q', ''));
 
-        $indicators = Indicator::query()
+        $indicatorQuery = Indicator::query()
             ->with(['indicatorable', 'latestDataSourceSyncLog'])
             ->whereNotNull('primary_source')
             ->where('primary_source', '!=', '')
@@ -60,7 +64,9 @@ class MeDataSourceController extends Controller
                         ->orWhere('primary_source', 'like', '%' . $search . '%')
                         ->orWhere('methodology', 'like', '%' . $search . '%');
                 });
-            })
+            });
+        $this->scopeMeIndicators($indicatorQuery);
+        $indicators = $indicatorQuery
             ->latest('updated_at')
             ->paginate(20)
             ->withQueryString();
@@ -80,15 +86,21 @@ class MeDataSourceController extends Controller
             })->count(),
         ];
 
-        $surveyLinks = IndicatorSurveyLink::with(['indicator:id,name', 'methodology:id,name'])
+        $surveyLinkQuery = IndicatorSurveyLink::with(['indicator:id,name', 'methodology:id,name'])
             ->withCount('responses')
-            ->latest()
-            ->get();
+            ->latest();
+        $this->scopeMeSurveyLinks($surveyLinkQuery);
+        $surveyLinks = $surveyLinkQuery->get();
+
+        $surveyResponseQuery = IndicatorSurveyResponse::query();
+        $lastSurveyResponseQuery = IndicatorSurveyResponse::query();
+        $this->scopeMeSurveyResponses($surveyResponseQuery);
+        $this->scopeMeSurveyResponses($lastSurveyResponseQuery);
 
         $surveyStats = [
             'surveys' => $surveyLinks->count(),
-            'responses' => IndicatorSurveyResponse::count(),
-            'last_response' => optional(IndicatorSurveyResponse::latest('submitted_at')->first())->submitted_at,
+            'responses' => $surveyResponseQuery->count(),
+            'last_response' => optional($lastSurveyResponseQuery->latest('submitted_at')->first())->submitted_at,
         ];
 
         return view('me.data-sources.index', [
@@ -115,6 +127,8 @@ class MeDataSourceController extends Controller
 
     public function downloadTemplate(Request $request, Indicator $indicator): StreamedResponse
     {
+        $this->assertMeIndicatorInScope($indicator);
+
         [$storedType, $storedValue] = $this->unpackPrimarySource($indicator->primary_source);
 
         $sourceType = trim((string) $request->query('source_type', $storedType ?? 'file_location'));
@@ -129,6 +143,8 @@ class MeDataSourceController extends Controller
 
     public function previewColumns(Request $request, Indicator $indicator): JsonResponse
     {
+        $this->assertMeIndicatorInScope($indicator);
+
         $request->validate([
             'upload_file' => ['required', 'file', 'mimes:csv,xlsx,xls', 'max:20480'],
         ]);
@@ -149,8 +165,10 @@ class MeDataSourceController extends Controller
     {
         $format = strtolower((string) $request->query('format', 'csv'));
 
-        $responses = IndicatorSurveyResponse::with(['indicator:id,name', 'methodology:id,name', 'surveyLink:id,public_token'])
-            ->orderByDesc('submitted_at')
+        $responseQuery = IndicatorSurveyResponse::with(['indicator:id,name', 'methodology:id,name', 'surveyLink:id,public_token'])
+            ->orderByDesc('submitted_at');
+        $this->scopeMeSurveyResponses($responseQuery);
+        $responses = $responseQuery
             ->get();
 
         return $this->streamSurveyExport($responses, 'me-survey-responses', $format);
@@ -158,6 +176,8 @@ class MeDataSourceController extends Controller
 
     public function showSurvey(IndicatorSurveyLink $surveyLink)
     {
+        $this->assertMeSurveyLinkInScope($surveyLink);
+
         $surveyLink->load(['indicator', 'methodology']);
         $responses = IndicatorSurveyResponse::with('indicator', 'methodology')
             ->where('survey_link_id', $surveyLink->id)
@@ -173,6 +193,8 @@ class MeDataSourceController extends Controller
 
     public function exportSurvey(Request $request, IndicatorSurveyLink $surveyLink)
     {
+        $this->assertMeSurveyLinkInScope($surveyLink);
+
         $format = strtolower((string) $request->query('format', 'csv'));
 
         $responses = IndicatorSurveyResponse::with(['indicator:id,name', 'methodology:id,name'])
@@ -237,6 +259,8 @@ class MeDataSourceController extends Controller
 
     public function manualSync(Request $request, Indicator $indicator)
     {
+        $this->assertMeIndicatorInScope($indicator);
+
         $searchQuery = trim((string) $request->input('q', $request->query('q', '')));
         [$sourceType, $sourceValue] = $this->unpackPrimarySource($indicator->primary_source);
         if (!$sourceType || !$sourceValue) {
@@ -349,10 +373,11 @@ class MeDataSourceController extends Controller
     public function manualSyncAll(Request $request)
     {
         $searchQuery = trim((string) $request->input('q', $request->query('q', '')));
-        $indicators = Indicator::query()
+        $indicatorQuery = Indicator::query()
             ->whereNotNull('primary_source')
-            ->where('primary_source', '!=', '')
-            ->get();
+            ->where('primary_source', '!=', '');
+        $this->scopeMeIndicators($indicatorQuery);
+        $indicators = $indicatorQuery->get();
 
         $success = 0;
         $failed = 0;
@@ -437,6 +462,8 @@ class MeDataSourceController extends Controller
 
     public function rawData(Request $request, Indicator $indicator)
     {
+        $this->assertMeIndicatorInScope($indicator);
+
         $search = trim((string) $request->query('q', ''));
         [$sourceType, $sourceValue] = $this->unpackPrimarySource($indicator->primary_source);
 
@@ -490,6 +517,54 @@ class MeDataSourceController extends Controller
             'summary' => $summary,
             'search' => $search,
         ]);
+    }
+
+    protected function scopeMeIndicators($query): void
+    {
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToIndicators($query);
+        }
+    }
+
+    protected function scopeMeSurveyLinks($query): void
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        $query->whereHas('indicator', function ($indicatorQuery) {
+            $this->applyAssignedPortfolioScopeToIndicators($indicatorQuery);
+        });
+    }
+
+    protected function scopeMeSurveyResponses($query): void
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        $query->whereHas('indicator', function ($indicatorQuery) {
+            $this->applyAssignedPortfolioScopeToIndicators($indicatorQuery);
+        });
+    }
+
+    protected function assertMeIndicatorInScope(Indicator $indicator): void
+    {
+        if ($this->userHasAssignedPortfolioScope() && ! $this->indicatorIsInAssignedPortfolio($indicator)) {
+            abort(403, 'This indicator is outside your assigned portfolio.');
+        }
+    }
+
+    protected function assertMeSurveyLinkInScope(IndicatorSurveyLink $surveyLink): void
+    {
+        if (! $this->userHasAssignedPortfolioScope()) {
+            return;
+        }
+
+        $surveyLink->loadMissing('indicator');
+        if (! $surveyLink->indicator || ! $this->indicatorIsInAssignedPortfolio($surveyLink->indicator)) {
+            abort(403, 'This survey is outside your assigned portfolio.');
+        }
     }
 
     protected function streamTemplateCsv(?Indicator $indicator, string $sourceType, string $sourceValue): StreamedResponse
@@ -1497,6 +1572,10 @@ class MeDataSourceController extends Controller
 
     protected function ownerLabel(Indicator $indicator): string
     {
+        if ($indicator->indicatorable_type === Sector::class) {
+            return 'Portfolio: ' . ($indicator->indicatorable?->name ?: 'Unknown');
+        }
+
         if ($indicator->indicatorable_type === Program::class) {
             return 'Program: ' . ($indicator->indicatorable?->name ?: 'Unknown');
         }

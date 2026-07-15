@@ -10,6 +10,7 @@ class IndicatorDefinition extends BaseModel
     protected $table = 'indicator_definitions';
 
     protected $fillable = [
+        'portfolio_id',
         'name',
         'code',
         'description',
@@ -30,6 +31,11 @@ class IndicatorDefinition extends BaseModel
     public function methodology()
     {
         return $this->belongsTo(IndicatorMethodology::class, 'methodology_id');
+    }
+
+    public function portfolio()
+    {
+        return $this->belongsTo(Sector::class, 'portfolio_id');
     }
 
     public function variableRows()

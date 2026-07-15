@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Mail\PurchaseRequestMail;
 use App\Models\BudgetCommitment;
 use App\Models\ProcurementPurchaseOrder;
@@ -19,6 +20,8 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseRequestController extends Controller
 {
+    use ScopesAssignedPortfolios;
+
     private const PURCHASE_REQUEST_STATUS_TABS = [
         'submitted' => 'Submitted',
         'in_review' => 'In Review',
@@ -31,9 +34,11 @@ class PurchaseRequestController extends Controller
 
     public function index()
     {
+        $currentUser = Auth::user();
+        $isPortfolioLeader = $this->userHasAssignedPortfolioScope($currentUser);
         $canViewAll = Auth::user()?->can('finance.purchase_requests.view_all') === true;
-        $scopedNodeIds = $canViewAll ? null : $this->scopedNodeIds();
-        if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
+        $scopedNodeIds = ($canViewAll && ! $isPortfolioLeader) ? null : $this->scopedNodeIds();
+        if (! $isPortfolioLeader && $scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to purchase requests.');
         }
 
@@ -44,7 +49,10 @@ class PurchaseRequestController extends Controller
             'commitments',
             'creator',
         ])
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            ->when($isPortfolioLeader, function ($query) use ($currentUser) {
+                $this->applyAssignedPortfolioScopeToPurchaseRequests($query, $currentUser);
+            })
+            ->when(! $isPortfolioLeader && $scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             })
@@ -814,6 +822,15 @@ class PurchaseRequestController extends Controller
 
     private function assertPurchaseRequestInScope(PurchaseRequest $purchaseRequest): void
     {
+        $currentUser = Auth::user();
+        if ($this->userHasAssignedPortfolioScope($currentUser)) {
+            if (! $this->purchaseRequestIsInAssignedPortfolio($purchaseRequest, $currentUser)) {
+                abort(403, 'You do not have access to this purchase request.');
+            }
+
+            return;
+        }
+
         if (Auth::user()?->can('finance.purchase_requests.view_all') === true) {
             return;
         }
