@@ -343,6 +343,41 @@ class ActivityController extends Controller
         return [$currentUser->governance_node_id];
     }
 
+    /**
+     * Reallocate an activity to a different project (and thereby another program).
+     * Moves the activity and updates governance node on the activity and its sub-activities.
+     */
+    public function reallocate(Request $request, Activity $activity)
+    {
+        $this->assertActivityInScope($activity);
+
+        $request->validate([
+            'project_id' => 'required|exists:myb_projects,id',
+        ]);
+
+        $targetProject = Project::findOrFail($request->project_id);
+        $this->assertProjectInScope($targetProject);
+
+        if ($activity->project_id === $targetProject->id) {
+            return back()->with('error', 'Activity already assigned to the selected project.');
+        }
+
+        try {
+            DB::transaction(function () use ($activity, $targetProject) {
+                $activity->project_id = $targetProject->id;
+                $activity->governance_node_id = $targetProject->governance_node_id;
+                $activity->save();
+
+                // Update sub-activities governance node to match new project
+                $activity->subActivities()->update(['governance_node_id' => $targetProject->governance_node_id]);
+            });
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Reallocation failed: ' . $e->getMessage());
+        }
+
+        return back()->with('success', 'Activity reallocated successfully.');
+    }
+
     private function assertProjectInScope(Project $project): void
     {
         $currentUser = Auth::user();

@@ -1524,6 +1524,10 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:activities.edit')
             ->name('activities.update');
 
+        // Reallocate an activity (move activity + its sub-activities to another project/program)
+        Route::post('activities/{activity}/reallocate', [ActivityController::class, 'reallocate'])
+            ->middleware('permission:activities.edit')
+            ->name('activities.reallocate');
         Route::delete('activities/{activity}', [ActivityController::class, 'destroy'])
             ->middleware('permission:activities.delete')
             ->name('activities.destroy');

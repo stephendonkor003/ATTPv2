@@ -634,11 +634,22 @@
                                                     <div class="text-muted small">
                                                         Activity allocation: <strong>{{ number_format($activityAllocation, 2) }} {{ $currency }}</strong>
                                                     </div>
-                                                    @can('subactivities.create')
-                                                        <a href="{{ route('budget.subactivities.create', $activity->id) }}" class="btn btn-success btn-sm">
-                                                            <i class="feather-plus-circle me-1"></i> Add Sub-Activity
-                                                        </a>
-                                                    @endcan
+                                                    <div class="d-flex gap-2">
+                                                        @can('subactivities.create')
+                                                            <a href="{{ route('budget.subactivities.create', $activity->id) }}" class="btn btn-success btn-sm">
+                                                                <i class="feather-plus-circle me-1"></i> Add Sub-Activity
+                                                            </a>
+                                                        @endcan
+
+                                                        @can('activities.edit')
+                                                            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
+                                                                data-bs-target="#reallocateModal"
+                                                                data-activity-id="{{ $activity->id }}"
+                                                                data-activity-name="{{ $activity->name }}">
+                                                                <i class="feather-move me-1"></i> Reallocate
+                                                            </button>
+                                                        @endcan
+                                                    </div>
                                                 </div>
 
                                                 @forelse ($activitySubActivities as $subActivity)
@@ -755,6 +766,42 @@
     </div>
 @endsection
 
+<!-- Reallocate Modal -->
+<div class="modal fade" id="reallocateModal" tabindex="-1" aria-labelledby="reallocateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="reallocateForm" method="POST" action="">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reallocateModalLabel">Reallocate Activity</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">Select the target project (and its program) to move this activity and its sub-activities into.</p>
+
+                    <div class="mb-3">
+                        <label class="form-label">Target Project</label>
+                        <select name="project_id" id="reallocateProject" class="form-select" required>
+                            <option value="">Select project</option>
+                            @foreach($programs as $p)
+                                <optgroup label="{{ $p->name }}">
+                                    @foreach($p->projects as $proj)
+                                        <option value="{{ $proj->id }}">{{ $proj->project_id }} - {{ $proj->name }}</option>
+                                    @endforeach
+                                </optgroup>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Reallocate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -782,6 +829,22 @@
             buttons.forEach(button => {
                 button.addEventListener('click', () => toggleNode(button));
             });
+
+            // Reallocate modal behavior
+            const reallocateModalEl = document.getElementById('reallocateModal');
+            if (reallocateModalEl) {
+                reallocateModalEl.addEventListener('show.bs.modal', function (event) {
+                    const button = event.relatedTarget;
+                    const activityId = button?.getAttribute('data-activity-id');
+                    const activityName = button?.getAttribute('data-activity-name') || 'Activity';
+                    const form = document.getElementById('reallocateForm');
+                    if (form && activityId) {
+                        form.action = `/budget/activities/${activityId}/reallocate`;
+                    }
+                    const title = document.getElementById('reallocateModalLabel');
+                    if (title) title.textContent = `Reallocate: ${activityName}`;
+                });
+            }
         });
     </script>
 @endpush
