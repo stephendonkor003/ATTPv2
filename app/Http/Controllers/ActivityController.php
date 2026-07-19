@@ -364,6 +364,9 @@ class ActivityController extends Controller
 
         try {
             DB::transaction(function () use ($activity, $targetProject) {
+                $sourceProject = $activity->loadMissing('project')->project;
+                $sourceProject->transferActivityBudgetTo($activity, $targetProject, true);
+
                 $activity->project_id = $targetProject->id;
                 $activity->governance_node_id = $targetProject->governance_node_id;
                 $activity->save();
