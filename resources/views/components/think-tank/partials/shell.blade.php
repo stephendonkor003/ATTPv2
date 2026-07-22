@@ -81,6 +81,17 @@
 
         return $item;
     })->values();
+    if ($portalUser?->isThinkTankUser() && Illuminate\Support\Facades\Route::has('think-tank.grievances.create')) {
+        $portalNav->push([
+            'area' => null,
+            'label' => 'Grievance',
+            'icon' => 'feather-alert-octagon',
+            'route' => 'think-tank.grievances.create',
+            'patterns' => ['think-tank.grievances.*'],
+            'url' => route('think-tank.grievances.create'),
+            'active' => request()->routeIs('think-tank.grievances.*'),
+        ]);
+    }
     $accountName = trim((string) ($portalUser?->name ?: 'Portal user'));
     $accountInitials = collect(preg_split('/\s+/', $accountName) ?: [])
         ->filter()

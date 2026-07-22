@@ -7,6 +7,7 @@ use App\Models\SubActivity;
 use App\Models\Activity;
 use App\Models\SubActivityAllocation;
 use App\Models\Program;
+use App\Services\ActivityReallocationTracker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,7 @@ class SubActivityController extends Controller
 {
     use ScopesAssignedPortfolios;
 
- public function index(Request $request)
+ public function index(Request $request, ActivityReallocationTracker $reallocationTracker)
 {
     $search = $request->search;
 
@@ -81,7 +82,14 @@ class SubActivityController extends Controller
         'allocation_total' => $subActivities->sum('allocation_total'),
     ];
 
-    return view('subactivities.index', compact('programs', 'search', 'subActivityStats'));
+    $reallocationIssues = $reallocationTracker->issuesFor($activities, $projects);
+
+    return view('subactivities.index', compact(
+        'programs',
+        'search',
+        'subActivityStats',
+        'reallocationIssues'
+    ));
 }
 
 

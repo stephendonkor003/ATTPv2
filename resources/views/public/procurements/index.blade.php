@@ -183,6 +183,7 @@
             <a href="#annoucements">Annoucements</a>
             <a href="{{ route('events') }}">Events / Webinars</a>
             {{-- <a href="#customization">Customization</a> --}}
+            <a href="{{ route('public.grievances.create') }}">Grievance</a>
             <a href="#contact">Contact</a>
             <a href="{{ route('careers.index') }}">Career</a>
         </nav>

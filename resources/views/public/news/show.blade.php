@@ -222,6 +222,7 @@
             </ul>
         </div>
         <a href="{{ route('news.index') }}" class="active">{{ __('navigation.news_updates') }}</a>
+        <a href="{{ route('public.grievances.create') }}">Grievance</a>
         <a href="#contact">{{ __('navigation.contact') }}</a>
     </nav>
     <div class="nav-actions">

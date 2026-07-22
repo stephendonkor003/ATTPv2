@@ -300,6 +300,8 @@ class BudgetReportController extends Controller
                     'activity_budget' => $activityBudget,
                     'sub_activity_budget' => $subActivityBudget,
                     'remaining_to_sub_activities' => round(max($activityBudget - $subActivityBudget, 0), 2),
+                    'sub_activity_overallocation' => round(max($subActivityBudget - $activityBudget, 0), 2),
+                    'covered_by_sub_activities' => round(min($activityBudget, $subActivityBudget), 2),
                     'activity_share' => $projectBudget > 0 ? round(($activityBudget / $projectBudget) * 100, 1) : 0,
                     'sub_activity_progress' => $activityBudget > 0 ? round(min(100, ($subActivityBudget / $activityBudget) * 100), 1) : 0,
                 ];
@@ -309,6 +311,9 @@ class BudgetReportController extends Controller
 
         $activityBudget = round((float) $activityRows->sum('activity_budget'), 2);
         $subActivityBudget = round((float) $activityRows->sum('sub_activity_budget'), 2);
+        $remainingToSubActivities = round((float) $activityRows->sum('remaining_to_sub_activities'), 2);
+        $subActivityOverallocation = round((float) $activityRows->sum('sub_activity_overallocation'), 2);
+        $subActivityCoveredBudget = round((float) $activityRows->sum('covered_by_sub_activities'), 2);
         $years = collect($project->allocations->pluck('year'))
             ->merge($project->activities->flatMap(fn (Activity $activity) => $activity->allocations->pluck('year')))
             ->merge($project->activities->flatMap(fn (Activity $activity) => $activity->subActivities->flatMap(fn ($subActivity) => $subActivity->allocations->pluck('year'))))
@@ -332,11 +337,12 @@ class BudgetReportController extends Controller
                 'activity_budget' => $activityBudget,
                 'sub_activity_budget' => $subActivityBudget,
                 'remaining_to_activities' => round(max($projectBudget - $activityBudget, 0), 2),
-                'remaining_to_sub_activities' => round(max($activityBudget - $subActivityBudget, 0), 2),
+                'remaining_to_sub_activities' => $remainingToSubActivities,
+                'sub_activity_overallocation' => $subActivityOverallocation,
                 'activity_count' => $project->activities->count(),
                 'sub_activity_count' => $project->activities->sum(fn (Activity $activity) => $activity->subActivities->count()),
                 'activity_progress' => $projectBudget > 0 ? round(min(100, ($activityBudget / $projectBudget) * 100), 1) : 0,
-                'sub_activity_progress' => $activityBudget > 0 ? round(min(100, ($subActivityBudget / $activityBudget) * 100), 1) : 0,
+                'sub_activity_progress' => $activityBudget > 0 ? round(($subActivityCoveredBudget / $activityBudget) * 100, 2) : 0,
             ],
             'activity_rows' => $activityRows,
             'chart' => [

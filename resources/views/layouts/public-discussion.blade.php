@@ -58,6 +58,7 @@
 
         <a href="{{ route('news.index') }}" onclick="closeMobileNav()">{{ __('navigation.news_updates') }}</a>
         <a href="{{ route('gallery') }}" onclick="closeMobileNav()">{{ __('navigation.gallery') }}</a>
+        <a href="{{ route('public.grievances.create') }}" onclick="closeMobileNav()">Log a Grievance</a>
         <a href="{{ route('landing.index') }}#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
 
         <div class="mobile-nav-actions">
@@ -98,6 +99,7 @@
             </div>
             <a href="{{ route('news.index') }}">{{ __('navigation.news_updates') }}</a>
             <a href="{{ route('gallery') }}">{{ __('navigation.gallery') }}</a>
+            <a href="{{ route('public.grievances.create') }}">Grievance</a>
             <a href="{{ route('landing.index') }}#contact">{{ __('navigation.contact') }}</a>
         </nav>
 
@@ -162,6 +164,7 @@
                 <a href="{{ route('discussion.thematic-areas') }}">{{ __('navigation.thematic_areas') }}</a>
                 <a href="{{ route('discussion.current') }}">{{ __('navigation.current_discussions') }}</a>
                 <a href="{{ route('discussion.join') }}">{{ __('navigation.join_discussion') }}</a>
+                <a href="{{ route('public.grievances.create') }}">Log a Grievance</a>
             </div>
             <div class="footer-contact">
                 <h4>{{ __('landing.footer_contact_title') }}</h4>

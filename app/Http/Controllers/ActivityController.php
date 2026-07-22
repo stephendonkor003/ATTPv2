@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ActivityReallocationException;
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Activity;
 use App\Models\Project;
 use App\Models\Program;
 use App\Models\ActivityAllocation;
+use App\Services\ActivityReallocationTracker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -347,38 +349,378 @@ class ActivityController extends Controller
      * Reallocate an activity to a different project (and thereby another program).
      * Moves the activity and updates governance node on the activity and its sub-activities.
      */
-    public function reallocate(Request $request, Activity $activity)
+    public function reallocate(
+        Request $request,
+        Activity $activity,
+        ActivityReallocationTracker $reallocationTracker
+    )
     {
         $this->assertActivityInScope($activity);
 
         $request->validate([
             'project_id' => 'required|exists:myb_projects,id',
+            'attempt_id' => 'nullable|uuid',
+            'repair' => 'nullable|boolean',
         ]);
 
         $targetProject = Project::findOrFail($request->project_id);
         $this->assertProjectInScope($targetProject);
+        $repairExistingMove = $request->boolean('repair') || $request->filled('attempt_id');
 
-        if ($activity->project_id === $targetProject->id) {
+        if ((string) $activity->project_id === (string) $targetProject->id && ! $repairExistingMove) {
             return back()->with('error', 'Activity already assigned to the selected project.');
         }
 
+        $attempt = null;
         try {
-            DB::transaction(function () use ($activity, $targetProject) {
-                $sourceProject = $activity->loadMissing('project')->project;
-                $sourceProject->transferActivityBudgetTo($activity, $targetProject, true);
-
-                $activity->project_id = $targetProject->id;
-                $activity->governance_node_id = $targetProject->governance_node_id;
-                $activity->save();
-
-                // Update sub-activities governance node to match new project
-                $activity->subActivities()->update(['governance_node_id' => $targetProject->governance_node_id]);
-            });
-        } catch (\Throwable $e) {
-            return back()->with('error', 'Reallocation failed: ' . $e->getMessage());
+            $attempt = $reallocationTracker->begin(
+                $activity,
+                $targetProject,
+                $request->input('attempt_id')
+            );
+        } catch (ActivityReallocationException $trackingError) {
+            return back()->with('error', 'Reallocation failed: ' . $trackingError->getMessage());
+        } catch (\Throwable $trackingError) {
+            report($trackingError);
         }
 
-        return back()->with('success', 'Activity reallocated successfully.');
+        try {
+            $result = DB::transaction(function () use ($activity, $targetProject, $repairExistingMove) {
+                $activityToMove = Activity::query()
+                    ->lockForUpdate()
+                    ->findOrFail($activity->id);
+                $activityToMove->setRelation(
+                    'allocations',
+                    $activityToMove->allocations()->lockForUpdate()->get()
+                );
+
+                $lockedProjects = Project::query()
+                    ->whereIn('id', [$activityToMove->project_id, $targetProject->id])
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy(fn (Project $project) => (string) $project->id);
+                $lockedSourceProject = $lockedProjects->get((string) $activityToMove->project_id);
+                $lockedTargetProject = $lockedProjects->get((string) $targetProject->id);
+
+                if (! $lockedSourceProject || ! $lockedTargetProject) {
+                    throw new ActivityReallocationException('The source or target component could not be locked for reallocation.');
+                }
+
+                $alreadyInTarget = (string) $activityToMove->project_id === (string) $lockedTargetProject->id;
+                if ($alreadyInTarget && ! $repairExistingMove) {
+                    throw new ActivityReallocationException('Activity already assigned to the selected project.');
+                }
+
+                $targetYears = collect($lockedTargetProject->years())->map(fn ($year) => (int) $year);
+                $outsideTargetYears = $activityToMove->allocations
+                    ->filter(fn ($allocation) => (float) $allocation->amount > 0)
+                    ->pluck('year')
+                    ->map(fn ($year) => (int) $year)
+                    ->diff($targetYears)
+                    ->values();
+
+                if ($outsideTargetYears->isNotEmpty()) {
+                    throw new ActivityReallocationException(
+                        'The target project does not cover the activity allocation year(s): '
+                        . $outsideTargetYears->implode(', ')
+                        . '.'
+                    );
+                }
+
+                $movedAmount = round((float) $activityToMove->allocations->sum('amount'), 2);
+                if ($alreadyInTarget) {
+                    $this->rebalanceTargetProjectYearlyAllocations($lockedTargetProject, $activityToMove);
+                } else {
+                    $this->transferActivityBudgetEnvelope(
+                        $lockedSourceProject,
+                        $lockedTargetProject,
+                        $activityToMove
+                    );
+                }
+
+                $activityToMove->project_id = $lockedTargetProject->id;
+                $activityToMove->governance_node_id = $lockedTargetProject->governance_node_id;
+                $activityToMove->save();
+
+                // Update sub-activities governance node to match new project
+                $activityToMove->subActivities()->update([
+                    'governance_node_id' => $lockedTargetProject->governance_node_id,
+                ]);
+
+                return [
+                    'amount' => $movedAmount,
+                    'repaired' => $alreadyInTarget,
+                ];
+            });
+        } catch (\Throwable $e) {
+            report($e);
+            $message = $this->safeReallocationErrorMessage($e);
+
+            if ($attempt) {
+                try {
+                    $reallocationTracker->fail($attempt, $message);
+                } catch (\Throwable $trackingError) {
+                    report($trackingError);
+                }
+            }
+
+            return back()->with('error', 'Reallocation failed: ' . $message);
+        }
+
+        $successMessage = $result['repaired']
+            ? 'The activity reallocation was repaired and verified. Its ' . number_format($result['amount'], 2) . ' allocation is fully attached to the current component.'
+            : 'Activity and its ' . number_format($result['amount'], 2) . ' budget envelope were reallocated successfully. The programme-wide budget was unchanged.';
+
+        if ($attempt) {
+            try {
+                $reallocationTracker->succeed($attempt, $successMessage);
+            } catch (\Throwable $trackingError) {
+                report($trackingError);
+            }
+        }
+
+        return back()->with(
+            'success',
+            $successMessage
+        );
+    }
+
+    private function rebalanceTargetProjectYearlyAllocations(Project $targetProject, Activity $incomingActivity): void
+    {
+        $years = collect($targetProject->years())->map(fn ($year) => (int) $year)->values();
+        $allocationModels = $targetProject->allocations()
+            ->whereIn('year', $years)
+            ->lockForUpdate()
+            ->get()
+            ->keyBy(fn ($allocation) => (int) $allocation->year);
+
+        $missingYears = $years->reject(fn (int $year) => $allocationModels->has($year));
+        if ($missingYears->isNotEmpty()) {
+            throw new ActivityReallocationException(
+                'The target component is missing yearly budget row(s) for: ' . $missingYears->implode(', ') . '.'
+            );
+        }
+
+        $current = $years->mapWithKeys(fn (int $year) => [
+            $year => round((float) optional($allocationModels->get($year))->amount, 2),
+        ])->all();
+        $required = $years->mapWithKeys(fn (int $year) => [$year => 0.0])->all();
+
+        $targetProject->load('activities.allocations');
+        foreach ($targetProject->activities as $activity) {
+            foreach ($activity->allocations as $allocation) {
+                $year = (int) $allocation->year;
+                if (array_key_exists($year, $required)) {
+                    $required[$year] += (float) $allocation->amount;
+                }
+            }
+        }
+
+        $incomingAlreadyIncluded = (string) $incomingActivity->project_id === (string) $targetProject->id;
+        if (! $incomingAlreadyIncluded) {
+            foreach ($incomingActivity->allocations as $allocation) {
+                $year = (int) $allocation->year;
+                if (array_key_exists($year, $required)) {
+                    $required[$year] += (float) $allocation->amount;
+                }
+            }
+        }
+
+        $plan = $this->rebalanceAllocationPlan($current, $required);
+        foreach ($plan as $year => $amount) {
+            $allocation = $allocationModels->get((int) $year);
+            if (! $allocation) {
+                throw new ActivityReallocationException("The target project has no allocation row for {$year}.");
+            }
+
+            if (abs((float) $allocation->amount - $amount) >= 0.01) {
+                $allocation->update(['amount' => $amount]);
+            }
+        }
+    }
+
+    private function transferActivityBudgetEnvelope(
+        Project $sourceProject,
+        Project $targetProject,
+        Activity $activity
+    ): float {
+        $activityYearly = $activity->allocations
+            ->groupBy(fn ($allocation) => (int) $allocation->year)
+            ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
+            ->all();
+
+        $sourceAllocations = $sourceProject->allocations()
+            ->lockForUpdate()
+            ->get()
+            ->keyBy(fn ($allocation) => (int) $allocation->year);
+        $targetAllocations = $targetProject->allocations()
+            ->lockForUpdate()
+            ->get()
+            ->keyBy(fn ($allocation) => (int) $allocation->year);
+
+        $sourceYearly = $sourceAllocations
+            ->mapWithKeys(fn ($allocation, $year) => [(int) $year => round((float) $allocation->amount, 2)])
+            ->all();
+        $targetYearly = $targetAllocations
+            ->mapWithKeys(fn ($allocation, $year) => [(int) $year => round((float) $allocation->amount, 2)])
+            ->all();
+
+        $plan = $this->budgetEnvelopeTransferPlan(
+            (float) $sourceProject->total_budget,
+            (float) $targetProject->total_budget,
+            $sourceYearly,
+            $targetYearly,
+            $activityYearly
+        );
+
+        foreach ($plan['source_yearly'] as $year => $amount) {
+            if (isset($activityYearly[$year]) && $sourceAllocations->has((int) $year)) {
+                $sourceAllocations->get((int) $year)->update(['amount' => $amount]);
+            }
+        }
+
+        foreach ($plan['target_yearly'] as $year => $amount) {
+            if (isset($activityYearly[$year]) && $targetAllocations->has((int) $year)) {
+                $targetAllocations->get((int) $year)->update(['amount' => $amount]);
+            }
+        }
+
+        $sourceProject->update(['total_budget' => $plan['source_total']]);
+        $targetProject->update(['total_budget' => $plan['target_total']]);
+
+        return $plan['moved_amount'];
+    }
+
+    private function budgetEnvelopeTransferPlan(
+        float $sourceTotal,
+        float $targetTotal,
+        array $sourceYearly,
+        array $targetYearly,
+        array $activityYearly
+    ): array {
+        $sourceYearly = collect($sourceYearly)
+            ->mapWithKeys(fn ($amount, $year) => [(int) $year => round((float) $amount, 2)])
+            ->all();
+        $targetYearly = collect($targetYearly)
+            ->mapWithKeys(fn ($amount, $year) => [(int) $year => round((float) $amount, 2)])
+            ->all();
+        $activityYearly = collect($activityYearly)
+            ->mapWithKeys(fn ($amount, $year) => [(int) $year => round((float) $amount, 2)])
+            ->all();
+
+        $movedAmount = round(array_sum($activityYearly), 2);
+        if ($movedAmount < 0) {
+            throw new ActivityReallocationException('The activity budget cannot be negative.');
+        }
+        if ($sourceTotal + 0.01 < $movedAmount) {
+            throw new ActivityReallocationException(
+                'The source component budget is lower than the activity budget being moved.'
+            );
+        }
+
+        foreach ($activityYearly as $year => $amount) {
+            if ($amount < 0) {
+                throw new ActivityReallocationException("The activity allocation for {$year} cannot be negative.");
+            }
+            if ($amount <= 0) {
+                continue;
+            }
+            if (! array_key_exists($year, $sourceYearly)) {
+                throw new ActivityReallocationException("The source component has no yearly budget row for {$year}.");
+            }
+            if (! array_key_exists($year, $targetYearly)) {
+                throw new ActivityReallocationException("The target component has no yearly budget row for {$year}.");
+            }
+            if ($sourceYearly[$year] + 0.01 < $amount) {
+                throw new ActivityReallocationException(
+                    "The source component does not have enough budget in {$year} to move this activity."
+                );
+            }
+
+            $sourceYearly[$year] = round($sourceYearly[$year] - $amount, 2);
+            $targetYearly[$year] = round($targetYearly[$year] + $amount, 2);
+        }
+
+        return [
+            'moved_amount' => $movedAmount,
+            'source_total' => round($sourceTotal - $movedAmount, 2),
+            'target_total' => round($targetTotal + $movedAmount, 2),
+            'source_yearly' => $sourceYearly,
+            'target_yearly' => $targetYearly,
+        ];
+    }
+
+    private function rebalanceAllocationPlan(array $current, array $required): array
+    {
+        $current = collect($current)
+            ->mapWithKeys(fn ($amount, $year) => [(int) $year => round((float) $amount, 2)])
+            ->sortKeys()
+            ->all();
+        $required = collect($required)
+            ->mapWithKeys(fn ($amount, $year) => [(int) $year => round((float) $amount, 2)])
+            ->sortKeys()
+            ->all();
+
+        $availableTotal = round(array_sum($current), 2);
+        $requiredTotal = round(array_sum($required), 2);
+        if ($requiredTotal > $availableTotal + 0.01) {
+            throw new ActivityReallocationException(
+                'The target project does not have enough available budget. '
+                . 'Available: ' . number_format($availableTotal, 2)
+                . '; required after reallocation: ' . number_format($requiredTotal, 2)
+                . '.'
+            );
+        }
+
+        $plan = $current;
+        $deficits = [];
+        $surpluses = [];
+
+        foreach ($required as $year => $requiredAmount) {
+            $difference = round(($current[$year] ?? 0) - $requiredAmount, 2);
+            if ($difference < 0) {
+                $deficits[$year] = abs($difference);
+            } elseif ($difference > 0) {
+                $surpluses[$year] = $difference;
+            }
+        }
+
+        krsort($surpluses);
+        foreach ($deficits as $deficitYear => $needed) {
+            foreach ($surpluses as $surplusYear => $available) {
+                if ($needed <= 0.001) {
+                    break;
+                }
+
+                $moved = round(min($needed, $available), 2);
+                if ($moved <= 0) {
+                    continue;
+                }
+
+                $plan[$deficitYear] = round(($plan[$deficitYear] ?? 0) + $moved, 2);
+                $plan[$surplusYear] = round(($plan[$surplusYear] ?? 0) - $moved, 2);
+                $needed = round($needed - $moved, 2);
+                $surpluses[$surplusYear] = round($available - $moved, 2);
+            }
+
+            if ($needed > 0.01) {
+                throw new ActivityReallocationException('Unable to rebalance the target project yearly budget.');
+            }
+        }
+
+        ksort($plan);
+
+        return $plan;
+    }
+
+    private function safeReallocationErrorMessage(\Throwable $error): string
+    {
+        if ($error instanceof ActivityReallocationException) {
+            return $error->getMessage();
+        }
+
+        return 'The move could not be completed. The activity remains in its previous component and the attempt has been saved for retry.';
     }
 
     private function assertProjectInScope(Project $project): void

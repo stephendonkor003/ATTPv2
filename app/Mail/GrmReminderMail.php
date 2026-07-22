@@ -17,14 +17,13 @@ class GrmReminderMail extends Mailable
         public GrmGrievance $grievance,
         public ?GrmEscalationRule $rule = null,
         public string $noticeType = 'reminder'
-    ) {
-    }
+    ) {}
 
     public function build(): self
     {
         $subject = $this->noticeType === 'escalation'
-            ? 'GRM Case Escalation: ' . $this->grievance->case_number
-            : ($this->rule?->reminder_subject ?: 'GRM Case Reminder: ' . $this->grievance->case_number);
+            ? 'GRM Case Escalation: '.$this->grievance->case_number
+            : ($this->rule?->reminder_subject ?: 'GRM Case Reminder: '.$this->grievance->case_number);
 
         return $this->subject($subject)
             ->view('emails.grm.reminder');

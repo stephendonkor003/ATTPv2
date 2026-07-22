@@ -244,6 +244,7 @@
             <a href="{{ route('landing.index') }}">Home</a>
             <a href="#process">System Flow</a>
             <a href="#customization">Customization</a>
+            <a href="{{ route('public.grievances.create') }}">Grievance</a>
             <a href="#contact">Contact</a>
             <a href="{{ route('events') }}">Events</a>
             <a href="{{ route('careers.index') }}">Career</a>

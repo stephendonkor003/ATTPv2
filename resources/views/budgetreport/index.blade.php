@@ -668,10 +668,23 @@
                                 <div class="br-metric">
                                     <div class="text-muted small">Remaining to Activities</div>
                                     <div class="h4 fw-bold mb-0">{{ $projectMoney($projectSummary['remaining_to_activities']) }}</div>
-                                    <div class="small text-muted mt-3">{{ number_format($projectSummary['sub_activity_progress'], 1) }}% sub-activity coverage</div>
+                                    <div class="small text-muted mt-3">{{ number_format($projectSummary['sub_activity_progress'], 2) }}% sub-activity coverage</div>
                                 </div>
                             </div>
                         </div>
+
+                        @if (($projectSummary['sub_activity_overallocation'] ?? 0) > 0)
+                            <div class="alert alert-warning mt-3 mb-0 d-flex align-items-start gap-2" role="alert">
+                                <i class="feather-alert-triangle mt-1"></i>
+                                <div>
+                                    <div class="fw-semibold">Sub-activity allocations exceed their parent activities by {{ $projectMoney($projectSummary['sub_activity_overallocation']) }}.</div>
+                                    <div class="small mt-1">
+                                        The report keeps parent and child allocations separate and does not count the excess twice.
+                                        Review the highlighted activity rows to correct the underlying allocation breakdown.
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
                     </div>
                 </div>
 
@@ -712,7 +725,7 @@
                                 <div>
                                     <div class="d-flex justify-content-between small fw-semibold mb-2">
                                         <span>Sub-activity progress</span>
-                                        <span>{{ number_format($projectSummary['sub_activity_progress'], 1) }}%</span>
+                                        <span>{{ number_format($projectSummary['sub_activity_progress'], 2) }}%</span>
                                     </div>
                                     <div class="br-progress"><span style="width: {{ min(100, $projectSummary['sub_activity_progress']) }}%;"></span></div>
                                 </div>
@@ -756,6 +769,15 @@
                                                     <div class="br-progress flex-grow-1"><span style="width: {{ min(100, $activityRow['sub_activity_progress']) }}%;"></span></div>
                                                     <span class="small fw-semibold">{{ number_format($activityRow['sub_activity_progress'], 1) }}%</span>
                                                 </div>
+                                                @if (($activityRow['sub_activity_overallocation'] ?? 0) > 0)
+                                                    <div class="small text-danger mt-1">
+                                                        Over-allocated by {{ $projectMoney($activityRow['sub_activity_overallocation']) }}
+                                                    </div>
+                                                @elseif (($activityRow['remaining_to_sub_activities'] ?? 0) > 0)
+                                                    <div class="small text-muted mt-1">
+                                                        {{ $projectMoney($activityRow['remaining_to_sub_activities']) }} not assigned to sub-activities
+                                                    </div>
+                                                @endif
                                             </td>
                                         </tr>
                                     @empty

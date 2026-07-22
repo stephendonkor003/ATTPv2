@@ -6,6 +6,22 @@ use Illuminate\Support\Str;
 
 class GrmGrievance extends BaseModel
 {
+    public const CHANNELS = [
+        'portal' => 'Internal Portal (Legacy)',
+        'internal_portal' => 'ATTP Internal Portal',
+        'public_portal' => 'Public Website',
+        'think_tank_portal' => 'Think Tank Portal',
+        'funding_partner_portal' => 'Funding Partner Portal',
+        'vendor_portal' => 'Vendor Portal',
+        'ttl_portal' => 'Task Team Leader Portal',
+        'member_state_portal' => 'Member State Portal',
+        'email' => 'Email',
+        'phone' => 'Phone',
+        'walk_in' => 'Walk-in',
+        'field_visit' => 'Field Visit',
+        'other' => 'Other',
+    ];
+
     public const STATUSES = [
         'submitted' => 'Submitted',
         'acknowledged' => 'Acknowledged',
@@ -27,6 +43,8 @@ class GrmGrievance extends BaseModel
         'submitter_name',
         'submitter_email',
         'submitter_phone',
+        'anonymous_contact_method',
+        'anonymous_contact_value',
         'channel',
         'subject',
         'description',
@@ -44,6 +62,7 @@ class GrmGrievance extends BaseModel
 
     protected $casts = [
         'is_anonymous' => 'boolean',
+        'anonymous_contact_value' => 'encrypted',
         'submitted_at' => 'datetime',
         'acknowledged_at' => 'datetime',
         'responded_at' => 'datetime',
@@ -52,6 +71,10 @@ class GrmGrievance extends BaseModel
         'due_resolution_at' => 'datetime',
         'last_reminder_sent_at' => 'datetime',
         'last_escalated_at' => 'datetime',
+    ];
+
+    protected $hidden = [
+        'anonymous_contact_value',
     ];
 
     public function program()
@@ -99,6 +122,11 @@ class GrmGrievance extends BaseModel
         return self::STATUSES[$this->status] ?? Str::headline((string) $this->status);
     }
 
+    public function getChannelLabelAttribute(): string
+    {
+        return self::CHANNELS[$this->channel] ?? Str::headline((string) $this->channel);
+    }
+
     public function getIsUnattendedAttribute(): bool
     {
         return in_array($this->status, ['submitted', 'acknowledged', 'under_review', 'escalated'], true)
@@ -106,16 +134,43 @@ class GrmGrievance extends BaseModel
             && ! $this->resolved_at;
     }
 
+    public function replyEmail(): ?string
+    {
+        if ($this->is_anonymous) {
+            return $this->anonymous_contact_method === 'email'
+                ? $this->anonymous_contact_value
+                : null;
+        }
+
+        return $this->submitter_email;
+    }
+
+    public function replyPhone(): ?string
+    {
+        if ($this->is_anonymous) {
+            return $this->anonymous_contact_method === 'phone'
+                ? $this->anonymous_contact_value
+                : null;
+        }
+
+        return $this->submitter_phone;
+    }
+
+    public function confidentialReplyContact(): ?string
+    {
+        return $this->replyEmail() ?: $this->replyPhone();
+    }
+
     public static function generateCaseNumber(?Program $program = null): string
     {
         $prefix = 'GRM';
 
         if ($program && filled($program->name)) {
-            $prefix .= '-' . Str::upper(Str::substr(Str::slug($program->name, ''), 0, 4));
+            $prefix .= '-'.Str::upper(Str::substr(Str::slug($program->name, ''), 0, 4));
         }
 
         do {
-            $number = $prefix . '-' . now()->format('Ymd') . '-' . Str::upper(Str::random(6));
+            $number = $prefix.'-'.now()->format('Ymd').'-'.Str::upper(Str::random(6));
         } while (static::query()->where('case_number', $number)->exists());
 
         return $number;

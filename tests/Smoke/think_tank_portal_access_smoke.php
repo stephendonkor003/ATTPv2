@@ -73,6 +73,8 @@ class ThinkTankPortalAccessSmoke
         'think-tank.procurement',
     ];
 
+    private const GRIEVANCE_ROUTE_NAME = 'think-tank.grievances.create';
+
     protected $app;
 
     public function __construct($app)
@@ -90,6 +92,7 @@ class ThinkTankPortalAccessSmoke
             $context = $this->prepareContext();
             $this->assertAreaRouteMiddleware();
             $this->assertRoleAccessMatrix($context['users']);
+            $this->assertGrievanceAccess($context['users']);
             $this->assertLegacyRoutesAreForbidden($context['users']);
             $this->assertSimplifiedNavigation($context['users']);
 
@@ -107,7 +110,7 @@ class ThinkTankPortalAccessSmoke
             'The think-tank member and access-level user columns are not migrated.'
         );
 
-        foreach ([...array_values(self::AREA_ROUTES), ...self::LEGACY_ROUTE_NAMES] as $routeName) {
+        foreach ([...array_values(self::AREA_ROUTES), ...self::LEGACY_ROUTE_NAMES, self::GRIEVANCE_ROUTE_NAME] as $routeName) {
             $this->assertTrue(
                 Route::has($routeName),
                 "Required think-tank portal route [{$routeName}] is missing."
@@ -227,6 +230,25 @@ class ThinkTankPortalAccessSmoke
     /**
      * @param  array<string, User>  $users
      */
+    private function assertGrievanceAccess(array $users): void
+    {
+        foreach ($users as $accessLevel => $user) {
+            $this->asPortalUser($user)
+                ->get(route(self::GRIEVANCE_ROUTE_NAME))
+                ->assertOk()
+                ->assertSee('Log a Grievance')
+                ->assertSee('Incident Details / Summary')
+                ->assertSee('Think Tank Portal')
+                ->assertSee('Automatically detected by the system.')
+                ->assertSee('Your identity will be hidden')
+                ->assertDontSee('<select name="channel"', false)
+                ->assertSee(route('think-tank.grievances.store'));
+        }
+    }
+
+    /**
+     * @param  array<string, User>  $users
+     */
     private function assertSimplifiedNavigation(array $users): void
     {
         foreach (self::ACCESS_MATRIX as $accessLevel => $allowedAreas) {
@@ -242,8 +264,17 @@ class ThinkTankPortalAccessSmoke
             preg_match_all('/<a\b/i', $navigation, $navigationLinks);
 
             $this->assertTrue(
-                count($navigationLinks[0]) === count($allowedAreas),
-                "The {$accessLevel} menu must contain exactly its allowed portal areas."
+                count($navigationLinks[0]) === count($allowedAreas) + 1,
+                "The {$accessLevel} menu must contain its allowed portal areas and the grievance link."
+            );
+
+            $this->assertTrue(
+                str_contains($navigation, 'href="'.route(self::GRIEVANCE_ROUTE_NAME).'"'),
+                "The {$accessLevel} menu is missing the grievance link."
+            );
+            $this->assertTrue(
+                str_contains($navigationText, 'Grievance'),
+                "The {$accessLevel} menu is missing the Grievance label."
             );
 
             foreach (self::AREA_ROUTES as $area => $routeName) {

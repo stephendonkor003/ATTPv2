@@ -88,6 +88,7 @@
                             <th>Case Number</th>
                             <th>Program</th>
                             <th>Submitter</th>
+                            <th>Channel</th>
                             <th>Level</th>
                             <th>Status</th>
                             <th>Response Due</th>
@@ -107,6 +108,7 @@
                                     <div>{{ $grievance->is_anonymous ? 'Anonymous' : ($grievance->submitter_name ?: 'Not provided') }}</div>
                                     <small class="text-muted">{{ $grievance->submitter_email }}</small>
                                 </td>
+                                <td><span class="badge bg-light text-dark border">{{ $grievance->channel_label }}</span></td>
                                 <td>
                                     <span class="badge" style="background: {{ $grievance->level?->color ?? '#0f766e' }}">{{ $grievance->level?->name ?? 'Unclassified' }}</span>
                                 </td>
@@ -125,7 +127,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center text-muted py-4">No grievance records found.</td>
+                                <td colspan="9" class="text-center text-muted py-4">No grievance records found.</td>
                             </tr>
                         @endforelse
                     </tbody>

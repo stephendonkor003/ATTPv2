@@ -55,12 +55,12 @@
                         <div><span>Program</span><strong>{{ $grievance->program?->name ?? 'No program' }}</strong></div>
                         <div><span>Portfolio</span><strong>{{ $grievance->program?->sector?->name ?? 'N/A' }}</strong></div>
                         <div><span>Level</span><strong>{{ $grievance->level?->name ?? 'Unclassified' }}</strong></div>
-                        <div><span>Channel</span><strong>{{ \Illuminate\Support\Str::headline($grievance->channel) }}</strong></div>
+                        <div><span>Channel</span><strong>{{ $grievance->channel_label }}</strong></div>
                         <div><span>Response Due</span><strong>{{ $grievance->due_response_at?->format('d M Y H:i') ?? 'N/A' }}</strong></div>
                         <div><span>Resolution Due</span><strong>{{ $grievance->due_resolution_at?->format('d M Y H:i') ?? 'N/A' }}</strong></div>
                     </div>
 
-                    <h6 class="fw-bold">Description</h6>
+                    <h6 class="fw-bold">Incident Details / Summary</h6>
                     <p class="mb-4" style="white-space: pre-wrap;">{{ $grievance->description }}</p>
 
                     <h6 class="fw-bold">Supporting Documents</h6>
@@ -83,6 +83,16 @@
                         <div><span>Name</span><strong>{{ $grievance->is_anonymous ? 'Anonymous' : ($grievance->submitter_name ?: 'Not provided') }}</strong></div>
                         <div><span>Email</span><strong>{{ $grievance->is_anonymous ? 'Anonymous' : ($grievance->submitter_email ?: 'Not provided') }}</strong></div>
                         <div><span>Phone</span><strong>{{ $grievance->is_anonymous ? 'Anonymous' : ($grievance->submitter_phone ?: 'Not provided') }}</strong></div>
+                        @if ($grievance->is_anonymous)
+                            <div>
+                                <span>Confidential Reply Method</span>
+                                <strong>{{ \Illuminate\Support\Str::headline($grievance->anonymous_contact_method ?: 'Not provided') }}</strong>
+                            </div>
+                            <div>
+                                <span>Confidential Reply Contact</span>
+                                <strong>{{ $grievance->confidentialReplyContact() ?: 'Not provided' }}</strong>
+                            </div>
+                        @endif
                         <div><span>Submitted</span><strong>{{ $grievance->submitted_at?->format('d M Y H:i') ?? $grievance->created_at?->format('d M Y H:i') }}</strong></div>
                     </div>
                 </div>

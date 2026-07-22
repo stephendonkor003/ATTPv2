@@ -2817,6 +2817,11 @@ Route::middleware(['auth', 'not.funding.partner'])
 
 Route::get('/', [LandingPageController::class, 'index'])->name('landing.index');
 Route::get('/gallery', [LandingPageController::class, 'gallery'])->name('gallery');
+Route::get('/grievances/submit', [GrmController::class, 'createPublicSubmission'])
+    ->name('public.grievances.create');
+Route::post('/grievances/submit', [GrmController::class, 'storeSubmission'])
+    ->middleware('throttle:6,1')
+    ->name('public.grievances.store');
 Route::get('/stream/{filename}', [VideoStreamController::class, 'stream'])
     ->where('filename', '[A-Za-z0-9_.+-]+')
     ->name('video.stream');
@@ -3624,6 +3629,11 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
     ->name('think-tank.')
     ->controller(\App\Http\Controllers\ThinkTankPortalController::class)
     ->group(function () {
+        Route::get('/grievances/create', [GrmController::class, 'createSubmission'])
+            ->name('grievances.create');
+        Route::post('/grievances', [GrmController::class, 'storeSubmission'])
+            ->name('grievances.store');
+
         Route::get('/dashboard', 'dashboard')
             ->middleware('think.tank.area:dashboard')
             ->name('dashboard');

@@ -355,6 +355,7 @@
     </div>
     <a href="{{ route('news.index') }}" onclick="closeMobileNav()">{{ __('navigation.news_updates') }}</a>
     <a href="{{ route('gallery') }}" class="active" onclick="closeMobileNav()">{{ __('navigation.gallery') }}</a>
+    <a href="{{ route('public.grievances.create') }}" onclick="closeMobileNav()">Log a Grievance</a>
     <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
     <div class="mobile-nav-actions">
         <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
@@ -394,6 +395,7 @@
         </div>
         <a href="{{ route('news.index') }}">{{ __('navigation.news_updates') }}</a>
         <a href="{{ route('gallery') }}" class="active">{{ __('navigation.gallery') }}</a>
+        <a href="{{ route('public.grievances.create') }}">Grievance</a>
         <a href="#contact">{{ __('navigation.contact') }}</a>
     </nav>
     <div class="nav-actions">

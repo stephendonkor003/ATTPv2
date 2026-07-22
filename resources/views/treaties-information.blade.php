@@ -438,6 +438,7 @@
             </ul>
         </div>
         <a href="{{ route('news.index') }}">News &amp; Updates</a>
+        <a href="{{ route('public.grievances.create') }}">Grievance</a>
         <a href="#contact">Contact</a>
     </nav>
     <div class="nav-actions">

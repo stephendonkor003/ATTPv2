@@ -4,17 +4,18 @@ use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
 
-require __DIR__ . '/../../vendor/autoload.php';
+require __DIR__.'/../../vendor/autoload.php';
 
-$app = require __DIR__ . '/../../bootstrap/app.php';
+$app = require __DIR__.'/../../bootstrap/app.php';
 $app->make(ConsoleKernel::class)->bootstrap();
 
 $paths = [
-    '/' => ['ATTP', 'News', 'Login', 'Thematic Areas'],
+    '/' => ['ATTP', 'News', 'Login', 'Thematic Areas', 'Log a Grievance'],
     '/events' => ['Events', 'Login', 'Thematic Areas'],
     '/news' => ['News', 'Subscribe', 'Thematic Areas'],
     '/careers' => ['Careers', 'Login', 'Thematic Areas'],
     '/gallery' => ['Gallery', 'Thematic Areas'],
+    '/grievances/submit' => ['Speak up. We are listening.', 'Submit anonymously', 'What happens next?', 'Your identity will be hidden'],
     '/public/procurement' => ['Procurement', 'Login'],
     '/impact-map' => ['Impact', 'Thematic Areas'],
     '/world-indicators-performance' => ['World', 'Thematic Areas'],
@@ -30,7 +31,7 @@ foreach ($paths as $path => $needles) {
 
     if ($response->getStatusCode() !== 200) {
         fwrite(STDERR, "Expected 200 from {$path}, got {$response->getStatusCode()}.\n");
-        fwrite(STDERR, substr($content, 0, 1200) . "\n");
+        fwrite(STDERR, substr($content, 0, 1200)."\n");
         exit(1);
     }
 

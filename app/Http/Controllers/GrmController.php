@@ -31,28 +31,92 @@ class GrmController extends Controller
         $programs = $this->submissionProgramsQuery()->get();
         $levels = $this->submissionLevelsQuery()->where('is_active', true)->get();
 
-        return view('grm.submissions.create', [
+        $viewData = [
             'programs' => $programs,
             'levels' => $levels,
             'channels' => $this->channels(),
+            'selectableChannels' => $this->officerSelectableChannels(),
+            'canSelectChannel' => $this->canSelectSubmissionChannel($request),
+            'automaticChannel' => $this->automaticSubmissionChannel($request),
+        ];
+
+        if ($request->user()?->isThinkTankUser()) {
+            $member = $request->user()->resolvedThinkTankMembership();
+            abort_unless($member, 403, 'Your think tank account is not linked to a consortium membership yet.');
+
+            return view('grm.submissions.think-tank', array_merge($viewData, [
+                'member' => $member,
+            ]));
+        }
+
+        return view('grm.submissions.create', $viewData);
+    }
+
+    public function createPublicSubmission(Request $request)
+    {
+        return view('grm.submissions.public', [
+            'programs' => $this->submissionProgramsQuery()->get(),
+            'levels' => $this->submissionLevelsQuery()->where('is_active', true)->get(),
+            'channels' => $this->channels(),
+            'selectableChannels' => [],
+            'canSelectChannel' => false,
+            'automaticChannel' => $this->automaticSubmissionChannel($request),
         ]);
     }
 
     public function storeSubmission(Request $request)
     {
+        $isPublicSubmission = $request->routeIs('public.grievances.store');
+        $isThinkTankSubmission = $request->routeIs('think-tank.grievances.store');
+        $canSelectChannel = $this->canSelectSubmissionChannel($request);
+        $automaticChannel = $this->automaticSubmissionChannel($request);
+
+        if (! $canSelectChannel || ! $request->filled('channel')) {
+            $request->merge(['channel' => $automaticChannel]);
+        }
+
+        $allowedChannels = $canSelectChannel
+            ? $this->officerSelectableChannels()
+            : [$automaticChannel => $this->channels()[$automaticChannel]];
+
         $data = $request->validate([
             'program_id' => ['required', 'uuid', 'exists:myb_programs,id'],
             'level_id' => ['nullable', 'uuid', 'exists:grm_levels,id'],
             'submitter_name' => ['nullable', 'string', 'max:255'],
             'submitter_email' => ['nullable', 'email', 'max:255'],
             'submitter_phone' => ['nullable', 'string', 'max:60'],
-            'channel' => ['required', Rule::in(array_keys($this->channels()))],
+            'channel' => ['required', Rule::in(array_keys($allowedChannels))],
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'min:10'],
             'is_anonymous' => ['nullable', 'boolean'],
+            'anonymous_contact_method' => ['nullable', 'required_if:is_anonymous,1', Rule::in(['email', 'phone'])],
+            'anonymous_contact_value' => [
+                'nullable',
+                'required_if:is_anonymous,1',
+                'string',
+                'max:255',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request) {
+                    if (! $request->boolean('is_anonymous')) {
+                        return;
+                    }
+
+                    $method = $request->string('anonymous_contact_method')->toString();
+                    $contact = trim((string) $value);
+
+                    if ($method === 'email' && ! filter_var($contact, FILTER_VALIDATE_EMAIL)) {
+                        $fail('Enter a valid private email address for anonymous case replies.');
+                    }
+
+                    if ($method === 'phone' && ! preg_match('/^[+()\d\s.\-]{7,60}$/', $contact)) {
+                        $fail('Enter a valid private phone number for anonymous case replies.');
+                    }
+                },
+            ],
             'supporting_documents' => ['nullable', 'array', 'max:10'],
             'supporting_documents.*.title' => ['nullable', 'string', 'max:255'],
             'supporting_documents.*.file' => ['nullable', 'file', 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip', 'max:20480'],
+        ], [], [
+            'description' => 'incident details or summary',
         ]);
 
         $program = Program::with('sector')->findOrFail($data['program_id']);
@@ -78,8 +142,12 @@ class GrmController extends Controller
             ? $data['submitter_email']
             : Auth::user()?->email);
         $submitterPhone = $isAnonymous ? null : ($data['submitter_phone'] ?? null);
+        $anonymousContactMethod = $isAnonymous ? ($data['anonymous_contact_method'] ?? null) : null;
+        $anonymousContactValue = $isAnonymous ? trim((string) ($data['anonymous_contact_value'] ?? '')) : null;
+        $hideSubmittingActor = $isAnonymous && ! $canSelectChannel;
+        $submissionWorkspace = $this->channels()[$data['channel']] ?? 'the GRM workspace';
 
-        $grievance = DB::transaction(function () use ($request, $data, $program, $level, $rule, $responseHours, $resolutionHours, $responsibleOfficer, $submitterName, $submitterEmail, $submitterPhone, $isAnonymous) {
+        $grievance = DB::transaction(function () use ($request, $data, $program, $level, $rule, $responseHours, $resolutionHours, $responsibleOfficer, $submitterName, $submitterEmail, $submitterPhone, $isAnonymous, $anonymousContactMethod, $anonymousContactValue, $submissionWorkspace, $hideSubmittingActor, $canSelectChannel, $automaticChannel) {
             $now = now();
 
             $grievance = GrmGrievance::create([
@@ -93,6 +161,8 @@ class GrmController extends Controller
                 'submitter_name' => $submitterName,
                 'submitter_email' => $submitterEmail,
                 'submitter_phone' => $submitterPhone,
+                'anonymous_contact_method' => $anonymousContactMethod,
+                'anonymous_contact_value' => $anonymousContactValue,
                 'channel' => $data['channel'],
                 'subject' => $data['subject'],
                 'description' => $data['description'],
@@ -103,21 +173,22 @@ class GrmController extends Controller
                 'due_resolution_at' => $now->copy()->addHours($resolutionHours),
             ]);
 
-            $this->recordEvent($grievance, 'submitted', 'Grievance submitted through the GRM workspace.', [
+            $this->recordEvent($grievance, 'submitted', 'Grievance submitted through '.$submissionWorkspace.'.', [
                 'channel' => $data['channel'],
                 'program_id' => $program->id,
                 'level_id' => $level?->id,
-            ], $isAnonymous);
+                'logged_on_behalf' => $canSelectChannel && $data['channel'] !== $automaticChannel,
+            ], $hideSubmittingActor);
 
-            $attachmentCount = $this->storeSupportingDocuments($request, $grievance, $isAnonymous);
+            $attachmentCount = $this->storeSupportingDocuments($request, $grievance, $hideSubmittingActor);
 
             if ($attachmentCount > 0) {
                 $this->recordEvent(
                     $grievance,
                     'documents_uploaded',
-                    $attachmentCount . ' supporting document' . ($attachmentCount === 1 ? '' : 's') . ' uploaded with the grievance.',
+                    $attachmentCount.' supporting document'.($attachmentCount === 1 ? '' : 's').' uploaded with the grievance.',
                     ['attachments_count' => $attachmentCount],
-                    $isAnonymous
+                    $hideSubmittingActor
                 );
             }
 
@@ -125,11 +196,11 @@ class GrmController extends Controller
                 $this->recordEvent($grievance, 'assigned', 'Case assigned to the program GRM responsible officer.', [
                     'assigned_to' => $responsibleOfficer->id,
                     'assigned_to_email' => $responsibleOfficer->email,
-                ], $isAnonymous);
+                ], $hideSubmittingActor);
             } else {
                 $this->recordEvent($grievance, 'assignment_pending', 'No active GRM responsible officer was found for this program at submission time.', [
                     'program_id' => $program->id,
-                ], $isAnonymous);
+                ], $hideSubmittingActor);
             }
 
             return $grievance;
@@ -137,15 +208,27 @@ class GrmController extends Controller
 
         $this->sendSubmissionNotifications($grievance);
 
+        if ($isPublicSubmission) {
+            return redirect()
+                ->route('public.grievances.create')
+                ->with('success', 'Your grievance was submitted securely. Keep this case number for follow-up: '.$grievance->case_number);
+        }
+
+        if ($isThinkTankSubmission) {
+            return redirect()
+                ->route('think-tank.grievances.create')
+                ->with('success', 'Grievance submitted. Case number: '.$grievance->case_number);
+        }
+
         if (Auth::user()?->hasPermission('grm.view')) {
             return redirect()
                 ->route('grm.logs.show', $grievance)
-                ->with('success', 'Grievance submitted. Case number: ' . $grievance->case_number);
+                ->with('success', 'Grievance submitted. Case number: '.$grievance->case_number);
         }
 
         return redirect()
             ->route('grm.submissions.create')
-            ->with('success', 'Grievance submitted. Case number: ' . $grievance->case_number);
+            ->with('success', 'Grievance submitted. Case number: '.$grievance->case_number);
     }
 
     public function levels()
@@ -287,7 +370,7 @@ class GrmController extends Controller
         }
 
         if ($request->filled('q')) {
-            $search = '%' . $request->string('q')->trim()->toString() . '%';
+            $search = '%'.$request->string('q')->trim()->toString().'%';
             $query->where(function ($scope) use ($search) {
                 $scope->where('case_number', 'like', $search)
                     ->orWhere('subject', 'like', $search)
@@ -406,7 +489,7 @@ class GrmController extends Controller
         }
 
         $grievance->update($updates);
-        $this->recordEvent($grievance, 'status_updated', $data['notes'] ?: 'Case status updated to ' . GrmGrievance::STATUSES[$data['status']] . '.', [
+        $this->recordEvent($grievance, 'status_updated', $data['notes'] ?: 'Case status updated to '.GrmGrievance::STATUSES[$data['status']].'.', [
             'status' => $data['status'],
             'assigned_to' => $data['assigned_to'] ?? null,
         ]);
@@ -691,11 +774,13 @@ class GrmController extends Controller
 
         if ($this->userHasAssignedPortfolioScope($user)) {
             $this->applyAssignedPortfolioScopeToPrograms($query, $user);
+
             return $query;
         }
 
         if ($user->governance_node_id) {
             $nodeId = $user->governance_node_id;
+
             return $query->where(function (Builder $scope) use ($nodeId) {
                 $scope->where('governance_node_id', $nodeId)
                     ->orWhereHas('sector', fn (Builder $sectorQuery) => $sectorQuery->where('governance_node_id', $nodeId));
@@ -753,6 +838,7 @@ class GrmController extends Controller
 
         if ($this->userHasAssignedPortfolioScope($user)) {
             $this->applyAssignedPortfolioScopeToPrograms($query, $user);
+
             return $query;
         }
 
@@ -836,6 +922,7 @@ class GrmController extends Controller
 
         if ($user?->governance_node_id) {
             $nodeId = $user->governance_node_id;
+
             return $query->where(function (Builder $scope) use ($nodeId) {
                 $scope->where('governance_node_id', $nodeId)
                     ->orWhereHas('program', function (Builder $programQuery) use ($nodeId) {
@@ -926,6 +1013,7 @@ class GrmController extends Controller
     {
         if (! $programId) {
             abort_unless($this->userCanSeeAll(Auth::user()), 403, 'Only system administrators can create global GRM configuration.');
+
             return null;
         }
 
@@ -942,14 +1030,56 @@ class GrmController extends Controller
 
     private function channels(): array
     {
-        return [
-            'portal' => 'Portal',
-            'email' => 'Email',
-            'phone' => 'Phone',
-            'walk_in' => 'Walk-in',
-            'field_visit' => 'Field Visit',
-            'other' => 'Other',
-        ];
+        return GrmGrievance::CHANNELS;
+    }
+
+    private function automaticSubmissionChannel(Request $request): string
+    {
+        if ($request->routeIs('public.grievances.*')) {
+            return 'public_portal';
+        }
+
+        if ($request->routeIs('think-tank.grievances.*')) {
+            return 'think_tank_portal';
+        }
+
+        return match ($request->user()?->user_type) {
+            'think_tank' => 'think_tank_portal',
+            'funding_partner' => 'funding_partner_portal',
+            'vendor' => 'vendor_portal',
+            'ttl' => 'ttl_portal',
+            'member_state' => 'member_state_portal',
+            default => 'internal_portal',
+        };
+    }
+
+    private function officerSelectableChannels(): array
+    {
+        return collect(GrmGrievance::CHANNELS)
+            ->only([
+                'internal_portal',
+                'email',
+                'phone',
+                'walk_in',
+                'field_visit',
+                'other',
+            ])
+            ->all();
+    }
+
+    private function canSelectSubmissionChannel(Request $request): bool
+    {
+        if ($request->routeIs('public.grievances.*', 'think-tank.grievances.*')) {
+            return false;
+        }
+
+        $user = $request->user();
+
+        return (bool) ($user && collect([
+            'grm.view',
+            'grm.configure',
+            'grm.escalations',
+        ])->contains(fn (string $permission): bool => $user->hasPermission($permission)));
     }
 
     private function resolveResponsibleGrmOfficer(Program $program): ?User
@@ -1055,7 +1185,7 @@ class GrmController extends Controller
             && ! (bool) $user->is_blacklisted;
     }
 
-    private function storeSupportingDocuments(Request $request, GrmGrievance $grievance, bool $isAnonymous): int
+    private function storeSupportingDocuments(Request $request, GrmGrievance $grievance, bool $hideUploaderIdentity): int
     {
         $documentInputs = $request->input('supporting_documents', []);
         $documentFiles = $request->file('supporting_documents', []);
@@ -1072,7 +1202,7 @@ class GrmController extends Controller
             $path = $file->store("grm/grievances/{$grievance->id}/attachments", 'local');
 
             $grievance->attachments()->create([
-                'uploaded_by' => $isAnonymous ? null : Auth::id(),
+                'uploaded_by' => $hideUploaderIdentity ? null : Auth::id(),
                 'title' => $title !== '' ? $title : pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
                 'file_path' => $path,
                 'file_name' => $file->getClientOriginalName(),
@@ -1088,13 +1218,12 @@ class GrmController extends Controller
 
     private function sendSubmissionNotifications(GrmGrievance $grievance): void
     {
-        if (filled($grievance->submitter_email)) {
+        if (filled($grievance->replyEmail())) {
             try {
                 SendGrmAutoResponse::dispatch($grievance->id);
             } catch (Throwable $exception) {
                 Log::warning('GRM submitter acknowledgement failed during submission.', [
                     'grievance_id' => $grievance->id,
-                    'email' => $grievance->submitter_email,
                     'error' => $exception->getMessage(),
                 ]);
             }

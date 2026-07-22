@@ -17,12 +17,11 @@ class GrmResponsibleOfficerMail extends Mailable
         public GrmGrievance $grievance,
         public User $officer,
         public string $caseUrl
-    ) {
-    }
+    ) {}
 
     public function build(): self
     {
-        return $this->subject('New Grievance Assigned: ' . $this->grievance->case_number)
+        return $this->subject('New Grievance Assigned: '.$this->grievance->case_number)
             ->view('emails.grm.responsible-officer');
     }
 }

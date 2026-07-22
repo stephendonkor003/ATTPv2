@@ -1,60 +1,47 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>{{ $grievance->case_number }}</title>
-</head>
-<body style="margin:0;background:#f3f7f5;font-family:Arial,sans-serif;color:#0f172a;">
-    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f3f7f5;padding:24px;">
+@php
+    $isEscalation = $noticeType === 'escalation';
+    $emailTitle = ($isEscalation ? 'Grievance escalation: ' : 'Grievance reminder: ').$grievance->case_number;
+    $emailPreheader = 'Case '.$grievance->case_number.' requires attention.';
+    $emailEyebrow = $isEscalation ? 'Escalation notice' : 'Response reminder';
+    $emailHeading = $isEscalation ? 'This grievance has reached escalation' : 'This grievance requires attention';
+    $emailSubheading = 'Please review the case timeline and record the next action in the secured GRM workspace.';
+    $emailAccent = $isEscalation ? '#dc2626' : '#d4a017';
+@endphp
+
+@extends('emails.grm.layout')
+
+@section('content')
+    <p style="margin:0 0 18px;">A grievance case requires attention based on the configured acknowledgement, response, and resolution timeline.</p>
+
+    @if (! $isEscalation && $rule?->reminder_body)
+        <div style="margin:0 0 20px;white-space:pre-line;">{{ $rule->reminder_body }}</div>
+    @endif
+
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 20px;border-collapse:separate;border-spacing:0;border:1px solid #dfe7e3;border-radius:9px;overflow:hidden;">
         <tr>
-            <td align="center">
-                <table width="640" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #dbe5df;">
-                    <tr>
-                        <td style="background:{{ $noticeType === 'escalation' ? '#dc2626' : '#0f766e' }};color:#ffffff;padding:22px 26px;">
-                            <h2 style="margin:0;font-size:22px;">{{ $noticeType === 'escalation' ? 'GRM Case Escalation' : 'GRM Case Reminder' }}</h2>
-                            <p style="margin:6px 0 0;color:#f8fafc;">{{ $grievance->case_number }}</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding:26px;">
-                            <p style="margin-top:0;">
-                                A grievance case requires attention based on the configured GRM response timeline.
-                            </p>
-
-                            @if ($noticeType === 'reminder' && $rule?->reminder_body)
-                                <p style="white-space:pre-line;">{{ $rule->reminder_body }}</p>
-                            @endif
-
-                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:20px 0;border-collapse:collapse;">
-                                <tr>
-                                    <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;"><strong>Subject</strong></td>
-                                    <td style="padding:10px;border:1px solid #e2e8f0;">{{ $grievance->subject }}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;"><strong>Program</strong></td>
-                                    <td style="padding:10px;border:1px solid #e2e8f0;">{{ $grievance->program?->name ?? 'N/A' }}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;"><strong>Status</strong></td>
-                                    <td style="padding:10px;border:1px solid #e2e8f0;">{{ $grievance->status_label }}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding:10px;border:1px solid #e2e8f0;background:#f8fafc;"><strong>Response Due</strong></td>
-                                    <td style="padding:10px;border:1px solid #e2e8f0;">{{ $grievance->due_response_at?->format('d M Y H:i') ?? 'N/A' }}</td>
-                                </tr>
-                            </table>
-
-                            <p style="margin-bottom:0;color:#475569;">Open the GRM logs in ATTP to update the case and record the response.</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="background:#522b39;color:#ffffff;padding:16px 26px;font-size:12px;">
-                            Developed, maintained and supported by the ATTP Technical Team.
-                        </td>
-                    </tr>
-                </table>
-            </td>
+            <td style="width:34%;padding:11px 13px;background:#f7faf8;border-bottom:1px solid #e3ebe7;color:#607068;font-size:12px;font-weight:700;">Case number</td>
+            <td style="padding:11px 13px;border-bottom:1px solid #e3ebe7;color:#10543b;font-weight:800;">{{ $grievance->case_number }}</td>
+        </tr>
+        <tr>
+            <td style="padding:11px 13px;background:#f7faf8;border-bottom:1px solid #e3ebe7;color:#607068;font-size:12px;font-weight:700;">Subject</td>
+            <td style="padding:11px 13px;border-bottom:1px solid #e3ebe7;color:#25362d;">{{ $grievance->subject }}</td>
+        </tr>
+        <tr>
+            <td style="padding:11px 13px;background:#f7faf8;border-bottom:1px solid #e3ebe7;color:#607068;font-size:12px;font-weight:700;">Program</td>
+            <td style="padding:11px 13px;border-bottom:1px solid #e3ebe7;color:#25362d;">{{ $grievance->program?->name ?? 'Not specified' }}</td>
+        </tr>
+        <tr>
+            <td style="padding:11px 13px;background:#f7faf8;border-bottom:1px solid #e3ebe7;color:#607068;font-size:12px;font-weight:700;">Current status</td>
+            <td style="padding:11px 13px;border-bottom:1px solid #e3ebe7;color:#25362d;">{{ $grievance->status_label }}</td>
+        </tr>
+        <tr>
+            <td style="padding:11px 13px;background:#f7faf8;color:#607068;font-size:12px;font-weight:700;">Response due</td>
+            <td style="padding:11px 13px;color:{{ $isEscalation ? '#b91c1c' : '#9a3412' }};font-weight:700;">{{ $grievance->due_response_at?->format('d M Y, H:i') ?? 'Not set' }}</td>
         </tr>
     </table>
-</body>
-</html>
+
+    <div style="margin:0;padding:14px 16px;border-left:4px solid {{ $emailAccent }};background:{{ $isEscalation ? '#fef2f2' : '#fff9e8' }};color:{{ $isEscalation ? '#7f1d1d' : '#5d4a13' }};border-radius:0 8px 8px 0;">
+        <strong style="display:block;margin-bottom:3px;">Required next step</strong>
+        Open the GRM logs, review the incident details, and record the acknowledgement, response, assignment, or escalation action.
+    </div>
+@endsection

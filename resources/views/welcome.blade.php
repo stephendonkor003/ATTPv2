@@ -111,6 +111,7 @@
 
         <a href="{{ route('news.index') }}" onclick="closeMobileNav()">{{ __('navigation.news_updates') }}</a>
         <a href="{{ route('gallery') }}" onclick="closeMobileNav()">{{ __('navigation.gallery') }}</a>
+        <a href="{{ route('public.grievances.create') }}" onclick="closeMobileNav()">Log a Grievance</a>
         <a href="#contact" onclick="closeMobileNav()">{{ __('navigation.contact') }}</a>
         <div class="mobile-nav-actions">
             <a href="{{ route('public.procurement.index') }}" class="btn btn-primary">{{ __('landing.policy_programs') }}</a>
@@ -155,6 +156,7 @@
 
             <a href="{{ route('news.index') }}">{{ __('navigation.news_updates') }}</a>
             <a href="{{ route('gallery') }}">{{ __('navigation.gallery') }}</a>
+            <a href="{{ route('public.grievances.create') }}">Grievance</a>
             <a href="#contact">{{ __('navigation.contact') }}</a>
         </nav>
 
@@ -198,9 +200,14 @@
             <h1 class="typing-text">{{ __('landing.hero_title') }}</h1>
             <p class="hero-subtitle-text sub-visible">{{ __('landing.hero_subtitle') }}</p>
 
-            <a href="{{ route('public.procurement.index') }}" class="cta-btn">
-                {{ __('landing.hero_cta') }}
-            </a>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;">
+                <a href="{{ route('public.procurement.index') }}" class="cta-btn">
+                    {{ __('landing.hero_cta') }}
+                </a>
+                <a href="{{ route('public.grievances.create') }}" class="cta-btn" style="background:#fff;color:#522b39;border:2px solid rgba(255,255,255,.8);">
+                    Log a Grievance
+                </a>
+            </div>
         </div>
     </section>
 
@@ -462,6 +469,7 @@
                 <a href="{{ route('landing.index') }}">{{ __('landing.footer_link_home') }}</a>
                 <a href="#process">{{ __('landing.footer_link_process') }}</a>
                 <a href="{{ route('gallery') }}">{{ __('navigation.gallery') }}</a>
+                <a href="{{ route('public.grievances.create') }}">Log a Grievance</a>
                 <a href="#customization">{{ __('landing.footer_link_oversight') }}</a>
                 <a href="#contact">{{ __('navigation.contact') }}</a>
                 <a href="{{ route('careers.index') }}">{{ __('navigation.careers') }}</a>

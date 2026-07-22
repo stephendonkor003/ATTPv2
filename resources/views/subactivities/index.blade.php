@@ -415,6 +415,59 @@
             background: #ffffff;
         }
 
+        .reallocation-alert {
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fffbeb;
+            box-shadow: 0 10px 24px rgba(146, 64, 14, 0.08);
+        }
+
+        .reallocation-alert-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 16px;
+            color: #78350f;
+            background: #fef3c7;
+        }
+
+        .reallocation-issue-list {
+            display: grid;
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .reallocation-issue {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 14px;
+            align-items: center;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 12px;
+            background: #ffffff;
+        }
+
+        .reallocation-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            border-radius: 999px;
+            padding: 0.22rem 0.55rem;
+            color: #991b1b;
+            background: #fee2e2;
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .reallocation-route {
+            color: #475569;
+            font-size: 0.82rem;
+        }
+
         @media (max-width: 1199.98px) {
             .sub-summary-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -439,6 +492,10 @@
 
             .sub-card-actions {
                 justify-content: flex-start;
+            }
+
+            .reallocation-issue {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -484,6 +541,84 @@
                 <i class="feather-alert-triangle me-2"></i> {{ session('error') }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
+        @endif
+
+        @if ($reallocationIssues->isNotEmpty())
+            <section class="reallocation-alert mt-3" aria-labelledby="reallocationIssuesHeading">
+                <div class="reallocation-alert-header">
+                    <div class="d-flex gap-2">
+                        <i class="feather-alert-triangle mt-1"></i>
+                        <div>
+                            <div class="fw-bold" id="reallocationIssuesHeading">
+                                {{ $reallocationIssues->count() }} reallocation {{ Str::plural('issue', $reallocationIssues->count()) }}
+                                {{ $reallocationIssues->count() === 1 ? 'needs' : 'need' }} attention
+                            </div>
+                            <div class="small mt-1">
+                                These moves failed, were interrupted, or were detected with incomplete allocation links. Retry them here; no manual database correction is required.
+                            </div>
+                        </div>
+                    </div>
+                    <span class="badge bg-warning text-dark">Action required</span>
+                </div>
+
+                <div class="reallocation-issue-list">
+                    @foreach ($reallocationIssues as $issue)
+                        @php
+                            $issueActivity = $issue['activity'];
+                            $issueTarget = $issue['target_project'];
+                            $issueSource = $issue['source_project'];
+                            $issueCurrency = $issueTarget->currency ?: ($issueTarget->program?->currency ?? 'USD');
+                            $attemptedWhen = $issue['last_attempted_at']
+                                ? \Illuminate\Support\Carbon::parse($issue['last_attempted_at'])->diffForHumans()
+                                : 'detected automatically';
+                        @endphp
+                        <article class="reallocation-issue" id="{{ $issue['key'] }}">
+                            <div>
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                    <span class="reallocation-status">
+                                        <i class="feather-alert-circle"></i> {{ $issue['status'] }}
+                                    </span>
+                                    <strong>{{ $issueActivity->name }}</strong>
+                                </div>
+                                <div class="reallocation-route mb-1">
+                                    @if ($issue['repair'])
+                                        Current component: {{ $issueTarget->project_id }} - {{ $issueTarget->name }}
+                                    @else
+                                        {{ $issueSource?->project_id ?? 'Unknown' }} - {{ $issueSource?->name ?? 'Unknown source' }}
+                                        <i class="feather-arrow-right mx-1"></i>
+                                        {{ $issueTarget->project_id }} - {{ $issueTarget->name }}
+                                    @endif
+                                </div>
+                                <div class="small text-danger mb-1">{{ $issue['reason'] }}</div>
+                                <div class="small text-muted">
+                                    {{ number_format((float) $issue['amount'], 2) }} {{ $issueCurrency }}
+                                    <span class="mx-1">&bull;</span> {{ $attemptedWhen }}
+                                    @if ($issue['attempt_count'])
+                                        <span class="mx-1">&bull;</span> {{ $issue['attempt_count'] }} {{ Str::plural('attempt', $issue['attempt_count']) }}
+                                    @endif
+                                </div>
+                            </div>
+
+                            @can('activities.edit')
+                                <form action="{{ route('budget.activities.reallocate', $issueActivity->id) }}" method="POST"
+                                    onsubmit="return confirm('Retry this reallocation now? The activity, allocation, and sub-activities will be verified together.');">
+                                    @csrf
+                                    <input type="hidden" name="project_id" value="{{ $issueTarget->id }}">
+                                    @if ($issue['attempt_id'])
+                                        <input type="hidden" name="attempt_id" value="{{ $issue['attempt_id'] }}">
+                                    @endif
+                                    @if ($issue['repair'])
+                                        <input type="hidden" name="repair" value="1">
+                                    @endif
+                                    <button type="submit" class="btn btn-warning btn-sm text-nowrap">
+                                        <i class="feather-refresh-cw me-1"></i> Retry reallocation
+                                    </button>
+                                </form>
+                            @endcan
+                        </article>
+                    @endforeach
+                </div>
+            </section>
         @endif
 
         <div class="sub-summary-grid mt-3">
@@ -645,6 +780,7 @@
                                                             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
                                                                 data-bs-target="#reallocateModal"
                                                                 data-activity-id="{{ $activity->id }}"
+                                                                data-project-id="{{ $project->id }}"
                                                                 data-activity-name="{{ $activity->name }}">
                                                                 <i class="feather-move me-1"></i> Reallocate
                                                             </button>
@@ -764,43 +900,47 @@
             @endforelse
         </div>
     </div>
-@endsection
 
-<!-- Reallocate Modal -->
-<div class="modal fade" id="reallocateModal" tabindex="-1" aria-labelledby="reallocateModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form id="reallocateForm" method="POST" action="">
-                @csrf
-                <div class="modal-header">
-                    <h5 class="modal-title" id="reallocateModalLabel">Reallocate Activity</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="small text-muted">Select the target project (and its program) to move this activity and its sub-activities into.</p>
-
-                    <div class="mb-3">
-                        <label class="form-label">Target Project</label>
-                        <select name="project_id" id="reallocateProject" class="form-select" required>
-                            <option value="">Select project</option>
-                            @foreach($programs as $p)
-                                <optgroup label="{{ $p->name }}">
-                                    @foreach($p->projects as $proj)
-                                        <option value="{{ $proj->id }}">{{ $proj->project_id }} - {{ $proj->name }}</option>
-                                    @endforeach
-                                </optgroup>
-                            @endforeach
-                        </select>
+    <!-- Kept inside the content section so no modal markup is emitted before the page layout. -->
+    <div class="modal fade" id="reallocateModal" tabindex="-1" aria-labelledby="reallocateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form id="reallocateForm" method="POST" action="">
+                    @csrf
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="reallocateModalLabel">Reallocate Activity</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Reallocate</button>
-                </div>
-            </form>
+                    <div class="modal-body">
+                        <p class="small text-muted">
+                            Select the target project. The activity, its allocation, and all sub-activities will move together.
+                            Sub-activity amounts remain a breakdown of the activity allocation and are not added a second time.
+                            The activity's budget envelope moves from the source component to the target component, while the programme-wide budget remains unchanged.
+                        </p>
+
+                        <div class="mb-3">
+                            <label class="form-label">Target Project</label>
+                            <select name="project_id" id="reallocateProject" class="form-select" required>
+                                <option value="">Select project</option>
+                                @foreach($programs as $p)
+                                    <optgroup label="{{ $p->name }}">
+                                        @foreach($p->projects as $proj)
+                                            <option value="{{ $proj->id }}">{{ $proj->project_id }} - {{ $proj->name }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Reallocate</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
+@endsection
 
 @push('scripts')
     <script>
@@ -836,6 +976,7 @@
                 reallocateModalEl.addEventListener('show.bs.modal', function (event) {
                     const button = event.relatedTarget;
                     const activityId = button?.getAttribute('data-activity-id');
+                    const currentProjectId = button?.getAttribute('data-project-id');
                     const activityName = button?.getAttribute('data-activity-name') || 'Activity';
                     const form = document.getElementById('reallocateForm');
                     if (form && activityId) {
@@ -843,6 +984,14 @@
                     }
                     const title = document.getElementById('reallocateModalLabel');
                     if (title) title.textContent = `Reallocate: ${activityName}`;
+
+                    const projectSelect = document.getElementById('reallocateProject');
+                    if (projectSelect) {
+                        projectSelect.value = '';
+                        Array.from(projectSelect.options).forEach(option => {
+                            option.disabled = option.value !== '' && option.value === currentProjectId;
+                        });
+                    }
                 });
             }
         });
