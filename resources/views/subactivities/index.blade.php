@@ -741,6 +741,7 @@
                                             $activityUsagePercent = $activityAllocation > 0 ? min(100, round(($activitySubAllocation / $activityAllocation) * 100, 1)) : 0;
                                             $activityCollapseId = 'activitySubFlow' . $activity->id;
                                             $currency = $project->currency ?: ($program->currency ?? 'USD');
+                                            $revertableReallocation = $revertableReallocations->get((string) $activity->id);
                                         @endphp
 
                                         <div class="sub-activity-node">
@@ -784,6 +785,19 @@
                                                                 data-activity-name="{{ $activity->name }}">
                                                                 <i class="feather-move me-1"></i> Reallocate
                                                             </button>
+
+                                                            @if ($revertableReallocation)
+                                                                <form action="{{ route('budget.activities.reallocation.revert', $activity->id) }}" method="POST"
+                                                                    onsubmit="return confirm('Revert this reallocation? The activity, its budget envelope, and all sub-activities will return to their original project.');">
+                                                                    @csrf
+                                                                    <input type="hidden" name="reallocation_attempt_id"
+                                                                        value="{{ $revertableReallocation['attempt']->id }}">
+                                                                    <button type="submit" class="btn btn-sm btn-outline-warning"
+                                                                        title="Return to {{ $revertableReallocation['source_project']->project_id }} - {{ $revertableReallocation['source_project']->name }}">
+                                                                        <i class="feather-rotate-ccw me-1"></i> Revert Reallocation
+                                                                    </button>
+                                                                </form>
+                                                            @endif
                                                         @endcan
                                                     </div>
                                                 </div>

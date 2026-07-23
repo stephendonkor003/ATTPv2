@@ -1528,6 +1528,9 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::post('activities/{activity}/reallocate', [ActivityController::class, 'reallocate'])
             ->middleware('permission:activities.edit')
             ->name('activities.reallocate');
+        Route::post('activities/{activity}/revert-reallocation', [ActivityController::class, 'revertReallocation'])
+            ->middleware('permission:activities.edit')
+            ->name('activities.reallocation.revert');
         Route::delete('activities/{activity}', [ActivityController::class, 'destroy'])
             ->middleware('permission:activities.delete')
             ->name('activities.destroy');

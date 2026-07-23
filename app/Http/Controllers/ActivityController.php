@@ -385,74 +385,14 @@ class ActivityController extends Controller
         }
 
         try {
-            $result = DB::transaction(function () use ($activity, $targetProject, $repairExistingMove) {
-                $activityToMove = Activity::query()
-                    ->lockForUpdate()
-                    ->findOrFail($activity->id);
-                $activityToMove->setRelation(
-                    'allocations',
-                    $activityToMove->allocations()->lockForUpdate()->get()
-                );
-
-                $lockedProjects = Project::query()
-                    ->whereIn('id', [$activityToMove->project_id, $targetProject->id])
-                    ->orderBy('id')
-                    ->lockForUpdate()
-                    ->get()
-                    ->keyBy(fn (Project $project) => (string) $project->id);
-                $lockedSourceProject = $lockedProjects->get((string) $activityToMove->project_id);
-                $lockedTargetProject = $lockedProjects->get((string) $targetProject->id);
-
-                if (! $lockedSourceProject || ! $lockedTargetProject) {
-                    throw new ActivityReallocationException('The source or target component could not be locked for reallocation.');
-                }
-
-                $alreadyInTarget = (string) $activityToMove->project_id === (string) $lockedTargetProject->id;
-                if ($alreadyInTarget && ! $repairExistingMove) {
-                    throw new ActivityReallocationException('Activity already assigned to the selected project.');
-                }
-
-                $targetYears = collect($lockedTargetProject->years())->map(fn ($year) => (int) $year);
-                $outsideTargetYears = $activityToMove->allocations
-                    ->filter(fn ($allocation) => (float) $allocation->amount > 0)
-                    ->pluck('year')
-                    ->map(fn ($year) => (int) $year)
-                    ->diff($targetYears)
-                    ->values();
-
-                if ($outsideTargetYears->isNotEmpty()) {
-                    throw new ActivityReallocationException(
-                        'The target project does not cover the activity allocation year(s): '
-                        . $outsideTargetYears->implode(', ')
-                        . '.'
-                    );
-                }
-
-                $movedAmount = round((float) $activityToMove->allocations->sum('amount'), 2);
-                if ($alreadyInTarget) {
-                    $this->rebalanceTargetProjectYearlyAllocations($lockedTargetProject, $activityToMove);
-                } else {
-                    $this->transferActivityBudgetEnvelope(
-                        $lockedSourceProject,
-                        $lockedTargetProject,
-                        $activityToMove
-                    );
-                }
-
-                $activityToMove->project_id = $lockedTargetProject->id;
-                $activityToMove->governance_node_id = $lockedTargetProject->governance_node_id;
-                $activityToMove->save();
-
-                // Update sub-activities governance node to match new project
-                $activityToMove->subActivities()->update([
-                    'governance_node_id' => $lockedTargetProject->governance_node_id,
-                ]);
-
-                return [
-                    'amount' => $movedAmount,
-                    'repaired' => $alreadyInTarget,
-                ];
-            });
+            $result = $this->moveActivityToProject(
+                $activity,
+                $targetProject,
+                $repairExistingMove,
+                $attempt
+                    ? fn (array $snapshot) => $reallocationTracker->captureSnapshot($attempt, $snapshot)
+                    : null
+            );
         } catch (\Throwable $e) {
             report($e);
             $message = $this->safeReallocationErrorMessage($e);
@@ -484,6 +424,331 @@ class ActivityController extends Controller
             'success',
             $successMessage
         );
+    }
+
+    /**
+     * Restore an activity to the first project it occupied before its current
+     * chain of successful reallocations.
+     */
+    public function revertReallocation(
+        Request $request,
+        Activity $activity,
+        ActivityReallocationTracker $reallocationTracker
+    ) {
+        $this->assertActivityInScope($activity);
+
+        $request->validate([
+            'reallocation_attempt_id' => 'required|uuid',
+        ]);
+
+        try {
+            $reallocation = $reallocationTracker->resolveRevertableReallocation(
+                $activity,
+                (string) $request->input('reallocation_attempt_id')
+            );
+        } catch (ActivityReallocationException $trackingError) {
+            return back()->with('error', 'Revert failed: '.$trackingError->getMessage());
+        }
+
+        $originalProject = Project::find($reallocation['source_project_id']);
+        if (! $originalProject) {
+            return back()->with('error', 'Revert failed: the original project is no longer available.');
+        }
+
+        $this->assertProjectInScope($originalProject);
+
+        $revertAttempt = null;
+        try {
+            $revertAttempt = $reallocationTracker->beginRevert(
+                $activity,
+                $originalProject,
+                $reallocation['attempts']
+            );
+        } catch (ActivityReallocationException $trackingError) {
+            return back()->with('error', 'Revert failed: '.$trackingError->getMessage());
+        } catch (\Throwable $trackingError) {
+            report($trackingError);
+        }
+
+        try {
+            $result = $this->moveActivityToProject(
+                $activity,
+                $originalProject,
+                false,
+                null,
+                $reallocation['restore_state']
+            );
+        } catch (\Throwable $e) {
+            report($e);
+            $message = $this->safeReallocationErrorMessage($e);
+
+            if ($revertAttempt) {
+                try {
+                    $reallocationTracker->fail($revertAttempt, $message);
+                } catch (\Throwable $trackingError) {
+                    report($trackingError);
+                }
+            }
+
+            return back()->with('error', 'Revert failed: '.$message);
+        }
+
+        $successMessage = 'The reallocation was reverted successfully. The activity, its '
+            .number_format($result['amount'], 2)
+            .' budget envelope, and all sub-activities are back in '
+            .$originalProject->name
+            .'.';
+
+        if ($revertAttempt) {
+            try {
+                $reallocationTracker->succeed($revertAttempt, $successMessage);
+                $reallocationTracker->markReverted($reallocation['attempts'], $revertAttempt);
+            } catch (\Throwable $trackingError) {
+                report($trackingError);
+            }
+        }
+
+        return back()->with('success', $successMessage);
+    }
+
+    private function moveActivityToProject(
+        Activity $activity,
+        Project $targetProject,
+        bool $repairExistingMove = false,
+        ?callable $beforeMove = null,
+        ?array $restoreState = null
+    ): array {
+        return DB::transaction(function () use ($activity, $targetProject, $repairExistingMove, $beforeMove, $restoreState) {
+            $activityToMove = Activity::query()
+                ->lockForUpdate()
+                ->findOrFail($activity->id);
+            $activityToMove->setRelation(
+                'allocations',
+                $activityToMove->allocations()->lockForUpdate()->get()
+            );
+            $lockedSubActivities = $activityToMove->subActivities()
+                ->lockForUpdate()
+                ->get();
+
+            $lockedProjects = Project::query()
+                ->whereIn('id', [$activityToMove->project_id, $targetProject->id])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy(fn (Project $project) => (string) $project->id);
+            $lockedSourceProject = $lockedProjects->get((string) $activityToMove->project_id);
+            $lockedTargetProject = $lockedProjects->get((string) $targetProject->id);
+
+            if (! $lockedSourceProject || ! $lockedTargetProject) {
+                throw new ActivityReallocationException('The source or target component could not be locked for reallocation.');
+            }
+
+            $alreadyInTarget = (string) $activityToMove->project_id === (string) $lockedTargetProject->id;
+            if ($alreadyInTarget && ! $repairExistingMove) {
+                throw new ActivityReallocationException('Activity already assigned to the selected project.');
+            }
+
+            $targetYears = collect($lockedTargetProject->years())->map(fn ($year) => (int) $year);
+            $outsideTargetYears = $activityToMove->allocations
+                ->filter(fn ($allocation) => (float) $allocation->amount > 0)
+                ->pluck('year')
+                ->map(fn ($year) => (int) $year)
+                ->diff($targetYears)
+                ->values();
+
+            if ($outsideTargetYears->isNotEmpty()) {
+                throw new ActivityReallocationException(
+                    'The target project does not cover the activity allocation year(s): '
+                    .$outsideTargetYears->implode(', ')
+                    .'.'
+                );
+            }
+
+            if ($restoreState) {
+                $this->assertRevertStateCanBeRestored(
+                    $activityToMove,
+                    $lockedSubActivities,
+                    $lockedSourceProject,
+                    $lockedTargetProject,
+                    $restoreState
+                );
+            }
+
+            if ($beforeMove && ! $alreadyInTarget) {
+                $beforeMove($this->reallocationSnapshot(
+                    $activityToMove,
+                    $lockedSubActivities,
+                    $lockedSourceProject,
+                    $lockedTargetProject
+                ));
+            }
+
+            $movedAmount = round((float) $activityToMove->allocations->sum('amount'), 2);
+            if ($alreadyInTarget) {
+                $this->rebalanceTargetProjectYearlyAllocations($lockedTargetProject, $activityToMove);
+            } else {
+                $this->transferActivityBudgetEnvelope(
+                    $lockedSourceProject,
+                    $lockedTargetProject,
+                    $activityToMove
+                );
+            }
+
+            $originalState = (array) ($restoreState['original'] ?? []);
+            $activityToMove->project_id = $lockedTargetProject->id;
+            $activityToMove->governance_node_id = $restoreState
+                ? ($originalState['activity_governance_node_id'] ?? null)
+                : $lockedTargetProject->governance_node_id;
+            $activityToMove->save();
+
+            $originalSubActivityNodes = (array) ($originalState['sub_activity_governance_nodes'] ?? []);
+            foreach ($lockedSubActivities as $subActivity) {
+                $governanceNodeId = $restoreState
+                    ? ($originalSubActivityNodes[(string) $subActivity->id] ?? null)
+                    : $lockedTargetProject->governance_node_id;
+
+                if ((string) $subActivity->governance_node_id !== (string) $governanceNodeId) {
+                    $subActivity->update(['governance_node_id' => $governanceNodeId]);
+                }
+            }
+
+            return [
+                'amount' => $movedAmount,
+                'repaired' => $alreadyInTarget,
+            ];
+        });
+    }
+
+    private function reallocationSnapshot(
+        Activity $activity,
+        $subActivities,
+        Project $sourceProject,
+        Project $targetProject
+    ): array {
+        $sourceAllocations = $sourceProject->allocations()
+            ->lockForUpdate()
+            ->get();
+        $targetAllocations = $targetProject->allocations()
+            ->lockForUpdate()
+            ->get();
+
+        return [
+            'version' => 1,
+            'source_project_id' => (string) $sourceProject->id,
+            'target_project_id' => (string) $targetProject->id,
+            'activity_governance_node_id' => $activity->governance_node_id,
+            'target_governance_node_id' => $targetProject->governance_node_id,
+            'activity_allocation_by_year' => $this->allocationAmountsByYear($activity->allocations),
+            'sub_activity_ids' => $subActivities
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->sort()
+                ->values()
+                ->all(),
+            'sub_activity_governance_nodes' => $subActivities
+                ->mapWithKeys(fn ($subActivity) => [(string) $subActivity->id => $subActivity->governance_node_id])
+                ->all(),
+            'budget_envelope_before' => [
+                'source_total_budget' => round((float) $sourceProject->total_budget, 2),
+                'target_total_budget' => round((float) $targetProject->total_budget, 2),
+                'source_allocation_by_year' => $this->allocationAmountsByYear($sourceAllocations),
+                'target_allocation_by_year' => $this->allocationAmountsByYear($targetAllocations),
+            ],
+        ];
+    }
+
+    private function assertRevertStateCanBeRestored(
+        Activity $activity,
+        $subActivities,
+        Project $currentProject,
+        Project $originalProject,
+        array $restoreState
+    ): void {
+        $original = (array) ($restoreState['original'] ?? []);
+        $current = (array) ($restoreState['current'] ?? []);
+
+        if ($original === [] || $current === []) {
+            throw new ActivityReallocationException('The original reallocation snapshot is incomplete.');
+        }
+
+        if (
+            (string) ($current['target_project_id'] ?? '') !== (string) $currentProject->id
+            || (string) ($original['source_project_id'] ?? '') !== (string) $originalProject->id
+        ) {
+            throw new ActivityReallocationException('The activity no longer matches the recorded reallocation route.');
+        }
+
+        if ($this->allocationAmountsByYear($activity->allocations) !== $this->normaliseAllocationAmounts(
+            (array) ($current['activity_allocation_by_year'] ?? [])
+        )) {
+            throw new ActivityReallocationException(
+                'The activity allocation has changed since it was reallocated and cannot be reverted safely.'
+            );
+        }
+
+        $currentSubActivityIds = $subActivities
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->sort()
+            ->values()
+            ->all();
+        $originalSubActivityIds = collect((array) ($original['sub_activity_ids'] ?? []))
+            ->map(fn ($id) => (string) $id)
+            ->sort()
+            ->values()
+            ->all();
+        $latestSubActivityIds = collect((array) ($current['sub_activity_ids'] ?? []))
+            ->map(fn ($id) => (string) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        if ($currentSubActivityIds !== $originalSubActivityIds || $currentSubActivityIds !== $latestSubActivityIds) {
+            throw new ActivityReallocationException(
+                'The activity sub-activities have changed since it was reallocated and cannot be reverted safely.'
+            );
+        }
+
+        if (! array_key_exists('activity_governance_node_id', $original)) {
+            throw new ActivityReallocationException('The original activity governance assignment is unavailable.');
+        }
+
+        if ((string) $activity->governance_node_id !== (string) ($current['target_governance_node_id'] ?? '')) {
+            throw new ActivityReallocationException(
+                'The activity governance assignment has changed since it was reallocated and cannot be reverted safely.'
+            );
+        }
+
+        $originalSubActivityNodes = (array) ($original['sub_activity_governance_nodes'] ?? []);
+        foreach ($subActivities as $subActivity) {
+            if (! array_key_exists((string) $subActivity->id, $originalSubActivityNodes)) {
+                throw new ActivityReallocationException('The original sub-activity governance assignment is unavailable.');
+            }
+
+            if ((string) $subActivity->governance_node_id !== (string) ($current['target_governance_node_id'] ?? '')) {
+                throw new ActivityReallocationException(
+                    'A sub-activity governance assignment has changed since reallocation and cannot be reverted safely.'
+                );
+            }
+        }
+    }
+
+    private function allocationAmountsByYear($allocations): array
+    {
+        return collect($allocations)
+            ->groupBy(fn ($allocation) => (int) $allocation->year)
+            ->map(fn ($rows) => round((float) $rows->sum('amount'), 2))
+            ->sortKeys()
+            ->mapWithKeys(fn ($amount, $year) => [(string) $year => $amount])
+            ->all();
+    }
+
+    private function normaliseAllocationAmounts(array $allocations): array
+    {
+        return collect($allocations)
+            ->mapWithKeys(fn ($amount, $year) => [(string) $year => round((float) $amount, 2)])
+            ->sortKeys()
+            ->all();
     }
 
     private function rebalanceTargetProjectYearlyAllocations(Project $targetProject, Activity $incomingActivity): void

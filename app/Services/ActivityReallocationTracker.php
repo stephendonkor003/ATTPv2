@@ -13,10 +13,157 @@ class ActivityReallocationTracker
 {
     public const ACTION = 'activity_reallocation_attempt';
 
+    public const REVERT_ACTION = 'activity_reallocation_revert_attempt';
+
     public function begin(Activity $activity, Project $targetProject, ?string $attemptId = null): SystemAuditLog
     {
+        return $this->beginAttempt(
+            $activity,
+            $targetProject,
+            $attemptId,
+            self::ACTION,
+            'Activity reallocation attempt started',
+            'Reallocation is in progress.'
+        );
+    }
+
+    /**
+     * Record a new, server-resolved attempt to return an activity to the root
+     * of its current reallocation chain.
+     */
+    public function beginRevert(
+        Activity $activity,
+        Project $targetProject,
+        Collection $reallocationAttempts
+    ): SystemAuditLog {
+        $latestAttempt = $reallocationAttempts->first();
+        if (! $latestAttempt instanceof SystemAuditLog) {
+            throw new ActivityReallocationException('The original reallocation record could not be found.');
+        }
+
+        return $this->beginAttempt(
+            $activity,
+            $targetProject,
+            null,
+            self::REVERT_ACTION,
+            'Activity reallocation revert started',
+            'Reverting reallocation is in progress.',
+            [
+                'operation' => 'revert',
+                'reverts_reallocation_attempt_ids' => $reallocationAttempts
+                    ->pluck('id')
+                    ->map(fn ($id) => (string) $id)
+                    ->values()
+                    ->all(),
+                'reverts_latest_reallocation_attempt_id' => (string) $latestAttempt->id,
+            ]
+        );
+    }
+
+    /**
+     * Persist the locked, pre-move state required for an exact relationship
+     * restore. This is called inside the budget-move transaction.
+     */
+    public function captureSnapshot(SystemAuditLog $attempt, array $snapshot): void
+    {
+        if ($attempt->action !== self::ACTION) {
+            throw new ActivityReallocationException('Only a reallocation attempt can store a reversion snapshot.');
+        }
+
+        $payload = (array) $attempt->payload;
+        if (! empty($payload['reallocation_snapshot'])) {
+            return;
+        }
+
+        $attempt->update([
+            'payload' => array_merge($payload, [
+                'reallocation_snapshot' => $snapshot,
+                'snapshot_captured_at' => now()->toIso8601String(),
+            ]),
+        ]);
+    }
+
+    /**
+     * Return a server-validated reallocation chain for a submitted revert
+     * control. The latest attempt ID protects against stale forms.
+     *
+     * @return array{attempt: SystemAuditLog, attempts: Collection, source_project_id: string}|null
+     */
+    public function resolveRevertableReallocation(Activity $activity, string $attemptId): array
+    {
+        $reallocation = $this->revertableReallocationFor($activity);
+
+        if (! $reallocation || (string) $reallocation['attempt']->id !== $attemptId) {
+            throw new ActivityReallocationException(
+                'This reallocation can no longer be reverted. Refresh the page and try again.'
+            );
+        }
+
+        return $reallocation;
+    }
+
+    /**
+     * Provide revert controls only for activities with an intact, successful
+     * reallocation chain whose root is a different available project.
+     */
+    public function revertableReallocationsFor(Collection $activities, Collection $projects): Collection
+    {
+        $activitiesById = $activities->keyBy(fn (Activity $activity) => (string) $activity->id);
+        $projectsById = $projects->keyBy(fn (Project $project) => (string) $project->id);
+        $attemptsByActivity = $this->successfulUnrevertedAttemptsFor(
+            $activitiesById->keys()->all()
+        );
+
+        $reallocations = collect();
+        foreach ($activitiesById as $activityId => $activity) {
+            $reallocation = $this->revertableReallocationFromAttempts(
+                $activity,
+                $attemptsByActivity->get($activityId, collect())
+            );
+
+            if (! $reallocation) {
+                continue;
+            }
+
+            $sourceProject = $projectsById->get($reallocation['source_project_id']);
+            if (! $sourceProject) {
+                continue;
+            }
+
+            $reallocation['source_project'] = $sourceProject;
+            $reallocations->put($activityId, $reallocation);
+        }
+
+        return $reallocations;
+    }
+
+    public function markReverted(Collection $reallocationAttempts, SystemAuditLog $revertAttempt): void
+    {
+        $reallocationAttempts
+            ->filter(fn ($attempt) => $attempt instanceof SystemAuditLog && $attempt->action === self::ACTION)
+            ->each(function (SystemAuditLog $attempt) use ($revertAttempt) {
+                $attempt->update([
+                    'action_message' => 'Activity reallocation reverted',
+                    'description' => 'The activity was returned to its original project.',
+                    'payload' => array_merge((array) $attempt->payload, [
+                        'reverted_at' => now()->toIso8601String(),
+                        'reverted_by_attempt_id' => (string) $revertAttempt->id,
+                    ]),
+                ]);
+            });
+    }
+
+    private function beginAttempt(
+        Activity $activity,
+        Project $targetProject,
+        ?string $attemptId,
+        string $action,
+        string $startedActionMessage,
+        string $description,
+        array $extraPayload = []
+    ): SystemAuditLog {
         $attempt = $attemptId
-            ? SystemAuditLog::query()->where('action', self::ACTION)->find($attemptId)
+            ? SystemAuditLog::query()->where('action', $action)->find($attemptId)
             : null;
 
         if ($attemptId && ! $attempt) {
@@ -31,8 +178,22 @@ class ActivityReallocationTracker
             if ((string) ($payload['target_project_id'] ?? '') !== (string) $targetProject->id) {
                 throw new ActivityReallocationException('The saved reallocation target has changed. Start a new reallocation from the activity.');
             }
+
+            $recordedSourceProjectId = (string) ($payload['source_project_id'] ?? '');
+            if (
+                ($payload['status'] ?? null) !== 'succeeded'
+                && $recordedSourceProjectId !== ''
+                && $recordedSourceProjectId !== (string) $activity->project_id
+                && (string) $targetProject->id !== (string) $activity->project_id
+            ) {
+                throw new ActivityReallocationException('The activity has moved since this saved attempt. Start a new reallocation from the activity.');
+            }
+
+            if (($payload['status'] ?? null) !== 'succeeded') {
+                unset($payload['reallocation_snapshot'], $payload['snapshot_captured_at']);
+            }
         } else {
-            $attempt = new SystemAuditLog();
+            $attempt = new SystemAuditLog;
             $payload = [];
         }
 
@@ -50,9 +211,9 @@ class ActivityReallocationTracker
         $attempt->fill([
             'user_id' => auth()->id(),
             'module' => 'Budget',
-            'action' => self::ACTION,
-            'action_message' => 'Activity reallocation attempt started',
-            'description' => 'Reallocation is in progress.',
+            'action' => $action,
+            'action_message' => $startedActionMessage,
+            'description' => $description,
             'method' => $request->method(),
             'url' => $request->fullUrl(),
             'route_name' => $request->route()?->getName(),
@@ -60,19 +221,23 @@ class ActivityReallocationTracker
             'country' => $country,
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             'status_code' => 202,
-            'payload' => array_merge($payload, [
-                'status' => 'pending',
-                'activity_id' => (string) $activity->id,
-                'activity_name' => (string) $activity->name,
-                'source_project_id' => (string) $activity->project_id,
-                'source_project_name' => (string) ($activity->project?->name ?? ''),
-                'target_project_id' => (string) $targetProject->id,
-                'target_project_name' => (string) $targetProject->name,
-                'amount' => round((float) $activity->allocations()->sum('amount'), 2),
-                'attempt_count' => $attemptCount,
-                'last_attempted_at' => $now->toIso8601String(),
-                'error' => null,
-            ]),
+            'payload' => array_merge(
+                $payload,
+                [
+                    'status' => 'pending',
+                    'activity_id' => (string) $activity->id,
+                    'activity_name' => (string) $activity->name,
+                    'source_project_id' => (string) ($payload['source_project_id'] ?? $activity->project_id),
+                    'source_project_name' => (string) ($payload['source_project_name'] ?? ($activity->project?->name ?? '')),
+                    'target_project_id' => (string) ($payload['target_project_id'] ?? $targetProject->id),
+                    'target_project_name' => (string) ($payload['target_project_name'] ?? $targetProject->name),
+                    'amount' => round((float) $activity->allocations()->sum('amount'), 2),
+                    'attempt_count' => $attemptCount,
+                    'last_attempted_at' => $now->toIso8601String(),
+                    'error' => null,
+                ],
+                $extraPayload
+            ),
         ]);
         $attempt->save();
 
@@ -83,7 +248,7 @@ class ActivityReallocationTracker
     {
         $payload = (array) $attempt->payload;
         $attempt->update([
-            'action_message' => 'Activity reallocation failed',
+            'action_message' => $this->attemptLabel($attempt) . ' failed',
             'description' => $message,
             'status_code' => 422,
             'payload' => array_merge($payload, [
@@ -98,7 +263,7 @@ class ActivityReallocationTracker
     {
         $payload = (array) $attempt->payload;
         $attempt->update([
-            'action_message' => 'Activity reallocation succeeded',
+            'action_message' => $this->attemptLabel($attempt) . ' succeeded',
             'description' => $message,
             'status_code' => 200,
             'payload' => array_merge($payload, [
@@ -108,10 +273,120 @@ class ActivityReallocationTracker
             ]),
         ]);
 
-        $this->supersedeOtherOpenAttempts(
-            (string) ($payload['activity_id'] ?? ''),
-            (string) $attempt->id
+        if ($attempt->action === self::ACTION) {
+            $this->supersedeOtherOpenAttempts(
+                (string) ($payload['activity_id'] ?? ''),
+                (string) $attempt->id
+            );
+        }
+    }
+
+    /**
+     * @return array{attempt: SystemAuditLog, attempts: Collection, source_project_id: string}|null
+     */
+    private function revertableReallocationFor(Activity $activity): ?array
+    {
+        $attemptsByActivity = $this->successfulUnrevertedAttemptsFor([(string) $activity->id]);
+
+        return $this->revertableReallocationFromAttempts(
+            $activity,
+            $attemptsByActivity->get((string) $activity->id, collect())
         );
+    }
+
+    /**
+     * @param  Collection<int, SystemAuditLog>  $attempts
+     * @return array{attempt: SystemAuditLog, attempts: Collection, source_project_id: string}|null
+     */
+    private function revertableReallocationFromAttempts(Activity $activity, Collection $attempts): ?array
+    {
+        $attempts = $attempts->values();
+        $currentProjectId = (string) $activity->project_id;
+        $latestIndex = $attempts->search(function (SystemAuditLog $attempt) use ($currentProjectId) {
+            return (string) data_get($attempt->payload, 'target_project_id') === $currentProjectId;
+        });
+
+        if ($latestIndex === false) {
+            return null;
+        }
+
+        $chain = collect();
+        $sourceProjectId = '';
+
+        for ($index = $latestIndex; $index < $attempts->count(); $index++) {
+            /** @var SystemAuditLog $attempt */
+            $attempt = $attempts->get($index);
+            $payload = (array) $attempt->payload;
+
+            if ($index === $latestIndex) {
+                $chain->push($attempt);
+                $sourceProjectId = (string) ($payload['source_project_id'] ?? '');
+
+                continue;
+            }
+
+            if ((string) ($payload['target_project_id'] ?? '') !== $sourceProjectId) {
+                continue;
+            }
+
+            $chain->push($attempt);
+            $sourceProjectId = (string) ($payload['source_project_id'] ?? '');
+        }
+
+        if ($chain->isEmpty() || $sourceProjectId === '' || $sourceProjectId === $currentProjectId) {
+            return null;
+        }
+
+        $originalSnapshot = (array) data_get($chain->last()->payload, 'reallocation_snapshot');
+        $currentSnapshot = (array) data_get($chain->first()->payload, 'reallocation_snapshot');
+        if ($originalSnapshot === [] || $currentSnapshot === []) {
+            return null;
+        }
+
+        return [
+            'attempt' => $chain->first(),
+            'attempts' => $chain,
+            'source_project_id' => $sourceProjectId,
+            'restore_state' => [
+                'original' => $originalSnapshot,
+                'current' => $currentSnapshot,
+            ],
+        ];
+    }
+
+    /**
+     * Get successful regular reallocation attempts, newest first, keyed by
+     * activity. Reverted chains are deliberately excluded.
+     */
+    private function successfulUnrevertedAttemptsFor(array $activityIds): Collection
+    {
+        if ($activityIds === []) {
+            return collect();
+        }
+
+        $allowedActivityIds = array_map('strval', $activityIds);
+
+        return SystemAuditLog::query()
+            ->where('action', self::ACTION)
+            ->where('status_code', 200)
+            ->latest('created_at')
+            ->get()
+            ->filter(function (SystemAuditLog $attempt) use ($allowedActivityIds) {
+                $payload = (array) $attempt->payload;
+
+                return ($payload['status'] ?? null) === 'succeeded'
+                    && empty($payload['reverted_at'])
+                    && ! empty($payload['reallocation_snapshot'])
+                    && in_array((string) ($payload['activity_id'] ?? ''), $allowedActivityIds, true);
+            })
+            ->groupBy(fn (SystemAuditLog $attempt) => (string) data_get($attempt->payload, 'activity_id'));
+    }
+
+    private function attemptLabel(SystemAuditLog $attempt): string
+    {
+        return $attempt->action === self::REVERT_ACTION
+            ? 'Activity reallocation revert'
+            : 'Activity reallocation';
     }
 
     /**
