@@ -171,7 +171,13 @@ class ProcurementPlanController extends Controller
             }
         }
 
-        ProcurementPlan::create($validated);
+        try {
+            ProcurementPlan::create($validated);
+        } catch (\Throwable $e) {
+            return redirect()->route('procurement.plans.create')
+                ->withInput()
+                ->with('error', 'Failed to create procurement plan: ' . $e->getMessage());
+        }
 
         return redirect()->route('procurement.plans.index')
             ->with('success', 'Procurement plan created successfully.');

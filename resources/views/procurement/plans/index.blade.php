@@ -17,6 +17,20 @@
             </a>
         </div>
 
+        {{-- ================= FLASH MESSAGES ================= --}}
+        @if (session('success'))
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="feather-check-circle me-2"></i> {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        @endif
+        @if (session('error'))
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="feather-alert-circle me-2"></i> {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        @endif
+
         {{-- ================= STATS CARDS ================= --}}
         <div class="row mb-3">
             <div class="col-md-3">
@@ -25,7 +39,8 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-shrink-0">
                                 <div class="avatar-sm bg-primary bg-opacity-10 rounded">
-                                    <i class="feather-file-text text-primary fs-4 d-flex align-items-center justify-content-center h-100"></i>
+                                    <i
+                                        class="feather-file-text text-primary fs-4 d-flex align-items-center justify-content-center h-100"></i>
                                 </div>
                             </div>
                             <div class="flex-grow-1 ms-3">
@@ -42,7 +57,8 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-shrink-0">
                                 <div class="avatar-sm bg-success bg-opacity-10 rounded">
-                                    <i class="feather-check-circle text-success fs-4 d-flex align-items-center justify-content-center h-100"></i>
+                                    <i
+                                        class="feather-check-circle text-success fs-4 d-flex align-items-center justify-content-center h-100"></i>
                                 </div>
                             </div>
                             <div class="flex-grow-1 ms-3">
@@ -59,7 +75,8 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-shrink-0">
                                 <div class="avatar-sm bg-warning bg-opacity-10 rounded">
-                                    <i class="feather-clock text-warning fs-4 d-flex align-items-center justify-content-center h-100"></i>
+                                    <i
+                                        class="feather-clock text-warning fs-4 d-flex align-items-center justify-content-center h-100"></i>
                                 </div>
                             </div>
                             <div class="flex-grow-1 ms-3">
@@ -76,7 +93,8 @@
                         <div class="d-flex align-items-center">
                             <div class="flex-shrink-0">
                                 <div class="avatar-sm bg-info bg-opacity-10 rounded">
-                                    <i class="feather-dollar-sign text-info fs-4 d-flex align-items-center justify-content-center h-100"></i>
+                                    <i
+                                        class="feather-dollar-sign text-info fs-4 d-flex align-items-center justify-content-center h-100"></i>
                                 </div>
                             </div>
                             <div class="flex-grow-1 ms-3">
@@ -116,7 +134,7 @@
                                 </td>
                                 <td>
                                     <div class="fw-semibold">{{ Str::limit($plan->title, 30) }}</div>
-                                    @if($plan->subActivity)
+                                    @if ($plan->subActivity)
                                         <small class="text-muted">{{ $plan->subActivity->name }}</small>
                                     @endif
                                 </td>
@@ -124,28 +142,30 @@
                                     {{ $plan->governanceNode?->name ?? '-' }}
                                 </td>
                                 <td>
-                                    @if($plan->activity)
-                                        <span class="badge bg-light text-dark">{{ Str::limit($plan->activity->name, 20) }}</span>
+                                    @if ($plan->activity)
+                                        <span
+                                            class="badge bg-light text-dark">{{ Str::limit($plan->activity->name, 20) }}</span>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
                                 </td>
                                 <td>
-                                    @if($plan->methodPlanned)
-                                        <span class="badge bg-info">{{ Str::limit($plan->methodPlanned->method_name, 15) }}</span>
+                                    @if ($plan->methodPlanned)
+                                        <span
+                                            class="badge bg-info">{{ Str::limit($plan->methodPlanned->method_name, 15) }}</span>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
                                 </td>
                                 <td class="text-center">
-                                    @if($plan->stage)
+                                    @if ($plan->stage)
                                         <span class="badge bg-secondary">{{ $plan->stage->stage_name }}</span>
                                     @else
                                         <span class="text-muted">—</span>
                                     @endif
                                 </td>
                                 <td class="text-center">
-                                    @if($plan->is_launched)
+                                    @if ($plan->is_launched)
                                         <span class="badge bg-success px-3 py-1">Yes</span>
                                     @else
                                         <span class="badge bg-danger px-3 py-1">No</span>
@@ -167,8 +187,8 @@
                                             class="btn btn-sm btn-outline-warning" title="Edit">
                                             <i class="feather-edit"></i>
                                         </a>
-                                        <form action="{{ route('procurement.plans.destroy', $plan) }}"
-                                            method="POST" class="d-inline">
+                                        <form action="{{ route('procurement.plans.destroy', $plan) }}" method="POST"
+                                            class="d-inline">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"
