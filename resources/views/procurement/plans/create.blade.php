@@ -275,12 +275,12 @@
                             @enderror
                         </div>
 
-                        {{-- Notes --}}
+                        {{-- Remarks --}}
                         <div class="col-12">
-                            <label for="notes" class="form-label">Notes</label>
-                            <textarea class="form-control @error('notes') is-invalid @enderror" id="notes" name="notes" rows="2"
-                                placeholder="Additional notes">{{ old('notes') }}</textarea>
-                            @error('notes')
+                            <label for="remarks" class="form-label">Remarks</label>
+                            <textarea class="form-control @error('remarks') is-invalid @enderror" id="remarks" name="remarks" rows="2"
+                                placeholder="Additional notes">{{ old('remarks') }}</textarea>
+                            @error('remarks')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>

@@ -2,12 +2,16 @@
 
 use App\Http\Controllers\MeConfigurationController;
 use App\Http\Controllers\MeIndicatorController;
+use App\Http\Controllers\MeKnowledgeEvidenceController;
 use App\Models\Indicator;
+use App\Models\IndicatorDisaggregation;
 use App\Models\IndicatorLevel;
 use App\Models\IndicatorResult;
 use App\Models\IndicatorTarget;
 use App\Models\IndicatorUnit;
+use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\Program;
+use App\Models\Project;
 use App\Models\ReportingFrequency;
 use App\Models\Role;
 use App\Models\Sector;
@@ -29,6 +33,10 @@ $app->make(ConsoleKernel::class)->bootstrap();
 foreach ([
     ['myb_indicators', 'indicator_code'],
     ['myb_indicators', 'responsible_user_id'],
+    ['myb_indicators', 'project_component_id'],
+    ['myb_indicators', 'results_level'],
+    ['myb_indicators', 'data_collection_method'],
+    ['myb_indicators', 'means_of_verification_id'],
     ['me_indicator_targets', 'target_context'],
 ] as [$table, $column]) {
     if (! Schema::hasColumn($table, $column)) {
@@ -54,6 +62,7 @@ $unit = IndicatorUnit::query()
 $frequency = ReportingFrequency::query()
     ->where('portfolio_id', $unit->portfolio_id)
     ->where('is_active', true)
+    ->indicatorCadences()
     ->firstOrFail();
 $portfolio = Sector::query()->findOrFail($unit->portfolio_id);
 $level = IndicatorLevel::query()
@@ -64,6 +73,7 @@ $level = IndicatorLevel::query()
 $app['auth']->guard()->setUser($admin);
 $controller = $app->make(MeIndicatorController::class);
 $configurationController = $app->make(MeConfigurationController::class);
+$repositoryController = $app->make(MeKnowledgeEvidenceController::class);
 $suffix = Str::upper(Str::random(10));
 
 $requestForUser = function (User $user, string $method, string $uri, array $input = []) use ($app): Request {
@@ -98,7 +108,8 @@ $basePayload = [
     'baseline_value' => 12.5,
     'target_value' => 25,
     'frequency_of_reporting_id' => $frequency->id,
-    'data_source' => 'https://example.test/me/framework-source',
+    'data_collection_method' => 'Household survey and administrative data extract',
+    'results_level' => 'pdo',
     'responsible_user_id' => $responsiblePerson->id,
     'baseline_type' => 'year',
     'baseline_year' => '2026',
@@ -116,6 +127,31 @@ try {
         'description' => 'Temporary programme used to verify portfolio resolution for an indicator owner.',
         'created_by' => $admin->id,
     ]);
+    $component = Project::query()->create([
+        'program_id' => $hierarchyProgram->id,
+        'project_id' => (string) Str::uuid(),
+        'name' => "Indicator project component {$suffix}",
+        'description' => 'Temporary project component for indicator classification.',
+        'created_by' => $admin->id,
+    ]);
+    $evidenceTitle = "Indicator MOV {$suffix}";
+    $repositoryResponse = $repositoryController->store($requestFor(
+        'POST',
+        '/budget/me/knowledge-and-evidence-repository',
+        [
+            'portfolio_id' => $portfolio->id,
+            'title' => $evidenceTitle,
+            'document_type' => 'means_of_verification',
+            'external_url' => 'https://example.test/me/mov',
+        ]
+    ));
+    $evidence = MeKnowledgeEvidenceItem::query()->where('title', $evidenceTitle)->firstOrFail();
+    if (! str_contains($repositoryResponse->getTargetUrl(), 'knowledge-and-evidence-repository')
+        || $evidence->external_url !== 'https://example.test/me/mov') {
+        throw new RuntimeException('The Knowledge and Evidence Repository did not persist a selectable MOV.');
+    }
+    $basePayload['project_component_id'] = $component->id;
+    $basePayload['means_of_verification_id'] = $evidence->id;
     $foreignPortfolio = Sector::query()->whereKeyNot($portfolio->id)->firstOrFail();
     $foreignProgram = Program::query()->create([
         'sector_id' => $foreignPortfolio->id,
@@ -186,7 +222,7 @@ try {
             'name' => "Inline smoke frequency {$suffix}",
             'code' => "ISF_{$suffix}",
             'interval_unit' => 'month',
-            'interval_value' => 2,
+            'interval_value' => 6,
             'description' => 'Created without leaving the indicator form.',
             'is_active' => 1,
         ]
@@ -196,7 +232,7 @@ try {
     if ($frequencyResponse->getStatusCode() !== 201
         || ! $inlineFrequency->is_active
         || (string) $inlineFrequency->portfolio_id !== (string) $portfolio->id
-        || $inlineFrequency->frequency_in_days !== 60
+        || $inlineFrequency->frequency_in_days !== 180
         || ($frequencyResponseData['label'] ?? null) !== "Inline smoke frequency {$suffix}") {
         throw new RuntimeException('Inline reporting-frequency creation did not return a selectable cadence.');
     }
@@ -338,12 +374,76 @@ try {
         throw new RuntimeException('The single responsible person was not persisted compatibly.');
     }
     if ($indicator->definitions !== $basePayload['definition']
-        || $indicator->primary_source !== 'link:'.$basePayload['data_source']) {
-        throw new RuntimeException('The definition or data source was not persisted.');
+        || $indicator->data_collection_method !== $basePayload['data_collection_method']
+        || (string) $indicator->project_component_id !== (string) $component->id
+        || (string) $indicator->means_of_verification_id !== (string) $evidence->id
+        || $indicator->results_level !== 'pdo') {
+        throw new RuntimeException('The enhanced indicator profile was not persisted.');
     }
     if ($indicator->indicatorable_type !== Sector::class
         || (string) $indicator->indicatorable_id !== (string) $portfolio->id) {
         throw new RuntimeException('Blank hierarchy owner did not default to the mandatory selected portfolio.');
+    }
+
+    $repositoryView = $repositoryController->index($requestFor(
+        'GET',
+        '/budget/me/rebuild/knowledge-and-evidence-repository?q='.rawurlencode($evidenceTitle)
+    ));
+    $repositoryHtml = $repositoryView->with('errors', new ViewErrorBag)->render();
+    if (! str_contains($repositoryHtml, $evidenceTitle)
+        || ! str_contains($repositoryHtml, 'Linked indicators')
+        || $repositoryView->getData()['items']->total() !== 1) {
+        throw new RuntimeException('The Knowledge and Evidence Repository did not render the linked MOV.');
+    }
+    try {
+        $repositoryController->destroy($evidence);
+        throw new RuntimeException('A repository item linked as an MOV was deleted.');
+    } catch (ValidationException $exception) {
+        if (! array_key_exists('evidence', $exception->errors())) {
+            throw new RuntimeException('Linked MOV deletion did not return the expected validation error.');
+        }
+    }
+
+    $controller->updateDisaggregations(
+        $requestFor('PUT', "/budget/me/indicators/{$indicator->id}/disaggregations", [
+            'primary_disaggregation' => 'Gender',
+            'secondary_disaggregation' => 'Age Group',
+            'tertiary_disaggregation' => 'Geographic Location',
+        ]),
+        $indicator
+    );
+    $indicator->load('disaggregations');
+    $primaryDisaggregation = $indicator->disaggregations->firstWhere('level', 'primary');
+    $secondaryDisaggregation = $indicator->disaggregations->firstWhere('level', 'secondary');
+    $tertiaryDisaggregation = $indicator->disaggregations->firstWhere('level', 'tertiary');
+    if (! $primaryDisaggregation
+        || (string) $secondaryDisaggregation?->parent_id !== (string) $primaryDisaggregation->id
+        || (string) $tertiaryDisaggregation?->parent_id !== (string) $secondaryDisaggregation?->id
+        || IndicatorDisaggregation::query()->where('indicator_id', $indicator->id)->count() !== 3) {
+        throw new RuntimeException('Primary, secondary and tertiary disaggregations were not persisted as a linked hierarchy.');
+    }
+
+    $collectIndicators = new ReflectionMethod($controller, 'collectIndicatorsWithRelations');
+    $reportIndicators = $collectIndicators->invoke($controller, (string) $component->id);
+    $statusBuilder = new ReflectionMethod($controller, 'buildStatusRow');
+    $statusRows = $reportIndicators
+        ->map(fn (Indicator $reportIndicator) => $statusBuilder->invoke($controller, $reportIndicator))
+        ->keyBy('id');
+    $reportBuilder = new ReflectionMethod($controller, 'buildManagementReportRows');
+    $reportRows = $reportBuilder->invoke(
+        $controller,
+        $reportIndicators,
+        $statusRows,
+        User::query()->pluck('name', 'id'),
+        null
+    );
+    $reportRow = $reportRows->firstWhere('indicator_name', $indicator->name);
+    if (($reportRow['project_component'] ?? null) !== $component->project_id.' - '.$component->name
+        || ($reportRow['indicator_level'] ?? null) !== 'PDO'
+        || ($reportRow['disaggregation'] ?? null) !== 'Gender → Age Group → Geographic Location'
+        || ($reportRow['means_of_verification'] ?? null) !== $evidence->title
+        || ($reportRow['data_collection_method'] ?? null) !== $basePayload['data_collection_method']) {
+        throw new RuntimeException('Component, classification, disaggregation, collection method or MOV is missing from management reporting.');
     }
 
     $setupTarget = $indicator->setupTarget;
@@ -388,7 +488,10 @@ try {
         'baseline_value' => 13,
         'target_value' => 30,
         'frequency_of_reporting_id' => $frequency->id,
-        'data_source' => 'https://example.test/me/updated-source',
+        'data_collection_method' => 'Updated survey and administrative data collection method',
+        'project_component_id' => $component->id,
+        'means_of_verification_id' => $evidence->id,
+        'results_level' => 'intermediate_results',
         'responsible_user_id' => $responsiblePerson->id,
     ];
     $controller->update(
@@ -400,14 +503,16 @@ try {
     if ($indicator->indicator_code !== $firstCode) {
         throw new RuntimeException('Updating an indicator changed its immutable Indicator ID.');
     }
-    if ($indicator->methodology !== $basePayload['methodology']
+    if ($indicator->methodology !== $updatePayload['data_collection_method']
+        || $indicator->data_collection_method !== $updatePayload['data_collection_method']
+        || $indicator->results_level !== 'intermediate_results'
         || $indicator->notes !== $basePayload['notes']
         || $indicator->baseline_year !== $basePayload['baseline_year']
         || $indicator->baseline_type !== $basePayload['baseline_type']
         || (string) $indicator->indicatorable_id !== (string) $portfolio->id) {
         throw new RuntimeException('A focused update erased legacy optional indicator data.');
     }
-    if ($indicator->primary_source !== 'link:'.$updatePayload['data_source']) {
+    if ($indicator->primary_source !== 'link:'.$updatePayload['data_collection_method']) {
         throw new RuntimeException('A focused update did not preserve the legacy data-source type.');
     }
     if ((string) $indicator->setupTarget?->id !== (string) $originalTargetId
@@ -460,12 +565,15 @@ try {
     } catch (ValidationException $exception) {
         $missingFields = array_diff([
             'portfolio_id',
+            'project_component_id',
+            'results_level',
             'definition',
             'unit_id',
             'baseline_value',
             'target_value',
             'frequency_of_reporting_id',
-            'data_source',
+            'data_collection_method',
+            'means_of_verification_id',
             'responsible_user_id',
         ], array_keys($exception->errors()));
 
@@ -480,7 +588,8 @@ try {
     $registrySearch = strtolower((string) $indicator->indicator_code);
     $indexView = $controller->index($requestFor(
         'GET',
-        '/budget/me/indicators?q='.rawurlencode($registrySearch)
+        '/budget/me/indicators?q='.rawurlencode($registrySearch).'&component_id='.$component->id,
+        ['q' => $registrySearch, 'component_id' => $component->id]
     ));
     $viewData = $indexView->getData();
     foreach ([
@@ -489,8 +598,10 @@ try {
         'editingOwnerReference',
         'editingPortfolioId',
         'ownerPortfolioMap',
+        'ownerComponentMap',
         'editingResponsibleUserIds',
         'editingPrimarySourceValue',
+        'editingDataCollectionMethod',
         'editingTargetValue',
         'users',
         'units',
@@ -500,6 +611,11 @@ try {
         'projects',
         'activities',
         'subActivities',
+        'repositoryItems',
+        'componentOptions',
+        'componentCounts',
+        'componentFilter',
+        'disaggregationDimensions',
         'summary',
         'search',
         'showForm',
@@ -518,6 +634,7 @@ try {
     if ($viewData['indicators']->total() !== 1
         || (string) $viewData['indicators']->first()->id !== (string) $indicator->id
         || $viewData['search'] !== $registrySearch
+        || (string) $viewData['componentFilter'] !== (string) $component->id
         || $viewData['showForm'] !== false
         || ($viewData['summary']['complete'] ?? 0) < 2
         || ($viewData['summary']['needs_attention'] ?? -1) < 0
@@ -540,6 +657,7 @@ try {
         || $editData['users']->isEmpty()
         || ! $editData['units']->contains('id', $inlineUnit->id)
         || ! $editData['frequencies']->contains('id', $inlineFrequency->id)
+        || ! $editData['repositoryItems']->contains('id', $evidence->id)
         || ($editData['frequencyIntervalOptions']['month'] ?? null) !== 'Month') {
         throw new RuntimeException('The create/edit form contract was not loaded on demand.');
     }
@@ -548,14 +666,17 @@ try {
     $editHtml = $editView->with('errors', new ViewErrorBag)->render();
     foreach ([
         'Portfolio',
+        'Project component',
         'Indicator ID',
         'Indicator name',
+        'Results level',
         'Definition',
         'Unit of measurement',
         'Baseline',
         'Target',
         'Reporting frequency',
-        'Data source',
+        'Data Collection Method/Data Source',
+        'Means of Verification',
         'Responsible person',
     ] as $requiredLabel) {
         if (! str_contains($editHtml, $requiredLabel)) {
@@ -564,7 +685,6 @@ try {
     }
     foreach ([
         'New unit',
-        'New frequency',
         'indicatorUnitCreateModal',
         'indicatorFrequencyCreateModal',
         route('budget.me-configuration.units.store'),
@@ -590,6 +710,25 @@ try {
         || ! str_contains($indicatorFormHtml, 'data-portfolio-id="'.$portfolio->id.'"')) {
         throw new RuntimeException('The indicator form does not expose its required portfolio-first UI contract.');
     }
+    $frequencySelectStart = strpos($indicatorFormHtml, 'id="indicator-frequency"');
+    $frequencySelectEnd = strpos($indicatorFormHtml, '</select>', $frequencySelectStart ?: 0);
+    $frequencySelectHtml = $frequencySelectStart !== false && $frequencySelectEnd !== false
+        ? substr($indicatorFormHtml, $frequencySelectStart, $frequencySelectEnd - $frequencySelectStart)
+        : '';
+    foreach (['Monthly', 'Quarterly', 'Semi-Annual', 'Annual'] as $allowedCadence) {
+        if (! str_contains($frequencySelectHtml, $allowedCadence)) {
+            throw new RuntimeException("The indicator frequency selector is missing {$allowedCadence}.");
+        }
+    }
+    foreach (['Second', 'Minute', 'Hour', 'Week', 'Once', 'Quinquennial'] as $forbiddenCadence) {
+        if (str_contains($frequencySelectHtml, '>'.$forbiddenCadence.'<')) {
+            throw new RuntimeException("The indicator frequency selector still exposes {$forbiddenCadence}.");
+        }
+    }
+    if (str_contains($indicatorFormHtml, '>Methodology<')
+        || str_contains($indicatorFormHtml, '>Primary Source Type<')) {
+        throw new RuntimeException('Legacy Methodology or Primary Source Type labels remain in the indicator editor.');
+    }
     $unitModalStart = strpos($editHtml, 'id="indicatorUnitCreateModal"');
     if ($indicatorFormStart === false
         || $indicatorFormEnd === false
@@ -598,7 +737,9 @@ try {
         throw new RuntimeException('An inline configuration modal was nested inside the indicator form.');
     }
     if (! str_contains($registryHtml, $indicator->indicator_code)
-        || ! str_contains($registryHtml, 'Indicator register')) {
+        || ! str_contains($registryHtml, 'Indicator register')
+        || ! str_contains($registryHtml, 'Disaggregation')
+        || ! str_contains($registryHtml, 'Gender')) {
         throw new RuntimeException('The focused indicator register did not render the saved indicator.');
     }
 

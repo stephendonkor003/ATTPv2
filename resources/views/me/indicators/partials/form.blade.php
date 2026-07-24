@@ -19,8 +19,23 @@
     if ($selectedOwner === 'portfolio:'.$selectedPortfolioId) {
         $selectedOwner = '';
     }
+    $selectedComponentId = (string) old(
+        'project_component_id',
+        $editingIndicator->project_component_id ?? ''
+    );
+    $selectedResultsLevel = (string) old(
+        'results_level',
+        $editingIndicator->results_level ?? ''
+    );
+    $selectedMeansOfVerificationId = (string) old(
+        'means_of_verification_id',
+        $editingIndicator->means_of_verification_id ?? ''
+    );
     $targetValue = old('target_value', $editingTargetValue ?? '');
-    $sourceValue = old('data_source', $editingPrimarySourceValue ?? '');
+    $dataCollectionMethod = old(
+        'data_collection_method',
+        $editingDataCollectionMethod ?? $editingPrimarySourceValue ?? ''
+    );
     $showConfigurationPortfolio = ($portfolios ?? collect())->count() > 1;
 @endphp
 
@@ -96,7 +111,7 @@
                                     <optgroup label="Projects">
                                         @foreach ($projects as $project)
                                             @php($ownerValue = 'project:'.$project->id)
-                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $project->name }}</option>
+                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" data-component-id="{{ $ownerComponentMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $project->name }}</option>
                                         @endforeach
                                     </optgroup>
                                 @endif
@@ -104,7 +119,7 @@
                                     <optgroup label="Activities">
                                         @foreach ($activities as $activity)
                                             @php($ownerValue = 'activity:'.$activity->id)
-                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $activity->name }}</option>
+                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" data-component-id="{{ $ownerComponentMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $activity->name }}</option>
                                         @endforeach
                                     </optgroup>
                                 @endif
@@ -112,13 +127,39 @@
                                     <optgroup label="Sub-activities">
                                         @foreach ($subActivities as $subActivity)
                                             @php($ownerValue = 'sub_activity:'.$subActivity->id)
-                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $subActivity->name }}</option>
+                                            <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" data-component-id="{{ $ownerComponentMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $subActivity->name }}</option>
                                         @endforeach
                                     </optgroup>
                                 @endif
                             </select>
                             <small class="me-field-help" id="indicator-owner-help">Leave this as “Use the selected portfolio” unless the indicator belongs to a specific programme, project or activity.</small>
                             @error('owner_reference')<div class="invalid-feedback" id="indicator-owner-error">{{ $message }}</div>@enderror
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="indicator-project-component">Project component <span class="text-danger">*</span></label>
+                            <select
+                                id="indicator-project-component"
+                                name="project_component_id"
+                                class="form-select @error('project_component_id') is-invalid @enderror"
+                                data-indicator-component
+                                data-indicator-portfolio-dependent
+                                data-dependent-kind="components"
+                                required
+                            >
+                                <option value="">Select project component</option>
+                                @foreach ($projects as $component)
+                                    <option
+                                        value="{{ $component->id }}"
+                                        data-portfolio-id="{{ $component->program?->sector_id }}"
+                                        @selected($selectedComponentId === (string) $component->id)
+                                    >
+                                        {{ $component->project_id ? $component->project_id.' — ' : '' }}{{ $component->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="me-field-help">Used to filter, aggregate and report indicator results by project component. Project, activity and sub-activity owners automatically lock this selection.</small>
+                            @error('project_component_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
                     </div>
                     <div class="me-scope-status" id="indicator-scope-status" data-indicator-scope-status role="status" aria-live="polite"></div>
@@ -128,7 +169,7 @@
             <div class="me-form-section">
                 <h3 class="me-form-section-title">2. Indicator identity</h3>
                 <div class="row g-3">
-                    <div class="col-lg-4">
+                    <div class="col-lg-3">
                         <label class="form-label" for="indicator-code">Indicator ID</label>
                         <input
                             type="text"
@@ -141,7 +182,22 @@
                         <small class="me-field-help" id="indicator-code-help">The system assigns a permanent, unique ID so duplicate codes cannot be created.</small>
                     </div>
 
-                    <div class="col-lg-8">
+                    <div class="col-lg-3">
+                        <label class="form-label" for="indicator-results-level">Results level <span class="text-danger">*</span></label>
+                        <select
+                            id="indicator-results-level"
+                            name="results_level"
+                            class="form-select @error('results_level') is-invalid @enderror"
+                            required
+                        >
+                            <option value="">Select level</option>
+                            <option value="pdo" @selected($selectedResultsLevel === 'pdo')>PDO</option>
+                            <option value="intermediate_results" @selected($selectedResultsLevel === 'intermediate_results')>Intermediate Results</option>
+                        </select>
+                        @error('results_level')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-lg-6">
                         <label class="form-label" for="indicator-name">Indicator name <span class="text-danger">*</span></label>
                         <input
                             type="text"
@@ -202,6 +258,7 @@
                             class="form-select @error('unit_id') is-invalid @enderror"
                             aria-describedby="indicator-unit-selection-status @error('unit_id') indicator-unit-error @enderror"
                             data-indicator-portfolio-dependent
+                            data-dependent-kind="units"
                             required
                         >
                             <option value="">Select unit</option>
@@ -256,32 +313,21 @@
             <div class="me-form-section">
                 <h3 class="me-form-section-title">4. Reporting and accountability</h3>
                 <div class="row g-3">
-                    <div class="col-lg-4">
-                        <div class="me-field-label-row">
-                            <label class="form-label" for="indicator-frequency">Reporting frequency <span class="text-danger">*</span></label>
-                            <a
-                                href="{{ route('budget.me-configuration.frequencies.create') }}"
-                                class="me-inline-create-link"
-                                data-inline-config-open="frequency"
-                                aria-controls="indicatorFrequencyCreateModal"
-                                aria-haspopup="dialog"
-                                aria-label="Create a new reporting frequency without leaving this indicator"
-                            >
-                                <i class="feather-plus" aria-hidden="true"></i> New frequency
-                            </a>
-                        </div>
+                    <div class="col-lg-6">
+                        <label class="form-label" for="indicator-frequency">Reporting frequency <span class="text-danger">*</span></label>
                         <select
                             id="indicator-frequency"
                             name="frequency_of_reporting_id"
                             class="form-select @error('frequency_of_reporting_id') is-invalid @enderror"
                             aria-describedby="indicator-frequency-selection-status @error('frequency_of_reporting_id') indicator-frequency-error @enderror"
                             data-indicator-portfolio-dependent
+                            data-dependent-kind="frequencies"
                             required
                         >
                             <option value="">Select frequency</option>
                             @foreach ($frequencies as $frequency)
                                 <option value="{{ $frequency->id }}" data-portfolio-id="{{ $frequency->portfolio_id }}" @selected((string) old('frequency_of_reporting_id', $editingIndicator->frequency_of_reporting_id ?? '') === (string) $frequency->id)>
-                                    {{ $frequency->name }}@if($showConfigurationPortfolio && $frequency->portfolio?->name) &mdash; {{ $frequency->portfolio->name }}@endif
+                                    {{ $frequency->indicatorCadenceLabel() }}@if($showConfigurationPortfolio && $frequency->portfolio?->name) &mdash; {{ $frequency->portfolio->name }}@endif
                                 </option>
                             @endforeach
                         </select>
@@ -295,22 +341,52 @@
                         ></small>
                     </div>
 
-                    <div class="col-lg-4">
-                        <label class="form-label" for="indicator-data-source">Data source <span class="text-danger">*</span></label>
-                        <input
-                            type="text"
-                            id="indicator-data-source"
-                            name="data_source"
-                            class="form-control @error('data_source') is-invalid @enderror"
-                            value="{{ $sourceValue }}"
-                            maxlength="255"
-                            placeholder="e.g. survey, DHIS2, quarterly report"
+                    <div class="col-lg-6">
+                        <label class="form-label" for="indicator-data-collection-method">Data Collection Method/Data Source <span class="text-danger">*</span></label>
+                        <textarea
+                            id="indicator-data-collection-method"
+                            name="data_collection_method"
+                            class="form-control @error('data_collection_method') is-invalid @enderror"
+                            rows="2"
+                            maxlength="2000"
+                            placeholder="e.g. household survey, DHIS2 extract, quarterly monitoring report"
                             required
-                        >
-                        @error('data_source')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        >{{ $dataCollectionMethod }}</textarea>
+                        @error('data_collection_method')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-lg-4">
+                    <div class="col-lg-6">
+                        <div class="me-field-label-row">
+                            <label class="form-label" for="indicator-means-of-verification">Means of Verification <span class="text-danger">*</span></label>
+                            <a
+                                href="{{ route('budget.me.rebuild.knowledge-repository') }}"
+                                class="me-inline-create-link"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                <i class="feather-folder" aria-hidden="true"></i> Open repository
+                            </a>
+                        </div>
+                        <select
+                            id="indicator-means-of-verification"
+                            name="means_of_verification_id"
+                            class="form-select @error('means_of_verification_id') is-invalid @enderror"
+                            data-indicator-portfolio-dependent
+                            data-dependent-kind="evidence"
+                            required
+                        >
+                            <option value="">Select repository evidence</option>
+                            @foreach ($repositoryItems as $evidence)
+                                <option value="{{ $evidence->id }}" data-portfolio-id="{{ $evidence->portfolio_id }}" @selected($selectedMeansOfVerificationId === (string) $evidence->id)>
+                                    {{ $evidence->title }}@if($showConfigurationPortfolio && $evidence->portfolio?->name) &mdash; {{ $evidence->portfolio->name }}@endif
+                                </option>
+                            @endforeach
+                        </select>
+                        <small class="me-field-help">The selected document remains linked to this indicator in the Knowledge and Evidence Repository.</small>
+                        @error('means_of_verification_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-lg-6">
                         <label class="form-label" for="indicator-responsible-person">Responsible person <span class="text-danger">*</span></label>
                         <select id="indicator-responsible-person" name="responsible_user_id" class="form-select @error('responsible_user_id') is-invalid @enderror" required>
                             <option value="">Select indicator owner</option>

@@ -62,6 +62,52 @@ class ProcurementProgramPlanController extends Controller
             ->with('success', 'Program plan saved.');
     }
 
+    public function edit(ProcurementProgramPlan $programPlan)
+    {
+        $this->assertProcurementProgramPlanInScope($programPlan);
+
+        $governanceNodes = $this->availableGovernanceNodes();
+        $canChoosePortfolio = $governanceNodes->count() !== 1;
+        $currentGovernanceNodeName = $governanceNodes->count() === 1
+            ? $governanceNodes->first()->name
+            : null;
+
+        return view('procurement.structure.plans.edit', compact(
+            'programPlan',
+            'governanceNodes',
+            'canChoosePortfolio',
+            'currentGovernanceNodeName'
+        ));
+    }
+
+    public function update(Request $request, ProcurementProgramPlan $programPlan)
+    {
+        $this->assertProcurementProgramPlanInScope($programPlan);
+
+        $governanceNodeId = $this->resolveGovernanceNodeId($request, $programPlan);
+
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('myb_procurement_program_plans', 'name')
+                    ->where(fn ($query) => $query->where('governance_node_id', $governanceNodeId))
+                    ->ignore($programPlan->id),
+            ],
+            'description' => 'nullable|string',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+        ]);
+
+        $validated['governance_node_id'] = $governanceNodeId;
+
+        $programPlan->update($validated);
+
+        return redirect()->route('procurement.structure.index')
+            ->with('success', 'Program plan updated.');
+    }
+
     private function availableGovernanceNodes()
     {
         $query = GovernanceNode::query()
@@ -79,7 +125,7 @@ class ProcurementProgramPlanController extends Controller
         return $query->get(['id', 'name', 'code']);
     }
 
-    private function resolveGovernanceNodeId(Request $request): string
+    private function resolveGovernanceNodeId(Request $request, ?ProcurementProgramPlan $programPlan = null): string
     {
         $governanceNodes = $this->availableGovernanceNodes();
 

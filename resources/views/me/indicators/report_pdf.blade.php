@@ -76,15 +76,16 @@
                 <th>Sub-Activity</th>
                 <th>Indicator</th>
                 <th>Owner Type</th>
-                <th>Level</th>
+                <th>Project Component</th>
+                <th>Results Level</th>
+                <th>Disaggregation</th>
                 <th>Frequency</th>
                 <th>Baseline Type</th>
                 <th>Baseline Period</th>
                 <th>Baseline Value</th>
                 <th>Responsible Party/Person</th>
-                <th>Methodology</th>
-                <th>Primary Source Type</th>
-                <th>Primary Source Value</th>
+                <th>Data Collection Method/Data Source</th>
+                <th>Means of Verification</th>
                 <th>Definition</th>
                 <th>Target</th>
                 <th>Actual</th>
@@ -103,15 +104,16 @@
                     <td>{{ $row['sub_activity'] ?? '—' }}</td>
                     <td>{{ $row['indicator_name'] ?? '—' }}</td>
                     <td>{{ $row['owner_type'] ?? '—' }}</td>
+                    <td>{{ $row['project_component'] ?? '—' }}</td>
                     <td>{{ $row['indicator_level'] ?? '—' }}</td>
+                    <td>{{ $row['disaggregation'] ?? '—' }}</td>
                     <td>{{ $row['frequency'] ?? '—' }}</td>
                     <td>{{ $row['baseline_type'] ?? '—' }}</td>
                     <td>{{ $row['baseline_period'] ?? '—' }}</td>
                     <td>{{ $row['baseline_value'] ?? '—' }}</td>
                     <td>{{ $row['responsible'] ?? '—' }}</td>
-                    <td>{{ $row['methodology'] ?? '—' }}</td>
-                    <td>{{ $row['primary_source_type'] ?? '—' }}</td>
-                    <td>{{ $row['primary_source_value'] ?? '—' }}</td>
+                    <td>{{ $row['data_collection_method'] ?? '—' }}</td>
+                    <td>{{ $row['means_of_verification'] ?? '—' }}</td>
                     <td>{{ $row['definition'] ?? '—' }}</td>
                     <td class="nowrap">{{ $row['target'] ?? '—' }}</td>
                     <td class="nowrap">{{ $row['actual'] ?? '—' }}</td>
@@ -121,7 +123,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="22" class="small">No indicators available for export.</td>
+                    <td colspan="23" class="small">No indicators available for export.</td>
                 </tr>
             @endforelse
         </tbody>

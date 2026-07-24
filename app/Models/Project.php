@@ -66,6 +66,11 @@ class Project extends BaseModel
         return $this->morphMany(Indicator::class, 'indicatorable');
     }
 
+    public function componentIndicators()
+    {
+        return $this->hasMany(Indicator::class, 'project_component_id');
+    }
+
     // A Project has many Activity Allocations (via activities)
     public function activityAllocations()
     {

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -15,18 +16,22 @@ class Indicator extends BaseModel
         'indicator_code',
         'indicatorable_type',
         'indicatorable_id',
+        'project_component_id',
         'name',
         'baseline_year',
         'baseline_type',
         'baseline_value',
         'indicator_level_id',
+        'results_level',
         'methodology',
+        'data_collection_method',
         'notes',
         'responsible_user_id',
         'responsible_party',
         'frequency_of_reporting_id',
         'unit_id',
         'primary_source',
+        'means_of_verification_id',
         'definitions',
         'created_by',
     ];
@@ -63,6 +68,39 @@ class Indicator extends BaseModel
     public function indicatorable()
     {
         return $this->morphTo();
+    }
+
+    public function projectComponent(): BelongsTo
+    {
+        return $this->belongsTo(Project::class, 'project_component_id');
+    }
+
+    public function meansOfVerification(): BelongsTo
+    {
+        return $this->belongsTo(MeKnowledgeEvidenceItem::class, 'means_of_verification_id');
+    }
+
+    public function disaggregations(): HasMany
+    {
+        return $this->hasMany(IndicatorDisaggregation::class)
+            ->orderByRaw("CASE level WHEN 'primary' THEN 1 WHEN 'secondary' THEN 2 WHEN 'tertiary' THEN 3 ELSE 4 END");
+    }
+
+    public function resultsLevelLabel(): string
+    {
+        return match ($this->results_level) {
+            'pdo' => 'PDO',
+            'intermediate_results' => 'Intermediate Results',
+            default => 'Not classified',
+        };
+    }
+
+    public function disaggregationChain(): string
+    {
+        return $this->disaggregations
+            ->pluck('dimension')
+            ->filter()
+            ->implode(' → ');
     }
 
     // M&E Configuration relationships

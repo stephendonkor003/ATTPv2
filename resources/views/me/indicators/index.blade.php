@@ -117,6 +117,7 @@
 
             if (indicatorForm && portfolioSelect instanceof HTMLSelectElement) {
                 const ownerSelect = indicatorForm.querySelector('[data-indicator-owner]');
+                const componentSelect = indicatorForm.querySelector('[data-indicator-component]');
                 const dependentSelects = Array.from(indicatorForm.querySelectorAll('[data-indicator-portfolio-dependent]'));
                 const scopeStatus = indicatorForm.querySelector('[data-indicator-scope-status]');
                 const inlineCreateLinks = Array.from(indicatorForm.querySelectorAll('[data-inline-config-open]'));
@@ -155,10 +156,35 @@
                     return available;
                 };
 
+                const synchronizeComponentWithOwner = () => {
+                    if (!(ownerSelect instanceof HTMLSelectElement)
+                        || !(componentSelect instanceof HTMLSelectElement)) {
+                        return;
+                    }
+
+                    const componentId = ownerSelect.selectedOptions[0]?.dataset.componentId || '';
+                    const isLocked = componentId !== '';
+
+                    if (isLocked) {
+                        componentSelect.value = componentId;
+                    }
+
+                    componentSelect.classList.toggle('bg-light', isLocked);
+                    componentSelect.style.pointerEvents = isLocked ? 'none' : '';
+                    componentSelect.tabIndex = isLocked ? -1 : 0;
+                    componentSelect.setAttribute('aria-disabled', isLocked ? 'true' : 'false');
+                };
+
                 const filterIndicatorPortfolioFields = (clearInvalid = false) => {
                     const portfolioId = portfolioSelect.value;
                     const ownerCount = filterOptions(ownerSelect, portfolioId, clearInvalid);
-                    const dependentCounts = dependentSelects.map((select) => filterOptions(select, portfolioId, clearInvalid));
+                    const dependentCounts = dependentSelects.reduce((counts, select) => {
+                        const kind = select.dataset.dependentKind || 'items';
+                        counts[kind] = filterOptions(select, portfolioId, clearInvalid);
+                        return counts;
+                    }, {});
+
+                    synchronizeComponentWithOwner();
 
                     if (ownerSelect instanceof HTMLSelectElement) {
                         ownerSelect.options[0].textContent = portfolioId === ''
@@ -168,7 +194,13 @@
 
                     dependentSelects.forEach((select) => {
                         if (select.options[0]) {
-                            const itemName = select.id === 'indicator-unit' ? 'unit' : 'frequency';
+                            const itemNames = {
+                                components: 'project component',
+                                units: 'unit',
+                                frequencies: 'reporting frequency',
+                                evidence: 'repository evidence',
+                            };
+                            const itemName = itemNames[select.dataset.dependentKind] || 'item';
                             select.options[0].textContent = portfolioId === ''
                                 ? 'Select a portfolio first'
                                 : `Select ${itemName} for this portfolio`;
@@ -181,12 +213,13 @@
 
                     if (scopeStatus) {
                         scopeStatus.textContent = portfolioId === ''
-                            ? 'Select a portfolio to load its hierarchy, units and reporting frequencies.'
-                            : `${ownerCount} hierarchy ${ownerCount === 1 ? 'item' : 'items'}, ${dependentCounts[0] || 0} units and ${dependentCounts[1] || 0} reporting frequencies are available.`;
+                            ? 'Select a portfolio to load its hierarchy, components, evidence, units and reporting frequencies.'
+                            : `${ownerCount} hierarchy items, ${dependentCounts.components || 0} components, ${dependentCounts.evidence || 0} evidence items, ${dependentCounts.units || 0} units and ${dependentCounts.frequencies || 0} reporting frequencies are available.`;
                     }
                 };
 
                 portfolioSelect.addEventListener('change', () => filterIndicatorPortfolioFields(true));
+                ownerSelect?.addEventListener('change', synchronizeComponentWithOwner);
 
                 inlineCreateLinks.forEach((link) => {
                     link.addEventListener('click', (event) => {
@@ -226,6 +259,63 @@
                     }
                 });
             });
+
+            const disaggregationModalElement = document.getElementById('indicatorDisaggregationModal');
+            const disaggregationForm = disaggregationModalElement?.querySelector('[data-disaggregation-form]');
+            if (disaggregationModalElement
+                && disaggregationForm instanceof HTMLFormElement
+                && window.bootstrap?.Modal) {
+                const modal = window.bootstrap.Modal.getOrCreateInstance(disaggregationModalElement);
+                const indicatorName = disaggregationModalElement.querySelector('[data-disaggregation-indicator-name]');
+                const primary = disaggregationForm.querySelector('[data-disaggregation-level="primary"]');
+                const secondary = disaggregationForm.querySelector('[data-disaggregation-level="secondary"]');
+                const tertiary = disaggregationForm.querySelector('[data-disaggregation-level="tertiary"]');
+
+                const synchronizeDisaggregationLevels = (clearChildren = false) => {
+                    if (!(primary instanceof HTMLInputElement)
+                        || !(secondary instanceof HTMLInputElement)
+                        || !(tertiary instanceof HTMLInputElement)) {
+                        return;
+                    }
+
+                    const hasPrimary = primary.value.trim() !== '';
+                    if (clearChildren && !hasPrimary) {
+                        secondary.value = '';
+                        tertiary.value = '';
+                    }
+                    secondary.disabled = !hasPrimary;
+
+                    const hasSecondary = hasPrimary && secondary.value.trim() !== '';
+                    if (clearChildren && !hasSecondary) {
+                        tertiary.value = '';
+                    }
+                    tertiary.disabled = !hasSecondary;
+                };
+
+                primary?.addEventListener('input', () => synchronizeDisaggregationLevels(true));
+                secondary?.addEventListener('input', () => synchronizeDisaggregationLevels(true));
+
+                document.querySelectorAll('[data-disaggregation-open]').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        disaggregationForm.action = button.dataset.action || '#';
+                        if (indicatorName) {
+                            indicatorName.textContent = button.dataset.indicatorName || '';
+                        }
+                        if (primary instanceof HTMLInputElement) {
+                            primary.value = button.dataset.primary || '';
+                        }
+                        if (secondary instanceof HTMLInputElement) {
+                            secondary.value = button.dataset.secondary || '';
+                        }
+                        if (tertiary instanceof HTMLInputElement) {
+                            tertiary.value = button.dataset.tertiary || '';
+                        }
+
+                        synchronizeDisaggregationLevels(false);
+                        modal.show();
+                    });
+                });
+            }
 
             const firstInvalid = document.querySelector('.me-results-framework .is-invalid');
             if (firstInvalid) {

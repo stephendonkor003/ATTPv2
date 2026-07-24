@@ -126,6 +126,10 @@
                                         <span class="badge bg-info text-dark">{{ $plan->procurements_count }}</span>
                                     </td>
                                     <td class="text-end">
+                                        <a href="{{ route('procurement.structure.edit', $plan) }}"
+                                            class="btn btn-sm btn-outline-warning me-1">
+                                            <i class="feather-edit-2 me-1"></i> Edit
+                                        </a>
                                         <a href="{{ route('procurement.plans.sheet', ['program_plan_id' => $plan->id]) }}"
                                             class="btn btn-sm btn-outline-primary">
                                             <i class="feather-eye me-1"></i> View Sheet

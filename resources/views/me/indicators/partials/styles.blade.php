@@ -334,6 +334,8 @@
     .me-results-framework .me-filter-bar {
         display: flex;
         align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
         gap: .65rem;
     }
 

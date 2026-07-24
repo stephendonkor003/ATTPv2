@@ -30,13 +30,29 @@
                     name="q"
                     class="form-control"
                     value="{{ $search ?? request('q') }}"
-                    placeholder="Search ID, name or source"
+                    placeholder="Search ID, name, component or evidence"
                 >
             </div>
+            <label class="visually-hidden" for="indicator-component-filter">Project component</label>
+            <select id="indicator-component-filter" name="component_id" class="form-select" style="min-width: 220px">
+                <option value="">All project components</option>
+                @foreach ($componentOptions as $component)
+                    <option value="{{ $component->id }}" @selected((string) $componentFilter === (string) $component->id)>
+                        {{ $component->project_id ? $component->project_id.' — ' : '' }}{{ $component->name }}
+                        ({{ number_format((int) ($componentCounts->get($component->id) ?? 0)) }})
+                    </option>
+                @endforeach
+            </select>
             <button type="submit" class="btn btn-outline-success">Search</button>
-            @if (filled($search ?? request('q')))
+            @if (filled($search ?? request('q')) || filled($componentFilter))
                 <a href="{{ route('budget.me.indicators.index') }}" class="btn btn-light border">Clear</a>
             @endif
+            <a href="{{ route('budget.me.indicators.report.excel', ['q' => $search, 'component_id' => $componentFilter]) }}" class="btn btn-light border" title="Export filtered indicators to Excel">
+                <i class="feather-download"></i> Excel
+            </a>
+            <a href="{{ route('budget.me.indicators.report.pdf', ['q' => $search, 'component_id' => $componentFilter]) }}" class="btn btn-light border" title="Export filtered indicators to PDF">
+                <i class="feather-file-text"></i> PDF
+            </a>
         </form>
     </div>
 
@@ -44,15 +60,15 @@
         <div class="me-empty-state">
             <span class="me-empty-icon"><i class="feather-target" aria-hidden="true"></i></span>
             <h3 class="h6 fw-bold mb-2">
-                {{ filled($search ?? request('q')) ? 'No matching indicators' : 'No indicators have been added' }}
+                {{ filled($search ?? request('q')) || filled($componentFilter) ? 'No matching indicators' : 'No indicators have been added' }}
             </h3>
             <p class="me-muted small mb-3">
-                {{ filled($search ?? request('q'))
-                    ? 'Try a different ID, name, definition or data source.'
+                {{ filled($search ?? request('q')) || filled($componentFilter)
+                    ? 'Try a different search term or project component.'
                     : 'Create the first indicator to begin your results framework.' }}
             </p>
             @can('me.configuration.manage')
-                @if (!filled($search ?? request('q')))
+                @if (!filled($search ?? request('q')) && !filled($componentFilter))
                     <a href="{{ route('budget.me.indicators.index', ['create' => 1]) }}#indicator-form" class="me-primary-action">
                         <i class="feather-plus" aria-hidden="true"></i> Add first indicator
                     </a>
@@ -65,11 +81,11 @@
                 <caption class="visually-hidden">Results framework indicators and their required measurement information</caption>
                 <thead>
                     <tr>
-                        <th style="width: 31%">Indicator</th>
+                        <th style="width: 30%">Indicator</th>
                         <th style="width: 18%">Measurement</th>
-                        <th style="width: 22%">Reporting</th>
-                        <th style="width: 17%">Responsible person</th>
-                        <th class="text-end" style="width: 12%">Actions</th>
+                        <th style="width: 24%">Reporting &amp; evidence</th>
+                        <th style="width: 15%">Responsible person</th>
+                        <th class="text-end" style="width: 13%">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -77,10 +93,9 @@
                         @php
                             $setupTarget = $indicator->setupTarget;
                             $unitLabel = $indicator->unit?->symbol ?: ($indicator->unit?->name ?: 'Unit not set');
-                            $source = (string) ($indicator->primary_source ?? '');
-                            if (preg_match('/^(file_location|link|external_system_connector):(.*)$/s', $source, $sourceParts)) {
-                                $source = trim($sourceParts[2]);
-                            }
+                            $dataCollectionMethod = (string) ($indicator->data_collection_method ?: $indicator->methodology ?: '');
+                            $disaggregations = $indicator->disaggregations->keyBy('level');
+                            $disaggregationChain = $indicator->disaggregationChain();
                             $responsibleNames = collect([$indicator->responsiblePerson?->name])->filter();
                             if ($responsibleNames->isEmpty()) {
                                 $responsibleNames = collect(json_decode((string) $indicator->responsible_party, true) ?: [])
@@ -95,6 +110,13 @@
                                 <div class="me-indicator-name">{{ $indicator->name }}</div>
                                 <div class="me-definition" title="{{ $indicator->definitions }}">
                                     {{ $indicator->definitions ?: 'Definition not provided' }}
+                                </div>
+                                <div class="d-flex flex-wrap gap-1 mt-2">
+                                    <span class="me-chip"><i class="feather-layers"></i>{{ $indicator->resultsLevelLabel() }}</span>
+                                    <span class="me-chip">
+                                        <i class="feather-briefcase"></i>
+                                        {{ $indicator->projectComponent?->project_id ? $indicator->projectComponent->project_id.' — ' : '' }}{{ $indicator->projectComponent?->name ?: 'Component not set' }}
+                                    </span>
                                 </div>
                                 @if ($indicator->indicatorable)
                                     <div class="me-muted mt-2"><i class="feather-link me-1"></i>{{ $indicator->indicatorable->name }}</div>
@@ -113,10 +135,21 @@
                             </td>
                             <td>
                                 <div class="mb-2">
-                                    <span class="me-chip"><i class="feather-calendar"></i>{{ $indicator->frequency?->name ?: 'Frequency not set' }}</span>
+                                    <span class="me-chip"><i class="feather-calendar"></i>{{ $indicator->frequency?->indicatorCadenceLabel() ?: 'Frequency not set' }}</span>
+                                    <span class="me-chip"><i class="feather-filter"></i>{{ $disaggregationChain !== '' ? $disaggregationChain : 'No disaggregation' }}</span>
                                 </div>
                                 <div class="me-muted text-break">
-                                    <i class="feather-database me-1"></i>{{ $source !== '' ? $source : 'Data source not set' }}
+                                    <i class="feather-database me-1"></i>{{ $dataCollectionMethod !== '' ? $dataCollectionMethod : 'Collection method not set' }}
+                                </div>
+                                <div class="me-muted text-break mt-1">
+                                    <i class="feather-check-square me-1"></i>
+                                    @if ($indicator->meansOfVerification)
+                                        <a href="{{ route('budget.me.rebuild.knowledge-repository', ['q' => $indicator->meansOfVerification->title]) }}">
+                                            {{ $indicator->meansOfVerification->title }}
+                                        </a>
+                                    @else
+                                        Means of Verification not linked
+                                    @endif
                                 </div>
                             </td>
                             <td>
@@ -129,6 +162,19 @@
                             <td>
                                 @can('me.configuration.manage')
                                     <div class="me-row-actions">
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-primary"
+                                            data-disaggregation-open
+                                            data-indicator-name="{{ $indicator->name }}"
+                                            data-action="{{ route('budget.me.indicators.disaggregations.update', $indicator) }}"
+                                            data-primary="{{ $disaggregations->get('primary')?->dimension }}"
+                                            data-secondary="{{ $disaggregations->get('secondary')?->dimension }}"
+                                            data-tertiary="{{ $disaggregations->get('tertiary')?->dimension }}"
+                                            aria-label="Configure disaggregation for {{ $indicator->name }}"
+                                        >
+                                            <i class="feather-filter" aria-hidden="true"></i> Disaggregation
+                                        </button>
                                         <a
                                             href="{{ route('budget.me.indicators.index', ['edit' => $indicator->id]) }}#indicator-form"
                                             class="btn btn-sm btn-light border"
@@ -159,10 +205,9 @@
                 @php
                     $setupTarget = $indicator->setupTarget;
                     $unitLabel = $indicator->unit?->symbol ?: ($indicator->unit?->name ?: 'Unit not set');
-                    $source = (string) ($indicator->primary_source ?? '');
-                    if (preg_match('/^(file_location|link|external_system_connector):(.*)$/s', $source, $sourceParts)) {
-                        $source = trim($sourceParts[2]);
-                    }
+                    $dataCollectionMethod = (string) ($indicator->data_collection_method ?: $indicator->methodology ?: '');
+                    $disaggregations = $indicator->disaggregations->keyBy('level');
+                    $disaggregationChain = $indicator->disaggregationChain();
                     $responsibleNames = collect([$indicator->responsiblePerson?->name])->filter();
                     if ($responsibleNames->isEmpty()) {
                         $responsibleNames = collect(json_decode((string) $indicator->responsible_party, true) ?: [])
@@ -175,6 +220,10 @@
                     <span class="me-code">{{ $indicator->indicator_code ?: $indicator->id }}</span>
                     <h3 class="me-indicator-name mb-1">{{ $indicator->name }}</h3>
                     <p class="me-definition mb-0">{{ $indicator->definitions ?: 'Definition not provided' }}</p>
+                    <div class="d-flex flex-wrap gap-1 mt-2">
+                        <span class="me-chip"><i class="feather-layers"></i>{{ $indicator->resultsLevelLabel() }}</span>
+                        <span class="me-chip"><i class="feather-briefcase"></i>{{ $indicator->projectComponent?->name ?: 'Component not set' }}</span>
+                    </div>
 
                     <div class="me-mobile-facts">
                         <div class="me-mobile-fact">
@@ -187,7 +236,7 @@
                         </div>
                         <div class="me-mobile-fact">
                             <small>Frequency</small>
-                            <strong>{{ $indicator->frequency?->name ?: 'Not set' }}</strong>
+                            <strong>{{ $indicator->frequency?->indicatorCadenceLabel() ?: 'Not set' }}</strong>
                         </div>
                         <div class="me-mobile-fact">
                             <small>Responsible</small>
@@ -195,10 +244,33 @@
                         </div>
                     </div>
 
-                    <div class="me-muted text-break mb-3"><i class="feather-database me-1"></i>{{ $source !== '' ? $source : 'Data source not set' }}</div>
+                    <div class="me-muted text-break"><i class="feather-filter me-1"></i>{{ $disaggregationChain !== '' ? $disaggregationChain : 'No disaggregation' }}</div>
+                    <div class="me-muted text-break"><i class="feather-database me-1"></i>{{ $dataCollectionMethod !== '' ? $dataCollectionMethod : 'Collection method not set' }}</div>
+                    <div class="me-muted text-break mb-3">
+                        <i class="feather-check-square me-1"></i>
+                        @if ($indicator->meansOfVerification)
+                            <a href="{{ route('budget.me.rebuild.knowledge-repository', ['q' => $indicator->meansOfVerification->title]) }}">
+                                {{ $indicator->meansOfVerification->title }}
+                            </a>
+                        @else
+                            Means of Verification not linked
+                        @endif
+                    </div>
 
                     @can('me.configuration.manage')
                         <div class="me-row-actions justify-content-start">
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline-primary"
+                                data-disaggregation-open
+                                data-indicator-name="{{ $indicator->name }}"
+                                data-action="{{ route('budget.me.indicators.disaggregations.update', $indicator) }}"
+                                data-primary="{{ $disaggregations->get('primary')?->dimension }}"
+                                data-secondary="{{ $disaggregations->get('secondary')?->dimension }}"
+                                data-tertiary="{{ $disaggregations->get('tertiary')?->dimension }}"
+                            >
+                                <i class="feather-filter me-1"></i> Disaggregation
+                            </button>
                             <a href="{{ route('budget.me.indicators.index', ['edit' => $indicator->id]) }}#indicator-form" class="btn btn-sm btn-light border">
                                 <i class="feather-edit-2 me-1"></i> Edit
                             </a>
@@ -220,3 +292,76 @@
         @endif
     @endif
 </section>
+
+@can('me.configuration.manage')
+    <div class="modal fade" id="indicatorDisaggregationModal" tabindex="-1" aria-labelledby="indicatorDisaggregationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="POST" action="#" data-disaggregation-form>
+                    @csrf
+                    @method('PUT')
+                    <div class="modal-header">
+                        <div>
+                            <h5 class="modal-title" id="indicatorDisaggregationModalLabel">Indicator disaggregation</h5>
+                            <div class="text-muted small" data-disaggregation-indicator-name></div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small">Choose the applicable dimensions in order. Each lower level is stored as a child of the level above it.</p>
+                        <datalist id="indicator-disaggregation-dimensions">
+                            @foreach ($disaggregationDimensions as $dimension)
+                                <option value="{{ $dimension }}"></option>
+                            @endforeach
+                        </datalist>
+                        <div class="mb-3">
+                            <label for="primary-disaggregation" class="form-label">Primary disaggregation</label>
+                            <input
+                                id="primary-disaggregation"
+                                name="primary_disaggregation"
+                                class="form-control"
+                                list="indicator-disaggregation-dimensions"
+                                maxlength="120"
+                                placeholder="e.g. Gender"
+                                data-disaggregation-level="primary"
+                            >
+                            <div class="form-text">First level of disaggregation.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="secondary-disaggregation" class="form-label">Secondary disaggregation</label>
+                            <input
+                                id="secondary-disaggregation"
+                                name="secondary_disaggregation"
+                                class="form-control"
+                                list="indicator-disaggregation-dimensions"
+                                maxlength="120"
+                                placeholder="e.g. Age Group"
+                                data-disaggregation-level="secondary"
+                            >
+                            <div class="form-text">Linked to the primary level.</div>
+                        </div>
+                        <div>
+                            <label for="tertiary-disaggregation" class="form-label">Tertiary disaggregation</label>
+                            <input
+                                id="tertiary-disaggregation"
+                                name="tertiary_disaggregation"
+                                class="form-control"
+                                list="indicator-disaggregation-dimensions"
+                                maxlength="120"
+                                placeholder="e.g. Geographic Location"
+                                data-disaggregation-level="tertiary"
+                            >
+                            <div class="form-text">Linked to the secondary level.</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="feather-save me-1"></i> Save disaggregation
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+@endcan

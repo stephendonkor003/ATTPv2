@@ -7,11 +7,13 @@ use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Activity;
 use App\Models\Indicator;
 use App\Models\IndicatorDefinition;
+use App\Models\IndicatorDisaggregation;
 use App\Models\IndicatorMethodology;
 use App\Models\IndicatorResult;
 use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorTarget;
 use App\Models\IndicatorUnit;
+use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\ReportingFrequency;
@@ -48,12 +50,14 @@ class MeIndicatorController extends Controller
             'storeData',
             'validateData',
             'approveData',
+            'updateDisaggregations',
         ]);
     }
 
     public function index(Request $request)
     {
         $search = trim((string) $request->query('q', ''));
+        $componentFilter = trim((string) $request->query('component_id', ''));
         $showForm = $request->boolean('create')
             || $request->filled('edit')
             || $request->query('tab') === 'settings';
@@ -61,6 +65,9 @@ class MeIndicatorController extends Controller
 
         $registryQuery = Indicator::query();
         $this->scopeIndicatorsForCurrentPortfolio($registryQuery);
+        if ($componentFilter !== '') {
+            $registryQuery->where('project_component_id', $componentFilter);
+        }
 
         $completeQuery = (clone $registryQuery)
             ->whereNotNull('indicator_code')
@@ -72,8 +79,11 @@ class MeIndicatorController extends Controller
             ->whereNotNull('unit_id')
             ->whereNotNull('baseline_value')
             ->whereNotNull('frequency_of_reporting_id')
-            ->whereNotNull('primary_source')
-            ->where('primary_source', '<>', '')
+            ->whereNotNull('project_component_id')
+            ->whereIn('results_level', ['pdo', 'intermediate_results'])
+            ->whereNotNull('data_collection_method')
+            ->where('data_collection_method', '<>', '')
+            ->whereNotNull('means_of_verification_id')
             ->whereNotNull('responsible_user_id')
             ->whereHas('setupTarget');
 
@@ -88,10 +98,13 @@ class MeIndicatorController extends Controller
         $indicators = (clone $registryQuery)
             ->with([
                 'indicatorable',
-                'frequency:id,name',
+                'frequency:id,name,code,interval_unit,interval_value,frequency_in_days',
                 'unit:id,name,symbol',
                 'responsiblePerson:id,name,email',
                 'setupTarget:id,indicator_id,target_value,unit_id,target_context',
+                'projectComponent:id,project_id,name,program_id',
+                'meansOfVerification:id,title,document_type',
+                'disaggregations:id,indicator_id,level,dimension,parent_id',
             ])
             ->when($search !== '', function ($query) use ($search) {
                 $escaped = addcslashes($search, '%_\\');
@@ -101,7 +114,14 @@ class MeIndicatorController extends Controller
                     $searchQuery->whereLike('indicator_code', $term)
                         ->orWhereLike('name', $term)
                         ->orWhereLike('definitions', $term)
-                        ->orWhereLike('primary_source', $term)
+                        ->orWhereLike('data_collection_method', $term)
+                        ->orWhereLike('results_level', $term)
+                        ->orWhereHas('projectComponent', function ($componentQuery) use ($term) {
+                            $componentQuery->whereLike('name', $term)
+                                ->orWhereLike('project_id', $term);
+                        })
+                        ->orWhereHas('meansOfVerification', fn ($evidenceQuery) => $evidenceQuery->whereLike('title', $term))
+                        ->orWhereHas('disaggregations', fn ($disaggregationQuery) => $disaggregationQuery->whereLike('dimension', $term))
                         ->orWhereHas('responsiblePerson', function ($personQuery) use ($term) {
                             $personQuery->whereLike('name', $term)
                                 ->orWhereLike('email', $term);
@@ -115,7 +135,7 @@ class MeIndicatorController extends Controller
         $editingIndicator = null;
         if ($request->filled('edit')) {
             $editingIndicator = Indicator::query()
-                ->with(['setupTarget', 'targets'])
+                ->with(['setupTarget', 'targets', 'disaggregations', 'meansOfVerification'])
                 ->findOrFail((string) $request->query('edit'));
             $this->assertIndicatorInCurrentPortfolioScope($editingIndicator);
         }
@@ -128,7 +148,23 @@ class MeIndicatorController extends Controller
         $projects = collect();
         $activities = collect();
         $subActivities = collect();
+        $repositoryItems = collect();
         $frequencyIntervalOptions = [];
+
+        $componentOptionsQuery = Project::with('program:id,sector_id')->orderBy('name');
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToProjects($componentOptionsQuery);
+        }
+        $componentOptions = $componentOptionsQuery->get(['id', 'project_id', 'name', 'program_id']);
+
+        $componentCountQuery = Indicator::query()
+            ->whereNotNull('project_component_id')
+            ->selectRaw('project_component_id, COUNT(*) as aggregate')
+            ->groupBy('project_component_id');
+        $this->scopeIndicatorsForCurrentPortfolio($componentCountQuery);
+        $componentCounts = $componentCountQuery
+            ->pluck('aggregate', 'project_component_id')
+            ->map(fn ($count) => (int) $count);
 
         if ($showForm) {
             $users = $this->indicatorResponsibleUsersQuery()
@@ -136,16 +172,31 @@ class MeIndicatorController extends Controller
                 ->get(['id', 'name', 'email']);
 
             $unitQuery = IndicatorUnit::query()->with('portfolio:id,name')->active()->ordered();
-            $frequencyQuery = ReportingFrequency::query()->with('portfolio:id,name')->active()->ordered();
+            $frequencyQuery = ReportingFrequency::query()
+                ->with('portfolio:id,name')
+                ->active()
+                ->indicatorCadences()
+                ->ordered();
             $this->scopeIndicatorConfigurationQuery($unitQuery);
             $this->scopeIndicatorConfigurationQuery($frequencyQuery);
             $units = $unitQuery->get(['id', 'portfolio_id', 'name', 'symbol']);
-            $frequencies = $frequencyQuery->get(['id', 'portfolio_id', 'name']);
+            $frequencies = $this->uniqueIndicatorFrequencies(
+                $frequencyQuery->get([
+                    'id',
+                    'portfolio_id',
+                    'name',
+                    'code',
+                    'interval_unit',
+                    'interval_value',
+                    'frequency_in_days',
+                    'sort_order',
+                ]),
+                $editingIndicator?->frequency_of_reporting_id
+            );
             $frequencyIntervalOptions = ReportingFrequency::intervalOptions();
 
             $portfolioQuery = Sector::query()->orderBy('name');
             $programQuery = Program::query()->orderBy('name');
-            $projectQuery = Project::with('program:id,sector_id')->orderBy('name');
             $activityQuery = Activity::with([
                 'project:id,name,program_id',
                 'project.program:id,sector_id',
@@ -159,16 +210,30 @@ class MeIndicatorController extends Controller
             if ($this->userHasAssignedPortfolioScope()) {
                 $this->applyAssignedPortfolioScopeToSectors($portfolioQuery);
                 $this->applyAssignedPortfolioScopeToPrograms($programQuery);
-                $this->applyAssignedPortfolioScopeToProjects($projectQuery);
                 $this->applyAssignedPortfolioScopeToActivities($activityQuery);
                 $this->applyAssignedPortfolioScopeToSubActivities($subActivityQuery);
             }
 
             $portfolios = $portfolioQuery->get(['id', 'name']);
             $programs = $programQuery->get(['id', 'program_id', 'sector_id', 'name']);
-            $projects = $projectQuery->get(['id', 'project_id', 'name', 'program_id']);
+            $projects = $componentOptions;
             $activities = $activityQuery->get(['id', 'name', 'project_id']);
             $subActivities = $subActivityQuery->get(['id', 'name', 'activity_id']);
+
+            $repositoryQuery = MeKnowledgeEvidenceItem::query()
+                ->with('portfolio:id,name')
+                ->orderBy('title');
+            if ($this->userHasAssignedPortfolioScope()) {
+                $this->applyAssignedPortfolioScopeToPortfolioOwnedRecords($repositoryQuery);
+            }
+            $repositoryItems = $repositoryQuery->get([
+                'id',
+                'portfolio_id',
+                'title',
+                'document_type',
+                'file_path',
+                'external_url',
+            ]);
         }
 
         $editingOwnerReference = $this->ownerReferenceForIndicator($editingIndicator);
@@ -185,10 +250,14 @@ class MeIndicatorController extends Controller
             $activities,
             $subActivities
         );
+        $ownerComponentMap = $this->ownerComponentMap($projects, $activities, $subActivities);
         $editingResponsibleUserIds = $this->responsibleUserIdsForIndicator($editingIndicator);
         [, $editingPrimarySourceValue] = $this->unpackPrimarySource($editingIndicator?->primary_source);
+        $editingDataCollectionMethod = $editingIndicator?->data_collection_method
+            ?: $editingPrimarySourceValue;
         $editingTargetValue = $editingIndicator?->setupTarget?->target_value
             ?? $editingIndicator?->targets->sortByDesc('period_start')->first()?->target_value;
+        $disaggregationDimensions = IndicatorDisaggregation::SUGGESTED_DIMENSIONS;
 
         return view('me.indicators.index', compact(
             'indicators',
@@ -196,8 +265,10 @@ class MeIndicatorController extends Controller
             'editingOwnerReference',
             'editingPortfolioId',
             'ownerPortfolioMap',
+            'ownerComponentMap',
             'editingResponsibleUserIds',
             'editingPrimarySourceValue',
+            'editingDataCollectionMethod',
             'editingTargetValue',
             'users',
             'units',
@@ -207,6 +278,11 @@ class MeIndicatorController extends Controller
             'projects',
             'activities',
             'subActivities',
+            'repositoryItems',
+            'componentOptions',
+            'componentCounts',
+            'componentFilter',
+            'disaggregationDimensions',
             'summary',
             'search',
             'showForm',
@@ -268,6 +344,58 @@ class MeIndicatorController extends Controller
         return redirect()
             ->route('budget.me.indicators.index')
             ->with('success', 'Indicator updated successfully.');
+    }
+
+    public function updateDisaggregations(Request $request, Indicator $indicator)
+    {
+        $this->assertIndicatorInCurrentPortfolioScope($indicator);
+
+        $validated = $request->validate([
+            'primary_disaggregation' => 'nullable|string|max:120',
+            'secondary_disaggregation' => 'nullable|string|max:120',
+            'tertiary_disaggregation' => 'nullable|string|max:120',
+        ]);
+
+        $dimensions = collect([
+            'primary' => trim((string) ($validated['primary_disaggregation'] ?? '')),
+            'secondary' => trim((string) ($validated['secondary_disaggregation'] ?? '')),
+            'tertiary' => trim((string) ($validated['tertiary_disaggregation'] ?? '')),
+        ]);
+
+        $errors = [];
+        if ($dimensions['secondary'] !== '' && $dimensions['primary'] === '') {
+            $errors['secondary_disaggregation'] = 'Select a primary disaggregation before adding a secondary level.';
+        }
+        if ($dimensions['tertiary'] !== '' && $dimensions['secondary'] === '') {
+            $errors['tertiary_disaggregation'] = 'Select a secondary disaggregation before adding a tertiary level.';
+        }
+        if ($dimensions->filter()->map(fn ($value) => Str::lower($value))->duplicates()->isNotEmpty()) {
+            $errors['primary_disaggregation'] = 'Each disaggregation level must use a different dimension.';
+        }
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        DB::transaction(function () use ($indicator, $dimensions): void {
+            $indicator->disaggregations()->delete();
+            $parent = null;
+
+            foreach ($dimensions as $level => $dimension) {
+                if ($dimension === '') {
+                    continue;
+                }
+
+                $parent = $indicator->disaggregations()->create([
+                    'level' => $level,
+                    'dimension' => $dimension,
+                    'parent_id' => $parent?->id,
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('budget.me.indicators.index')
+            ->with('success', 'Indicator disaggregation levels updated.');
     }
 
     public function destroy(Indicator $indicator)
@@ -388,9 +516,10 @@ class MeIndicatorController extends Controller
     public function exportManagementExcel(Request $request)
     {
         $searchTerm = trim((string) $request->query('q', ''));
+        $componentId = trim((string) $request->query('component_id', ''));
         $userNamesById = User::query()->pluck('name', 'id');
 
-        $allIndicators = $this->collectIndicatorsWithRelations();
+        $allIndicators = $this->collectIndicatorsWithRelations($componentId);
         $statusRowsById = $allIndicators
             ->map(fn (Indicator $indicator) => $this->buildStatusRow($indicator))
             ->keyBy('id');
@@ -416,9 +545,10 @@ class MeIndicatorController extends Controller
     public function exportManagementPdf(Request $request)
     {
         $searchTerm = trim((string) $request->query('q', ''));
+        $componentId = trim((string) $request->query('component_id', ''));
         $userNamesById = User::query()->pluck('name', 'id');
 
-        $allIndicators = $this->collectIndicatorsWithRelations();
+        $allIndicators = $this->collectIndicatorsWithRelations($componentId);
         $statusRowsById = $allIndicators
             ->map(fn (Indicator $indicator) => $this->buildStatusRow($indicator))
             ->keyBy('id');
@@ -445,13 +575,16 @@ class MeIndicatorController extends Controller
 
         return $request->validate([
             'portfolio_id' => 'required|uuid|exists:myb_sectors,id',
+            'project_component_id' => 'required|uuid|exists:myb_projects,id',
             'name' => 'required|string|max:255',
+            'results_level' => 'required|in:pdo,intermediate_results',
             'definition' => 'required|string|max:10000',
             'unit_id' => 'required|exists:me_indicator_units,id',
             'baseline_value' => 'required|numeric',
             'target_value' => 'required|numeric',
             'frequency_of_reporting_id' => 'required|exists:me_reporting_frequencies,id',
-            'data_source' => 'required|string|max:255',
+            'data_collection_method' => 'required|string|max:2000',
+            'means_of_verification_id' => 'required|uuid|exists:me_knowledge_evidence_items,id',
             'responsible_user_id' => [
                 'required',
                 'exists:users,id',
@@ -546,9 +679,12 @@ class MeIndicatorController extends Controller
             $request->merge(['definition' => $definition]);
         }
 
-        if (! $request->exists('data_source')) {
+        if (! $request->exists('data_collection_method')) {
             $request->merge([
-                'data_source' => trim((string) $request->input('primary_source_value', '')),
+                'data_collection_method' => trim((string) $request->input(
+                    'data_source',
+                    $request->input('methodology', $request->input('primary_source_value', ''))
+                )),
             ]);
         }
 
@@ -581,16 +717,33 @@ class MeIndicatorController extends Controller
         $frequencyQuery = ReportingFrequency::query()
             ->whereKey($validated['frequency_of_reporting_id'])
             ->where('portfolio_id', $portfolioId)
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->indicatorCadences();
+        $componentQuery = Project::query()
+            ->whereKey($validated['project_component_id'])
+            ->whereHas('program', fn ($query) => $query->where('sector_id', $portfolioId));
+        $evidenceQuery = MeKnowledgeEvidenceItem::query()
+            ->whereKey($validated['means_of_verification_id'])
+            ->where('portfolio_id', $portfolioId);
         $this->scopeIndicatorConfigurationQuery($unitQuery);
         $this->scopeIndicatorConfigurationQuery($frequencyQuery);
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToProjects($componentQuery);
+            $this->applyAssignedPortfolioScopeToPortfolioOwnedRecords($evidenceQuery);
+        }
 
         $errors = [];
         if (! $unitQuery->exists()) {
             $errors['unit_id'] = 'Please select an active unit configured for the selected portfolio.';
         }
         if (! $frequencyQuery->exists()) {
-            $errors['frequency_of_reporting_id'] = 'Please select an active reporting frequency configured for the selected portfolio.';
+            $errors['frequency_of_reporting_id'] = 'Select Monthly, Quarterly, Semi-Annual or Annual for the selected portfolio.';
+        }
+        if (! $componentQuery->exists()) {
+            $errors['project_component_id'] = 'Please select a project component from the selected portfolio.';
+        }
+        if (! $evidenceQuery->exists()) {
+            $errors['means_of_verification_id'] = 'Please select a Means of Verification from the selected portfolio repository.';
         }
 
         if ($errors !== []) {
@@ -629,6 +782,14 @@ class MeIndicatorController extends Controller
             ]);
         }
 
+        $ownerProjectId = $this->projectIdForOwner($indicatorableType, $indicatorableId);
+        if ($ownerProjectId
+            && (string) $validated['project_component_id'] !== (string) $ownerProjectId) {
+            throw ValidationException::withMessages([
+                'project_component_id' => 'The project component must match the selected project, activity or sub-activity owner.',
+            ]);
+        }
+
         return [$indicatorableType, $indicatorableId];
     }
 
@@ -654,6 +815,24 @@ class MeIndicatorController extends Controller
         };
 
         return $portfolioId ? (string) $portfolioId : null;
+    }
+
+    protected function projectIdForOwner(?string $indicatorableType, mixed $indicatorableId): ?string
+    {
+        if (! $indicatorableType || ! $indicatorableId) {
+            return null;
+        }
+
+        $projectId = match ($indicatorableType) {
+            Project::class => Project::query()->whereKey($indicatorableId)->value('id'),
+            Activity::class => Activity::query()->whereKey($indicatorableId)->value('project_id'),
+            SubActivity::class => SubActivity::query()
+                ->with('activity:id,project_id')
+                ->find($indicatorableId)?->activity?->project_id,
+            default => null,
+        };
+
+        return $projectId ? (string) $projectId : null;
     }
 
     /**
@@ -695,6 +874,75 @@ class MeIndicatorController extends Controller
         return $map;
     }
 
+    /**
+     * @return array<string, string>
+     */
+    protected function ownerComponentMap(
+        Collection $projects,
+        Collection $activities,
+        Collection $subActivities
+    ): array {
+        $map = [];
+
+        foreach ($projects as $project) {
+            $map['project:'.$project->id] = (string) $project->id;
+        }
+        foreach ($activities as $activity) {
+            if ($activity->project_id) {
+                $map['activity:'.$activity->id] = (string) $activity->project_id;
+            }
+        }
+        foreach ($subActivities as $subActivity) {
+            if ($subActivity->activity?->project_id) {
+                $map['sub_activity:'.$subActivity->id] = (string) $subActivity->activity->project_id;
+            }
+        }
+
+        return $map;
+    }
+
+    protected function uniqueIndicatorFrequencies(
+        Collection $frequencies,
+        mixed $selectedFrequencyId = null
+    ): Collection {
+        return $frequencies
+            ->filter(fn (ReportingFrequency $frequency) => $frequency->indicatorCadenceKey() !== null)
+            ->groupBy(fn (ReportingFrequency $frequency) => implode('|', [
+                (string) $frequency->portfolio_id,
+                (string) $frequency->indicatorCadenceKey(),
+            ]))
+            ->map(function (Collection $group) use ($selectedFrequencyId) {
+                $selected = $group->first(
+                    fn (ReportingFrequency $frequency) => (string) $frequency->id === (string) $selectedFrequencyId
+                );
+                if ($selected) {
+                    return $selected;
+                }
+
+                return $group
+                    ->sortBy(function (ReportingFrequency $frequency) {
+                        $canonical = $frequency->indicatorCadenceLabel();
+
+                        return [
+                            Str::lower($frequency->name) === Str::lower($canonical) ? 0 : 1,
+                            $frequency->sort_order ?? 999,
+                            Str::lower($frequency->name),
+                        ];
+                    })
+                    ->first();
+            })
+            ->filter()
+            ->sortBy(function (ReportingFrequency $frequency) {
+                $order = array_flip(array_keys(ReportingFrequency::INDICATOR_CADENCE_LABELS));
+
+                return [
+                    Str::lower((string) $frequency->portfolio?->name),
+                    $order[$frequency->indicatorCadenceKey()] ?? 999,
+                ];
+            })
+            ->values();
+    }
+
     protected function indicatorAttributes(
         array $validated,
         ?Indicator $indicator,
@@ -709,17 +957,26 @@ class MeIndicatorController extends Controller
         $attributes = [
             'indicatorable_type' => $indicatorableType,
             'indicatorable_id' => $indicatorableId,
+            'project_component_id' => $validated['project_component_id'],
             'name' => trim((string) $validated['name']),
+            'results_level' => $validated['results_level'],
             'baseline_value' => $validated['baseline_value'],
             'responsible_user_id' => $validated['responsible_user_id'],
             'responsible_party' => $this->packResponsibleParty([$validated['responsible_user_id']]),
             'frequency_of_reporting_id' => $validated['frequency_of_reporting_id'],
             'unit_id' => $validated['unit_id'],
-            'primary_source' => $this->packPrimarySource($sourceType, $validated['data_source']),
+            'data_collection_method' => trim((string) $validated['data_collection_method']),
+            'methodology' => trim((string) $validated['data_collection_method']),
+            'primary_source' => Str::limit(
+                (string) $this->packPrimarySource($sourceType, $validated['data_collection_method']),
+                255,
+                ''
+            ),
+            'means_of_verification_id' => $validated['means_of_verification_id'],
             'definitions' => trim((string) $validated['definition']),
         ];
 
-        foreach (['baseline_year', 'baseline_type', 'indicator_level_id', 'methodology', 'notes'] as $optionalField) {
+        foreach (['baseline_year', 'baseline_type', 'indicator_level_id', 'notes'] as $optionalField) {
             if (array_key_exists($optionalField, $validated)) {
                 $attributes[$optionalField] = $validated[$optionalField];
             }
@@ -1224,17 +1481,23 @@ class MeIndicatorController extends Controller
         return Carbon::parse($value)->format('Y-m-d H:i');
     }
 
-    protected function collectIndicatorsWithRelations(): Collection
+    protected function collectIndicatorsWithRelations(?string $componentId = null): Collection
     {
         $query = Indicator::with([
             'indicatorable',
             'level:id,name',
+            'projectComponent:id,project_id,name,program_id',
+            'meansOfVerification:id,title,document_type',
+            'disaggregations:id,indicator_id,level,dimension,parent_id',
             'targets:id,indicator_id,target_value,target_context,period_type,period_label,period_start',
             'results:id,indicator_id,actual_value,period_type,period_label,period_start,review_status,validated_at,approved_at',
-            'frequency:id,name',
+            'frequency:id,name,code,interval_unit,interval_value,frequency_in_days',
             'unit:id,name,symbol',
         ]);
         $this->scopeIndicatorsForCurrentPortfolio($query);
+        if (filled($componentId)) {
+            $query->where('project_component_id', $componentId);
+        }
         $indicators = $query->get();
 
         $indicators->loadMorph('indicatorable', [
@@ -1263,7 +1526,6 @@ class MeIndicatorController extends Controller
             ->map(function (Indicator $indicator) use ($statusRowsById, $userNamesById) {
                 $hierarchy = $this->resolveHierarchyForIndicator($indicator);
                 $status = $statusRowsById->get($indicator->id, []);
-                [$sourceType, $sourceValue] = $this->unpackPrimarySource($indicator->primary_source);
 
                 $unitLabel = $indicator->unit?->symbol ?: $indicator->unit?->name;
                 $baselineValue = $this->formatMetric($indicator->baseline_value);
@@ -1283,16 +1545,23 @@ class MeIndicatorController extends Controller
                     'sub_activity_key' => $hierarchy['sub_activity_key'],
                     'sub_activity' => $hierarchy['sub_activity'],
                     'owner_type' => $hierarchy['owner_type'],
+                    'project_component' => $indicator->projectComponent
+                        ? trim((string) (($indicator->projectComponent->project_id
+                            ? $indicator->projectComponent->project_id.' - '
+                            : '').$indicator->projectComponent->name))
+                        : '—',
                     'indicator_name' => $indicator->name,
-                    'indicator_level' => $indicator->level?->name ?: '—',
-                    'frequency' => $indicator->frequency?->name ?: '—',
+                    'indicator_level' => $indicator->resultsLevelLabel(),
+                    'disaggregation' => $indicator->disaggregationChain() ?: '—',
+                    'frequency' => $indicator->frequency?->indicatorCadenceLabel() ?: '—',
                     'baseline_type' => $indicator->baseline_type ? ucfirst($indicator->baseline_type) : '—',
                     'baseline_period' => $indicator->baseline_year ?: '—',
                     'baseline_value' => $baselineValue,
                     'responsible' => $this->formatResponsiblePartyForDisplay($indicator->responsible_party, $userNamesById),
-                    'methodology' => $indicator->methodology ?: '—',
-                    'primary_source_type' => $sourceType ? ucwords(str_replace('_', ' ', $sourceType)) : '—',
-                    'primary_source_value' => $sourceValue ?: '—',
+                    'data_collection_method' => $indicator->data_collection_method
+                        ?: $indicator->methodology
+                        ?: '—',
+                    'means_of_verification' => $indicator->meansOfVerification?->title ?: '—',
                     'definition' => $indicator->definitions ?: '—',
                     'target' => $this->formatMetric($status['target'] ?? null),
                     'actual' => $this->formatMetric($status['actual'] ?? null),
@@ -1308,6 +1577,7 @@ class MeIndicatorController extends Controller
             ->sortBy(function (array $row) {
                 return strtolower(implode('|', [
                     $row['portfolio_key'],
+                    $row['project_component'],
                     $row['program_key'],
                     $row['project_key'],
                     $row['activity_key'],
@@ -1332,15 +1602,16 @@ class MeIndicatorController extends Controller
                     $row['sub_activity'] ?? '',
                     $row['indicator_name'] ?? '',
                     $row['owner_type'] ?? '',
+                    $row['project_component'] ?? '',
                     $row['indicator_level'] ?? '',
+                    $row['disaggregation'] ?? '',
                     $row['frequency'] ?? '',
                     $row['baseline_type'] ?? '',
                     $row['baseline_period'] ?? '',
                     $row['baseline_value'] ?? '',
                     $row['responsible'] ?? '',
-                    $row['methodology'] ?? '',
-                    $row['primary_source_type'] ?? '',
-                    $row['primary_source_value'] ?? '',
+                    $row['data_collection_method'] ?? '',
+                    $row['means_of_verification'] ?? '',
                     $row['definition'] ?? '',
                     $row['target'] ?? '',
                     $row['actual'] ?? '',

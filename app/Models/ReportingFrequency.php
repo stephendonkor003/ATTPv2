@@ -6,6 +6,13 @@ use App\Models\BaseModel;
 
 class ReportingFrequency extends BaseModel
 {
+    public const INDICATOR_CADENCE_LABELS = [
+        'monthly' => 'Monthly',
+        'quarterly' => 'Quarterly',
+        'semi_annual' => 'Semi-Annual',
+        'annual' => 'Annual',
+    ];
+
     protected $table = 'me_reporting_frequencies';
 
     public const INTERVAL_UNITS = [
@@ -62,6 +69,59 @@ class ReportingFrequency extends BaseModel
     public function scopeOrdered($query)
     {
         return $query->orderBy('sort_order')->orderBy('name');
+    }
+
+    public function scopeIndicatorCadences($query)
+    {
+        return $query->where(function ($cadences) {
+            $cadences
+                ->where(function ($monthly) {
+                    $monthly->where('interval_unit', 'month')
+                        ->where(function ($value) {
+                            $value->where('interval_value', 1)
+                                ->orWhereNull('interval_value');
+                        });
+                })
+                ->orWhere(function ($quarterly) {
+                    $quarterly->where('interval_unit', 'quarterly')
+                        ->where(function ($value) {
+                            $value->where('interval_value', 1)
+                                ->orWhereNull('interval_value');
+                        });
+                })
+                ->orWhere(function ($semiAnnual) {
+                    $semiAnnual->where('interval_unit', 'month')
+                        ->where('interval_value', 6);
+                })
+                ->orWhere(function ($annual) {
+                    $annual->whereIn('interval_unit', ['year', 'annual'])
+                        ->where(function ($value) {
+                            $value->where('interval_value', 1)
+                                ->orWhereNull('interval_value');
+                        });
+                });
+        });
+    }
+
+    public function indicatorCadenceKey(): ?string
+    {
+        $unit = $this->resolvedIntervalUnit();
+        $value = $this->resolvedIntervalValue() ?? 1;
+
+        return match (true) {
+            $unit === 'month' && $value === 1 => 'monthly',
+            $unit === 'quarterly' && $value === 1 => 'quarterly',
+            $unit === 'month' && $value === 6 => 'semi_annual',
+            in_array($unit, ['year', 'annual'], true) && $value === 1 => 'annual',
+            default => null,
+        };
+    }
+
+    public function indicatorCadenceLabel(): string
+    {
+        $key = $this->indicatorCadenceKey();
+
+        return $key ? self::INDICATOR_CADENCE_LABELS[$key] : $this->name;
     }
 
     public static function intervalOptions(): array

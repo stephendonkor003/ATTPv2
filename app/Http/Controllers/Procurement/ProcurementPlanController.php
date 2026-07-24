@@ -154,7 +154,6 @@ class ProcurementPlanController extends Controller
         $validated['governance_node_id'] = $this->resolveProcurementPlanNodeId($validated);
 
         $validated['is_code_auto_generated'] = $request->has('is_code_auto_generated');
-        $validated['is_launched'] = $request->has('is_launched');
         $validated['created_by'] = auth()->id();
 
         // If launched, set launched_at
@@ -280,7 +279,6 @@ class ProcurementPlanController extends Controller
         }
 
         $validated['governance_node_id'] = $this->resolveProcurementPlanNodeId($validated);
-        $validated['is_launched'] = $request->has('is_launched');
         $validated['updated_by'] = auth()->id();
 
         // If just launched now
@@ -292,9 +290,9 @@ class ProcurementPlanController extends Controller
         if ($request->filled('method_planned_id') && $request->filled('estimated_start_date')) {
             $method = ProcurementMethodPlanned::find($request->method_planned_id);
             if ($method && !$request->filled('estimated_end_date')) {
-        $validated['estimated_end_date'] = \Carbon\Carbon::parse($request->estimated_start_date)
-            ->addDays($method->method_target_days)
-            ->format('Y-m-d');
+                $validated['estimated_end_date'] = \Carbon\Carbon::parse($request->estimated_start_date)
+                    ->addDays($method->method_target_days)
+                    ->format('Y-m-d');
             }
         }
 

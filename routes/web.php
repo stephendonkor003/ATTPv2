@@ -110,6 +110,7 @@ use App\Http\Controllers\{
 	    ProjectBudgetController,
 	    MeConfigurationController,
 	    MeModuleController,
+        MeKnowledgeEvidenceController,
         MeDataEntryController,
         MeIndicatorController,
         MeDataSourceController,
@@ -1290,11 +1291,18 @@ Route::middleware(['auth', 'not.funding.partner'])
                     ->name('reporting-dashboard');
                 Route::get('management-dashboard', [MeModuleController::class, 'managementDashboard'])
                     ->name('management-dashboard');
-                Route::get('knowledge-and-evidence-repository', [MeModuleController::class, 'knowledgeRepository'])
+                Route::get('knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'index'])
                     ->name('knowledge-repository');
                 Route::get('data-governance-framework', [MeModuleController::class, 'dataGovernance'])
                     ->name('data-governance');
             });
+
+        Route::post('me/knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'store'])
+            ->name('me.knowledge-evidence.store');
+        Route::get('me/knowledge-and-evidence-repository/{evidence}/download', [MeKnowledgeEvidenceController::class, 'download'])
+            ->name('me.knowledge-evidence.download');
+        Route::delete('me/knowledge-and-evidence-repository/{evidence}', [MeKnowledgeEvidenceController::class, 'destroy'])
+            ->name('me.knowledge-evidence.destroy');
 
         Route::get('me/rebuild/data-entry-and-performance-tracking', [MeDataEntryController::class, 'index'])
             ->middleware('permission:me.data_entry.view|me.data_entry.manage|me.configuration.view|me.configuration.manage')
@@ -1324,6 +1332,8 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('me.indicators.store');
         Route::put('me/indicators/{indicator}', [MeIndicatorController::class, 'update'])
             ->name('me.indicators.update');
+        Route::put('me/indicators/{indicator}/disaggregations', [MeIndicatorController::class, 'updateDisaggregations'])
+            ->name('me.indicators.disaggregations.update');
         Route::delete('me/indicators/{indicator}', [MeIndicatorController::class, 'destroy'])
             ->name('me.indicators.destroy');
         Route::post('me/indicators/{indicator}/data', [MeIndicatorController::class, 'storeData'])
@@ -3460,6 +3470,8 @@ Route::middleware(['auth', 'not.funding.partner'])
     ->group(function () {
         Route::get('/', [ProcurementProgramPlanController::class, 'index'])->name('index');
         Route::post('/', [ProcurementProgramPlanController::class, 'store'])->name('store');
+        Route::get('/{programPlan}/edit', [ProcurementProgramPlanController::class, 'edit'])->name('edit');
+        Route::put('/{programPlan}', [ProcurementProgramPlanController::class, 'update'])->name('update');
     });
 
 
