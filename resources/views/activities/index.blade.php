@@ -346,6 +346,37 @@
             background: #d97706;
         }
 
+        .activity-delete-button {
+            min-height: 30px;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            padding: 0.3rem 0.6rem;
+            color: #b91c1c;
+            background: #fef2f2;
+            font-size: 0.78rem;
+            font-weight: 800;
+            line-height: 1;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .activity-delete-button:hover {
+            border-color: #b91c1c;
+            color: #ffffff;
+            background: #b91c1c;
+        }
+
+        .activity-delete-warning {
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 12px;
+            color: #7f1d1d;
+            background: #fef2f2;
+        }
+
         .activity-allocation-panel {
             border-top: 1px solid #ead1da;
             padding: 12px;
@@ -600,6 +631,19 @@
                                                             <i class="feather-edit"></i>
                                                         </a>
                                                     @endcan
+                                                    @can('activities.delete')
+                                                        <button type="button" class="activity-delete-button"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#deleteActivityModal"
+                                                            data-delete-url="{{ route('budget.activities.destroy', $activity->id) }}"
+                                                            data-activity-id="{{ $activity->id }}"
+                                                            data-activity-name="{{ $activity->name }}"
+                                                            data-sub-activity-count="{{ $activity->sub_activities_count }}"
+                                                            aria-label="Delete {{ $activity->name }}">
+                                                            <i class="feather-trash-2"></i>
+                                                            <span>Delete</span>
+                                                        </button>
+                                                    @endcan
                                                 </div>
                                             </div>
 
@@ -647,6 +691,53 @@
             @endforelse
         </div>
     </div>
+
+    @can('activities.delete')
+        <div class="modal fade" id="deleteActivityModal" tabindex="-1"
+            aria-labelledby="deleteActivityModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <form id="deleteActivityForm" method="POST" action="">
+                        @csrf
+                        @method('DELETE')
+                        <input type="hidden" name="confirmed_activity_id" id="confirmedActivityId">
+
+                        <div class="modal-header">
+                            <h5 class="modal-title text-danger" id="deleteActivityModalLabel">
+                                <i class="feather-alert-triangle me-1"></i>
+                                Confirm activity deletion
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3">
+                                Are you sure you want to delete
+                                <strong id="deleteActivityName">this activity</strong>?
+                            </p>
+                            <div class="activity-delete-warning">
+                                <div class="fw-bold mb-1" id="deleteActivityImpact"></div>
+                                <div class="small">
+                                    The activity, its yearly allocations, and every associated sub-activity
+                                    allocation will be permanently removed. This action cannot be undone.
+                                    Deletion is blocked when commitments or purchase requests are linked.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-light border" data-bs-dismiss="modal">
+                                Cancel
+                            </button>
+                            <button type="submit" class="btn btn-danger" id="confirmDeleteActivityButton">
+                                <i class="feather-trash-2 me-1"></i>
+                                Yes, delete activity
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endcan
 @endsection
 
 @push('scripts')
@@ -675,6 +766,51 @@
 
             buttons.forEach(button => {
                 button.addEventListener('click', () => toggleNode(button));
+            });
+
+            const deleteModal = document.getElementById('deleteActivityModal');
+            const deleteForm = document.getElementById('deleteActivityForm');
+            const confirmedActivityId = document.getElementById('confirmedActivityId');
+            const deleteActivityName = document.getElementById('deleteActivityName');
+            const deleteActivityImpact = document.getElementById('deleteActivityImpact');
+            const confirmDeleteButton = document.getElementById('confirmDeleteActivityButton');
+
+            deleteModal?.addEventListener('show.bs.modal', event => {
+                const trigger = event.relatedTarget;
+
+                if (!trigger || !deleteForm || !confirmedActivityId) {
+                    event.preventDefault();
+                    return;
+                }
+
+                const activityName = trigger.dataset.activityName || 'this activity';
+                const subActivityCount = Number(trigger.dataset.subActivityCount || 0);
+
+                deleteForm.action = trigger.dataset.deleteUrl || '';
+                confirmedActivityId.value = trigger.dataset.activityId || '';
+                deleteActivityName.textContent = `"${activityName}"`;
+                deleteActivityImpact.textContent = subActivityCount === 0
+                    ? 'This activity has no associated sub-activities.'
+                    : (subActivityCount === 1
+                        ? '1 associated sub-activity will also be deleted.'
+                        : `${subActivityCount} associated sub-activities will also be deleted.`);
+
+                if (confirmDeleteButton) {
+                    confirmDeleteButton.disabled = false;
+                    confirmDeleteButton.innerHTML = '<i class="feather-trash-2 me-1"></i> Yes, delete activity';
+                }
+            });
+
+            deleteForm?.addEventListener('submit', event => {
+                if (!deleteForm.action || !confirmedActivityId?.value) {
+                    event.preventDefault();
+                    return;
+                }
+
+                if (confirmDeleteButton) {
+                    confirmDeleteButton.disabled = true;
+                    confirmDeleteButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Deleting...';
+                }
             });
         });
     </script>

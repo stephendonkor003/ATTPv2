@@ -330,6 +330,120 @@ class ActivityController extends Controller
     ));
 }
 
+    public function destroy(Request $request, Activity $activity)
+    {
+        if ((string) $request->input('confirmed_activity_id') !== (string) $activity->id) {
+            return back()->with('error', 'Activity deletion was not confirmed.');
+        }
+
+        $this->assertActivityInScope($activity);
+        $activityName = $activity->name ?: 'Unnamed activity';
+
+        try {
+            $deletedSubActivityCount = DB::transaction(function () use ($activity) {
+                $lockedActivity = Activity::query()
+                    ->with('project')
+                    ->lockForUpdate()
+                    ->findOrFail($activity->id);
+                $this->assertActivityInScope($lockedActivity);
+
+                $subActivityIds = $lockedActivity->subActivities()
+                    ->lockForUpdate()
+                    ->pluck('id');
+
+                $linkedCommitmentCount = DB::table('myb_budget_commitments')
+                    ->where(function ($query) use ($lockedActivity, $subActivityIds) {
+                        $query->where(function ($activityQuery) use ($lockedActivity) {
+                            $activityQuery
+                                ->where('allocation_level', 'activity')
+                                ->where('allocation_id', $lockedActivity->id);
+                        });
+
+                        if ($subActivityIds->isNotEmpty()) {
+                            $query->orWhere(function ($subActivityQuery) use ($subActivityIds) {
+                                $subActivityQuery
+                                    ->where('allocation_level', 'sub_activity')
+                                    ->whereIn('allocation_id', $subActivityIds);
+                            });
+                        }
+                    })
+                    ->count();
+
+                $linkedPurchaseRequestCount = $subActivityIds->isEmpty()
+                    ? 0
+                    : DB::table('myb_purchase_requests')
+                        ->whereIn('allocation_id', $subActivityIds)
+                        ->count();
+
+                if ($linkedCommitmentCount > 0 || $linkedPurchaseRequestCount > 0) {
+                    $dependencies = collect([
+                        $linkedCommitmentCount > 0
+                            ? $linkedCommitmentCount . ' budget ' . ($linkedCommitmentCount === 1 ? 'commitment' : 'commitments')
+                            : null,
+                        $linkedPurchaseRequestCount > 0
+                            ? $linkedPurchaseRequestCount . ' purchase ' . ($linkedPurchaseRequestCount === 1 ? 'request' : 'requests')
+                            : null,
+                    ])->filter()->implode(' and ');
+
+                    throw new \DomainException(
+                        "This activity cannot be deleted because it is linked to {$dependencies}. "
+                        . 'Reassign or remove those records first.'
+                    );
+                }
+
+                if ($subActivityIds->isNotEmpty()) {
+                    DB::table('myb_sub_activity_allocations')
+                        ->whereIn('sub_activity_id', $subActivityIds)
+                        ->delete();
+
+                    DB::table('program_budget_allocations')
+                        ->whereIn('sub_activity_id', $subActivityIds)
+                        ->delete();
+
+                    foreach ([
+                        'procurement_disbursements',
+                        'procurement_invoices',
+                        'procurement_purchase_orders',
+                    ] as $table) {
+                        DB::table($table)
+                            ->whereIn('sub_activity_id', $subActivityIds)
+                            ->update(['sub_activity_id' => null]);
+                    }
+                }
+
+                DB::table('program_budget_allocations')
+                    ->where('activity_id', $lockedActivity->id)
+                    ->delete();
+
+                $lockedActivity->subActivities()->delete();
+                $lockedActivity->allocations()->delete();
+                $lockedActivity->delete();
+
+                return $subActivityIds->count();
+            });
+        } catch (\DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'The activity could not be deleted. No activity or sub-activity records were removed.'
+            );
+        }
+
+        $subActivityMessage = $deletedSubActivityCount === 1
+            ? ' Its 1 associated sub-activity was also deleted.'
+            : ($deletedSubActivityCount > 1
+                ? " Its {$deletedSubActivityCount} associated sub-activities were also deleted."
+                : '');
+
+        return back()->with(
+            'success',
+            "Activity \"{$activityName}\" deleted successfully.{$subActivityMessage}"
+        );
+    }
+
     private function scopedNodeIds(): ?array
     {
         $currentUser = Auth::user();
