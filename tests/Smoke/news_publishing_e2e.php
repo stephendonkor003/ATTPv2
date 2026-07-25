@@ -66,7 +66,9 @@ class NewsPublishingSmoke
             $this->actingAs($user)
                 ->get(route('system.news.create'))
                 ->assertOk()
-                ->assertSee('Create News');
+                ->assertSee('Create News')
+                ->assertSee('maximum 10 MB')
+                ->assertSee('maximum 20 MB each');
 
             $this->actingAs($user)
                 ->postWithCsrf(route('system.news.store'), [
@@ -89,6 +91,70 @@ class NewsPublishingSmoke
             $this->assertTrue((bool) $post->cover_image_path, 'News cover image path was not stored.');
             $this->assertTrue(Storage::disk('public')->exists($post->cover_image_path), 'News cover image file was not stored.');
             $this->assertTrue($post->attachments()->exists(), 'News attachment was not stored.');
+
+            $this->actingAs($user)
+                ->postWithCsrf(route('system.news.store'), [
+                    'title' => $title,
+                    'category' => 'announcement',
+                    'body' => 'A second post with the same title must still save successfully.',
+                    'action' => 'draft',
+                ])
+                ->assertRedirect();
+
+            $sameTitlePosts = NewsPost::where('title', $title)->orderBy('created_at')->get();
+            $this->assertSame(2, $sameTitlePosts->count(), 'A repeated title did not create a second post.');
+            $this->assertTrue(
+                $sameTitlePosts->pluck('slug')->unique()->count() === 2,
+                'Repeated titles did not receive unique generated slugs.'
+            );
+
+            $symbolTitle = '!!!';
+            $this->actingAs($user)
+                ->postWithCsrf(route('system.news.store'), [
+                    'title' => $symbolTitle,
+                    'category' => 'announcement',
+                    'body' => 'A title without Latin slug characters must receive a safe fallback slug.',
+                    'action' => 'draft',
+                ])
+                ->assertRedirect();
+
+            $symbolPost = NewsPost::where('title', $symbolTitle)->first();
+            $this->assertTrue((bool) $symbolPost, 'The symbol-only title post was not created.');
+            $this->assertTrue(
+                Str::startsWith($symbolPost->slug, 'news-'),
+                'A safe fallback slug was not generated.'
+            );
+
+            $duplicateSlugTitle = 'Duplicate custom slug must fail cleanly';
+            $this->actingAs($user)
+                ->postWithCsrf(route('system.news.store'), [
+                    'title' => $duplicateSlugTitle,
+                    'slug' => $post->slug,
+                    'category' => 'announcement',
+                    'body' => 'This post should be returned to the form with a slug error.',
+                    'action' => 'draft',
+                ])
+                ->assertRedirect()
+                ->assertSessionHasErrors('slug');
+            $this->assertTrue(
+                ! NewsPost::where('title', $duplicateSlugTitle)->exists(),
+                'A post with a duplicate custom slug was created.'
+            );
+
+            $inlineImageTitle = 'Inline image must fail cleanly';
+            $this->actingAs($user)
+                ->postWithCsrf(route('system.news.store'), [
+                    'title' => $inlineImageTitle,
+                    'category' => 'announcement',
+                    'body' => '<p>Article text.</p><img src="data:image/png;base64,aGVsbG8=">',
+                    'action' => 'draft',
+                ])
+                ->assertRedirect()
+                ->assertSessionHasErrors('body');
+            $this->assertTrue(
+                ! NewsPost::where('title', $inlineImageTitle)->exists(),
+                'A post with an embedded base64 image was created.'
+            );
 
             $this->actingAs($user)
                 ->get(route('system.news.edit', $post))

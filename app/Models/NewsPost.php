@@ -99,16 +99,29 @@ class NewsPost extends BaseModel
     {
         static::saving(function (NewsPost $post): void {
             if (blank($post->slug)) {
-                $base = Str::slug($post->title);
-                $slug = $base;
-                $counter = 1;
-
-                while (self::where('slug', $slug)->when($post->exists, fn ($query) => $query->where('id', '!=', $post->id))->exists()) {
-                    $slug = $base . '-' . $counter++;
-                }
-
-                $post->slug = $slug;
+                $post->slug = self::generateUniqueSlug((string) $post->title, $post);
             }
         });
+    }
+
+    public static function generateUniqueSlug(string $title, ?self $ignore = null): string
+    {
+        $base = Str::limit(Str::slug($title), 230, '');
+
+        if ($base === '') {
+            $base = 'news-' . Str::lower(Str::random(10));
+        }
+
+        $slug = $base;
+        $counter = 2;
+
+        while (self::query()
+            ->where('slug', $slug)
+            ->when($ignore?->exists, fn ($query) => $query->where($ignore->getKeyName(), '!=', $ignore->getKey()))
+            ->exists()) {
+            $slug = $base . '-' . $counter++;
+        }
+
+        return $slug;
     }
 }

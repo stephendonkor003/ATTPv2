@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Gate;
 use App\Models\UserLoginOtp;
 use App\Models\DiscussionParticipantToken;
 use App\Models\DiscussionReaction;
+use App\Models\NewsPost;
 use Illuminate\Pagination\Paginator;
 
 class AppServiceProvider extends ServiceProvider
@@ -145,12 +146,23 @@ private function logModelEvent(string $type, array $data): void
         'id' => $model->getKey(),
     ];
 
+    if ($model instanceof NewsPost) {
+        $changes = $this->summarizeNewsBodyForAudit($changes);
+        $original = $this->summarizeNewsBodyForAudit($original);
+    }
+
     if ($type === 'updated') {
         // Store only the diff for updates to reduce log volume.
         $payload['changes'] = $this->redactAuditPayload($changes);
         $payload['original'] = $this->redactAuditPayload($original);
     } else {
-        $payload['attributes'] = $this->redactAuditPayload($model->getAttributes());
+        $attributes = $model->getAttributes();
+
+        if ($model instanceof NewsPost) {
+            $attributes = $this->summarizeNewsBodyForAudit($attributes);
+        }
+
+        $payload['attributes'] = $this->redactAuditPayload($attributes);
     }
 
     SystemAuditLog::create([
@@ -193,6 +205,15 @@ private function redactAuditPayload(array $data): array
         if (array_key_exists($key, $data)) {
             $data[$key] = '[REDACTED]';
         }
+    }
+
+    return $data;
+}
+
+private function summarizeNewsBodyForAudit(array $data): array
+{
+    if (isset($data['body']) && is_string($data['body'])) {
+        $data['body'] = '[NEWS BODY OMITTED; length=' . strlen($data['body']) . ']';
     }
 
     return $data;

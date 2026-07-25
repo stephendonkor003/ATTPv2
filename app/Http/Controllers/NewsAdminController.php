@@ -8,11 +8,15 @@ use App\Models\NewsPost;
 use App\Models\NewsSubscriber;
 use App\Services\GalleryImageService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
 use Throwable;
 
 class NewsAdminController extends Controller
@@ -35,6 +39,7 @@ class NewsAdminController extends Controller
         return view('system.news.form', [
             'post' => new NewsPost(),
             'newsCoverFallbackUrl' => $this->newsCoverFallbackUrl($gallery, 'thumb'),
+            'newsUploadLimits' => $this->newsUploadLimits(),
         ]);
     }
 
@@ -45,13 +50,37 @@ class NewsAdminController extends Controller
         $data['status'] = $request->input('action') === 'submit' ? 'submitted' : 'draft';
         $data['submitted_by'] = $data['status'] === 'submitted' ? $request->user()?->id : null;
         $data['submitted_at'] = $data['status'] === 'submitted' ? now() : null;
+        $storedPublicPaths = [];
+        $storedLocalPaths = [];
 
-        if ($request->hasFile('cover_image')) {
-            $data['cover_image_path'] = $request->file('cover_image')->store('news/covers', 'public');
+        try {
+            $post = DB::transaction(function () use ($request, $data, &$storedPublicPaths, &$storedLocalPaths) {
+                if ($request->hasFile('cover_image')) {
+                    $data['cover_image_path'] = $this->storeUpload(
+                        $request->file('cover_image'),
+                        'news/covers',
+                        'public'
+                    );
+                    $storedPublicPaths[] = $data['cover_image_path'];
+                }
+
+                $post = NewsPost::create($data);
+                $this->storeAttachments($request, $post, $storedLocalPaths);
+
+                return $post;
+            });
+        } catch (Throwable $exception) {
+            $this->deleteStoredFiles('public', $storedPublicPaths);
+            $this->deleteStoredFiles('local', $storedLocalPaths);
+            Log::error('News post could not be saved.', [
+                'user_id' => $request->user()?->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->with('error', 'The news post could not be saved. Please check the files and try again.');
         }
-
-        $post = NewsPost::create($data);
-        $this->storeAttachments($request, $post);
 
         return redirect()->route('system.news.edit', $post)->with('success', 'News post saved.');
     }
@@ -63,28 +92,56 @@ class NewsAdminController extends Controller
         return view('system.news.form', [
             'post' => $post,
             'newsCoverFallbackUrl' => $this->newsCoverFallbackUrl($gallery, 'thumb'),
+            'newsUploadLimits' => $this->newsUploadLimits(),
         ]);
     }
 
     public function update(Request $request, NewsPost $post)
     {
         $data = $this->validated($request);
+        $oldCoverPath = $post->cover_image_path;
+        $newCoverPath = null;
+        $storedPublicPaths = [];
+        $storedLocalPaths = [];
 
-        if ($request->hasFile('cover_image')) {
-            if ($post->cover_image_path) {
-                Storage::disk('public')->delete($post->cover_image_path);
+        try {
+            if ($request->hasFile('cover_image')) {
+                $newCoverPath = $this->storeUpload(
+                    $request->file('cover_image'),
+                    'news/covers',
+                    'public'
+                );
+                $storedPublicPaths[] = $newCoverPath;
+                $data['cover_image_path'] = $newCoverPath;
             }
-            $data['cover_image_path'] = $request->file('cover_image')->store('news/covers', 'public');
+
+            if ($request->input('action') === 'submit') {
+                $data['status'] = 'submitted';
+                $data['submitted_by'] = $request->user()?->id;
+                $data['submitted_at'] = now();
+            }
+
+            DB::transaction(function () use ($request, $post, $data, &$storedLocalPaths) {
+                $post->update($data);
+                $this->storeAttachments($request, $post, $storedLocalPaths);
+            });
+        } catch (Throwable $exception) {
+            $this->deleteStoredFiles('public', $storedPublicPaths);
+            $this->deleteStoredFiles('local', $storedLocalPaths);
+            Log::error('News post could not be updated.', [
+                'news_post_id' => $post->id,
+                'user_id' => $request->user()?->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->with('error', 'The news post could not be updated. Your existing post was not changed.');
         }
 
-        if ($request->input('action') === 'submit') {
-            $data['status'] = 'submitted';
-            $data['submitted_by'] = $request->user()?->id;
-            $data['submitted_at'] = now();
+        if ($newCoverPath && $oldCoverPath && $oldCoverPath !== $newCoverPath) {
+            Storage::disk('public')->delete($oldCoverPath);
         }
-
-        $post->update($data);
-        $this->storeAttachments($request, $post);
 
         return redirect()->route('system.news.edit', $post)->with('success', 'News post updated.');
     }
@@ -146,27 +203,43 @@ class NewsAdminController extends Controller
 
     private function validated(Request $request): array
     {
-        $post = $request->route('post');
-        $slug = filled($request->input('slug'))
-            ? Str::slug((string) $request->input('slug'))
-            : Str::slug((string) $request->input('title'));
+        $routePost = $request->route('post');
+        $post = $routePost instanceof NewsPost ? $routePost : null;
+        $requestedSlug = Str::slug((string) $request->input('slug'));
+        $slug = filled($requestedSlug)
+            ? $requestedSlug
+            : NewsPost::generateUniqueSlug((string) $request->input('title'), $post);
 
         $request->merge(['slug' => $slug]);
+
+        $uniqueSlug = Rule::unique('attp_news_posts', 'slug');
+        $uploadLimits = $this->newsUploadLimits();
+
+        if ($post?->exists) {
+            $uniqueSlug->ignore($post->getKey(), $post->getKeyName());
+        }
 
         $data = $request->validate([
             'title' => 'required|string|max:255',
             'slug' => [
-                'nullable',
+                'required',
                 'string',
                 'max:255',
-                Rule::unique('attp_news_posts', 'slug')->when($post?->exists, fn ($rule) => $rule->ignore($post->id)),
+                $uniqueSlug,
             ],
             'category' => 'required|in:policy,research,events,announcement,press',
             'excerpt' => 'nullable|string|max:500',
-            'body' => 'required|string',
+            'body' => 'required|string|max:500000',
             'tags' => 'nullable|string|max:1000',
-            'cover_image' => 'nullable|image|max:4096',
-            'attachments.*' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip,jpg,jpeg,png|max:20480',
+            'cover_image' => "nullable|image|max:{$uploadLimits['cover_kb']}",
+            'attachments' => 'nullable|array|max:10',
+            'attachments.*' => "nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip,jpg,jpeg,png|max:{$uploadLimits['attachment_kb']}",
+            'action' => 'required|in:draft,submit',
+        ], [
+            'cover_image.max' => "The cover image must not be larger than {$uploadLimits['cover_label']}.",
+            'attachments.max' => 'You may upload no more than 10 attachments at a time.',
+            'attachments.*.max' => "Each attachment must not be larger than {$uploadLimits['attachment_label']}.",
+            'attachments.*.mimes' => 'Attachments must be PDF, Office, ZIP, JPG, JPEG, or PNG files.',
         ]);
 
         $data['tags'] = collect(explode(',', (string) ($data['tags'] ?? '')))
@@ -175,30 +248,153 @@ class NewsAdminController extends Controller
             ->values()
             ->all();
         $data['body'] = $this->sanitizeNewsHtml($data['body']);
-        $data['slug'] = $data['slug'] ?: null;
+        $this->validateNewsBody($data['body']);
+        $this->validateTotalUploadSize($request, $uploadLimits);
 
-        unset($data['cover_image'], $data['attachments']);
+        unset($data['cover_image'], $data['attachments'], $data['action']);
 
         return $data;
     }
 
-    private function storeAttachments(Request $request, NewsPost $post): void
+    private function storeAttachments(Request $request, NewsPost $post, array &$storedPaths): void
     {
         foreach ($request->file('attachments', []) as $file) {
             if (! $file) {
                 continue;
             }
 
-            $path = $file->store("news/attachments/{$post->id}", 'local');
+            $path = $this->storeUpload($file, "news/attachments/{$post->id}", 'local');
+            $storedPaths[] = $path;
+            [$title, $fileName] = $this->attachmentNames($file);
 
             $post->attachments()->create([
                 'uploaded_by' => $request->user()?->id,
-                'title' => pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                'title' => $title,
                 'file_path' => $path,
-                'file_name' => $file->getClientOriginalName(),
-                'mime_type' => $file->getMimeType(),
+                'file_name' => $fileName,
+                'mime_type' => Str::limit((string) $file->getMimeType(), 255, ''),
                 'file_size_bytes' => $file->getSize(),
             ]);
+        }
+    }
+
+    private function storeUpload(UploadedFile $file, string $directory, string $disk): string
+    {
+        $path = $file->store($directory, $disk);
+
+        if (! is_string($path) || $path === '') {
+            throw new RuntimeException("The uploaded file could not be written to the {$disk} disk.");
+        }
+
+        return $path;
+    }
+
+    private function attachmentNames(UploadedFile $file): array
+    {
+        $originalName = basename(str_replace('\\', '/', trim($file->getClientOriginalName())));
+        $extension = Str::limit((string) pathinfo($originalName, PATHINFO_EXTENSION), 20, '');
+        $title = trim((string) pathinfo($originalName, PATHINFO_FILENAME));
+        $title = Str::limit($title !== '' ? $title : 'Attachment', 255, '');
+        $baseLength = max(1, 254 - Str::length($extension));
+        $fileName = Str::limit($title, $baseLength, '');
+
+        if ($extension !== '') {
+            $fileName .= '.' . $extension;
+        }
+
+        return [$title, $fileName];
+    }
+
+    private function validateNewsBody(string $body): void
+    {
+        if (preg_match('/<img\b[^>]*\bsrc\s*=\s*(["\'])\s*data:image\//i', $body)) {
+            throw ValidationException::withMessages([
+                'body' => 'Images cannot be pasted directly into the article. Please upload the main image under Cover Image.',
+            ]);
+        }
+
+        $plainText = html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />'], ' ', $body)));
+        $plainText = preg_replace('/\x{00A0}/u', ' ', $plainText) ?? '';
+
+        if (trim($plainText) === '') {
+            throw ValidationException::withMessages([
+                'body' => 'The news body must contain some text.',
+            ]);
+        }
+    }
+
+    private function validateTotalUploadSize(Request $request, array $uploadLimits): void
+    {
+        $files = collect($request->file('attachments', []));
+
+        if ($request->hasFile('cover_image')) {
+            $files->prepend($request->file('cover_image'));
+        }
+
+        $totalBytes = $files->sum(fn ($file) => $file instanceof UploadedFile ? (int) $file->getSize() : 0);
+
+        if ($totalBytes > $uploadLimits['combined_bytes']) {
+            throw ValidationException::withMessages([
+                'attachments' => "The combined upload size must not be larger than {$uploadLimits['combined_label']}.",
+            ]);
+        }
+    }
+
+    private function newsUploadLimits(): array
+    {
+        $megabyte = 1024 * 1024;
+        $phpFileLimit = $this->phpIniBytes((string) ini_get('upload_max_filesize'));
+        $phpPostLimit = $this->phpIniBytes((string) ini_get('post_max_size'));
+        $fileCeiling = $phpFileLimit > 0 ? $phpFileLimit : PHP_INT_MAX;
+        $postCeiling = $phpPostLimit > 0 ? (int) floor($phpPostLimit * 0.85) : PHP_INT_MAX;
+        $coverBytes = min(10 * $megabyte, $fileCeiling);
+        $attachmentBytes = min(20 * $megabyte, $fileCeiling);
+        $combinedBytes = min(50 * $megabyte, $postCeiling);
+
+        return [
+            'cover_bytes' => $coverBytes,
+            'cover_kb' => max(1, (int) floor($coverBytes / 1024)),
+            'cover_label' => $this->formatMegabytes($coverBytes),
+            'attachment_bytes' => $attachmentBytes,
+            'attachment_kb' => max(1, (int) floor($attachmentBytes / 1024)),
+            'attachment_label' => $this->formatMegabytes($attachmentBytes),
+            'combined_bytes' => $combinedBytes,
+            'combined_label' => $this->formatMegabytes($combinedBytes),
+        ];
+    }
+
+    private function phpIniBytes(string $value): int
+    {
+        $value = trim($value);
+
+        if ($value === '' || $value === '-1') {
+            return 0;
+        }
+
+        $unit = strtolower(substr($value, -1));
+        $number = (float) $value;
+
+        return match ($unit) {
+            'g' => (int) round($number * 1024 * 1024 * 1024),
+            'm' => (int) round($number * 1024 * 1024),
+            'k' => (int) round($number * 1024),
+            default => (int) round($number),
+        };
+    }
+
+    private function formatMegabytes(int $bytes): string
+    {
+        $megabytes = $bytes / (1024 * 1024);
+
+        return rtrim(rtrim(number_format($megabytes, 1, '.', ''), '0'), '.') . ' MB';
+    }
+
+    private function deleteStoredFiles(string $disk, array $paths): void
+    {
+        $paths = array_values(array_filter($paths, fn ($path) => is_string($path) && $path !== ''));
+
+        if ($paths !== []) {
+            Storage::disk($disk)->delete($paths);
         }
     }
 

@@ -12,11 +12,11 @@
                     <h4 class="fw-bold mb-1 text-white">News Administration</h4>
                     <p class="mb-0 text-white-50">Draft, submit, approve, and publish ATTP news on the public news page.</p>
                 </div>
-                @can('news.manage')
+                @canany(['news.manage', 'communications.respond'])
                     <a href="{{ route('system.news.create') }}" class="btn btn-light">
                         <i class="feather-plus-circle me-1"></i> New Post
                     </a>
-                @endcan
+                @endcanany
             </div>
         </div>
 
