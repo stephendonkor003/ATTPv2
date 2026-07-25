@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
 use App\Models\Procurement;
+use App\Models\ProcurementDocument;
 use App\Models\DynamicForm;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class PublicProcurementController extends Controller
@@ -64,6 +66,7 @@ class PublicProcurementController extends Controller
 
         $procurement->autoCloseIfExpired();
         abort_if(!$procurement->isApplicationOpen(), 404);
+        $procurement->load('documents');
 
         $form = DynamicForm::approved()
             ->where('procurement_id', $procurement->id)
@@ -77,6 +80,18 @@ class PublicProcurementController extends Controller
         }
 
         return view('public.procurements.show', compact('procurement', 'form'));
+    }
+
+    public function downloadDocument(Procurement $procurement, ProcurementDocument $document)
+    {
+        if (($procurement->visibility_type ?? 'public') !== 'public') {
+            abort(404);
+        }
+
+        $procurement->autoCloseIfExpired();
+        abort_if(! $procurement->isApplicationOpen(), 404);
+
+        return $this->documentDownloadResponse($procurement, $document);
     }
 
     /**
@@ -258,5 +273,27 @@ class PublicProcurementController extends Controller
         }
 
         return back()->with('success', 'Application submitted successfully. Your login credentials have been emailed to the official email address provided.');
+    }
+
+    private function documentDownloadResponse(Procurement $procurement, ProcurementDocument $document)
+    {
+        abort_unless((string) $document->procurement_id === (string) $procurement->id, 404);
+
+        $path = (string) $document->file_path;
+        $expectedPrefix = "procurements/{$procurement->id}/documents/";
+        abort_unless($path !== '' && str_starts_with($path, $expectedPrefix), 404);
+
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists($path), 404, 'Procurement document file not found.');
+
+        return $disk->download(
+            $path,
+            basename($document->original_name ?: $path),
+            [
+                'Content-Type' => $document->mime_type ?: 'application/octet-stream',
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'public, max-age=300',
+            ]
+        );
     }
 }

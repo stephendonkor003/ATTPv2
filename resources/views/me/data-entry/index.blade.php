@@ -14,6 +14,10 @@
             margin: 1rem 0;
         }
 
+        .me-data-entry .me-workflow-guide.me-report-lifecycle {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
         .me-data-entry .me-workflow-step {
             display: flex;
             align-items: flex-start;
@@ -182,6 +186,7 @@
         .me-data-entry .me-status.open,
         .me-data-entry .me-status.active,
         .me-data-entry .me-status.published,
+        .me-data-entry .me-status.reviewed,
         .me-data-entry .me-status.approved,
         .me-data-entry .me-status.validated {
             background: #dff3e9;
@@ -519,7 +524,8 @@
         }
 
         @media (max-width: 767.98px) {
-            .me-data-entry .me-workflow-guide {
+            .me-data-entry .me-workflow-guide,
+            .me-data-entry .me-workflow-guide.me-report-lifecycle {
                 grid-template-columns: 1fr;
             }
 
@@ -560,11 +566,13 @@
             'collections' => ['label' => 'Active Collections', 'icon' => 'feather-inbox'],
             'forms' => ['label' => 'Form Templates', 'icon' => 'feather-file-text'],
             'periods' => ['label' => 'Reporting Periods', 'icon' => 'feather-calendar'],
+            'reports' => ['label' => 'Performance Reports', 'icon' => 'feather-bar-chart-2'],
             'submissions' => ['label' => 'Submissions', 'icon' => 'feather-send'],
         ];
         $statusChoices = match ($tab) {
             'forms' => ['draft' => 'Draft', 'published' => 'Published', 'archived' => 'Archived'],
             'periods' => ['draft' => 'Draft', 'active' => 'Active', 'closed' => 'Closed'],
+            'reports' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'reviewed' => 'Reviewed', 'archived' => 'Archived'],
             'submissions' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'returned' => 'Returned', 'validated' => 'Validated', 'approved' => 'Approved'],
             default => ['draft' => 'Draft', 'open' => 'Open', 'closed' => 'Closed'],
         };
@@ -572,8 +580,12 @@
             'forms' => ['query' => ['tab' => 'forms', 'create' => 'form'], 'label' => 'Create form template'],
             'periods' => ['query' => ['tab' => 'periods', 'create' => 'period'], 'label' => 'Create reporting period'],
             'collections' => ['query' => ['tab' => 'collections', 'create' => 'collection'], 'label' => 'Create collection'],
+            'reports' => ['href' => route('budget.me.performance-reports.create'), 'label' => 'Create report'],
             default => null,
         };
+        $createHref = $createTarget
+            ? ($createTarget['href'] ?? route('budget.me.rebuild.data-entry', $createTarget['query']).'#data-entry-workspace')
+            : null;
     @endphp
 
     <main class="me-results-framework me-data-entry nxl-container">
@@ -583,13 +595,13 @@
                     <div class="me-eyebrow"><i class="feather-edit-3" aria-hidden="true"></i> Monitoring &amp; Evaluation</div>
                     <h1>Data Entry and Performance Tracking</h1>
                     <p>
-                        Build reusable collection forms, define reporting windows, assign participating think tanks and monitor submissions from one controlled workspace.
+                        Build reusable collection forms, link project components and indicators, track results against targets, manage evidence, and review performance reports from one controlled workspace.
                     </p>
                 </div>
 
                 @if ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
                     <div class="me-hero-actions">
-                        <a href="{{ route('budget.me.rebuild.data-entry', $createTarget['query']) }}#data-entry-workspace" class="me-primary-action">
+                        <a href="{{ $createHref }}" class="me-primary-action">
                             <i class="feather-plus" aria-hidden="true"></i> {{ $createTarget['label'] }}
                         </a>
                     </div>
@@ -621,20 +633,38 @@
             </article>
         </section>
 
-        <section class="me-workflow-guide" aria-label="Three-step data collection guide">
-            <article class="me-workflow-step">
-                <span class="me-workflow-number">1</span>
-                <div><strong>Build a form</strong><small>Define the questions and map numeric fields to portfolio indicators.</small></div>
-            </article>
-            <article class="me-workflow-step">
-                <span class="me-workflow-number">2</span>
-                <div><strong>Set a period</strong><small>Create the reporting year, quarter, month or custom measurement window.</small></div>
-            </article>
-            <article class="me-workflow-step">
-                <span class="me-workflow-number">3</span>
-                <div><strong>Open a collection</strong><small>Join a published form to an active period and assign participating think tanks.</small></div>
-            </article>
-        </section>
+        @if ($tab === 'reports')
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3 p-3 border rounded-3 bg-white">
+                <div>
+                    <div class="fw-bold text-dark">Reporting performance dashboard</div>
+                    <div class="text-muted small">Analyze workflow distribution, deadlines, review time and indicator completeness, then drill into report records.</div>
+                </div>
+                <a href="{{ route('budget.me.rebuild.reporting-dashboard') }}" class="btn btn-success flex-shrink-0">
+                    <i class="feather-bar-chart-2 me-1" aria-hidden="true"></i>Open dashboard
+                </a>
+            </div>
+            <section class="me-workflow-guide me-report-lifecycle" aria-label="Four-stage report lifecycle">
+                <article class="me-workflow-step"><span class="me-workflow-number">1</span><div><strong>Draft</strong><small>Think tanks or implementing partners prepare assigned reports.</small></div></article>
+                <article class="me-workflow-step"><span class="me-workflow-number">2</span><div><strong>Submitted</strong><small>Completed reports are locked and sent to the Secretariat/M&amp;E Officer.</small></div></article>
+                <article class="me-workflow-step"><span class="me-workflow-number">3</span><div><strong>Reviewed</strong><small>Authorized officers review, return, or approve the report and evidence.</small></div></article>
+                <article class="me-workflow-step"><span class="me-workflow-number">4</span><div><strong>Archived</strong><small>Final reports become read-only historical records with a lifecycle audit trail.</small></div></article>
+            </section>
+        @else
+            <section class="me-workflow-guide" aria-label="Three-step data collection guide">
+                <article class="me-workflow-step">
+                    <span class="me-workflow-number">1</span>
+                    <div><strong>Build a form</strong><small>Define the questions and map numeric fields to portfolio indicators.</small></div>
+                </article>
+                <article class="me-workflow-step">
+                    <span class="me-workflow-number">2</span>
+                    <div><strong>Set a period</strong><small>Create the reporting year, quarter, month or custom measurement window.</small></div>
+                </article>
+                <article class="me-workflow-step">
+                    <span class="me-workflow-number">3</span>
+                    <div><strong>Open a collection</strong><small>Join a published form to an active period and assign participating think tanks.</small></div>
+                </article>
+            </section>
+        @endif
 
         @if (session('success'))
             <div class="alert alert-success border-0 shadow-sm" role="status">
@@ -788,6 +818,7 @@
                         );
                     }
                     $formPortfolioValue = (string) ($formLocked ? $editingForm->portfolio_id : old('portfolio_id', $editingForm?->portfolio_id));
+                    $formComponentValue = (string) ($formLocked ? $editingForm->project_component_id : old('project_component_id', $editingForm?->project_component_id));
                     $formIndicatorValue = (string) ($formLocked ? $editingForm->indicator_id : old('indicator_id', $editingForm?->indicator_id));
                     $formCodeDisplay = (string) ($editingForm?->code ?? '');
                 @endphp
@@ -828,7 +859,7 @@
                             <div class="me-form-section">
                                 <div class="me-form-section-title">Template details</div>
                                 <div class="row g-3">
-                                    <div class="col-lg-6">
+                                    <div class="col-lg-4">
                                         <label class="form-label" for="form-portfolio">Portfolio <span class="text-danger">*</span></label>
                                         @if ($formLocked)
                                             <input type="hidden" name="portfolio_id" value="{{ $formPortfolioValue }}">
@@ -847,7 +878,35 @@
                                             @error('portfolio_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                         @endif
                                     </div>
-                                    <div class="col-lg-6">
+                                    <div class="col-lg-4">
+                                        <label class="form-label" for="form-project-component">Project Component <span class="text-danger">*</span></label>
+                                        @if ($formLocked)
+                                            <input type="hidden" name="project_component_id" value="{{ $formComponentValue }}">
+                                        @endif
+                                        <select
+                                            id="form-project-component"
+                                            @unless ($formLocked) name="project_component_id" required @endunless
+                                            class="form-select @error('project_component_id') is-invalid @enderror"
+                                            data-form-component
+                                            data-locked="{{ $formLocked ? 'true' : 'false' }}"
+                                            @disabled($formLocked)
+                                        >
+                                            <option value="">Choose project component</option>
+                                            @foreach ($projectComponents as $componentOption)
+                                                <option
+                                                    value="{{ $componentOption['id'] }}"
+                                                    data-portfolio="{{ $componentOption['portfolio_id'] }}"
+                                                    data-directorate="{{ $componentOption['directorate'] }}"
+                                                    @selected($formComponentValue === (string) $componentOption['id'])
+                                                >{{ $componentOption['label'] }}</option>
+                                            @endforeach
+                                        </select>
+                                        @error('project_component_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                        <div class="me-field-help" data-component-directorate>
+                                            Select a component to identify its responsible Directorate.
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-4">
                                         <div class="me-template-indicator-field">
                                             <label class="form-label me-template-indicator-label" for="form-indicator">
                                                 <i class="feather-target" aria-hidden="true"></i>
@@ -870,6 +929,7 @@
                                                     <option
                                                         value="{{ $indicatorOption['id'] }}"
                                                         data-portfolio="{{ $indicatorOption['portfolio_id'] }}"
+                                                        data-component="{{ $indicatorOption['project_component_id'] }}"
                                                         @selected($formIndicatorValue === (string) $indicatorOption['id'])
                                                     >{{ $indicatorOption['label'] }}{{ $indicatorOption['unit'] ? ' · '.$indicatorOption['unit'] : '' }}</option>
                                                 @endforeach
@@ -1207,6 +1267,7 @@
                                                                     <option
                                                                         value="{{ $indicatorOption['id'] }}"
                                                                         data-portfolio="{{ $indicatorOption['portfolio_id'] }}"
+                                                                        data-component="{{ $indicatorOption['project_component_id'] }}"
                                                                         @selected((string) ($row['indicator_id'] ?? '') === (string) $indicatorOption['id'])
                                                                     >{{ $indicatorOption['label'] }}{{ $indicatorOption['unit'] ? ' · '.$indicatorOption['unit'] : '' }}</option>
                                                                 @endforeach
@@ -1432,18 +1493,21 @@
                 $registerTitle = match ($tab) {
                     'forms' => 'Form templates',
                     'periods' => 'Reporting periods',
+                    'reports' => 'Quarterly performance reports',
                     'submissions' => 'Participant submissions',
                     default => 'Data collections',
                 };
                 $registerSubtitle = match ($tab) {
                     'forms' => 'Build, publish and retire reusable reporting forms.',
                     'periods' => 'Manage the portfolio reporting calendar.',
+                    'reports' => 'Create, complete and review quarterly indicator performance reports.',
                     'submissions' => 'Track participant progress and submissions awaiting review.',
                     default => 'Monitor open windows, assignments and collection progress.',
                 };
                 $currentPaginator = match ($tab) {
                     'forms' => $forms,
                     'periods' => $periods,
+                    'reports' => $reports,
                     'submissions' => $submissions,
                     default => $collections,
                 };
@@ -1465,7 +1529,7 @@
                         </div>
 
                         @if ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
-                            <a href="{{ route('budget.me.rebuild.data-entry', $createTarget['query']) }}#data-entry-workspace" class="btn btn-sm btn-outline-success flex-shrink-0">
+                            <a href="{{ $createHref }}" class="btn btn-sm btn-outline-success flex-shrink-0">
                                 <i class="feather-plus me-1" aria-hidden="true"></i>{{ $createTarget['label'] }}
                             </a>
                         @endif
@@ -1523,6 +1587,8 @@
                                 Create the first form template to define what participants will report.
                             @elseif ($tab === 'periods')
                                 Create a reporting period before opening a collection.
+                            @elseif ($tab === 'reports')
+                                Choose a published form, quarter and year to create the first performance report.
                             @elseif ($tab === 'submissions')
                                 Participant submissions will appear here when collection work begins.
                             @else
@@ -1530,7 +1596,7 @@
                             @endif
                         </p>
                         @if ($canManage && $createTarget && $tab !== 'submissions' && ! $registerHasFilters)
-                            <a href="{{ route('budget.me.rebuild.data-entry', $createTarget['query']) }}#data-entry-workspace" class="me-primary-action">
+                            <a href="{{ $createHref }}" class="me-primary-action">
                                 <i class="feather-plus" aria-hidden="true"></i>{{ $createTarget['label'] }}
                             </a>
                         @endif
@@ -1558,15 +1624,20 @@
                                         </td>
                                         <td>
                                             <div class="fw-semibold small text-dark">{{ $form->portfolio?->name ?: 'Portfolio unavailable' }}</div>
+                                            <div class="me-record-meta mt-1">
+                                                {{ $form->projectComponent?->project_id ? $form->projectComponent->project_id.' · ' : '' }}{{ $form->projectComponent?->name ?: 'Component not linked' }}
+                                            </div>
                                             <span class="me-status {{ $form->status }} mt-2">{{ $form->status }}</span>
                                         </td>
                                         <td>
                                             <div class="small fw-semibold text-dark">{{ $form->responsiblePerson?->name ?: 'Not assigned' }}</div>
-                                            <div class="me-record-meta">{{ number_format((int) $form->fields_count) }} fields</div>
+                                            <div class="me-record-meta">{{ $form->projectComponent?->governanceNode?->name ?: 'Directorate not assigned' }}</div>
+                                            <div class="me-record-meta">{{ number_format((int) $form->indicators_count) }} linked indicators · {{ number_format((int) $form->fields_count) }} fields</div>
                                         </td>
                                         <td>
                                             <div class="small fw-semibold text-dark">{{ number_format((int) $form->collections_count) }} collections</div>
-                                            <div class="me-record-meta">{{ number_format((int) $form->submitted_collections_count) }} with submissions</div>
+                                            <div class="me-record-meta">{{ number_format((int) $form->performance_reports_count) }} performance reports</div>
+                                            <div class="me-record-meta">{{ number_format((int) $form->submitted_collections_count) }} collections with submissions</div>
                                         </td>
                                         <td>
                                             @if ($canManage)
@@ -1580,6 +1651,9 @@
                                                             <button type="submit" class="btn btn-sm btn-outline-success"><i class="feather-upload-cloud" aria-hidden="true"></i> Publish</button>
                                                         </form>
                                                     @elseif ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
+                                                        <a href="{{ route('budget.me.performance-reports.create', ['form_id' => $form->id]) }}" class="btn btn-sm btn-outline-primary">
+                                                            <i class="feather-bar-chart-2" aria-hidden="true"></i> Report
+                                                        </a>
                                                         <form method="POST" action="{{ route('budget.me.data-entry.forms.archive', $form) }}" data-confirm="Archive this form? It cannot be used for new collections.">
                                                             @csrf
                                                             <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Archive {{ $form->title }}"><i class="feather-archive" aria-hidden="true"></i></button>
@@ -1605,9 +1679,10 @@
                                 </div>
                                 <div class="me-mobile-facts">
                                     <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $form->portfolio?->name ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Component</small><strong>{{ $form->projectComponent?->name ?: 'Not linked' }}</strong></div>
                                     <div class="me-mobile-fact"><small>Responsible</small><strong>{{ $form->responsiblePerson?->name ?: 'Not assigned' }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Structure</small><strong>{{ $form->fields_count }} fields · v{{ $form->version }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Usage</small><strong>{{ $form->collections_count }} collections</strong></div>
+                                    <div class="me-mobile-fact"><small>Structure</small><strong>{{ $form->indicators_count }} indicators · {{ $form->fields_count }} fields · v{{ $form->version }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Usage</small><strong>{{ $form->collections_count }} collections · {{ $form->performance_reports_count }} reports</strong></div>
                                 </div>
                                 @if ($canManage && $form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
                                     <div class="me-row-actions justify-content-start">
@@ -1615,6 +1690,7 @@
                                         @if ($form->status === \App\Models\MeDataEntryForm::STATUS_DRAFT)
                                             <form method="POST" action="{{ route('budget.me.data-entry.forms.publish', $form) }}" data-confirm="Publish this form? It will become available for new collections.">@csrf<button type="submit" class="btn btn-sm btn-outline-success"><i class="feather-upload-cloud me-1" aria-hidden="true"></i>Publish</button></form>
                                         @else
+                                            <a href="{{ route('budget.me.performance-reports.create', ['form_id' => $form->id]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-bar-chart-2 me-1" aria-hidden="true"></i>Report</a>
                                             <form method="POST" action="{{ route('budget.me.data-entry.forms.archive', $form) }}" data-confirm="Archive this form? It cannot be used for new collections.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-archive me-1" aria-hidden="true"></i>Archive</button></form>
                                         @endif
                                     </div>
@@ -1665,6 +1741,81 @@
                                     <div class="me-mobile-fact"><small>Ends</small><strong>{{ $period->period_end?->format('d M Y') }}</strong></div>
                                 </div>
                                 @if ($canManage)<div class="me-row-actions justify-content-start"><a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit period</a></div>@endif
+                            </article>
+                        @endforeach
+                    </div>
+                @elseif ($tab === 'reports')
+                    <div class="table-responsive me-register-desktop">
+                        <table class="table me-register-table align-middle">
+                            <caption class="visually-hidden">Quarterly performance reports</caption>
+                            <thead>
+                                <tr>
+                                    <th style="width: 22%">Report</th>
+                                    <th style="width: 16%">Author / owner</th>
+                                    <th style="width: 18%">Project Component</th>
+                                    <th style="width: 16%">Responsible Directorate</th>
+                                    <th style="width: 12%">Coverage</th>
+                                    <th style="width: 8%">Stage</th>
+                                    <th class="text-end" style="width: 8%">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($reports as $report)
+                                    <tr>
+                                        <td>
+                                            <span class="me-code">{{ $report->reporting_quarter }} {{ $report->reporting_year }}</span>
+                                            <div class="me-record-title">{{ $report->form?->title ?: 'Form unavailable' }}</div>
+                                            <div class="me-record-meta">{{ $report->form?->code }}</div>
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">{{ $report->thinkTank?->name ?: ($report->createdBy?->name ?: 'Secretariat') }}</div>
+                                            <div class="me-record-meta">{{ $report->thinkTank ? \Illuminate\Support\Str::headline($report->thinkTank->role ?: 'think tank') : 'Internal report' }}</div>
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">{{ $report->projectComponent?->name ?: 'Component unavailable' }}</div>
+                                            <div class="me-record-meta">{{ $report->projectComponent?->project_id }}</div>
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">{{ $report->responsibleDirectorate?->name ?: 'Not assigned' }}</div>
+                                            <div class="me-record-meta">{{ $report->responsibleDirectorate?->code }}</div>
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">{{ $report->indicator_results_count }} due indicators</div>
+                                            <div class="me-record-meta">{{ $report->documents_count }} supporting documents</div>
+                                        </td>
+                                        <td><span class="me-status {{ $report->status }}">{{ $report->lifecycleLabel() }}</span></td>
+                                        <td class="text-end">
+                                            <a href="{{ route('budget.me.performance-reports.edit', $report) }}" class="btn btn-sm btn-outline-primary">
+                                                <i class="{{ $report->isEditable() ? 'feather-edit-2' : 'feather-eye' }}" aria-hidden="true"></i>
+                                                {{ $report->isEditable() ? 'Complete' : ($report->isArchived() ? 'History' : 'Review') }}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="me-mobile-register">
+                        @foreach ($reports as $report)
+                            <article class="me-mobile-card">
+                                <div class="d-flex align-items-start justify-content-between gap-2">
+                                    <div>
+                                        <span class="me-code">{{ $report->reporting_quarter }} {{ $report->reporting_year }}</span>
+                                        <h3 class="me-record-title mb-0">{{ $report->form?->title ?: 'Form unavailable' }}</h3>
+                                    </div>
+                                    <span class="me-status {{ $report->status }}">{{ $report->lifecycleLabel() }}</span>
+                                </div>
+                                <div class="me-mobile-facts">
+                                    <div class="me-mobile-fact"><small>Component</small><strong>{{ $report->projectComponent?->name ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Owner</small><strong>{{ $report->thinkTank?->name ?: ($report->createdBy?->name ?: 'Secretariat') }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Directorate</small><strong>{{ $report->responsibleDirectorate?->name ?: 'Not assigned' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Indicators</small><strong>{{ $report->indicator_results_count }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Evidence</small><strong>{{ $report->documents_count }} files</strong></div>
+                                </div>
+                                <a href="{{ route('budget.me.performance-reports.edit', $report) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="{{ $report->isEditable() ? 'feather-edit-2' : 'feather-eye' }} me-1" aria-hidden="true"></i>
+                                    {{ $report->isEditable() ? 'Complete report' : 'Open review' }}
+                                </a>
                             </article>
                         @endforeach
                     </div>
@@ -1966,7 +2117,7 @@
                                 <select name="fields[__INDEX__][indicator_id]" class="form-select" data-indicator-select>
                                     <option value="">No indicator mapping</option>
                                     @foreach ($indicatorOptions as $indicatorOption)
-                                        <option value="{{ $indicatorOption['id'] }}" data-portfolio="{{ $indicatorOption['portfolio_id'] }}">{{ $indicatorOption['label'] }}{{ $indicatorOption['unit'] ? ' · '.$indicatorOption['unit'] : '' }}</option>
+                                        <option value="{{ $indicatorOption['id'] }}" data-portfolio="{{ $indicatorOption['portfolio_id'] }}" data-component="{{ $indicatorOption['project_component_id'] }}">{{ $indicatorOption['label'] }}{{ $indicatorOption['unit'] ? ' · '.$indicatorOption['unit'] : '' }}</option>
                                     @endforeach
                                 </select>
                                 <span class="me-field-help">Available for integer, number, percentage and currency. One indicator can be mapped only once.</span>
@@ -2047,20 +2198,21 @@
             const fieldTemplate = document.getElementById('data-entry-field-template');
             const sectionTemplate = document.getElementById('data-entry-section-template');
             const portfolioSelect = builder?.querySelector('[data-form-portfolio]');
+            const componentSelect = builder?.querySelector('[data-form-component]');
+            const componentDirectorate = builder?.querySelector('[data-component-directorate]');
             const templateIndicatorSelect = builder?.querySelector('[data-template-indicator]');
             const templateIndicatorHelp = builder?.querySelector('[data-template-indicator-help]');
             const sectionPalette = @json($sectionPalette ?? []);
 
-            const filterTemplateIndicators = () => {
-                if (!templateIndicatorSelect) return;
+            const filterTemplateComponents = () => {
+                if (!componentSelect) return;
 
                 const portfolioId = portfolioSelect?.value || '';
-                const locked = templateIndicatorSelect.dataset.locked === 'true';
-                const placeholder = templateIndicatorSelect.options[0];
+                const locked = componentSelect.dataset.locked === 'true';
+                let selectedStillAllowed = !componentSelect.value;
                 let availableCount = 0;
-                let selectedStillAllowed = !templateIndicatorSelect.value;
 
-                Array.from(templateIndicatorSelect.options).forEach((option) => {
+                Array.from(componentSelect.options).forEach((option) => {
                     if (!option.value) return;
                     const allowed = option.dataset.portfolio === portfolioId || (locked && option.selected);
                     option.hidden = !allowed;
@@ -2069,20 +2221,60 @@
                     if (allowed && option.selected) selectedStillAllowed = true;
                 });
 
+                if (!locked && !selectedStillAllowed) componentSelect.value = '';
+                componentSelect.disabled = locked || portfolioId === '';
+                componentSelect.options[0].textContent = portfolioId === ''
+                    ? 'Choose a portfolio first'
+                    : (availableCount === 0 ? 'No components available for this portfolio' : 'Choose project component');
+
+                const selected = componentSelect.selectedOptions[0];
+                if (componentDirectorate) {
+                    componentDirectorate.textContent = selected?.value
+                        ? `Responsible Directorate: ${selected.dataset.directorate || 'Not assigned'}`
+                        : 'Select a component to identify its responsible Directorate.';
+                }
+            };
+
+            const filterTemplateIndicators = () => {
+                if (!templateIndicatorSelect) return;
+
+                const portfolioId = portfolioSelect?.value || '';
+                const componentId = componentSelect?.value || '';
+                const locked = templateIndicatorSelect.dataset.locked === 'true';
+                const placeholder = templateIndicatorSelect.options[0];
+                let availableCount = 0;
+                let selectedStillAllowed = !templateIndicatorSelect.value;
+
+                Array.from(templateIndicatorSelect.options).forEach((option) => {
+                    if (!option.value) return;
+                    const allowed = (
+                        option.dataset.portfolio === portfolioId
+                        && option.dataset.component === componentId
+                    ) || (locked && option.selected);
+                    option.hidden = !allowed;
+                    option.disabled = !allowed;
+                    if (allowed) availableCount++;
+                    if (allowed && option.selected) selectedStillAllowed = true;
+                });
+
                 if (!locked && !selectedStillAllowed) templateIndicatorSelect.value = '';
-                templateIndicatorSelect.disabled = locked || portfolioId === '';
+                templateIndicatorSelect.disabled = locked || portfolioId === '' || componentId === '';
 
                 if (placeholder) {
                     placeholder.textContent = portfolioId === ''
                         ? 'Choose a portfolio first'
-                        : (availableCount === 0 ? 'No indicators available for this portfolio' : 'Choose an indicator');
+                        : (componentId === ''
+                            ? 'Choose a project component first'
+                            : (availableCount === 0 ? 'No indicators available for this component' : 'Choose an indicator'));
                 }
 
                 if (templateIndicatorHelp) {
                     if (portfolioId === '') {
                         templateIndicatorHelp.textContent = 'Choose a portfolio first to see its available indicators.';
+                    } else if (componentId === '') {
+                        templateIndicatorHelp.textContent = 'Choose a project component to see its linked performance indicators.';
                     } else if (availableCount === 0) {
-                        templateIndicatorHelp.textContent = 'No indicators are registered for this portfolio. Create one in Results Framework and Indicator Management before saving this template.';
+                        templateIndicatorHelp.textContent = 'No indicators are registered for this component. Link an indicator to the component in Results Framework and Indicator Management before saving this template.';
                     } else {
                         const countLabel = `${availableCount} ${availableCount === 1 ? 'indicator' : 'indicators'} available`;
                         templateIndicatorHelp.textContent = `${countLabel}. The linked template will open from this indicator in the think tank M&E workspace.`;
@@ -2093,11 +2285,15 @@
             const filterIndicatorOptions = (select) => {
                 if (!select) return;
                 const portfolioId = portfolioSelect?.value || '';
+                const componentId = componentSelect?.value || '';
                 let selectedStillAllowed = !select.value;
 
                 Array.from(select.options).forEach((option) => {
                     if (!option.value) return;
-                    const allowed = portfolioId !== '' && option.dataset.portfolio === portfolioId;
+                    const allowed = portfolioId !== ''
+                        && componentId !== ''
+                        && option.dataset.portfolio === portfolioId
+                        && option.dataset.component === componentId;
                     option.hidden = !allowed;
                     option.disabled = !allowed;
                     if (allowed && option.selected) selectedStillAllowed = true;
@@ -2320,6 +2516,7 @@
             };
 
             if (sectionList) {
+                filterTemplateComponents();
                 filterTemplateIndicators();
                 sectionList.querySelectorAll('[data-field-row]').forEach(updateFieldRow);
                 reindexBuilder();
@@ -2422,6 +2619,12 @@
                 });
 
                 portfolioSelect?.addEventListener('change', () => {
+                    filterTemplateComponents();
+                    filterTemplateIndicators();
+                    sectionList.querySelectorAll('[data-indicator-select]').forEach(filterIndicatorOptions);
+                });
+                componentSelect?.addEventListener('change', () => {
+                    filterTemplateComponents();
                     filterTemplateIndicators();
                     sectionList.querySelectorAll('[data-indicator-select]').forEach(filterIndicatorOptions);
                 });

@@ -55,6 +55,11 @@ class MeReportingPeriod extends BaseModel
         return $this->hasMany(IndicatorResult::class, 'reporting_period_id');
     }
 
+    public function performanceReports(): HasMany
+    {
+        return $this->hasMany(MePerformanceReport::class, 'reporting_period_id');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

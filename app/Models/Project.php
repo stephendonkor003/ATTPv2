@@ -71,6 +71,16 @@ class Project extends BaseModel
         return $this->hasMany(Indicator::class, 'project_component_id');
     }
 
+    public function dataEntryForms()
+    {
+        return $this->hasMany(MeDataEntryForm::class, 'project_component_id');
+    }
+
+    public function performanceReports()
+    {
+        return $this->hasMany(MePerformanceReport::class, 'project_component_id');
+    }
+
     // A Project has many Activity Allocations (via activities)
     public function activityAllocations()
     {

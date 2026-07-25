@@ -31,6 +31,42 @@
         </div>
     </div>
 
+    @if ($procurement->documents->isNotEmpty())
+        <div class="card vendor-card mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+                    <div>
+                        <h5 class="mb-1">Procurement Documents</h5>
+                        <p class="text-muted small mb-0">Download the official bidder files before completing your application.</p>
+                    </div>
+                    <span class="badge bg-light text-dark border">
+                        {{ $procurement->documents->count() }}
+                        {{ \Illuminate\Support\Str::plural('file', $procurement->documents->count()) }}
+                    </span>
+                </div>
+
+                <div class="row g-3">
+                    @foreach ($procurement->documents as $document)
+                        <div class="col-md-6">
+                            <a href="{{ route('vendor.procurements.documents.download', [$procurement, $document]) }}"
+                                class="d-flex align-items-center gap-3 border rounded-3 p-3 text-decoration-none bg-light h-100">
+                                <span class="btn btn-primary btn-icon rounded-circle flex-shrink-0">
+                                    <i class="feather-download"></i>
+                                </span>
+                                <span class="min-w-0">
+                                    <strong class="d-block text-dark">{{ $document->document_name }}</strong>
+                                    <small class="text-muted d-block text-truncate">
+                                        {{ $document->original_name }} · {{ $document->formatted_size }}
+                                    </small>
+                                </span>
+                            </a>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
+
     @if ($existingSubmission)
         <div class="alert alert-info">
             You already submitted this procurement. You can update your application from the submissions list.

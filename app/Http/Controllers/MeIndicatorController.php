@@ -78,6 +78,9 @@ class MeIndicatorController extends Controller
             ->where('definitions', '<>', '')
             ->whereNotNull('unit_id')
             ->whereNotNull('baseline_value')
+            ->whereNotNull('annual_target')
+            ->whereNotNull('life_of_programme_target')
+            ->whereIn('aggregation_method', array_keys(Indicator::AGGREGATION_METHODS))
             ->whereNotNull('frequency_of_reporting_id')
             ->whereNotNull('project_component_id')
             ->whereIn('results_level', ['pdo', 'intermediate_results'])
@@ -257,6 +260,7 @@ class MeIndicatorController extends Controller
             ?: $editingPrimarySourceValue;
         $editingTargetValue = $editingIndicator?->setupTarget?->target_value
             ?? $editingIndicator?->targets->sortByDesc('period_start')->first()?->target_value;
+        $aggregationMethods = Indicator::AGGREGATION_METHODS;
         $disaggregationDimensions = IndicatorDisaggregation::SUGGESTED_DIMENSIONS;
 
         return view('me.indicators.index', compact(
@@ -270,6 +274,7 @@ class MeIndicatorController extends Controller
             'editingPrimarySourceValue',
             'editingDataCollectionMethod',
             'editingTargetValue',
+            'aggregationMethods',
             'users',
             'units',
             'frequencies',
@@ -308,6 +313,7 @@ class MeIndicatorController extends Controller
             ));
 
             $this->syncSetupTarget($indicator, $validated['target_value']);
+            $this->syncAnnualTarget($indicator, $validated['annual_target']);
             $this->syncSurveyLinkForIndicator($indicator);
         });
 
@@ -338,6 +344,7 @@ class MeIndicatorController extends Controller
             ));
 
             $this->syncSetupTarget($lockedIndicator, $validated['target_value']);
+            $this->syncAnnualTarget($lockedIndicator, $validated['annual_target']);
             $this->syncSurveyLinkForIndicator($lockedIndicator);
         });
 
@@ -581,7 +588,12 @@ class MeIndicatorController extends Controller
             'definition' => 'required|string|max:10000',
             'unit_id' => 'required|exists:me_indicator_units,id',
             'baseline_value' => 'required|numeric',
+            'annual_target' => 'required|numeric',
             'target_value' => 'required|numeric',
+            'aggregation_method' => [
+                'required',
+                Rule::in(array_keys(Indicator::AGGREGATION_METHODS)),
+            ],
             'frequency_of_reporting_id' => 'required|exists:me_reporting_frequencies,id',
             'data_collection_method' => 'required|string|max:2000',
             'means_of_verification_id' => 'required|uuid|exists:me_knowledge_evidence_items,id',
@@ -961,6 +973,9 @@ class MeIndicatorController extends Controller
             'name' => trim((string) $validated['name']),
             'results_level' => $validated['results_level'],
             'baseline_value' => $validated['baseline_value'],
+            'annual_target' => $validated['annual_target'],
+            'life_of_programme_target' => $validated['target_value'],
+            'aggregation_method' => $validated['aggregation_method'],
             'responsible_user_id' => $validated['responsible_user_id'],
             'responsible_party' => $this->packResponsibleParty([$validated['responsible_user_id']]),
             'frequency_of_reporting_id' => $validated['frequency_of_reporting_id'],
@@ -1005,6 +1020,25 @@ class MeIndicatorController extends Controller
         $target->save();
 
         $indicator->setRelation('setupTarget', $target);
+
+        return $target;
+    }
+
+    protected function syncAnnualTarget(Indicator $indicator, mixed $targetValue): IndicatorTarget
+    {
+        $target = $indicator->annualTarget()->firstOrNew();
+        $target->indicator_id = $indicator->id;
+        $target->target_context = Indicator::ANNUAL_TARGET_CONTEXT;
+        $target->period_type = 'year';
+        $target->period_label = 'Annual target';
+        $target->target_value = $targetValue;
+        $target->unit_id = $indicator->unit_id;
+        $target->notes = 'Approved annual target used for cumulative reporting.';
+        $target->updated_by = auth()->id();
+        $target->created_by ??= auth()->id();
+        $target->save();
+
+        $indicator->setRelation('annualTarget', $target);
 
         return $target;
     }

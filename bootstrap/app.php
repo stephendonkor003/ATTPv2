@@ -31,6 +31,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // Send indicator reminder emails every 4 hours via queued job.
         $schedule->job(new IndicatorReminderJob())->everyFourHours();
 
+        // Generate deduplicated M&E deadline, workflow, corrective-action and
+        // Means of Verification validation reminders each morning.
+        $schedule->command('me:send-reporting-reminders')
+            ->dailyAt('07:00')
+            ->withoutOverlapping();
+
         // Process GRM reminders and escalations based on configured response clocks.
         $schedule->job(new ProcessGrmEscalations())->hourly();
 

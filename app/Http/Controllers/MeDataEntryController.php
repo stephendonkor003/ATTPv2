@@ -12,6 +12,7 @@ use App\Models\MeDataEntryForm;
 use App\Models\MeDataEntryFormField;
 use App\Models\MeDataEntryFormSection;
 use App\Models\MeDataSubmission;
+use App\Models\MePerformanceReport;
 use App\Models\MeReportingPeriod;
 use App\Models\Program;
 use App\Models\Project;
@@ -31,7 +32,7 @@ class MeDataEntryController extends Controller
 {
     use ScopesAssignedPortfolios;
 
-    private const TABS = ['collections', 'forms', 'periods', 'submissions'];
+    private const TABS = ['collections', 'forms', 'periods', 'reports', 'submissions'];
 
     private const DUE_SOON_DAYS = 7;
 
@@ -166,6 +167,7 @@ class MeDataEntryController extends Controller
         $forms = null;
         $periods = null;
         $collections = null;
+        $reports = null;
         $submissions = null;
         $editingForm = null;
         $editingPeriod = null;
@@ -178,11 +180,15 @@ class MeDataEntryController extends Controller
                     'portfolio:id,name',
                     'indicator:id,indicator_code,name,unit_id',
                     'indicator.unit:id,name,symbol',
+                    'projectComponent:id,project_id,name,governance_node_id',
+                    'projectComponent.governanceNode:id,name,code',
                     'responsiblePerson:id,name,email',
                 ])
                 ->withCount([
                     'fields',
+                    'indicators',
                     'collections',
+                    'performanceReports',
                     'collections as submitted_collections_count' => fn ($query) => $query->whereHas('submissions'),
                 ])
                 ->when($search !== '', function ($query) use ($search): void {
@@ -215,6 +221,8 @@ class MeDataEntryController extends Controller
                         'portfolio:id,name',
                         'indicator:id,indicator_code,name,unit_id',
                         'indicator.unit:id,name,symbol',
+                        'projectComponent:id,project_id,name,governance_node_id',
+                        'projectComponent.governanceNode:id,name,code',
                         'responsiblePerson:id,name,email',
                         'sections' => fn ($query) => $query->orderBy('sort_order')->orderBy('created_at'),
                         'sections.fields' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'),
@@ -222,7 +230,8 @@ class MeDataEntryController extends Controller
                         'fields.formSection',
                     ])
                     ->findOrFail((string) $request->query('edit_form'));
-                $editingFormHasSubmissions = $editingForm->collections()->whereHas('submissions')->exists();
+                $editingFormHasSubmissions = $editingForm->collections()->whereHas('submissions')->exists()
+                    || $editingForm->performanceReports()->exists();
             }
         } elseif ($tab === 'periods') {
             $periods = $this->scopedPeriodQuery($request, $portfolioId)
@@ -252,6 +261,43 @@ class MeDataEntryController extends Controller
                     ->with('portfolio:id,name')
                     ->findOrFail((string) $request->query('edit_period'));
             }
+        } elseif ($tab === 'reports') {
+            $reports = $this->scopedPerformanceReportQuery($request, $portfolioId)
+                ->with([
+                    'form:id,code,title',
+                    'portfolio:id,name',
+                    'projectComponent:id,project_id,name',
+                    'responsibleDirectorate:id,name,code',
+                    'thinkTank:id,name,role,country',
+                    'createdBy:id,name',
+                ])
+                ->withCount(['indicatorResults', 'documents'])
+                ->when($search !== '', function ($query) use ($search): void {
+                    $term = '%'.addcslashes($search, '%_\\').'%';
+                    $query->where(function ($searchQuery) use ($term): void {
+                        $searchQuery->whereHas('form', fn ($formQuery) => $formQuery
+                            ->where('title', 'like', $term)
+                            ->orWhere('code', 'like', $term))
+                            ->orWhereHas('projectComponent', fn ($componentQuery) => $componentQuery
+                                ->where('name', 'like', $term)
+                                ->orWhere('project_id', 'like', $term))
+                            ->orWhereHas('responsibleDirectorate', fn ($directorateQuery) => $directorateQuery
+                                ->where('name', 'like', $term));
+                    });
+                })
+                ->when(
+                    in_array($statusFilter, [
+                        MePerformanceReport::STATUS_DRAFT,
+                        MePerformanceReport::STATUS_SUBMITTED,
+                        MePerformanceReport::STATUS_REVIEWED,
+                        MePerformanceReport::STATUS_ARCHIVED,
+                    ], true),
+                    fn ($query) => $query->where('status', $statusFilter)
+                )
+                ->orderByDesc('reporting_year')
+                ->orderByDesc('reporting_quarter')
+                ->paginate(15, ['*'], 'reports_page')
+                ->withQueryString();
         } elseif ($tab === 'submissions') {
             $submissions = $this->scopedSubmissionQuery($request, $portfolioId)
                 ->with([
@@ -339,15 +385,18 @@ class MeDataEntryController extends Controller
 
         $responsibleUsers = collect();
         $indicatorOptions = collect();
+        $projectComponents = collect();
         if ($showFormBuilder) {
             $responsibleUsers = User::query()
                 ->whereNotNull('name')
                 ->where(function ($query): void {
-                    $query->whereNull('user_type')->orWhere('user_type', '!=', 'funding_partner');
+                    $query->whereNull('user_type')
+                        ->orWhereNotIn('user_type', ['funding_partner', 'vendor', 'think_tank']);
                 })
                 ->orderBy('name')
                 ->get(['id', 'name', 'email']);
             $indicatorOptions = $this->indicatorOptionsForPortfolios($portfolios);
+            $projectComponents = $this->componentOptionsForPortfolios($portfolios);
         }
 
         $publishedForms = collect();
@@ -394,6 +443,7 @@ class MeDataEntryController extends Controller
             'forms',
             'periods',
             'collections',
+            'reports',
             'submissions',
             'editingForm',
             'editingPeriod',
@@ -404,6 +454,7 @@ class MeDataEntryController extends Controller
             'showCollectionForm',
             'responsibleUsers',
             'indicatorOptions',
+            'projectComponents',
             'publishedForms',
             'activePeriods',
             'availableThinkTanks'
@@ -417,6 +468,7 @@ class MeDataEntryController extends Controller
         DB::transaction(function () use ($validated, $sections, $fields, $request): void {
             $form = MeDataEntryForm::query()->create([
                 'portfolio_id' => $validated['portfolio_id'],
+                'project_component_id' => $validated['project_component_id'],
                 'indicator_id' => $validated['indicator_id'],
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
@@ -429,6 +481,7 @@ class MeDataEntryController extends Controller
             ]);
 
             $this->syncFormStructure($form, $sections, $fields);
+            $this->syncFormIndicators($form, (string) $validated['indicator_id'], $fields);
         });
 
         return $this->redirectToTab('forms', 'Collection form created as a draft.');
@@ -448,28 +501,32 @@ class MeDataEntryController extends Controller
 
         $structureChanged = $this->formStructureFingerprint(
             (string) $form->portfolio_id,
+            $form->project_component_id ? (string) $form->project_component_id : null,
             $form->indicator_id ? (string) $form->indicator_id : null,
             (string) $form->code,
             $this->existingSectionStructure($form),
             $this->existingFieldStructure($form)
         ) !== $this->formStructureFingerprint(
             (string) $validated['portfolio_id'],
+            (string) $validated['project_component_id'],
             (string) $validated['indicator_id'],
             (string) $form->code,
             $sections,
             $fields
         );
-        $hasSubmissions = $form->collections()->whereHas('submissions')->exists();
+        $hasSubmissions = $form->collections()->whereHas('submissions')->exists()
+            || $form->performanceReports()->exists();
 
         if ($form->status === MeDataEntryForm::STATUS_PUBLISHED && $hasSubmissions && $structureChanged) {
             throw ValidationException::withMessages([
-                'fields' => 'This published form already has submissions. Its indicator, portfolio, sections, and question structure are locked; you may still update the title, description, instructions, or responsible person.',
+                'fields' => 'This published form already has submissions or performance reports. Its portfolio, project component, indicator links, sections, and question structure are locked; you may still update the title, description, instructions, or responsible person.',
             ]);
         }
 
         DB::transaction(function () use ($validated, $sections, $fields, $form, $request, $structureChanged): void {
             $form->update([
                 'portfolio_id' => $validated['portfolio_id'],
+                'project_component_id' => $validated['project_component_id'],
                 'indicator_id' => $validated['indicator_id'],
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
@@ -481,6 +538,7 @@ class MeDataEntryController extends Controller
 
             if ($structureChanged) {
                 $this->syncFormStructure($form, $sections, $fields);
+                $this->syncFormIndicators($form, (string) $validated['indicator_id'], $fields);
             }
         });
 
@@ -499,7 +557,20 @@ class MeDataEntryController extends Controller
         if (! $form->indicator_id) {
             throw ValidationException::withMessages(['indicator_id' => 'Link this template to a performance indicator before publishing it.']);
         }
-        $this->validateTemplateIndicator((string) $form->portfolio_id, (string) $form->indicator_id);
+        if (! $form->project_component_id) {
+            throw ValidationException::withMessages([
+                'project_component_id' => 'Link this template to a project component before publishing it.',
+            ]);
+        }
+        $this->validateProjectComponent(
+            (string) $form->portfolio_id,
+            (string) $form->project_component_id
+        );
+        $this->validateTemplateIndicator(
+            (string) $form->portfolio_id,
+            (string) $form->project_component_id,
+            (string) $form->indicator_id
+        );
         if ($form->sections()->whereDoesntHave('fields')->exists() || $form->fields()->whereNull('section_id')->exists()) {
             throw ValidationException::withMessages(['fields' => 'Every section must contain at least one question before this form can be published.']);
         }
@@ -703,6 +774,16 @@ class MeDataEntryController extends Controller
             ));
     }
 
+    private function scopedPerformanceReportQuery(Request $request, ?string $portfolioId = null)
+    {
+        $query = MePerformanceReport::query();
+        if ($this->userHasAssignedPortfolioScope($request->user())) {
+            $this->applyAssignedPortfolioScopeToPortfolioOwnedRecords($query, $request->user());
+        }
+
+        return $query->when($portfolioId, fn ($reportQuery) => $reportQuery->where('portfolio_id', $portfolioId));
+    }
+
     private function applySubmissionRegisterSearch($query, string $search): void
     {
         $term = '%'.Str::lower(addcslashes(trim($search), '%_\\')).'%';
@@ -794,11 +875,19 @@ class MeDataEntryController extends Controller
     private function validatedFormPayload(Request $request, ?MeDataEntryForm $form = null): array
     {
         $this->prepareLegacySectionPayload($request, $form);
+        if (! $request->filled('project_component_id') && $request->filled('indicator_id')) {
+            $request->merge([
+                'project_component_id' => Indicator::query()
+                    ->whereKey((string) $request->input('indicator_id'))
+                    ->value('project_component_id'),
+            ]);
+        }
         $fieldTable = (new MeDataEntryFormField)->getTable();
         $sectionTable = (new MeDataEntryFormSection)->getTable();
 
         $validated = $request->validate([
             'portfolio_id' => ['required', 'uuid', Rule::exists((new Sector)->getTable(), 'id')],
+            'project_component_id' => ['required', 'uuid', Rule::exists((new Project)->getTable(), 'id')],
             'indicator_id' => ['required', 'uuid', Rule::exists((new Indicator)->getTable(), 'id')],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
@@ -836,13 +925,22 @@ class MeDataEntryController extends Controller
         ]);
 
         $this->assertPortfolioInScope($request, (string) $validated['portfolio_id']);
+        $this->validateProjectComponent(
+            (string) $validated['portfolio_id'],
+            (string) $validated['project_component_id']
+        );
         $this->validateTemplateIndicator(
             (string) $validated['portfolio_id'],
+            (string) $validated['project_component_id'],
             (string) $validated['indicator_id']
         );
         $sections = $this->normalizeFormSections($validated['sections'], $form);
         $fields = $this->normalizeFormFields($validated['fields'], $sections, $form);
-        $this->validateFieldMappings((string) $validated['portfolio_id'], $fields);
+        $this->validateFieldMappings(
+            (string) $validated['portfolio_id'],
+            (string) $validated['project_component_id'],
+            $fields
+        );
 
         return [$validated, $sections, $fields];
     }
@@ -1230,13 +1328,14 @@ class MeDataEntryController extends Controller
             ->all();
     }
 
-    private function validateFieldMappings(string $portfolioId, array $fields): void
+    private function validateFieldMappings(string $portfolioId, string $componentId, array $fields): void
     {
         $errors = [];
         $mappedIds = collect($fields)->pluck('indicator_id')->filter()->values();
         $allowedIds = $mappedIds->isEmpty()
             ? collect()
             : $this->indicatorsForPortfolioQuery($portfolioId)
+                ->where('project_component_id', $componentId)
                 ->whereIn('id', $mappedIds->all())
                 ->pluck('id')
                 ->map(fn ($id): string => (string) $id);
@@ -1251,7 +1350,7 @@ class MeDataEntryController extends Controller
             if (! in_array($field['field_type'], self::MAPPABLE_FIELD_TYPES, true)) {
                 $errors["fields.$index.indicator_id"] = 'Only integer, number, percentage and currency fields can map to a performance indicator.';
             } elseif (! $allowedIds->contains((string) $indicatorId)) {
-                $errors["fields.$index.indicator_id"] = 'The selected indicator does not belong to this portfolio.';
+                $errors["fields.$index.indicator_id"] = 'The selected indicator does not belong to this project component.';
             } elseif (isset($seenIndicators[(string) $indicatorId])) {
                 $errors["fields.$index.indicator_id"] = 'Each indicator may be mapped only once in a collection form.';
             }
@@ -1263,11 +1362,30 @@ class MeDataEntryController extends Controller
         }
     }
 
-    private function validateTemplateIndicator(string $portfolioId, string $indicatorId): void
+    private function validateProjectComponent(string $portfolioId, string $componentId): void
     {
-        if (! $this->indicatorsForPortfolioQuery($portfolioId)->whereKey($indicatorId)->exists()) {
+        if (! Project::query()
+            ->whereKey($componentId)
+            ->whereHas('program', fn ($query) => $query->where('sector_id', $portfolioId))
+            ->exists()) {
             throw ValidationException::withMessages([
-                'indicator_id' => 'The selected indicator does not belong to the selected portfolio.',
+                'project_component_id' => 'The selected project component does not belong to the selected portfolio.',
+            ]);
+        }
+    }
+
+    private function validateTemplateIndicator(
+        string $portfolioId,
+        string $componentId,
+        string $indicatorId
+    ): void
+    {
+        if (! $this->indicatorsForPortfolioQuery($portfolioId)
+            ->where('project_component_id', $componentId)
+            ->whereKey($indicatorId)
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'indicator_id' => 'The selected indicator does not belong to the selected project component.',
             ]);
         }
     }
@@ -1332,6 +1450,23 @@ class MeDataEntryController extends Controller
         $form->fields()
             ->when($retainedIds !== [], fn ($query) => $query->whereNotIn('id', $retainedIds))
             ->delete();
+    }
+
+    private function syncFormIndicators(MeDataEntryForm $form, string $primaryIndicatorId, array $fields): void
+    {
+        $indicatorIds = collect([$primaryIndicatorId])
+            ->merge(collect($fields)->pluck('indicator_id')->filter())
+            ->map(fn ($id): string => (string) $id)
+            ->unique()
+            ->values();
+        $form->indicators()->detach();
+        $indicatorIds->each(function (string $indicatorId, int $index) use ($form, $primaryIndicatorId): void {
+            $form->indicators()->attach($indicatorId, [
+                'id' => (string) Str::uuid(),
+                'is_primary' => $indicatorId === $primaryIndicatorId,
+                'sort_order' => ($index + 1) * 10,
+            ]);
+        });
     }
 
     private function existingSectionStructure(MeDataEntryForm $form): array
@@ -1399,6 +1534,7 @@ class MeDataEntryController extends Controller
 
     private function formStructureFingerprint(
         string $portfolioId,
+        ?string $componentId,
         ?string $indicatorId,
         string $code,
         array $sections,
@@ -1417,6 +1553,7 @@ class MeDataEntryController extends Controller
 
         return hash('sha256', json_encode([
             'portfolio_id' => $portfolioId,
+            'project_component_id' => $componentId,
             'indicator_id' => $indicatorId,
             'code' => $code,
             'sections' => $normalizedSections,
@@ -1567,15 +1704,39 @@ class MeDataEntryController extends Controller
                 ->with('unit:id,name,symbol')
                 ->orderBy('indicator_code')
                 ->orderBy('name')
-                ->get(['id', 'indicator_code', 'name', 'unit_id'])
+                ->get(['id', 'indicator_code', 'name', 'unit_id', 'project_component_id'])
                 ->map(fn (Indicator $indicator): array => [
                     'id' => (string) $indicator->id,
                     'portfolio_id' => (string) $portfolio->id,
+                    'project_component_id' => (string) $indicator->project_component_id,
                     'portfolio_name' => (string) $portfolio->name,
                     'label' => trim(($indicator->indicator_code ? $indicator->indicator_code.' - ' : '').$indicator->name),
                     'unit' => $indicator->unit?->symbol ?: $indicator->unit?->name,
                 ]);
         })->values();
+    }
+
+    private function componentOptionsForPortfolios(Collection $portfolios): Collection
+    {
+        $portfolioIds = $portfolios->pluck('id')->map(fn ($id): string => (string) $id);
+
+        return Project::query()
+            ->with([
+                'program:id,sector_id',
+                'governanceNode:id,name,code,level_id',
+                'governanceNode.level:id,key,name',
+            ])
+            ->whereHas('program', fn ($query) => $query->whereIn('sector_id', $portfolioIds->all()))
+            ->orderBy('name')
+            ->get(['id', 'project_id', 'program_id', 'governance_node_id', 'name'])
+            ->map(fn (Project $component): array => [
+                'id' => (string) $component->id,
+                'portfolio_id' => (string) $component->program?->sector_id,
+                'label' => trim(($component->project_id ? $component->project_id.' - ' : '').$component->name),
+                'directorate' => $component->governanceNode?->name ?: 'Responsible Directorate not assigned',
+                'directorate_level' => $component->governanceNode?->level?->name,
+            ])
+            ->values();
     }
 
     private function indicatorsForPortfolioQuery(string $portfolioId)

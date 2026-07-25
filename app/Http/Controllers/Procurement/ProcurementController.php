@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
 use App\Models\Procurement;
+use App\Models\ProcurementDocument;
 use App\Models\ProcurementPlan;
 use App\Models\Resource;
 use App\Models\DynamicForm;
@@ -11,7 +12,10 @@ use App\Models\User;
 use App\Mail\VendorProcurementInvitation;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 
 class ProcurementController extends Controller
@@ -67,7 +71,7 @@ class ProcurementController extends Controller
      */
   public function store(Request $request)
 {
-    $data = $request->validate([
+        $data = $request->validate([
         'resource_id'       => 'required|exists:myb_resources,id',
         'title'             => 'required|string|max:255',
         'description'       => 'required|string',
@@ -85,6 +89,19 @@ class ProcurementController extends Controller
             Rule::unique('procurements', 'reference_no'),
         ],
         'estimated_budget'  => 'nullable|numeric',
+        'documents' => 'nullable|array|max:20',
+        'documents.*.name' => 'required_with:documents.*.file|nullable|string|max:255',
+        'documents.*.file' => [
+            'required_with:documents.*.name',
+            'file',
+            'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip',
+            'max:20480',
+        ],
+    ], [
+        'documents.*.name.required_with' => 'Enter a document name for every uploaded file.',
+        'documents.*.file.required_with' => 'Choose a file for every procurement document name.',
+        'documents.*.file.mimes' => 'Procurement documents must be PDF, Office, CSV, text, image, or ZIP files.',
+        'documents.*.file.max' => 'Each procurement document must not exceed 20 MB.',
     ]);
 
     $startDate = \Carbon\Carbon::parse($data['application_start_date']);
@@ -117,7 +134,52 @@ class ProcurementController extends Controller
         $data['vendor_categories'] = null;
     }
 
-    Procurement::create($data);
+    $documentRows = $data['documents'] ?? [];
+    unset($data['documents']);
+
+    $storedPaths = [];
+
+    try {
+        DB::transaction(function () use ($data, $documentRows, &$storedPaths) {
+            $procurement = Procurement::create($data);
+
+            foreach ($documentRows as $documentRow) {
+                $file = $documentRow['file'] ?? null;
+                if (! $file) {
+                    continue;
+                }
+
+                $path = $file->store("procurements/{$procurement->id}/documents", 'local');
+                if (! $path) {
+                    throw new \RuntimeException('A procurement document could not be stored.');
+                }
+
+                $storedPaths[] = $path;
+
+                $procurement->documents()->create([
+                    'document_name' => trim((string) $documentRow['name']),
+                    'original_name' => basename((string) $file->getClientOriginalName()),
+                    'file_path' => $path,
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => (int) $file->getSize(),
+                    'uploaded_by' => auth()->id(),
+                ]);
+            }
+        });
+    } catch (\Throwable $e) {
+        foreach ($storedPaths as $storedPath) {
+            Storage::disk('local')->delete($storedPath);
+        }
+
+        Log::error('Procurement creation failed.', [
+            'user_id' => auth()->id(),
+            'exception' => $e,
+        ]);
+
+        return back()
+            ->withInput()
+            ->with('error', 'The procurement could not be created. No files were retained; please try again.');
+    }
 
     return redirect()
         ->route('procurements.index')
@@ -133,6 +195,7 @@ class ProcurementController extends Controller
         $this->assertProcurementInScope($procurement);
         $procurement->load([
             'resource',
+            'documents.uploader',
             'forms.resource',
             'forms.creator',
         ]);
@@ -152,6 +215,13 @@ class ProcurementController extends Controller
             ->pluck('name');
 
         return view('procurement.show', compact('procurement', 'availableForms', 'vendorCategories'));
+    }
+
+    public function downloadDocument(Procurement $procurement, ProcurementDocument $document)
+    {
+        $this->assertProcurementInScope($procurement);
+
+        return $this->documentDownloadResponse($procurement, $document);
     }
 
     /**
@@ -218,5 +288,27 @@ class ProcurementController extends Controller
         }
 
         return back()->with('success', "Notification sent to {$vendors->count()} vendors.");
+    }
+
+    private function documentDownloadResponse(Procurement $procurement, ProcurementDocument $document)
+    {
+        abort_unless((string) $document->procurement_id === (string) $procurement->id, 404);
+
+        $path = (string) $document->file_path;
+        $expectedPrefix = "procurements/{$procurement->id}/documents/";
+        abort_unless($path !== '' && str_starts_with($path, $expectedPrefix), 404);
+
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists($path), 404, 'Procurement document file not found.');
+
+        return $disk->download(
+            $path,
+            basename($document->original_name ?: $path),
+            [
+                'Content-Type' => $document->mime_type ?: 'application/octet-stream',
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, no-store, max-age=0',
+            ]
+        );
     }
 }

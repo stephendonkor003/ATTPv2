@@ -33,11 +33,15 @@
             default => 'All sectors, programs, and projects',
         };
         $budgetEnvelope = (float) ($summary['budget_envelope'] ?? $totals['allocation'] ?? 0);
+        $scheduledAllocation = (float) ($summary['scheduled_allocation'] ?? collect($rows)->sum('allocation'));
+        $unallocatedEnvelope = (float) ($summary['unallocated_envelope'] ?? ($budgetEnvelope - $scheduledAllocation));
         $kpiCards = [
             [
                 'label' => 'Budget Envelope',
                 'value' => $compactMoney($budgetEnvelope),
-                'meta' => $money($budgetEnvelope),
+                'meta' => abs($unallocatedEnvelope) > 0.01
+                    ? $money($scheduledAllocation) . ' scheduled'
+                    : $money($budgetEnvelope),
                 'icon' => 'feather-target',
                 'tone' => 'teal',
             ],
@@ -133,6 +137,222 @@
         .execution-pdf-btn:focus {
             color: #fff;
             background: #0b1721;
+        }
+
+        .execution-pdf-btn.is-loading {
+            cursor: wait;
+            opacity: .82;
+            pointer-events: none;
+        }
+
+        .execution-download-modal[hidden] {
+            display: none !important;
+        }
+
+        .execution-download-modal {
+            align-items: center;
+            display: flex;
+            inset: 0;
+            justify-content: center;
+            padding: 1rem;
+            position: fixed;
+            z-index: 1095;
+        }
+
+        .execution-download-backdrop {
+            backdrop-filter: blur(5px);
+            background: rgba(8, 20, 31, .72);
+            inset: 0;
+            position: absolute;
+        }
+
+        .execution-download-dialog {
+            background: #fff;
+            border: 1px solid rgba(217, 226, 234, .9);
+            border-radius: 16px;
+            box-shadow: 0 28px 80px rgba(5, 16, 25, .32);
+            max-width: 510px;
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+        }
+
+        .execution-download-accent {
+            background: linear-gradient(90deg, var(--teal), var(--gold), var(--coral));
+            height: 5px;
+        }
+
+        .execution-download-content {
+            padding: 1.5rem;
+        }
+
+        .execution-download-heading {
+            align-items: center;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .execution-download-spinner {
+            align-items: center;
+            background: #e7f6f3;
+            border-radius: 14px;
+            display: inline-flex;
+            flex: 0 0 auto;
+            height: 54px;
+            justify-content: center;
+            position: relative;
+            width: 54px;
+        }
+
+        .execution-download-spinner::before {
+            animation: executionPdfSpin .9s linear infinite;
+            border: 4px solid rgba(15, 118, 110, .2);
+            border-radius: 50%;
+            border-top-color: var(--teal);
+            content: "";
+            height: 30px;
+            width: 30px;
+        }
+
+        .execution-download-modal.is-ready .execution-download-spinner::before {
+            animation: none;
+            border: 0;
+            content: "✓";
+            color: var(--green);
+            font-size: 1.75rem;
+            font-weight: 900;
+            height: auto;
+            width: auto;
+        }
+
+        .execution-download-modal.is-error .execution-download-spinner {
+            background: #fee2e2;
+        }
+
+        .execution-download-modal.is-error .execution-download-spinner::before {
+            animation: none;
+            border: 0;
+            color: #b91c1c;
+            content: "!";
+            font-size: 1.75rem;
+            font-weight: 900;
+            height: auto;
+            width: auto;
+        }
+
+        .execution-download-title {
+            color: var(--ink);
+            font-size: 1.12rem;
+            font-weight: 900;
+            margin: 0;
+        }
+
+        .execution-download-subtitle {
+            color: var(--muted);
+            font-size: .88rem;
+            margin: .25rem 0 0;
+        }
+
+        .execution-download-status {
+            align-items: flex-start;
+            background: #f6f9fb;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            display: flex;
+            gap: .7rem;
+            margin-top: 1.2rem;
+            min-height: 66px;
+            padding: .85rem;
+        }
+
+        .execution-download-pulse {
+            animation: executionPdfPulse 1.25s ease-in-out infinite;
+            background: var(--teal);
+            border-radius: 50%;
+            flex: 0 0 auto;
+            height: 9px;
+            margin-top: .3rem;
+            width: 9px;
+        }
+
+        .execution-download-status strong {
+            color: var(--ink);
+            display: block;
+            font-size: .84rem;
+        }
+
+        .execution-download-status span {
+            color: var(--muted);
+            display: block;
+            font-size: .82rem;
+            margin-top: .12rem;
+        }
+
+        .execution-download-progress {
+            background: #e5edf2;
+            border-radius: 999px;
+            height: 8px;
+            margin-top: 1rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .execution-download-progress span {
+            animation: executionPdfProgress 1.65s ease-in-out infinite;
+            background: linear-gradient(90deg, var(--teal), var(--blue), var(--teal));
+            border-radius: inherit;
+            height: 100%;
+            left: -45%;
+            position: absolute;
+            width: 45%;
+        }
+
+        .execution-download-modal.is-ready .execution-download-progress span {
+            animation: none;
+            background: var(--green);
+            left: 0;
+            width: 100%;
+        }
+
+        .execution-download-meta {
+            color: var(--muted);
+            display: flex;
+            font-size: .78rem;
+            justify-content: space-between;
+            margin-top: .55rem;
+        }
+
+        .execution-download-actions {
+            display: none;
+            gap: .65rem;
+            justify-content: flex-end;
+            margin-top: 1rem;
+        }
+
+        .execution-download-modal.is-error .execution-download-actions {
+            display: flex;
+        }
+
+        @keyframes executionPdfSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes executionPdfPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(15, 118, 110, .3); opacity: .65; }
+            50% { box-shadow: 0 0 0 7px rgba(15, 118, 110, 0); opacity: 1; }
+        }
+
+        @keyframes executionPdfProgress {
+            0% { left: -45%; }
+            100% { left: 105%; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .execution-download-spinner::before,
+            .execution-download-pulse,
+            .execution-download-progress span {
+                animation-duration: 2.8s;
+            }
         }
 
         .execution-filter-panel,
@@ -422,7 +642,14 @@
                 <h4 class="execution-title">Execution Dashboard</h4>
                 <div class="execution-scope">{{ $scopeLabel }}</div>
             </div>
-            <a href="{{ route('finance.execution.dashboard.export.pdf', request()->query()) }}" class="btn execution-pdf-btn">
+            <a
+                href="{{ route('finance.execution.dashboard.export.pdf', request()->query()) }}"
+                class="btn execution-pdf-btn"
+                id="executionPdfDownload"
+                data-download-url="{{ route('finance.execution.dashboard.export.pdf', request()->query()) }}"
+                data-status-url="{{ route('finance.execution.dashboard.export.status') }}"
+                data-snapshot-hash="{{ $executionChartData['snapshot_hash'] ?? '' }}"
+            >
                 <i class="feather-download me-1"></i> Download PDF
             </a>
         </div>
@@ -473,6 +700,10 @@
                 <div class="execution-hero-figure">{{ $compactMoney($budgetEnvelope) }}</div>
                 <p class="execution-hero-sub">
                     {{ $money($budgetEnvelope) }} approved for the selected execution scope.
+                    @if (abs($unallocatedEnvelope) > 0.01)
+                        {{ $money(abs($unallocatedEnvelope)) }}
+                        {{ $unallocatedEnvelope > 0 ? 'remains undistributed across component years.' : 'is allocated above the approved envelope.' }}
+                    @endif
                 </p>
             </div>
             <div class="execution-hero-metrics">
@@ -710,6 +941,15 @@
                     </tfoot>
                 </table>
             </div>
+            @if (abs($unallocatedEnvelope) > 0.01)
+                <div class="alert alert-info border-0 mt-3 mb-0">
+                    <strong>Envelope reconciliation:</strong>
+                    the approved envelope is {{ $money($budgetEnvelope) }}, while
+                    {{ $money($scheduledAllocation) }} is currently distributed across component years.
+                    The {{ $money(abs($unallocatedEnvelope)) }} difference is included in the dashboard total
+                    and shown separately in the component breakdown.
+                </div>
+            @endif
         </section>
 
         <section class="execution-insight-panel">
@@ -730,10 +970,311 @@
         </section>
     </div>
 
+    <div
+        class="execution-download-modal"
+        id="executionPdfModal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="executionPdfModalTitle"
+        aria-describedby="executionPdfStatusText"
+        aria-hidden="true"
+        hidden
+    >
+        <div class="execution-download-backdrop"></div>
+        <div class="execution-download-dialog">
+            <div class="execution-download-accent"></div>
+            <div class="execution-download-content">
+                <div class="execution-download-heading">
+                    <div class="execution-download-spinner" aria-hidden="true"></div>
+                    <div>
+                        <h5 class="execution-download-title" id="executionPdfModalTitle">Preparing complete dashboard PDF</h5>
+                        <p class="execution-download-subtitle">
+                            Please keep this window open while the report is assembled.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="execution-download-status" aria-live="polite" aria-atomic="true">
+                    <span class="execution-download-pulse" aria-hidden="true"></span>
+                    <div>
+                        <strong id="executionPdfStatusLabel">Reading dashboard</strong>
+                        <span id="executionPdfStatusText">Reading the selected filters and financial scope…</span>
+                    </div>
+                </div>
+
+                <div
+                    class="execution-download-progress"
+                    id="executionPdfProgress"
+                    role="progressbar"
+                    aria-label="Generating execution dashboard PDF"
+                    aria-valuetext="Generating report"
+                >
+                    <span></span>
+                </div>
+
+                <div class="execution-download-meta">
+                    <span>Full dashboard · all graphs · all tables</span>
+                    <span><strong id="executionPdfElapsed">0</strong>s elapsed</span>
+                </div>
+
+                <div class="execution-download-actions">
+                    <button type="button" class="btn btn-light" id="executionPdfClose">Close</button>
+                    <button type="button" class="btn btn-dark" id="executionPdfRetry">
+                        <i class="feather-refresh-cw me-1"></i> Try again
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <iframe
+        id="executionPdfDownloadFrame"
+        name="executionPdfDownloadFrame"
+        title="Execution Dashboard PDF download"
+        hidden
+    ></iframe>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const pdfButton = document.getElementById('executionPdfDownload');
+            const pdfModal = document.getElementById('executionPdfModal');
+            const pdfModalTitle = document.getElementById('executionPdfModalTitle');
+            const pdfStatusLabel = document.getElementById('executionPdfStatusLabel');
+            const pdfStatusText = document.getElementById('executionPdfStatusText');
+            const pdfElapsed = document.getElementById('executionPdfElapsed');
+            const pdfRetry = document.getElementById('executionPdfRetry');
+            const pdfClose = document.getElementById('executionPdfClose');
+            const pdfProgress = document.getElementById('executionPdfProgress');
+            const pdfDownloadFrame = document.getElementById('executionPdfDownloadFrame');
+            const pdfButtonDefaultHtml = pdfButton ? pdfButton.innerHTML : '';
+            const pdfReadingSteps = [
+                ['Reading selected filters', 'Reading the selected sector, programme, project, and execution years…'],
+                ['Reading budget cards', 'Reading the budget envelope, commitments, disbursements, and remaining balance…'],
+                ['Reading dashboard graphs', 'Reading all eight graph datasets and cumulative financial movements…'],
+                ['Drawing report graphs', 'Drawing print-ready trend, mix, rate, variance, radar, and exposure graphs…'],
+                ['Reading breakdown tables', 'Reading every component and year-by-year execution record…'],
+                ['Reading execution insights', 'Reading risk signals, performance findings, and reconciliation notes…'],
+                ['Finishing the document', 'Applying the report header, page layout, footer, and page numbers…'],
+            ];
+            let pdfIsDownloading = false;
+            let pdfStepTimer = null;
+            let pdfElapsedTimer = null;
+            let pdfStatusTimer = null;
+            let pdfDeadlineTimer = null;
+            let pdfStartedAt = 0;
+            let pdfStatusFailures = 0;
+
+            const stopPdfTimers = () => {
+                window.clearInterval(pdfStepTimer);
+                window.clearInterval(pdfElapsedTimer);
+                window.clearTimeout(pdfStatusTimer);
+                window.clearTimeout(pdfDeadlineTimer);
+                pdfStepTimer = null;
+                pdfElapsedTimer = null;
+                pdfStatusTimer = null;
+                pdfDeadlineTimer = null;
+            };
+
+            const setPdfButtonLoading = loading => {
+                if (!pdfButton) {
+                    return;
+                }
+
+                pdfButton.classList.toggle('is-loading', loading);
+                pdfButton.setAttribute('aria-disabled', loading ? 'true' : 'false');
+                pdfButton.innerHTML = loading
+                    ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Preparing PDF…'
+                    : pdfButtonDefaultHtml;
+            };
+
+            const showPdfModal = () => {
+                if (!pdfModal) {
+                    return;
+                }
+
+                pdfModal.hidden = false;
+                pdfModal.setAttribute('aria-hidden', 'false');
+                pdfModal.classList.remove('is-error', 'is-ready');
+                document.body.style.overflow = 'hidden';
+                pdfModalTitle.textContent = 'Preparing complete dashboard PDF';
+                pdfStatusLabel.textContent = pdfReadingSteps[0][0];
+                pdfStatusText.textContent = pdfReadingSteps[0][1];
+                pdfProgress.setAttribute('aria-valuetext', 'Generating report');
+                pdfElapsed.textContent = '0';
+
+                let stepIndex = 0;
+                pdfStartedAt = Date.now();
+                stopPdfTimers();
+                pdfStepTimer = window.setInterval(() => {
+                    stepIndex = (stepIndex + 1) % pdfReadingSteps.length;
+                    pdfStatusLabel.textContent = pdfReadingSteps[stepIndex][0];
+                    pdfStatusText.textContent = pdfReadingSteps[stepIndex][1];
+                }, 2300);
+                pdfElapsedTimer = window.setInterval(() => {
+                    pdfElapsed.textContent = String(Math.floor((Date.now() - pdfStartedAt) / 1000));
+                }, 1000);
+            };
+
+            const hidePdfModal = () => {
+                if (!pdfModal) {
+                    return;
+                }
+
+                stopPdfTimers();
+                pdfModal.hidden = true;
+                pdfModal.setAttribute('aria-hidden', 'true');
+                pdfModal.classList.remove('is-error', 'is-ready');
+                document.body.style.overflow = '';
+            };
+
+            const createDownloadToken = () => {
+                if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                    return window.crypto.randomUUID().replace(/-/g, '');
+                }
+
+                if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+                    const bytes = new Uint8Array(24);
+                    window.crypto.getRandomValues(bytes);
+                    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+                }
+
+                return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+            };
+
+            const showPdfError = error => {
+                stopPdfTimers();
+                pdfIsDownloading = false;
+                setPdfButtonLoading(false);
+                pdfModal.classList.add('is-error');
+                pdfModalTitle.textContent = 'The PDF could not be downloaded';
+                pdfStatusLabel.textContent = 'Report generation needs attention';
+                pdfStatusText.textContent = typeof error === 'string'
+                    ? error
+                    : (error instanceof Error
+                        ? error.message
+                        : 'The report could not be generated. Please try again.');
+                pdfProgress.setAttribute('aria-valuetext', 'Download failed');
+            };
+
+            const completePdfDownload = status => {
+                stopPdfTimers();
+                pdfModal.classList.add('is-ready');
+                pdfModalTitle.textContent = 'Report ready';
+                pdfStatusLabel.textContent = 'Download handed off successfully';
+                pdfStatusText.textContent = status?.message
+                    || 'The complete Execution Dashboard PDF has been sent to your browser or download manager.';
+                pdfProgress.setAttribute('aria-valuetext', 'Download started');
+
+                window.setTimeout(() => {
+                    pdfIsDownloading = false;
+                    setPdfButtonLoading(false);
+                    hidePdfModal();
+                }, 1400);
+            };
+
+            const pollPdfStatus = async (statusUrl, downloadToken) => {
+                if (!pdfIsDownloading) {
+                    return;
+                }
+
+                try {
+                    const url = new URL(statusUrl, window.location.href);
+                    url.searchParams.set('download_token', downloadToken);
+                    url.searchParams.set('_', String(Date.now()));
+                    const response = await fetch(url.toString(), {
+                        credentials: 'same-origin',
+                        headers: {
+                            Accept: 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        cache: 'no-store',
+                    });
+
+                    if (response.status === 401 || response.status === 403) {
+                        showPdfError('Your session or report permission has expired. Refresh the page, sign in, and try again.');
+                        return;
+                    }
+                    if (!response.ok) {
+                        throw new Error(`Status service returned HTTP ${response.status}.`);
+                    }
+
+                    const status = await response.json();
+                    pdfStatusFailures = 0;
+                    if (status.status === 'ready') {
+                        completePdfDownload(status);
+                        return;
+                    }
+                    if (status.status === 'failed') {
+                        showPdfError(status.message || 'The server could not generate the PDF. Please try again.');
+                        return;
+                    }
+                } catch (error) {
+                    pdfStatusFailures += 1;
+                    if (pdfStatusFailures >= 4) {
+                        pdfStatusLabel.textContent = 'Reconnecting to report status';
+                        pdfStatusText.textContent = 'The download request is still active. Reconnecting without cancelling it…';
+                    }
+                }
+
+                pdfStatusTimer = window.setTimeout(
+                    () => pollPdfStatus(statusUrl, downloadToken),
+                    pdfStatusFailures >= 4 ? 1800 : 700
+                );
+            };
+
+            const startPdfDownload = () => {
+                if (!pdfButton || !pdfModal || !pdfDownloadFrame || pdfIsDownloading) {
+                    return;
+                }
+
+                const statusUrl = pdfButton.dataset.statusUrl;
+                if (!statusUrl) {
+                    showPdfError('The report status service is unavailable. Refresh the page and try again.');
+                    return;
+                }
+
+                pdfIsDownloading = true;
+                pdfStatusFailures = 0;
+                setPdfButtonLoading(true);
+                showPdfModal();
+
+                const downloadToken = createDownloadToken();
+                const downloadUrl = new URL(
+                    pdfButton.dataset.downloadUrl || pdfButton.href,
+                    window.location.href
+                );
+                downloadUrl.searchParams.set('download_token', downloadToken);
+                if (pdfButton.dataset.snapshotHash) {
+                    downloadUrl.searchParams.set('dashboard_snapshot', pdfButton.dataset.snapshotHash);
+                }
+
+                pdfDeadlineTimer = window.setTimeout(() => {
+                    showPdfError(
+                        'The report is taking longer than three minutes. The request was not cancelled; check your browser or download manager, then try again if no file appears.'
+                    );
+                }, 180000);
+
+                pdfDownloadFrame.src = downloadUrl.toString();
+                pdfStatusTimer = window.setTimeout(
+                    () => pollPdfStatus(statusUrl, downloadToken),
+                    500
+                );
+            };
+
+            if (pdfButton && pdfModal) {
+                pdfButton.addEventListener('click', event => {
+                    event.preventDefault();
+                    startPdfDownload();
+                });
+                pdfRetry.addEventListener('click', startPdfDownload);
+                pdfClose.addEventListener('click', () => {
+                    pdfIsDownloading = false;
+                    setPdfButtonLoading(false);
+                    hidePdfModal();
+                });
+            }
+
             if (!window.Chart) {
                 return;
             }
@@ -741,11 +1282,12 @@
             const rows = @json($rows->values());
             const totals = @json($totals);
             const radarMetrics = @json($radarMetrics ?? []);
+            const chartData = @json($executionChartData ?? []);
             const currency = @json($currencyCode);
-            const labels = rows.map(row => String(row.year));
-            const allocations = rows.map(row => Number(row.allocation || 0));
-            const commitments = rows.map(row => Number(row.commitment || 0));
-            const disbursements = rows.map(row => Number(row.disbursement || 0));
+            const labels = chartData.labels || rows.map(row => String(row.year));
+            const allocations = chartData.allocations || rows.map(row => Number(row.allocation || 0));
+            const commitments = chartData.commitments || rows.map(row => Number(row.commitment || 0));
+            const disbursements = chartData.disbursements || rows.map(row => Number(row.disbursement || 0));
             const runningTotal = values => {
                 let total = 0;
                 return values.map(value => {
@@ -753,23 +1295,34 @@
                     return Number(total.toFixed(2));
                 });
             };
-            const cumulativeAllocation = runningTotal(allocations);
-            const cumulativeCommitment = runningTotal(commitments);
-            const cumulativeDisbursement = runningTotal(disbursements);
-            const cumulativeRemaining = cumulativeAllocation.map((value, index) => (
+            const cumulativeAllocation = chartData.cumulative_allocation || runningTotal(allocations);
+            const cumulativeCommitment = chartData.cumulative_commitment || runningTotal(commitments);
+            const cumulativeDisbursement = chartData.cumulative_disbursement || runningTotal(disbursements);
+            const cumulativeRemaining = chartData.cumulative_remaining || cumulativeAllocation.map((value, index) => (
                 value - Number(cumulativeCommitment[index] || 0)
             ));
-            const cumulativeExecutionRates = cumulativeAllocation.map((value, index) => (
+            const cumulativeExecutionRates = chartData.cumulative_execution_rates || cumulativeAllocation.map((value, index) => (
                 value > 0 ? (Number(cumulativeCommitment[index] || 0) / value) * 100 : 0
             ));
-            const cumulativeDisbursementRates = cumulativeAllocation.map((value, index) => (
+            const cumulativeDisbursementRates = chartData.cumulative_disbursement_rates || cumulativeAllocation.map((value, index) => (
                 value > 0 ? (Number(cumulativeDisbursement[index] || 0) / value) * 100 : 0
             ));
             const unpaidCommitments = Math.max(Number(totals.commitment || 0) - Number(totals.disbursement || 0), 0);
-            const mixValues = [
+            const mixValues = Array.isArray(chartData.mix) && chartData.mix.length
+                ? chartData.mix.map(item => Number(item.value || 0))
+                : [
                 Math.max(Number(totals.disbursement || 0), 0),
                 unpaidCommitments,
                 Math.max(Number(totals.remaining || 0), 0),
+            ];
+            const qualityLabels = chartData.quality_labels
+                || ['Commitment Rate', 'Timeliness', 'Consistency', 'Coverage', 'Risk Control'];
+            const qualityValues = chartData.quality_values || [
+                Number(radarMetrics.budget_utilization || 0),
+                Number(radarMetrics.timeliness || 0),
+                Number(radarMetrics.consistency || 0),
+                Number(radarMetrics.coverage || 0),
+                Number(radarMetrics.risk_exposure || 0)
             ];
 
             const money = value => `${currency} ${new Intl.NumberFormat('en-US', {
@@ -1013,16 +1566,10 @@
             makeChart('executionRadarChart', {
                 type: 'radar',
                 data: {
-                    labels: ['Commitment Rate', 'Timeliness', 'Consistency', 'Coverage', 'Risk Control'],
+                    labels: qualityLabels,
                     datasets: [{
                         label: 'Score',
-                        data: [
-                            Number(radarMetrics.budget_utilization || 0),
-                            Number(radarMetrics.timeliness || 0),
-                            Number(radarMetrics.consistency || 0),
-                            Number(radarMetrics.coverage || 0),
-                            Number(radarMetrics.risk_exposure || 0)
-                        ],
+                        data: qualityValues,
                         backgroundColor: 'rgba(109,91,208,.18)',
                         borderColor: '#6d5bd0',
                         pointBackgroundColor: '#6d5bd0'
@@ -1047,11 +1594,11 @@
                 data: {
                     datasets: [{
                         label: 'Year Exposure',
-                        data: rows.map((row, index) => ({
+                        data: labels.map((year, index) => ({
                             x: Number(cumulativeExecutionRates[index] || 0),
                             y: Number(cumulativeCommitment[index] || 0),
                             r: Math.max(5, Math.min(22, Math.sqrt(Math.max(Math.abs(Number(cumulativeRemaining[index] || 0)), 1)) / 900)),
-                            year: row.year
+                            year
                         })),
                         backgroundColor: 'rgba(214,90,49,.38)',
                         borderColor: '#d65a31'

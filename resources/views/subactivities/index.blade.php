@@ -468,6 +468,185 @@
             font-size: 0.82rem;
         }
 
+        .reallocation-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 7px;
+        }
+
+        .reallocation-actions form {
+            margin: 0;
+        }
+
+        .resolution-modal .modal-content {
+            overflow: hidden;
+            border: 0;
+            border-radius: 14px;
+            box-shadow: 0 26px 70px rgba(15, 23, 42, 0.24);
+        }
+
+        .resolution-modal .modal-header {
+            align-items: flex-start;
+            border: 0;
+            padding: 20px 22px;
+            color: #ffffff;
+            background: linear-gradient(135deg, #7c2d12 0%, #b45309 52%, #0f766e 100%);
+        }
+
+        .resolution-modal .modal-title,
+        .resolution-modal .modal-header .small {
+            color: #ffffff;
+        }
+
+        .resolution-modal .modal-header .small {
+            opacity: 0.86;
+        }
+
+        .resolution-modal .modal-header .btn-close {
+            filter: invert(1) grayscale(100%) brightness(200%);
+        }
+
+        .resolution-modal .modal-body {
+            padding: 20px 22px;
+            background: #f8fafc;
+        }
+
+        .resolution-overview {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .resolution-overview .badge {
+            border-radius: 999px;
+            padding: 0.45rem 0.7rem;
+        }
+
+        .resolution-route-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 42px minmax(0, 1fr);
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        .resolution-route-card,
+        .resolution-detail-card {
+            border: 1px solid #dbe3ea;
+            border-radius: 10px;
+            padding: 14px;
+            background: #ffffff;
+        }
+
+        .resolution-route-card.source {
+            border-top: 4px solid #64748b;
+        }
+
+        .resolution-route-card.destination {
+            border-top: 4px solid #0f766e;
+        }
+
+        .resolution-card-label {
+            color: #64748b;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+
+        .resolution-card-code {
+            margin-top: 5px;
+            color: #0f172a;
+            font-size: 0.88rem;
+            font-weight: 900;
+        }
+
+        .resolution-card-name {
+            margin-top: 3px;
+            color: #475569;
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        .resolution-route-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #b45309;
+            font-size: 1.2rem;
+        }
+
+        .resolution-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .resolution-detail-card.error {
+            border-color: #fecaca;
+            background: #fff7f7;
+        }
+
+        .resolution-detail-card.solution {
+            border-color: #a7f3d0;
+            background: #f0fdf4;
+        }
+
+        .resolution-detail-heading {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 7px;
+            font-size: 0.82rem;
+            font-weight: 900;
+        }
+
+        .resolution-detail-card.error .resolution-detail-heading {
+            color: #b91c1c;
+        }
+
+        .resolution-detail-card.solution .resolution-detail-heading {
+            color: #047857;
+        }
+
+        .resolution-detail-text {
+            margin: 0;
+            color: #334155;
+            font-size: 0.82rem;
+            line-height: 1.55;
+        }
+
+        .resolution-consent {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            border: 1px solid #bfdbfe;
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: #1e3a8a;
+            background: #eff6ff;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .resolution-modal .modal-footer {
+            justify-content: space-between;
+            gap: 10px;
+            border-top: 1px solid #e2e8f0;
+            padding: 14px 22px;
+            background: #ffffff;
+        }
+
+        .resolution-footer-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
         @media (max-width: 1199.98px) {
             .sub-summary-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -496,6 +675,38 @@
 
             .reallocation-issue {
                 grid-template-columns: 1fr;
+            }
+
+            .reallocation-actions {
+                justify-content: flex-start;
+            }
+
+            .resolution-route-grid,
+            .resolution-detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .resolution-route-arrow {
+                min-height: 24px;
+                transform: rotate(90deg);
+            }
+
+            .resolution-modal .modal-footer {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .resolution-footer-actions {
+                justify-content: stretch;
+            }
+
+            .resolution-footer-actions .btn,
+            .resolution-footer-actions form {
+                width: 100%;
+            }
+
+            .resolution-footer-actions form .btn {
+                width: 100%;
             }
         }
     </style>
@@ -554,7 +765,7 @@
                                 {{ $reallocationIssues->count() === 1 ? 'needs' : 'need' }} attention
                             </div>
                             <div class="small mt-1">
-                                These moves failed, were interrupted, or were detected with incomplete allocation links. Retry them here; no manual database correction is required.
+                                These moves failed, were interrupted, or were detected with incomplete allocation links. Open Review &amp; Resolve for a guided explanation and a safe automatic or manual resolution.
                             </div>
                         </div>
                     </div>
@@ -567,10 +778,58 @@
                             $issueActivity = $issue['activity'];
                             $issueTarget = $issue['target_project'];
                             $issueSource = $issue['source_project'];
+                            $previousReallocation = $previousReallocations->get((string) $issueActivity->id);
+                            $completableReallocation = $completableReallocations->get((string) $issueActivity->id);
+                            $verifiedPrevious = $completableReallocation ?: $previousReallocation;
+                            $displaySource = $verifiedPrevious['source_project'] ?? $issueSource;
                             $issueCurrency = $issueTarget->currency ?: ($issueTarget->program?->currency ?? 'USD');
                             $attemptedWhen = $issue['last_attempted_at']
                                 ? \Illuminate\Support\Carbon::parse($issue['last_attempted_at'])->diffForHumans()
                                 : 'detected automatically';
+                            $issueReasonLower = Str::lower($issue['reason']);
+                            $hasBudgetIssue = Str::contains($issueReasonLower, ['budget', 'envelope', 'short by', 'available']);
+                            $hasGovernanceIssue = Str::contains($issueReasonLower, ['governance', 'previous governance node']);
+                            $hasPeriodIssue = Str::contains($issueReasonLower, ['outside the component period', 'allocation year']);
+
+                            if ($completableReallocation) {
+                                $automaticMode = 'complete';
+                                $automaticAction = route('budget.activities.reallocation.complete', $issueActivity->id);
+                                $automaticSolution = 'The recorded move is incomplete. Choose Complete Move to keep the activity in '
+                                    . $issueTarget->project_id . ' - ' . $issueTarget->name
+                                    . ' and transfer its full ' . number_format((float) $issue['amount'], 2) . ' ' . $issueCurrency
+                                    . ' envelope from ' . $completableReallocation['source_project']->project_id
+                                    . '. The source will decrease and the destination will increase by the same yearly figures. You may instead send everything back to the previous component.';
+                            } elseif ($previousReallocation) {
+                                $automaticMode = 'retry';
+                                $automaticAction = route('budget.activities.reallocate', $issueActivity->id);
+                                $automaticSolution = 'The automatic fix will finish the relationship checks at the current destination without double-counting sub-activity figures. You may instead return the activity, its '
+                                    . number_format((float) $issue['amount'], 2) . ' ' . $issueCurrency
+                                    . ' envelope, and all sub-activities to the verified previous component '
+                                    . $previousReallocation['source_project']->project_id . ' - '
+                                    . $previousReallocation['source_project']->name . '.';
+                            } else {
+                                $automaticMode = 'retry';
+                                $automaticAction = route('budget.activities.reallocate', $issueActivity->id);
+                                $automaticSolution = match (true) {
+                                    $hasBudgetIssue && $hasGovernanceIssue => 'The activity figures already belong to this destination and will not be added a second time. The automatic fix will align the activity and all sub-activity relationships now. Choose manual fix afterward if the separate component yearly envelope also needs adjustment.',
+                                    $hasBudgetIssue => 'The relationship already points to this destination, so its activity and sub-activity figures must not be counted twice. Review the component yearly envelope manually, or run the automatic validation to confirm that no relationship change is outstanding.',
+                                    $hasGovernanceIssue => 'The automatic fix will align the activity and all affected sub-activities with the destination component governance node, while keeping their allocation amounts unchanged.',
+                                    $hasPeriodIssue => 'Adjust the destination component period or the activity allocation years manually. The automatic fix will revalidate the years and will proceed only when they fit the destination period.',
+                                    default => 'The automatic fix will retry the complete reallocation as one transaction and verify the activity, its budget envelope, governance links, and every sub-activity before committing.',
+                                };
+                            }
+
+                            $sourceRole = $verifiedPrevious
+                                ? 'Verified source / previous component'
+                                : ($issue['repair'] ? 'Current component' : 'Source component');
+                            $destinationRole = $completableReallocation
+                                ? 'New reallocation destination'
+                                : ($issue['repair'] ? 'Repair destination' : 'Destination component');
+                            $routeNote = $completableReallocation
+                                ? 'The relationship has reached the destination, but its activity budget envelope still needs to move from the verified source.'
+                                : ($issue['repair']
+                                    ? 'This is an in-place relationship repair; the activity is already in the destination component.'
+                                    : 'The recorded move is from the source component to the destination component.');
                         @endphp
                         <article class="reallocation-issue" id="{{ $issue['key'] }}">
                             <div>
@@ -599,22 +858,37 @@
                                 </div>
                             </div>
 
-                            @can('activities.edit')
-                                <form action="{{ route('budget.activities.reallocate', $issueActivity->id) }}" method="POST"
-                                    onsubmit="return confirm('Retry this reallocation now? The activity, allocation, and sub-activities will be verified together.');">
-                                    @csrf
-                                    <input type="hidden" name="project_id" value="{{ $issueTarget->id }}">
-                                    @if ($issue['attempt_id'])
-                                        <input type="hidden" name="attempt_id" value="{{ $issue['attempt_id'] }}">
-                                    @endif
-                                    @if ($issue['repair'])
-                                        <input type="hidden" name="repair" value="1">
-                                    @endif
-                                    <button type="submit" class="btn btn-warning btn-sm text-nowrap">
-                                        <i class="feather-refresh-cw me-1"></i> Retry reallocation
-                                    </button>
-                                </form>
-                            @endcan
+                            <div class="reallocation-actions">
+                                <button type="button" class="btn btn-warning btn-sm text-nowrap reallocation-review-button"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#reallocationResolutionModal"
+                                    data-activity-name="{{ $issueActivity->name }}"
+                                    data-status="{{ $issue['status'] }}"
+                                    data-source-role="{{ $sourceRole }}"
+                                    data-source-code="{{ $displaySource?->project_id ?? 'Unknown' }}"
+                                    data-source-name="{{ $displaySource?->name ?? 'The source component is unavailable.' }}"
+                                    data-destination-role="{{ $destinationRole }}"
+                                    data-destination-code="{{ $issueTarget->project_id }}"
+                                    data-destination-name="{{ $issueTarget->name }}"
+                                    data-route-note="{{ $routeNote }}"
+                                    data-reason="{{ $issue['reason'] }}"
+                                    data-solution="{{ $automaticSolution }}"
+                                    data-amount="{{ number_format((float) $issue['amount'], 2) }} {{ $issueCurrency }}"
+                                    data-attempted="{{ $attemptedWhen }}"
+                                    data-attempt-count="{{ $issue['attempt_count'] ?? 0 }}"
+                                    data-auto-mode="{{ $automaticMode }}"
+                                    data-auto-action="{{ $automaticAction }}"
+                                    data-target-project-id="{{ $issueTarget->id }}"
+                                    data-attempt-id="{{ $issue['attempt_id'] ?? '' }}"
+                                    data-repair="{{ $issue['repair'] ? '1' : '0' }}"
+                                    data-previous-attempt-id="{{ $completableReallocation ? $completableReallocation['attempt']->id : '' }}"
+                                    data-can-return="{{ $previousReallocation ? '1' : '0' }}"
+                                    data-return-action="{{ $previousReallocation ? route('budget.activities.reallocation.return-previous', $issueActivity->id) : '' }}"
+                                    data-return-attempt-id="{{ $previousReallocation ? $previousReallocation['attempt']->id : '' }}"
+                                    data-manual-url="{{ route('budget.projects.edit', $issueTarget->id) }}">
+                                    <i class="feather-info me-1"></i> Review &amp; Resolve
+                                </button>
+                            </div>
                         </article>
                     @endforeach
                 </div>
@@ -915,6 +1189,119 @@
         </div>
     </div>
 
+    <div class="modal fade resolution-modal" id="reallocationResolutionModal" tabindex="-1"
+        aria-labelledby="reallocationResolutionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <div class="small fw-bold text-uppercase mb-1">Reallocation issue review</div>
+                        <h5 class="modal-title" id="reallocationResolutionModalLabel">Review &amp; Resolve</h5>
+                        <div class="small mt-1" id="resolutionActivityName">Activity</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="resolution-overview">
+                        <span class="badge bg-danger" id="resolutionStatus">Needs attention</span>
+                        <span class="badge bg-light text-dark border" id="resolutionAmount">0.00</span>
+                        <span class="badge bg-light text-dark border" id="resolutionAttempted">Detected automatically</span>
+                        <span class="badge bg-light text-dark border d-none" id="resolutionAttemptCount"></span>
+                    </div>
+
+                    <div class="resolution-route-grid">
+                        <div class="resolution-route-card source">
+                            <div class="resolution-card-label" id="resolutionSourceRole">Source component</div>
+                            <div class="resolution-card-code" id="resolutionSourceCode">Unknown</div>
+                            <div class="resolution-card-name" id="resolutionSourceName">Source details unavailable</div>
+                        </div>
+
+                        <div class="resolution-route-arrow" aria-hidden="true">
+                            <i class="feather-arrow-right"></i>
+                        </div>
+
+                        <div class="resolution-route-card destination">
+                            <div class="resolution-card-label" id="resolutionDestinationRole">Destination component</div>
+                            <div class="resolution-card-code" id="resolutionDestinationCode">Unknown</div>
+                            <div class="resolution-card-name" id="resolutionDestinationName">Destination details unavailable</div>
+                        </div>
+                    </div>
+
+                    <p class="small text-muted mt-2 mb-0" id="resolutionRouteNote"></p>
+
+                    <div class="resolution-detail-grid">
+                        <div class="resolution-detail-card error">
+                            <div class="resolution-detail-heading">
+                                <i class="feather-alert-octagon"></i> Why the reallocation failed
+                            </div>
+                            <p class="resolution-detail-text" id="resolutionReason"></p>
+                        </div>
+
+                        <div class="resolution-detail-card solution">
+                            <div class="resolution-detail-heading">
+                                <i class="feather-check-circle"></i> Recommended solution
+                            </div>
+                            <p class="resolution-detail-text" id="resolutionSolution"></p>
+                        </div>
+                    </div>
+
+                    <div class="resolution-consent">
+                        <i class="feather-shield mt-1"></i>
+                        <div>
+                            <strong>Safe automatic action:</strong>
+                            the system will lock and validate the affected records together. If any budget, period, or relationship check fails, no partial change will be committed.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light border" data-bs-dismiss="modal">
+                        <i class="feather-x me-1"></i> Cancel
+                    </button>
+
+                    <div class="resolution-footer-actions">
+                        @can('project.edit')
+                            <a href="{{ route('budget.projects.index') }}" class="btn btn-outline-secondary"
+                                id="resolutionManualFix">
+                                <i class="feather-edit-3 me-1"></i> Reject — Fix Manually
+                            </a>
+                        @else
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                                <i class="feather-x-circle me-1"></i> Reject
+                            </button>
+                        @endcan
+
+                        @can('activities.edit')
+                            <form method="POST" action="" id="resolutionReturnForm" class="d-none">
+                                @csrf
+                                <input type="hidden" name="previous_reallocation_attempt_id"
+                                    id="resolutionReturnAttemptId">
+                                <button type="submit" class="btn btn-outline-danger" id="resolutionReturnButton">
+                                    <i class="feather-rotate-ccw me-1"></i>
+                                    <span>Send Back to Previous Component</span>
+                                </button>
+                            </form>
+
+                            <form method="POST" action="" id="resolutionAutomaticForm">
+                                @csrf
+                                <input type="hidden" name="project_id" id="resolutionProjectId" disabled>
+                                <input type="hidden" name="attempt_id" id="resolutionAttemptId" disabled>
+                                <input type="hidden" name="repair" value="1" id="resolutionRepair" disabled>
+                                <input type="hidden" name="previous_reallocation_attempt_id"
+                                    id="resolutionPreviousAttemptId" disabled>
+                                <button type="submit" class="btn btn-success" id="resolutionAutomaticButton">
+                                    <i class="feather-zap me-1"></i>
+                                    <span>I Agree — Run Automatic Fix</span>
+                                </button>
+                            </form>
+                        @endcan
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Kept inside the content section so no modal markup is emitted before the page layout. -->
     <div class="modal fade" id="reallocateModal" tabindex="-1" aria-labelledby="reallocateModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -983,6 +1370,146 @@
             buttons.forEach(button => {
                 button.addEventListener('click', () => toggleNode(button));
             });
+
+            const resolutionModalEl = document.getElementById('reallocationResolutionModal');
+            if (resolutionModalEl) {
+                resolutionModalEl.addEventListener('show.bs.modal', function (event) {
+                    const button = event.relatedTarget;
+                    if (!button) {
+                        return;
+                    }
+
+                    const setText = (id, value) => {
+                        const element = document.getElementById(id);
+                        if (element) {
+                            element.textContent = value || '';
+                        }
+                    };
+
+                    setText('resolutionActivityName', button.dataset.activityName);
+                    setText('resolutionStatus', button.dataset.status);
+                    setText('resolutionAmount', button.dataset.amount);
+                    setText('resolutionAttempted', button.dataset.attempted);
+                    setText('resolutionSourceRole', button.dataset.sourceRole);
+                    setText('resolutionSourceCode', button.dataset.sourceCode);
+                    setText('resolutionSourceName', button.dataset.sourceName);
+                    setText('resolutionDestinationRole', button.dataset.destinationRole);
+                    setText('resolutionDestinationCode', button.dataset.destinationCode);
+                    setText('resolutionDestinationName', button.dataset.destinationName);
+                    setText('resolutionRouteNote', button.dataset.routeNote);
+                    setText('resolutionReason', button.dataset.reason);
+                    setText('resolutionSolution', button.dataset.solution);
+
+                    const attemptCount = Number.parseInt(button.dataset.attemptCount || '0', 10);
+                    const attemptCountBadge = document.getElementById('resolutionAttemptCount');
+                    if (attemptCountBadge) {
+                        attemptCountBadge.classList.toggle('d-none', attemptCount < 1);
+                        attemptCountBadge.textContent = attemptCount === 1
+                            ? '1 attempt'
+                            : `${attemptCount} attempts`;
+                    }
+
+                    const manualFix = document.getElementById('resolutionManualFix');
+                    if (manualFix && button.dataset.manualUrl) {
+                        manualFix.href = button.dataset.manualUrl;
+                    }
+
+                    const form = document.getElementById('resolutionAutomaticForm');
+                    const projectId = document.getElementById('resolutionProjectId');
+                    const attemptId = document.getElementById('resolutionAttemptId');
+                    const repair = document.getElementById('resolutionRepair');
+                    const previousAttemptId = document.getElementById('resolutionPreviousAttemptId');
+                    const automaticButton = document.getElementById('resolutionAutomaticButton');
+                    const automaticButtonLabel = automaticButton?.querySelector('span');
+                    const returnForm = document.getElementById('resolutionReturnForm');
+                    const returnAttemptId = document.getElementById('resolutionReturnAttemptId');
+                    const returnButton = document.getElementById('resolutionReturnButton');
+                    const automaticMode = button.dataset.autoMode;
+
+                    [projectId, attemptId, repair, previousAttemptId].forEach(input => {
+                        if (input) {
+                            input.disabled = true;
+                            input.value = '';
+                        }
+                    });
+
+                    if (form) {
+                        form.action = button.dataset.autoAction || '';
+                    }
+
+                    if (returnForm) {
+                        const canReturn = button.dataset.canReturn === '1'
+                            && Boolean(button.dataset.returnAction)
+                            && Boolean(button.dataset.returnAttemptId);
+                        returnForm.classList.toggle('d-none', !canReturn);
+                        returnForm.action = canReturn ? button.dataset.returnAction : '';
+                        if (returnAttemptId) {
+                            returnAttemptId.value = canReturn ? button.dataset.returnAttemptId : '';
+                        }
+                        if (returnButton) {
+                            returnButton.disabled = false;
+                        }
+                    }
+
+                    if (automaticMode === 'complete') {
+                        if (previousAttemptId) {
+                            previousAttemptId.value = button.dataset.previousAttemptId || '';
+                            previousAttemptId.disabled = false;
+                        }
+                        if (automaticButtonLabel) {
+                            automaticButtonLabel.textContent = 'I Agree — Complete Move to Destination';
+                        }
+                    } else {
+                        if (projectId) {
+                            projectId.value = button.dataset.targetProjectId || '';
+                            projectId.disabled = false;
+                        }
+                        if (attemptId && button.dataset.attemptId) {
+                            attemptId.value = button.dataset.attemptId;
+                            attemptId.disabled = false;
+                        }
+                        if (repair && button.dataset.repair === '1') {
+                            repair.value = '1';
+                            repair.disabled = false;
+                        }
+                        if (automaticButtonLabel) {
+                            automaticButtonLabel.textContent = 'I Agree — Run Automatic Fix';
+                        }
+                    }
+
+                    if (automaticButton) {
+                        automaticButton.disabled = false;
+                    }
+                });
+            }
+
+            const resolutionReturnForm = document.getElementById('resolutionReturnForm');
+            if (resolutionReturnForm) {
+                resolutionReturnForm.addEventListener('submit', () => {
+                    const submitButton = document.getElementById('resolutionReturnButton');
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        const label = submitButton.querySelector('span');
+                        if (label) {
+                            label.textContent = 'Returning activity and figures...';
+                        }
+                    }
+                });
+            }
+
+            const resolutionAutomaticForm = document.getElementById('resolutionAutomaticForm');
+            if (resolutionAutomaticForm) {
+                resolutionAutomaticForm.addEventListener('submit', () => {
+                    const submitButton = document.getElementById('resolutionAutomaticButton');
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        const label = submitButton.querySelector('span');
+                        if (label) {
+                            label.textContent = 'Applying safe fix...';
+                        }
+                    }
+                });
+            }
 
             // Reallocate modal behavior
             const reallocateModalEl = document.getElementById('reallocateModal');

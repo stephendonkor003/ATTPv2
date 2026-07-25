@@ -6,7 +6,10 @@ use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\HeaderUtils;
+use Throwable;
 
 use App\Models\Sector;
 use App\Models\Program;
@@ -14,6 +17,7 @@ use App\Models\Project;
 use App\Models\BudgetCommitment;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementPurchaseOrder;
+use App\Services\ExecutionDashboardChartBuilder;
 use App\Services\ExecutionInsightBuilder;
 
 class MasterDashboard extends Controller
@@ -32,12 +36,111 @@ class MasterDashboard extends Controller
 
     public function exportExecutionDashboardPdf(Request $request)
     {
-        $data = $this->executionDashboardPayload($request);
-        $filename = 'execution-dashboard-' . now()->format('Ymd-His') . '.pdf';
+        $downloadToken = $this->executionDashboardDownloadToken($request);
+        $this->storeExecutionDashboardDownloadStatus($request, $downloadToken, [
+            'status' => 'processing',
+            'message' => 'The complete Execution Dashboard report is being generated.',
+        ]);
 
-        return Pdf::loadView('finance.execution.dashboard_pdf', $data)
-            ->setPaper('a4', 'landscape')
-            ->download($filename);
+        try {
+            $data = $this->executionDashboardPayload($request);
+            $expectedSnapshot = strtolower(trim((string) $request->query('dashboard_snapshot', '')));
+            $currentSnapshot = (string) ($data['executionChartData']['snapshot_hash'] ?? '');
+            if (! $this->executionDashboardSnapshotMatches($expectedSnapshot, $currentSnapshot)) {
+                $message = 'The dashboard figures changed after this page was opened. Refresh the dashboard before downloading so the webpage and PDF figures remain identical.';
+                $this->storeExecutionDashboardDownloadStatus($request, $downloadToken, [
+                    'status' => 'failed',
+                    'code' => 'dashboard_data_changed',
+                    'message' => $message,
+                ]);
+
+                return response($message, 409, [
+                    'Content-Type' => 'text/plain; charset=UTF-8',
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate',
+                    'X-Content-Type-Options' => 'nosniff',
+                ]);
+            }
+
+            $data['executionChartImages'] = app(ExecutionDashboardChartBuilder::class)
+                ->buildFromDataset($data['executionChartData'], $data['currency']);
+            $filename = 'execution-dashboard-' . now()->format('Ymd-His') . '.pdf';
+            $output = Pdf::loadView('finance.execution.dashboard_pdf', $data)
+                ->setPaper('a4', 'landscape')
+                ->output();
+
+            $this->storeExecutionDashboardDownloadStatus($request, $downloadToken, [
+                'status' => 'ready',
+                'message' => 'The report is ready and has been handed to your download manager.',
+                'filename' => $filename,
+                'bytes' => strlen($output),
+                'snapshot_hash' => $data['executionChartData']['snapshot_hash'] ?? null,
+            ]);
+
+            return response($output, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Length' => (string) strlen($output),
+                'Content-Disposition' => HeaderUtils::makeDisposition(
+                    HeaderUtils::DISPOSITION_ATTACHMENT,
+                    $filename
+                ),
+                'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+                'X-Content-Type-Options' => 'nosniff',
+                'X-Execution-Dashboard-Snapshot' => (string) ($data['executionChartData']['snapshot_hash'] ?? ''),
+            ]);
+        } catch (Throwable $exception) {
+            report($exception);
+            $reference = $downloadToken ? substr($downloadToken, -8) : null;
+            $message = 'The server could not generate the PDF. Please try again.';
+            if ($reference) {
+                $message .= ' Reference: ' . $reference . '.';
+            }
+
+            $this->storeExecutionDashboardDownloadStatus($request, $downloadToken, [
+                'status' => 'failed',
+                'message' => $message,
+                'reference' => $reference,
+            ]);
+
+            return response($message, 500, [
+                'Content-Type' => 'text/plain; charset=UTF-8',
+                'Cache-Control' => 'no-store, no-cache, must-revalidate',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+    }
+
+    public function executionDashboardExportStatus(Request $request)
+    {
+        $downloadToken = $this->executionDashboardDownloadToken($request, true);
+        try {
+            $status = Cache::get(
+                $this->executionDashboardDownloadStatusKey($request, $downloadToken),
+                [
+                    'status' => 'pending',
+                    'message' => 'Waiting for the report generator to start.',
+                ]
+            );
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'status' => 'unknown',
+                'message' => 'The report status service is temporarily unavailable. The download request remains active.',
+            ], 503)->withHeaders([
+                'Cache-Control' => 'no-store, no-cache, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Retry-After' => '2',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        return response()->json($status)->withHeaders([
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private function executionDashboardPayload(Request $request): array
@@ -77,6 +180,23 @@ class MasterDashboard extends Controller
             $this->applyAssignedPortfolioScopeToProjects($projectQuery, $currentUser);
         }
         $projects = $programId ? $projectQuery->get() : collect();
+        $executionFilters = [
+            'sector' => $sectorId
+                ? (string) ($sectors->first(
+                    fn (Sector $sector) => (string) $sector->id === (string) $sectorId
+                )?->name ?? 'Selected sector')
+                : 'All Sectors',
+            'program' => $programId
+                ? (string) ($programs->first(
+                    fn (Program $program) => (string) $program->id === (string) $programId
+                )?->name ?? 'Selected program')
+                : 'All Programs',
+            'project' => $projectId
+                ? (string) ($projects->first(
+                    fn (Project $project) => (string) $project->id === (string) $projectId
+                )?->name ?? 'Selected project')
+                : 'All Projects',
+        ];
 
         /* ============================================================
          * 3. RESOLVE EXECUTION SCOPE
@@ -225,7 +345,16 @@ class MasterDashboard extends Controller
         /* ============================================================
          * 7. KPI CALCULATIONS
          * ============================================================ */
-        $totalAllocation = array_sum($allocationByYear);
+        $scheduledAllocation = round((float) array_sum($allocationByYear), 2);
+        $budgetEnvelope = $this->resolveBudgetEnvelope(
+            $scopeType,
+            $scope,
+            $currentUser,
+            $hasPortfolioScope,
+            $scheduledAllocation
+        );
+        $totalAllocation = round($budgetEnvelope, 2);
+        $unallocatedEnvelope = round($totalAllocation - $scheduledAllocation, 2);
         $totalCommitment = array_sum($commitmentByYear);
         $totalDisbursements = array_sum($disbursementByYear);
 
@@ -308,7 +437,8 @@ class MasterDashboard extends Controller
             $currentUser,
             $hasPortfolioScope,
             $yearStart,
-            $yearEnd
+            $yearEnd,
+            $totalAllocation
         );
 
         $peakCommitmentRow = $executionBreakdownRows
@@ -322,6 +452,8 @@ class MasterDashboard extends Controller
         $executionSummary = [
             'currency' => $currency,
             'budget_envelope' => round($totalAllocation, 2),
+            'scheduled_allocation' => $scheduledAllocation,
+            'unallocated_envelope' => $unallocatedEnvelope,
             'committed' => round($totalCommitment, 2),
             'disbursed' => round($totalDisbursements, 2),
             'remaining_allocation' => $executionBreakdownTotals['remaining'],
@@ -368,6 +500,11 @@ class MasterDashboard extends Controller
             'coverage' => min(100, max(0, round($timeliness, 1))),
             'risk_exposure' => min(100, max(0, round(100 - $riskExposure, 1))),
         ];
+        $executionChartData = app(ExecutionDashboardChartBuilder::class)->dataset(
+            $executionBreakdownRows,
+            $executionBreakdownTotals,
+            $radarMetrics
+        );
 
         /* ============================================================
          * 11. AI PAYLOAD & INSIGHTS
@@ -410,10 +547,68 @@ class MasterDashboard extends Controller
             'executionBreakdownTotals',
             'componentBreakdownRows',
             'executionSummary',
+            'executionFilters',
+            'executionChartData',
             'currency',
             'radarMetrics',
             'aiInsights'
         );
+    }
+
+    private function executionDashboardDownloadToken(Request $request, bool $required = false): ?string
+    {
+        $token = trim((string) $request->query('download_token', ''));
+        if ($token === '' && ! $required) {
+            return null;
+        }
+
+        abort_unless(
+            preg_match('/\A[A-Za-z0-9_-]{20,100}\z/', $token) === 1,
+            422,
+            'The download tracking token is invalid.'
+        );
+
+        return $token;
+    }
+
+    private function executionDashboardSnapshotMatches(
+        string $expectedSnapshot,
+        string $currentSnapshot
+    ): bool {
+        if ($expectedSnapshot === '') {
+            return true;
+        }
+
+        return preg_match('/\A[a-f0-9]{64}\z/', $expectedSnapshot) === 1
+            && preg_match('/\A[a-f0-9]{64}\z/', $currentSnapshot) === 1
+            && hash_equals($currentSnapshot, $expectedSnapshot);
+    }
+
+    private function executionDashboardDownloadStatusKey(Request $request, string $downloadToken): string
+    {
+        $userId = (string) ($request->user()?->id ?? 'guest');
+
+        return 'execution-dashboard-download:' . hash('sha256', $userId . '|' . $downloadToken);
+    }
+
+    private function storeExecutionDashboardDownloadStatus(
+        Request $request,
+        ?string $downloadToken,
+        array $status
+    ): void {
+        if (! $downloadToken) {
+            return;
+        }
+
+        try {
+            Cache::put(
+                $this->executionDashboardDownloadStatusKey($request, $downloadToken),
+                array_merge($status, ['updated_at' => now()->toIso8601String()]),
+                now()->addMinutes(10)
+            );
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function componentExecutionBreakdown(
@@ -422,7 +617,8 @@ class MasterDashboard extends Controller
         $currentUser,
         bool $hasPortfolioScope,
         ?int $yearStart,
-        ?int $yearEnd
+        ?int $yearEnd,
+        float $budgetEnvelope
     ) {
         $componentQuery = Project::query()
             ->select(['id', 'program_id', 'name', 'total_budget']);
@@ -463,7 +659,7 @@ class MasterDashboard extends Controller
         $commitmentByComponent = $this->commitmentsByExecutionComponent($componentIds);
         $disbursementByComponent = $this->disbursementsByExecutionComponent($componentIds, $yearStart, $yearEnd);
 
-        return $components->map(function (Project $component) use (
+        $rows = $components->map(function (Project $component) use (
             $allocationByComponent,
             $commitmentByComponent,
             $disbursementByComponent
@@ -491,6 +687,28 @@ class MasterDashboard extends Controller
                     : 0,
             ];
         })->values();
+
+        $unallocatedEnvelope = round($budgetEnvelope - (float) $rows->sum('allocation'), 2);
+        if (abs($unallocatedEnvelope) > 0.01) {
+            $rows->push([
+                'component_id' => null,
+                'label' => $unallocatedEnvelope > 0
+                    ? 'Unallocated Programme Balance'
+                    : 'Envelope Reconciliation',
+                'description' => $unallocatedEnvelope > 0
+                    ? 'Approved budget not yet distributed across component yearly allocations.'
+                    : 'Component yearly allocations exceed the approved budget envelope.',
+                'name' => 'Programme envelope reconciliation',
+                'allocation' => $unallocatedEnvelope,
+                'commitment' => 0.0,
+                'disbursement' => 0.0,
+                'remaining' => $unallocatedEnvelope,
+                'execution_rate' => 0.0,
+                'disbursement_rate' => 0.0,
+            ]);
+        }
+
+        return $rows->values();
     }
 
     private function commitmentsByExecutionComponent(array $componentIds)
@@ -772,6 +990,70 @@ class MasterDashboard extends Controller
         }
 
         return $query->value('currency') ?: 'USD';
+    }
+
+    /**
+     * Resolve the approved budget envelope independently from its yearly
+     * distribution. Programme budgets are authoritative; project allocation
+     * rows remain the source for yearly execution charts.
+     */
+    private function resolveBudgetEnvelope(
+        string $scopeType,
+        $scope,
+        $currentUser,
+        bool $hasPortfolioScope,
+        float $scheduledAllocation
+    ): float {
+        if ($scopeType === 'project') {
+            return $this->preferDeclaredEnvelope(
+                (float) ($scope?->total_budget ?? 0),
+                $scheduledAllocation
+            );
+        }
+
+        if ($scopeType === 'program') {
+            return $this->preferDeclaredEnvelope(
+                (float) ($scope?->total_budget ?? 0),
+                $scheduledAllocation
+            );
+        }
+
+        $programQuery = Program::query()->select(['id', 'total_budget']);
+        if ($scopeType === 'sector' && $scope?->id) {
+            $programQuery->where('sector_id', $scope->id);
+        }
+        if ($hasPortfolioScope) {
+            $this->applyAssignedPortfolioScopeToPrograms($programQuery, $currentUser);
+        }
+
+        $programs = $programQuery->get();
+        if ($programs->isEmpty()) {
+            return $scheduledAllocation;
+        }
+
+        $declaredEnvelope = (float) $programs
+            ->filter(fn (Program $program) => (float) $program->total_budget > 0)
+            ->sum('total_budget');
+        $programIdsWithoutEnvelope = $programs
+            ->filter(fn (Program $program) => (float) $program->total_budget <= 0)
+            ->pluck('id');
+
+        $fallbackEnvelope = $programIdsWithoutEnvelope->isEmpty()
+            ? 0.0
+            : (float) DB::table('myb_project_allocations as allocation')
+                ->join('myb_projects as project', 'project.id', '=', 'allocation.project_id')
+                ->whereIn('project.program_id', $programIdsWithoutEnvelope)
+                ->sum('allocation.amount');
+
+        return $this->preferDeclaredEnvelope(
+            $declaredEnvelope + $fallbackEnvelope,
+            $scheduledAllocation
+        );
+    }
+
+    private function preferDeclaredEnvelope(float $declaredEnvelope, float $scheduledAllocation): float
+    {
+        return round($declaredEnvelope > 0 ? $declaredEnvelope : $scheduledAllocation, 2);
     }
 
     /**

@@ -409,7 +409,9 @@ class ActivityController extends Controller
         }
 
         $successMessage = $result['repaired']
-            ? 'The activity reallocation was repaired and verified. Its ' . number_format($result['amount'], 2) . ' allocation is fully attached to the current component.'
+            ? 'The activity and all sub-activity relationships were repaired. Their '
+                .number_format($result['amount'], 2)
+                .' activity envelope remains attached to the current component and was not counted a second time.'
             : 'Activity and its ' . number_format($result['amount'], 2) . ' budget envelope were reallocated successfully. The programme-wide budget was unchanged.';
 
         if ($attempt) {
@@ -511,14 +513,201 @@ class ActivityController extends Controller
         return back()->with('success', $successMessage);
     }
 
+    /**
+     * Return an attention item to the immediately preceding component using
+     * server-resolved audit history. This is a new validated move, so older
+     * records without exact snapshots can still be handled safely.
+     */
+    public function returnToPreviousReallocation(
+        Request $request,
+        Activity $activity,
+        ActivityReallocationTracker $reallocationTracker
+    ) {
+        $this->assertActivityInScope($activity);
+
+        $request->validate([
+            'previous_reallocation_attempt_id' => 'required|uuid',
+        ]);
+
+        try {
+            $previousReallocation = $reallocationTracker->resolvePreviousReallocation(
+                $activity,
+                (string) $request->input('previous_reallocation_attempt_id')
+            );
+        } catch (ActivityReallocationException $trackingError) {
+            return back()->with('error', 'Return failed: '.$trackingError->getMessage());
+        }
+
+        $previousProject = Project::find($previousReallocation['source_project_id']);
+        if (! $previousProject) {
+            return back()->with('error', 'Return failed: the previous component is no longer available.');
+        }
+
+        $this->assertProjectInScope($previousProject);
+
+        try {
+            $returnAttempt = $reallocationTracker->beginReturnToPrevious(
+                $activity,
+                $previousProject,
+                $previousReallocation['attempt']
+            );
+        } catch (ActivityReallocationException $trackingError) {
+            return back()->with('error', 'Return failed: '.$trackingError->getMessage());
+        } catch (\Throwable $trackingError) {
+            report($trackingError);
+
+            return back()->with('error', 'Return failed: the operation could not be recorded safely.');
+        }
+
+        try {
+            $result = $this->moveActivityToProject(
+                $activity,
+                $previousProject,
+                false,
+                fn (array $snapshot) => $reallocationTracker->captureSnapshot($returnAttempt, $snapshot)
+            );
+        } catch (\Throwable $error) {
+            report($error);
+            $message = $this->safeReallocationErrorMessage($error);
+
+            try {
+                $reallocationTracker->fail($returnAttempt, $message);
+            } catch (\Throwable $trackingError) {
+                report($trackingError);
+            }
+
+            return back()->with('error', 'Return failed: '.$message);
+        }
+
+        $successMessage = 'The activity, its '
+            .number_format($result['amount'], 2)
+            .' budget envelope, and all sub-activities were returned to '
+            .$previousProject->name
+            .'.';
+
+        try {
+            $reallocationTracker->succeed($returnAttempt, $successMessage);
+            $reallocationTracker->markReverted(
+                collect([$previousReallocation['attempt']]),
+                $returnAttempt
+            );
+        } catch (\Throwable $trackingError) {
+            report($trackingError);
+        }
+
+        return back()->with('success', $successMessage);
+    }
+
+    /**
+     * Finish an interrupted/legacy move when the activity relationship already
+     * points at the destination but its budget envelope is still at the
+     * verified source component.
+     */
+    public function completeReallocation(
+        Request $request,
+        Activity $activity,
+        ActivityReallocationTracker $reallocationTracker
+    ) {
+        $this->assertActivityInScope($activity);
+
+        $request->validate([
+            'previous_reallocation_attempt_id' => 'required|uuid',
+        ]);
+
+        try {
+            $incompleteReallocation = $reallocationTracker->resolveCompletableReallocation(
+                $activity,
+                (string) $request->input('previous_reallocation_attempt_id')
+            );
+        } catch (ActivityReallocationException $trackingError) {
+            return back()->with('error', 'Completion failed: '.$trackingError->getMessage());
+        }
+
+        $sourceProject = Project::find($incompleteReallocation['source_project_id']);
+        $targetProject = $activity->project()->first();
+        if (! $sourceProject || ! $targetProject) {
+            return back()->with('error', 'Completion failed: the source or destination component is no longer available.');
+        }
+
+        if ((string) $sourceProject->id === (string) $targetProject->id) {
+            return back()->with('error', 'Completion failed: the source and destination components must be different.');
+        }
+
+        $this->assertProjectInScope($sourceProject);
+        $this->assertProjectInScope($targetProject);
+
+        try {
+            $completionAttempt = $reallocationTracker->beginCompleteToCurrent(
+                $activity,
+                $sourceProject,
+                $targetProject,
+                $incompleteReallocation['attempt']
+            );
+        } catch (ActivityReallocationException $trackingError) {
+            return back()->with('error', 'Completion failed: '.$trackingError->getMessage());
+        } catch (\Throwable $trackingError) {
+            report($trackingError);
+
+            return back()->with('error', 'Completion failed: the operation could not be recorded safely.');
+        }
+
+        try {
+            $result = $this->moveActivityToProject(
+                $activity,
+                $targetProject,
+                true,
+                fn (array $snapshot) => $reallocationTracker->captureSnapshot($completionAttempt, $snapshot),
+                null,
+                $sourceProject
+            );
+        } catch (\Throwable $error) {
+            report($error);
+            $message = $this->safeReallocationErrorMessage($error);
+
+            try {
+                $reallocationTracker->fail($completionAttempt, $message);
+            } catch (\Throwable $trackingError) {
+                report($trackingError);
+            }
+
+            return back()->with('error', 'Completion failed: '.$message);
+        }
+
+        $successMessage = 'Reallocation completed. The activity, all of its sub-activities, and the full '
+            .number_format($result['amount'], 2)
+            .' budget envelope are now attached to '
+            .$targetProject->name
+            .'. The source component decreased and the destination component increased by the same amount.';
+
+        try {
+            $reallocationTracker->succeed($completionAttempt, $successMessage);
+            $reallocationTracker->markEnvelopeCompleted(
+                $incompleteReallocation['attempt'],
+                $completionAttempt
+            );
+        } catch (\Throwable $trackingError) {
+            report($trackingError);
+        }
+
+        return back()->with('success', $successMessage);
+    }
+
     private function moveActivityToProject(
         Activity $activity,
         Project $targetProject,
         bool $repairExistingMove = false,
         ?callable $beforeMove = null,
-        ?array $restoreState = null
+        ?array $restoreState = null,
+        ?Project $repairBudgetSource = null
     ): array {
-        return DB::transaction(function () use ($activity, $targetProject, $repairExistingMove, $beforeMove, $restoreState) {
+        return DB::transaction(function () use (
+            $activity,
+            $targetProject,
+            $repairExistingMove,
+            $beforeMove,
+            $restoreState,
+            $repairBudgetSource
+        ) {
             $activityToMove = Activity::query()
                 ->lockForUpdate()
                 ->findOrFail($activity->id);
@@ -530,13 +719,20 @@ class ActivityController extends Controller
                 ->lockForUpdate()
                 ->get();
 
+            $sourceProjectId = $repairBudgetSource?->id ?? $activityToMove->project_id;
+            $projectIdsToLock = collect([
+                $activityToMove->project_id,
+                $targetProject->id,
+                $sourceProjectId,
+            ])->filter()->unique()->values();
+
             $lockedProjects = Project::query()
-                ->whereIn('id', [$activityToMove->project_id, $targetProject->id])
+                ->whereIn('id', $projectIdsToLock)
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->get()
                 ->keyBy(fn (Project $project) => (string) $project->id);
-            $lockedSourceProject = $lockedProjects->get((string) $activityToMove->project_id);
+            $lockedSourceProject = $lockedProjects->get((string) $sourceProjectId);
             $lockedTargetProject = $lockedProjects->get((string) $targetProject->id);
 
             if (! $lockedSourceProject || ! $lockedTargetProject) {
@@ -546,6 +742,17 @@ class ActivityController extends Controller
             $alreadyInTarget = (string) $activityToMove->project_id === (string) $lockedTargetProject->id;
             if ($alreadyInTarget && ! $repairExistingMove) {
                 throw new ActivityReallocationException('Activity already assigned to the selected project.');
+            }
+            if (
+                $repairBudgetSource
+                && (
+                    ! $alreadyInTarget
+                    || (string) $lockedSourceProject->id === (string) $lockedTargetProject->id
+                )
+            ) {
+                throw new ActivityReallocationException(
+                    'The incomplete reallocation no longer matches its verified source and destination.'
+                );
             }
 
             $targetYears = collect($lockedTargetProject->years())->map(fn ($year) => (int) $year);
@@ -574,7 +781,7 @@ class ActivityController extends Controller
                 );
             }
 
-            if ($beforeMove && ! $alreadyInTarget) {
+            if ($beforeMove && (! $alreadyInTarget || $repairBudgetSource)) {
                 $beforeMove($this->reallocationSnapshot(
                     $activityToMove,
                     $lockedSubActivities,
@@ -584,14 +791,25 @@ class ActivityController extends Controller
             }
 
             $movedAmount = round((float) $activityToMove->allocations->sum('amount'), 2);
-            if ($alreadyInTarget) {
-                $this->rebalanceTargetProjectYearlyAllocations($lockedTargetProject, $activityToMove);
+            $envelopeTransferred = false;
+            if ($alreadyInTarget && $repairBudgetSource) {
+                $this->transferActivityBudgetEnvelope(
+                    $lockedSourceProject,
+                    $lockedTargetProject,
+                    $activityToMove
+                );
+                $envelopeTransferred = true;
+            } elseif ($alreadyInTarget) {
+                // The activity amount already belongs to this component through
+                // its project relationship. Relationship repair must not add it
+                // again or fail because of a separate component-envelope issue.
             } else {
                 $this->transferActivityBudgetEnvelope(
                     $lockedSourceProject,
                     $lockedTargetProject,
                     $activityToMove
                 );
+                $envelopeTransferred = true;
             }
 
             $originalState = (array) ($restoreState['original'] ?? []);
@@ -615,6 +833,7 @@ class ActivityController extends Controller
             return [
                 'amount' => $movedAmount,
                 'repaired' => $alreadyInTarget,
+                'envelope_transferred' => $envelopeTransferred,
             ];
         });
     }

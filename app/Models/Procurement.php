@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Models\BaseModel;
 use Illuminate\Support\Str;
 use App\Models\EvaluationAssignment;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Procurement extends BaseModel
 {
@@ -101,6 +103,11 @@ class Procurement extends BaseModel
     public function forms()
     {
         return $this->hasMany(DynamicForm::class, 'procurement_id');
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(ProcurementDocument::class)->orderBy('created_at');
     }
 
     public function submissions()
@@ -204,6 +211,10 @@ class Procurement extends BaseModel
 
                 $procurement->slug = $slug;
             }
+        });
+
+        static::deleting(function (Procurement $procurement) {
+            Storage::disk('local')->deleteDirectory("procurements/{$procurement->id}");
         });
     }
 

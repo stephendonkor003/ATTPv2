@@ -49,6 +49,10 @@
                                 </option>
                             @endforeach
                         </select>
+                        <div class="form-text">Vendor and think tank accounts are not eligible for prescreening assignments.</div>
+                        @error('user_id')
+                            <div class="text-danger small mt-1">{{ $message }}</div>
+                        @enderror
                     </div>
 
                     <div class="mb-3" id="submissionSelectWrap" style="{{ $assignmentType === 'submission' ? '' : 'display:none;' }}">

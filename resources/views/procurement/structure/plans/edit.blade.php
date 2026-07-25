@@ -18,6 +18,16 @@
         @if (session('success'))
             <div class="alert alert-success">{{ session('success') }}</div>
         @endif
+        @if ($errors->any())
+            <div class="alert alert-danger" role="alert">
+                <div class="fw-semibold mb-1">The procurement plan could not be updated.</div>
+                <ul class="mb-0">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
         <div class="card shadow-sm">
             <div class="card-body">
@@ -89,6 +99,23 @@
                             rows="2">{{ old('description', $programPlan->description) }}</textarea>
                         @error('description')
                             <small class="text-danger">{{ $message }}</small>
+                        @enderror
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label" for="is_active">Status <span class="text-danger">*</span></label>
+                        <select name="is_active" id="is_active"
+                            class="form-select @error('is_active') is-invalid @enderror" required>
+                            <option value="1" {{ old('is_active', $programPlan->is_active ? '1' : '0') === '1' ? 'selected' : '' }}>
+                                Active
+                            </option>
+                            <option value="0" {{ old('is_active', $programPlan->is_active ? '1' : '0') === '0' ? 'selected' : '' }}>
+                                Archived
+                            </option>
+                        </select>
+                        <small class="text-muted">Archived plans keep their existing items but cannot receive new ones.</small>
+                        @error('is_active')
+                            <small class="text-danger d-block">{{ $message }}</small>
                         @enderror
                     </div>
 

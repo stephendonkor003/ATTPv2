@@ -73,6 +73,10 @@
                                             </option>
                                         @endforeach
                                     </select>
+                                    <div class="form-text">Vendor and think tank accounts are excluded.</div>
+                                    @error('user_id')
+                                        <div class="text-danger small">{{ $message }}</div>
+                                    @enderror
                                 </div>
 
                                 <div class="col-md-3">

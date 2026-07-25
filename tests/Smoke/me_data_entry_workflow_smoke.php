@@ -10,6 +10,7 @@ use App\Models\MeDataEntryFormSection;
 use App\Models\MeDataSubmission;
 use App\Models\MeDataSubmissionAnswer;
 use App\Models\MeReportingPeriod;
+use App\Models\Project;
 use App\Models\Role;
 use App\Models\Sector;
 use App\Models\User;
@@ -155,15 +156,18 @@ class MeDataEntryWorkflowSmoke
             $user->unsetRelation('role');
         }
 
-        $portfolio = Sector::query()
-            ->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+        $projectComponent = Project::query()
+            ->with('program.sector')
+            ->whereHas('program.sector')
             ->orderBy('name')
             ->first();
-        $this->assertTrue((bool) $portfolio, 'An existing portfolio is required for this smoke test.');
+        $this->assertTrue((bool) $projectComponent, 'An existing project component is required for this smoke test.');
+        $portfolio = $projectComponent->program->sector;
 
         $indicator = Indicator::query()->create([
             'indicatorable_type' => Sector::class,
             'indicatorable_id' => $portfolio->id,
+            'project_component_id' => $projectComponent->id,
             'name' => 'Smoke numeric performance indicator '.Str::upper(Str::random(6)),
             'baseline_type' => 'year',
             'baseline_value' => 0,
@@ -177,6 +181,7 @@ class MeDataEntryWorkflowSmoke
         return compact(
             'admin',
             'portfolio',
+            'projectComponent',
             'indicator',
             'firstMember',
             'secondMember',
@@ -1088,6 +1093,7 @@ class MeDataEntryWorkflowSmoke
         $replacementIndicator = Indicator::query()->create([
             'indicatorable_type' => Sector::class,
             'indicatorable_id' => $context['portfolio']->id,
+            'project_component_id' => $context['projectComponent']->id,
             'name' => 'Locked relationship replacement indicator '.Str::upper(Str::random(6)),
             'baseline_type' => 'year',
             'baseline_value' => 0,

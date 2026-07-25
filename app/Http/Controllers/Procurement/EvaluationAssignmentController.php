@@ -4,22 +4,30 @@ namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
 use App\Models\EvaluationAssignment;
-use App\Models\User;
+use App\Support\ProcurementReviewAssignees;
 use Illuminate\Http\Request;
 
 class EvaluationAssignmentController extends Controller
 {
     public function store(Request $request)
     {
+        $validated = $request->validate([
+            'procurement_id' => 'required',
+            'form_id' => 'required',
+            'user_id' => [
+                'required',
+                'uuid',
+                ProcurementReviewAssignees::existsRule(),
+            ],
+            'stage' => 'required',
+        ], [
+            'user_id.exists' => ProcurementReviewAssignees::INELIGIBLE_MESSAGE,
+        ]);
+
         EvaluationAssignment::create(
-            $request->validate([
-                'procurement_id' => 'required',
-                'form_id' => 'required',
-                'user_id' => 'required',
-                'stage' => 'required'
-            ]) + [
+            $validated + [
                 'assigned_by' => auth()->id(),
-                'assigned_at' => now()
+                'assigned_at' => now(),
             ]
         );
 

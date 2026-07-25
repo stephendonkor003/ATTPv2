@@ -5,10 +5,23 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Indicator extends BaseModel
 {
     public const SETUP_TARGET_CONTEXT = 'setup';
+    public const ANNUAL_TARGET_CONTEXT = 'annual';
+
+    public const AGGREGATION_METHODS = [
+        'sum' => 'Sum (additive values only)',
+        'latest' => 'Latest reported value',
+        'average' => 'Average of reported values',
+        'minimum' => 'Minimum reported value',
+        'maximum' => 'Maximum reported value',
+        'percentage' => 'Percentage (latest; never summed)',
+        'ratio' => 'Ratio / rate (latest; never summed)',
+        'non_additive' => 'Other non-additive value (latest)',
+    ];
 
     protected $table = 'myb_indicators';
 
@@ -21,8 +34,11 @@ class Indicator extends BaseModel
         'baseline_year',
         'baseline_type',
         'baseline_value',
+        'annual_target',
+        'life_of_programme_target',
         'indicator_level_id',
         'results_level',
+        'aggregation_method',
         'methodology',
         'data_collection_method',
         'notes',
@@ -38,6 +54,9 @@ class Indicator extends BaseModel
 
     protected $casts = [
         'baseline_type' => 'string',
+        'baseline_value' => 'decimal:4',
+        'annual_target' => 'decimal:4',
+        'life_of_programme_target' => 'decimal:4',
     ];
 
     protected static function booted(): void
@@ -143,6 +162,22 @@ class Indicator extends BaseModel
             ->where('target_context', self::SETUP_TARGET_CONTEXT);
     }
 
+    public function annualTarget()
+    {
+        return $this->hasOne(IndicatorTarget::class)
+            ->where('target_context', self::ANNUAL_TARGET_CONTEXT);
+    }
+
+    public function aggregationMethodLabel(): string
+    {
+        return self::AGGREGATION_METHODS[$this->aggregation_method] ?? 'Latest reported value';
+    }
+
+    public function isAdditive(): bool
+    {
+        return $this->aggregation_method === 'sum';
+    }
+
     public function responsiblePerson()
     {
         return $this->belongsTo(User::class, 'responsible_user_id');
@@ -161,6 +196,18 @@ class Indicator extends BaseModel
     public function dataEntryForms(): HasMany
     {
         return $this->hasMany(MeDataEntryForm::class, 'indicator_id');
+    }
+
+    public function linkedDataEntryForms(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            MeDataEntryForm::class,
+            'me_data_entry_form_indicators',
+            'indicator_id',
+            'form_id'
+        )
+            ->withPivot(['is_primary', 'sort_order'])
+            ->withTimestamps();
     }
 
     public function surveyLink()

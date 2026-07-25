@@ -61,6 +61,57 @@ class ActivityReallocationTracker
     }
 
     /**
+     * Record a new, validated move back to the activity's immediately
+     * preceding component. Unlike an exact revert, this also supports older
+     * successful moves that pre-date reallocation snapshots.
+     */
+    public function beginReturnToPrevious(
+        Activity $activity,
+        Project $targetProject,
+        SystemAuditLog $previousAttempt
+    ): SystemAuditLog {
+        return $this->beginAttempt(
+            $activity,
+            $targetProject,
+            null,
+            self::ACTION,
+            'Activity return to previous component started',
+            'Returning the activity to its previous component is in progress.',
+            [
+                'operation' => 'return_to_previous',
+                'returns_reallocation_attempt_id' => (string) $previousAttempt->id,
+            ]
+        );
+    }
+
+    /**
+     * Record completion of a legacy/incomplete move whose activity
+     * relationship is already at the destination but whose budget envelope
+     * still needs to be transferred from the verified source.
+     */
+    public function beginCompleteToCurrent(
+        Activity $activity,
+        Project $sourceProject,
+        Project $targetProject,
+        SystemAuditLog $previousAttempt
+    ): SystemAuditLog {
+        return $this->beginAttempt(
+            $activity,
+            $targetProject,
+            null,
+            self::ACTION,
+            'Activity reallocation completion started',
+            'Completing the relationship and budget-envelope move.',
+            [
+                'operation' => 'complete_to_current',
+                'source_project_id' => (string) $sourceProject->id,
+                'source_project_name' => (string) $sourceProject->name,
+                'completes_reallocation_attempt_id' => (string) $previousAttempt->id,
+            ]
+        );
+    }
+
+    /**
      * Persist the locked, pre-move state required for an exact relationship
      * restore. This is called inside the budget-move transaction.
      */
@@ -137,6 +188,117 @@ class ActivityReallocationTracker
         return $reallocations;
     }
 
+    /**
+     * Provide the immediately preceding component for successful moves,
+     * including legacy attempts that do not have an exact reversion snapshot.
+     */
+    public function previousReallocationsFor(Collection $activities, Collection $projects): Collection
+    {
+        $activitiesById = $activities->keyBy(fn (Activity $activity) => (string) $activity->id);
+        $projectsById = $projects->keyBy(fn (Project $project) => (string) $project->id);
+        $attemptsByActivity = $this->successfulUnreturnedAttemptsFor(
+            $activitiesById->keys()->all()
+        );
+
+        $reallocations = collect();
+        foreach ($activitiesById as $activityId => $activity) {
+            $reallocation = $this->previousReallocationFromAttempts(
+                $activity,
+                $attemptsByActivity->get($activityId, collect())
+            );
+
+            if (! $reallocation) {
+                continue;
+            }
+
+            $sourceProject = $projectsById->get($reallocation['source_project_id']);
+            if (! $sourceProject) {
+                continue;
+            }
+
+            $reallocation['source_project'] = $sourceProject;
+            $reallocations->put($activityId, $reallocation);
+        }
+
+        return $reallocations;
+    }
+
+    /**
+     * Resolve the server-side evidence submitted by a return control and
+     * reject stale or tampered forms.
+     */
+    public function resolvePreviousReallocation(Activity $activity, string $attemptId): array
+    {
+        $attemptsByActivity = $this->successfulUnreturnedAttemptsFor([(string) $activity->id]);
+        $reallocation = $this->previousReallocationFromAttempts(
+            $activity,
+            $attemptsByActivity->get((string) $activity->id, collect())
+        );
+
+        if (! $reallocation || (string) $reallocation['attempt']->id !== $attemptId) {
+            throw new ActivityReallocationException(
+                'The previous component can no longer be verified. Refresh the page and try again.'
+            );
+        }
+
+        return $reallocation;
+    }
+
+    /**
+     * Provide incomplete legacy moves that can be safely completed at the
+     * activity's current destination. Snapshot-backed moves already include
+     * their budget transfer and are deliberately excluded.
+     */
+    public function completableReallocationsFor(Collection $activities, Collection $projects): Collection
+    {
+        $activitiesById = $activities->keyBy(fn (Activity $activity) => (string) $activity->id);
+        $projectsById = $projects->keyBy(fn (Project $project) => (string) $project->id);
+        $attemptsByActivity = $this->successfulUnreturnedAttemptsFor(
+            $activitiesById->keys()->all()
+        );
+
+        $reallocations = collect();
+        foreach ($activitiesById as $activityId => $activity) {
+            $reallocation = $this->completableReallocationFromAttempts(
+                $activity,
+                $attemptsByActivity->get($activityId, collect())
+            );
+
+            if (! $reallocation) {
+                continue;
+            }
+
+            $sourceProject = $projectsById->get($reallocation['source_project_id']);
+            $targetProject = $projectsById->get((string) $activity->project_id);
+            if (! $sourceProject || ! $targetProject) {
+                continue;
+            }
+
+            $reallocation['source_project'] = $sourceProject;
+            $reallocation['target_project'] = $targetProject;
+            $reallocations->put($activityId, $reallocation);
+        }
+
+        return $reallocations;
+    }
+
+    public function resolveCompletableReallocation(Activity $activity, string $attemptId): array
+    {
+        $attemptsByActivity = $this->successfulUnreturnedAttemptsFor([(string) $activity->id]);
+        $reallocation = $this->completableReallocationFromAttempts(
+            $activity,
+            $attemptsByActivity->get((string) $activity->id, collect())
+        );
+
+        if (! $reallocation || (string) $reallocation['attempt']->id !== $attemptId) {
+            throw new ActivityReallocationException(
+                'This incomplete move can no longer be verified. Refresh the page and try again.'
+            );
+        }
+
+        return $reallocation;
+    }
+
     public function markReverted(Collection $reallocationAttempts, SystemAuditLog $revertAttempt): void
     {
         $reallocationAttempts
@@ -151,6 +313,18 @@ class ActivityReallocationTracker
                     ]),
                 ]);
             });
+    }
+
+    public function markEnvelopeCompleted(
+        SystemAuditLog $previousAttempt,
+        SystemAuditLog $completionAttempt
+    ): void {
+        $previousAttempt->update([
+            'payload' => array_merge((array) $previousAttempt->payload, [
+                'envelope_completed_at' => now()->toIso8601String(),
+                'envelope_completed_by_attempt_id' => (string) $completionAttempt->id,
+            ]),
+        ]);
     }
 
     private function beginAttempt(
@@ -382,11 +556,103 @@ class ActivityReallocationTracker
             ->groupBy(fn (SystemAuditLog $attempt) => (string) data_get($attempt->payload, 'activity_id'));
     }
 
+    /**
+     * Get successful moves, newest first, without requiring a modern
+     * reallocation snapshot.
+     */
+    private function successfulUnreturnedAttemptsFor(array $activityIds): Collection
+    {
+        if ($activityIds === []) {
+            return collect();
+        }
+
+        $allowedActivityIds = array_map('strval', $activityIds);
+
+        return SystemAuditLog::query()
+            ->where('action', self::ACTION)
+            ->where('status_code', 200)
+            ->latest('created_at')
+            ->get()
+            ->filter(function (SystemAuditLog $attempt) use ($allowedActivityIds) {
+                $payload = (array) $attempt->payload;
+
+                return ($payload['status'] ?? null) === 'succeeded'
+                    && empty($payload['reverted_at'])
+                    && in_array((string) ($payload['activity_id'] ?? ''), $allowedActivityIds, true);
+            })
+            ->groupBy(fn (SystemAuditLog $attempt) => (string) data_get($attempt->payload, 'activity_id'));
+    }
+
+    /**
+     * Return the newest successful move that placed the activity in its
+     * current component.
+     *
+     * @param  Collection<int, SystemAuditLog>  $attempts
+     * @return array{attempt: SystemAuditLog, source_project_id: string}|null
+     */
+    private function previousReallocationFromAttempts(Activity $activity, Collection $attempts): ?array
+    {
+        $currentProjectId = (string) $activity->project_id;
+
+        $attempt = $attempts->first(function (SystemAuditLog $attempt) use ($currentProjectId) {
+            $payload = (array) $attempt->payload;
+            $sourceProjectId = (string) ($payload['source_project_id'] ?? '');
+
+            return ($payload['status'] ?? null) === 'succeeded'
+                && empty($payload['reverted_at'])
+                && (string) ($payload['target_project_id'] ?? '') === $currentProjectId
+                && $sourceProjectId !== ''
+                && $sourceProjectId !== $currentProjectId;
+        });
+
+        if (! $attempt) {
+            return null;
+        }
+
+        return [
+            'attempt' => $attempt,
+            'source_project_id' => (string) data_get($attempt->payload, 'source_project_id'),
+        ];
+    }
+
+    /**
+     * Return a legacy/incomplete move only when its latest successful evidence
+     * has no transaction snapshot and has not already had its envelope
+     * completed by a later repair.
+     *
+     * @param  Collection<int, SystemAuditLog>  $attempts
+     * @return array{attempt: SystemAuditLog, source_project_id: string}|null
+     */
+    private function completableReallocationFromAttempts(Activity $activity, Collection $attempts): ?array
+    {
+        $reallocation = $this->previousReallocationFromAttempts($activity, $attempts);
+        if (! $reallocation) {
+            return null;
+        }
+
+        $payload = (array) $reallocation['attempt']->payload;
+        if (
+            ! empty($payload['reallocation_snapshot'])
+            || ! empty($payload['envelope_completed_at'])
+            || ($payload['operation'] ?? null) === 'complete_to_current'
+        ) {
+            return null;
+        }
+
+        return $reallocation;
+    }
+
     private function attemptLabel(SystemAuditLog $attempt): string
     {
-        return $attempt->action === self::REVERT_ACTION
-            ? 'Activity reallocation revert'
-            : 'Activity reallocation';
+        if ($attempt->action === self::REVERT_ACTION) {
+            return 'Activity reallocation revert';
+        }
+
+        return match (data_get($attempt->payload, 'operation')) {
+            'return_to_previous' => 'Activity return to previous component',
+            'complete_to_current' => 'Activity reallocation completion',
+            default => 'Activity reallocation',
+        };
     }
 
     /**
@@ -486,10 +752,9 @@ class ActivityReallocationTracker
             ]);
         }
 
-        $reallocationEvidence = $this->reallocatedActivityIds(
-            $allowedActivityIds,
-            $openAttempts,
-            $legacyRequests
+        $incompleteEnvelopeActivityIds = $this->activitiesWithIncompleteEnvelopeTransfers(
+            $activities,
+            $this->successfulUnreturnedAttemptsFor($allowedActivityIds)
         );
         foreach ($activities as $activity) {
             $project = $projectsById->get((string) $activity->project_id);
@@ -498,7 +763,7 @@ class ActivityReallocationTracker
             }
 
             $directReasons = $this->activityIntegrityReasons($activity, $project, []);
-            $deficitReasons = isset($reallocationEvidence[(string) $activity->id])
+            $deficitReasons = isset($incompleteEnvelopeActivityIds[(string) $activity->id])
                 ? ($projectDeficits[(string) $project->id] ?? [])
                 : [];
             $reasons = array_values(array_unique(array_merge($directReasons, $deficitReasons)));
@@ -588,35 +853,26 @@ class ActivityReallocationTracker
         return array_values(array_unique(array_merge($reasons, $projectDeficitReasons)));
     }
 
-    private function reallocatedActivityIds(
-        array $allowedActivityIds,
-        Collection $openAttempts,
-        Collection $legacyRequests
+    /**
+     * A component deficit is actionable against an activity only when that
+     * activity has a successful legacy move whose budget-envelope transfer is
+     * still incomplete. Historical reallocation logs alone are not sufficient:
+     * otherwise every already-repaired activity in the same component is
+     * repeatedly reported for one shared component deficit.
+     */
+    private function activitiesWithIncompleteEnvelopeTransfers(
+        Collection $activities,
+        Collection $attemptsByActivity
     ): array
     {
         $ids = [];
 
-        foreach ($openAttempts as $attempt) {
-            $id = (string) data_get($attempt->payload, 'activity_id');
-            if ($id !== '') {
-                $ids[$id] = true;
-            }
-        }
+        foreach ($activities as $activity) {
+            $activityId = (string) $activity->id;
+            $attempts = $attemptsByActivity->get($activityId, collect());
 
-        foreach ($legacyRequests as $legacyRequest) {
-            $ids[$legacyRequest['activity_id']] = true;
-        }
-
-        $historicalLogs = SystemAuditLog::query()
-            ->where('route_name', 'budget.activities.reallocate')
-            ->where('action', 'model_updated')
-            ->latest('created_at')
-            ->get(['payload']);
-
-        foreach ($historicalLogs as $log) {
-            $id = (string) data_get($log->payload, 'id');
-            if (in_array($id, $allowedActivityIds, true)) {
-                $ids[$id] = true;
+            if ($this->completableReallocationFromAttempts($activity, $attempts)) {
+                $ids[$activityId] = true;
             }
         }
 

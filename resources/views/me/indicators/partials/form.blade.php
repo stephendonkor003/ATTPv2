@@ -294,7 +294,22 @@
                     </div>
 
                     <div class="col-md-4">
-                        <label class="form-label" for="indicator-target">Target <span class="text-danger">*</span></label>
+                        <label class="form-label" for="indicator-annual-target">Annual target <span class="text-danger">*</span></label>
+                        <input
+                            type="number"
+                            id="indicator-annual-target"
+                            name="annual_target"
+                            class="form-control @error('annual_target') is-invalid @enderror"
+                            value="{{ old('annual_target', $editingIndicator->annual_target ?? '') }}"
+                            step="any"
+                            placeholder="Target for one reporting year"
+                            required
+                        >
+                        @error('annual_target')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label" for="indicator-target">Life-of-programme target <span class="text-danger">*</span></label>
                         <input
                             type="number"
                             id="indicator-target"
@@ -302,10 +317,26 @@
                             class="form-control @error('target_value') is-invalid @enderror"
                             value="{{ $targetValue }}"
                             step="any"
-                            placeholder="Expected achievement"
+                            placeholder="Expected achievement by programme end"
                             required
                         >
                         @error('target_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-md-8">
+                        <label class="form-label" for="indicator-aggregation-method">Approved aggregation method <span class="text-danger">*</span></label>
+                        <select
+                            id="indicator-aggregation-method"
+                            name="aggregation_method"
+                            class="form-select @error('aggregation_method') is-invalid @enderror"
+                            required
+                        >
+                            @foreach ($aggregationMethods as $value => $label)
+                                <option value="{{ $value }}" @selected(old('aggregation_method', $editingIndicator->aggregation_method ?? 'sum') === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        @error('aggregation_method')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <small class="text-muted">Only “Sum” adds periods. Percentages, ratios, averages and other non-additive values are never summed.</small>
                     </div>
                 </div>
             </div>

@@ -52,6 +52,20 @@
             'patterns' => ['think-tank.me-data.*'],
         ],
         [
+            'area' => 'me',
+            'label' => 'M&E Reports',
+            'icon' => 'feather-file-text',
+            'route' => 'think-tank.performance-reports.index',
+            'patterns' => ['think-tank.performance-reports.*'],
+        ],
+        [
+            'area' => 'me',
+            'label' => 'Notifications',
+            'icon' => 'feather-bell',
+            'route' => 'think-tank.reporting-notifications.index',
+            'patterns' => ['think-tank.reporting-notifications.*'],
+        ],
+        [
             'area' => 'finance',
             'label' => 'Finance',
             'icon' => 'feather-credit-card',

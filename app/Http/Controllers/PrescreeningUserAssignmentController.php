@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 use App\Mail\PrescreeningAssigned;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
-use App\Models\User;
 use App\Models\PrescreeningAssignment;
+use App\Support\ProcurementReviewAssignees;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
@@ -46,7 +46,9 @@ class PrescreeningUserAssignmentController extends Controller
     public function edit(Procurement $procurement)
     {
         $this->assertProcurementInScope($procurement);
-        $users = User::orderBy('name')->get();
+        $users = ProcurementReviewAssignees::query()
+            ->orderBy('name')
+            ->get();
         $submissions = $procurement->submissions()
             ->orderByDesc('created_at')
             ->get();
@@ -74,20 +76,27 @@ class PrescreeningUserAssignmentController extends Controller
     public function store(Request $request, Procurement $procurement)
     {
         $this->assertProcurementInScope($procurement);
-        $request->validate([
+        $validated = $request->validate([
             'assignment_type' => 'required|in:procurement,submission',
-            'user_id' => 'required|exists:users,id',
+            'user_id' => [
+                'required',
+                'uuid',
+                ProcurementReviewAssignees::existsRule(),
+            ],
             'submission_id' => 'required_if:assignment_type,submission|nullable|exists:form_submissions,id',
+        ], [
+            'user_id.exists' => ProcurementReviewAssignees::INELIGIBLE_MESSAGE,
         ]);
+
+        $assignee = ProcurementReviewAssignees::query()
+            ->findOrFail($validated['user_id']);
 
         // Reset assignments (enforce single prescreener)
         PrescreeningAssignment::where('procurement_id', $procurement->id)->delete();
         FormSubmission::where('procurement_id', $procurement->id)
             ->update(['assigned_prescreener_id' => null]);
 
-        $assignee = User::findOrFail($request->user_id);
-
-        if ($request->assignment_type === 'procurement') {
+        if ($validated['assignment_type'] === 'procurement') {
             PrescreeningAssignment::create([
                 'procurement_id' => $procurement->id,
                 'user_id'        => $assignee->id,
@@ -96,8 +105,8 @@ class PrescreeningUserAssignmentController extends Controller
             ]);
         }
 
-        if ($request->assignment_type === 'submission' && $request->submission_id) {
-            FormSubmission::where('id', $request->submission_id)
+        if ($validated['assignment_type'] === 'submission' && ! empty($validated['submission_id'])) {
+            FormSubmission::where('id', $validated['submission_id'])
                 ->where('procurement_id', $procurement->id)
                 ->update(['assigned_prescreener_id' => $assignee->id]);
         }

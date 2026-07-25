@@ -84,13 +84,17 @@ class SubActivityController extends Controller
 
     $reallocationIssues = $reallocationTracker->issuesFor($activities, $projects);
     $revertableReallocations = $reallocationTracker->revertableReallocationsFor($activities, $projects);
+    $previousReallocations = $reallocationTracker->previousReallocationsFor($activities, $projects);
+    $completableReallocations = $reallocationTracker->completableReallocationsFor($activities, $projects);
 
     return view('subactivities.index', compact(
         'programs',
         'search',
         'subActivityStats',
         'reallocationIssues',
-        'revertableReallocations'
+        'revertableReallocations',
+        'previousReallocations',
+        'completableReallocations'
     ));
 }
 

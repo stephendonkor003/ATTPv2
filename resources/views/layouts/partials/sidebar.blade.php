@@ -1189,7 +1189,7 @@
                 {{-- ======================================================
                     | MONITORING & EVALUATION
                     ====================================================== --}}
-                @canany(['me.configuration.view', 'me.configuration.manage', 'me.data_entry.view', 'me.data_entry.manage', 'world.indicators.manage'])
+                @canany(['me.configuration.view', 'me.configuration.manage', 'me.data_entry.view', 'me.data_entry.manage', 'me.mission_reports.view', 'me.mission_reports.manage', 'me.mission_reports.review', 'me.mission_reports.archive', 'me.reporting_notifications.view', 'world.indicators.manage'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('Monitoring & Evaluation') }}</label>
                     </li>
@@ -1216,6 +1216,22 @@
                                     </a>
                                 </li>
                             @endcanany
+                            @canany(['me.mission_reports.view', 'me.mission_reports.manage', 'me.mission_reports.review', 'me.mission_reports.archive'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.mission-reports.index') }}" class="nxl-link">
+                                        <i class="feather-map me-2"></i> Mission Reports
+                                    </a>
+                                </li>
+                            @endcanany
+                            @can('me.reporting_notifications.view')
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.reporting-notifications.index') }}" class="nxl-link">
+                                        <i class="feather-bell me-2"></i> Reporting Notifications
+                                        @php($meUnreadNotifications = auth()->user()?->unreadNotifications()->where('type', \App\Notifications\MeReportingNotification::class)->count() ?? 0)
+                                        @if($meUnreadNotifications)<span class="badge bg-danger ms-1">{{ $meUnreadNotifications }}</span>@endif
+                                    </a>
+                                </li>
+                            @endcan
                             @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.data-quality') }}" class="nxl-link">

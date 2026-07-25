@@ -123,6 +123,7 @@
                             <th>Portfolio</th>
                             <th>Type</th>
                             <th>Linked indicators</th>
+                            <th>Validation</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -143,6 +144,11 @@
                                 <td><span class="badge bg-primary-subtle text-primary">{{ $item->typeLabel() }}</span></td>
                                 <td>{{ number_format((int) $item->indicators_count) }}</td>
                                 <td>
+                                    <span class="badge {{ $item->validation_status === 'validated' ? 'bg-success' : ($item->validation_status === 'rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
+                                        {{ \Illuminate\Support\Str::headline($item->validation_status ?: 'pending') }}
+                                    </span>
+                                </td>
+                                <td>
                                     <div class="d-flex justify-content-end gap-2">
                                         @if ($item->file_path)
                                             <a href="{{ route('budget.me.knowledge-evidence.download', $item) }}" class="btn btn-sm btn-light border">
@@ -155,6 +161,15 @@
                                             </a>
                                         @endif
                                         @can('me.configuration.manage')
+                                            @if($item->document_type === 'means_of_verification' && $item->validation_status !== 'validated')
+                                                <form method="POST" action="{{ route('budget.me.knowledge-evidence.validate', $item) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="validation_status" value="validated">
+                                                    <button class="btn btn-sm btn-outline-success" title="Validate Means of Verification">
+                                                        <i class="feather-check-circle"></i>
+                                                    </button>
+                                                </form>
+                                            @endif
                                             <form method="POST" action="{{ route('budget.me.knowledge-evidence.destroy', $item) }}" onsubmit="return confirm('Remove this evidence item?');">
                                                 @csrf
                                                 @method('DELETE')
@@ -168,7 +183,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="text-center text-muted py-5">No knowledge or evidence items match this view.</td>
+                                <td colspan="6" class="text-center text-muted py-5">No knowledge or evidence items match this view.</td>
                             </tr>
                         @endforelse
                     </tbody>

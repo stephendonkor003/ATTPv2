@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class MeDataCollectionAssignment extends BaseModel
@@ -38,5 +39,10 @@ class MeDataCollectionAssignment extends BaseModel
     public function submission(): HasOne
     {
         return $this->hasOne(MeDataSubmission::class, 'assignment_id');
+    }
+
+    public function performanceReports(): HasMany
+    {
+        return $this->hasMany(MePerformanceReport::class, 'assignment_id');
     }
 }

@@ -176,6 +176,127 @@ it('resolves a reallocation chain back to its original project', function () {
         ->and($reallocation['restore_state']['current']['target_project_id'])->toBe('project-c');
 });
 
+it('resolves the immediately previous component without requiring a snapshot', function () {
+    $tracker = new ActivityReallocationTracker();
+    $method = new \ReflectionMethod($tracker, 'previousReallocationFromAttempts');
+
+    $activity = new Activity();
+    $activity->forceFill(['project_id' => 'project-c']);
+
+    $olderMove = new SystemAuditLog();
+    $olderMove->forceFill([
+        'id' => 'attempt-a-to-b',
+        'payload' => [
+            'status' => 'succeeded',
+            'source_project_id' => 'project-a',
+            'target_project_id' => 'project-b',
+        ],
+    ]);
+
+    $latestMove = new SystemAuditLog();
+    $latestMove->forceFill([
+        'id' => 'attempt-b-to-c',
+        'payload' => [
+            'status' => 'succeeded',
+            'source_project_id' => 'project-b',
+            'target_project_id' => 'project-c',
+        ],
+    ]);
+
+    $reallocation = $method->invoke($tracker, $activity, collect([$latestMove, $olderMove]));
+
+    expect($reallocation['attempt']->id)->toBe('attempt-b-to-c')
+        ->and($reallocation['source_project_id'])->toBe('project-b');
+});
+
+it('offers envelope completion only for a legacy move without a transaction snapshot', function () {
+    $tracker = new ActivityReallocationTracker();
+    $method = new \ReflectionMethod($tracker, 'completableReallocationFromAttempts');
+
+    $activity = new Activity();
+    $activity->forceFill(['project_id' => 'project-b']);
+
+    $legacyMove = new SystemAuditLog();
+    $legacyMove->forceFill([
+        'id' => 'legacy-attempt-a-to-b',
+        'payload' => [
+            'status' => 'succeeded',
+            'source_project_id' => 'project-a',
+            'target_project_id' => 'project-b',
+        ],
+    ]);
+
+    $completable = $method->invoke($tracker, $activity, collect([$legacyMove]));
+
+    expect($completable['attempt']->id)->toBe('legacy-attempt-a-to-b')
+        ->and($completable['source_project_id'])->toBe('project-a');
+
+    $snapshotBackedMove = new SystemAuditLog();
+    $snapshotBackedMove->forceFill([
+        'id' => 'snapshot-attempt-a-to-b',
+        'payload' => [
+            'status' => 'succeeded',
+            'source_project_id' => 'project-a',
+            'target_project_id' => 'project-b',
+            'reallocation_snapshot' => [
+                'source_project_id' => 'project-a',
+                'target_project_id' => 'project-b',
+            ],
+        ],
+    ]);
+
+    expect($method->invoke($tracker, $activity, collect([$snapshotBackedMove, $legacyMove])))
+        ->toBeNull();
+});
+
+it('does not reopen repaired activities because another activity caused a component deficit', function () {
+    $tracker = new ActivityReallocationTracker();
+    $method = new \ReflectionMethod($tracker, 'activitiesWithIncompleteEnvelopeTransfers');
+
+    $repairedActivity = new Activity();
+    $repairedActivity->forceFill([
+        'id' => 'repaired-activity',
+        'project_id' => 'project-b',
+    ]);
+
+    $relationshipRepair = new SystemAuditLog();
+    $relationshipRepair->forceFill([
+        'payload' => [
+            'status' => 'succeeded',
+            'source_project_id' => 'project-b',
+            'target_project_id' => 'project-b',
+        ],
+    ]);
+
+    $incompleteActivity = new Activity();
+    $incompleteActivity->forceFill([
+        'id' => 'incomplete-activity',
+        'project_id' => 'project-b',
+    ]);
+
+    $incompleteMove = new SystemAuditLog();
+    $incompleteMove->forceFill([
+        'payload' => [
+            'status' => 'succeeded',
+            'source_project_id' => 'project-a',
+            'target_project_id' => 'project-b',
+        ],
+    ]);
+
+    $activityIds = $method->invoke(
+        $tracker,
+        collect([$repairedActivity, $incompleteActivity]),
+        collect([
+            'repaired-activity' => collect([$relationshipRepair]),
+            'incomplete-activity' => collect([$incompleteMove]),
+        ])
+    );
+
+    expect($activityIds)
+        ->not->toHaveKey('repaired-activity')
+        ->toHaveKey('incomplete-activity');
+});
+
 it('rebalances target years without changing the component budget envelope', function () {
     $controller = new ActivityController();
     $method = new \ReflectionMethod($controller, 'rebalanceAllocationPlan');

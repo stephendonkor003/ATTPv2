@@ -95,7 +95,36 @@
                         </div>
                     </div>
                 </div>
+        </div>
+
+        @if ($procurement->documents->isNotEmpty())
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold">Procurement Documents</h6>
+                    <span class="badge bg-primary">{{ $procurement->documents->count() }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        @foreach ($procurement->documents as $document)
+                            <div class="col-md-6">
+                                <a href="{{ route('procurements.documents.download', [$procurement, $document]) }}"
+                                    class="d-flex align-items-center gap-3 border rounded p-3 text-decoration-none h-100">
+                                    <span class="btn btn-outline-primary btn-icon rounded-circle flex-shrink-0">
+                                        <i class="feather-download"></i>
+                                    </span>
+                                    <span>
+                                        <strong class="d-block text-dark">{{ $document->document_name }}</strong>
+                                        <small class="text-muted">
+                                            {{ $document->original_name }} · {{ $document->formatted_size }}
+                                        </small>
+                                    </span>
+                                </a>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
             </div>
+        @endif
 
         {{-- ================= PROCUREMENT STATUS ACTIONS ================= --}}
         <div class="card shadow-sm mb-4">

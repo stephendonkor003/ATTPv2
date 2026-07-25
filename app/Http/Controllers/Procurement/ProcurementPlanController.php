@@ -15,7 +15,10 @@ use App\Models\ProcurementStatus;
 use App\Models\ProcurementStepApproval;
 use App\Models\ProcurementStepStage;
 use App\Models\SubActivity;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ProcurementPlanController extends Controller
@@ -89,7 +92,7 @@ class ProcurementPlanController extends Controller
     /**
      * Show the form for creating a new procurement plan.
      */
-    public function create()
+    public function create(Request $request)
     {
         $activities = $this->scopedActivitiesQuery()->orderBy('name')->get();
         $methods = ProcurementMethodPlanned::active()->orderBy('method_name')->get();
@@ -101,10 +104,14 @@ class ProcurementPlanController extends Controller
             ->orderBy('approval_order')
             ->get();
         $programPlans = $this->applyProcurementProgramPlanScope(
-            ProcurementProgramPlan::where('is_active', true)
+            ProcurementProgramPlan::with('governanceNode')->where('is_active', true)
         )
             ->orderBy('name')
             ->get();
+        $requestedProgramPlanId = $request->query('program_plan_id');
+        $selectedProgramPlanId = is_string($requestedProgramPlanId)
+            ? $programPlans->firstWhere('id', $requestedProgramPlanId)?->id
+            : null;
 
         // Generate a default procurement code
         $defaultCode = ProcurementPlan::generateCode();
@@ -118,7 +125,8 @@ class ProcurementPlanController extends Controller
             'stepStages',
             'stepApprovals',
             'defaultCode',
-            'programPlans'
+            'programPlans',
+            'selectedProgramPlanId'
         ));
     }
 
@@ -127,22 +135,28 @@ class ProcurementPlanController extends Controller
      */
     public function store(Request $request)
     {
+        $this->normalizePlanRequest($request);
+
         $validated = $request->validate([
             'procurement_code' => 'required|string|max:50|unique:myb_procurement_plans,procurement_code',
-            'is_code_auto_generated' => 'boolean',
+            'is_code_auto_generated' => 'required|boolean',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'activity_id' => 'nullable|exists:myb_activities,id',
+            'activity_id' => 'required|exists:myb_activities,id',
             'sub_activity_id' => 'nullable|exists:myb_sub_activities,id',
-            'method_planned_id' => 'nullable|exists:myb_procurement_method_planned,id',
-            'program_plan_id' => 'required|exists:myb_procurement_program_plans,id',
+            'method_planned_id' => 'required|exists:myb_procurement_method_planned,id',
+            'program_plan_id' => [
+                'required',
+                Rule::exists('myb_procurement_program_plans', 'id')
+                    ->where(fn ($query) => $query->where('is_active', true)),
+            ],
             'geographic_id' => 'nullable|exists:myb_procurement_geographics,id',
             'stage_id' => 'nullable|exists:myb_procurement_stages,id',
             'status_id' => 'nullable|exists:myb_procurement_statuses,id',
             'step_stage_id' => 'nullable|exists:myb_procurement_step_stages,id',
             'step_approval_id' => 'nullable|exists:myb_procurement_step_approvals,id',
-            'is_launched' => 'boolean',
-            'estimated_start_date' => 'nullable|date',
+            'is_launched' => 'required|boolean',
+            'estimated_start_date' => 'required|date',
             'estimated_end_date' => 'nullable|date|after_or_equal:estimated_start_date',
             'estimated_budget' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|max:10',
@@ -152,8 +166,13 @@ class ProcurementPlanController extends Controller
 
         $this->ensureSubActivityIsApprovedCommittedInScope($request);
         $validated['governance_node_id'] = $this->resolveProcurementPlanNodeId($validated);
+        $this->ensureStepApprovalMatchesNode($validated['step_approval_id'] ?? null, $validated['governance_node_id']);
 
-        $validated['is_code_auto_generated'] = $request->has('is_code_auto_generated');
+        $validated['procurement_code'] = strtoupper(trim($validated['procurement_code']));
+        $validated['is_code_auto_generated'] = $request->boolean('is_code_auto_generated');
+        $validated['is_launched'] = $request->boolean('is_launched');
+        $validated['currency'] = strtoupper(trim((string) ($validated['currency'] ?? 'USD'))) ?: 'USD';
+        $validated['fiscal_year'] ??= Carbon::parse($validated['estimated_start_date'])->year;
         $validated['created_by'] = auth()->id();
 
         // If launched, set launched_at
@@ -161,22 +180,23 @@ class ProcurementPlanController extends Controller
             $validated['launched_at'] = now();
         }
 
-        // Auto-calculate end date if method is selected and start date provided
-        if ($request->filled('method_planned_id') && $request->filled('estimated_start_date') && !$request->filled('estimated_end_date')) {
-            $method = ProcurementMethodPlanned::find($request->method_planned_id);
-            if ($method) {
-                $validated['estimated_end_date'] = \Carbon\Carbon::parse($request->estimated_start_date)
-                    ->addDays($method->method_target_days)
-                    ->format('Y-m-d');
-            }
-        }
+        $validated['estimated_end_date'] = $this->calculatedEndDate(
+            $validated['method_planned_id'],
+            $validated['estimated_start_date']
+        );
 
         try {
             ProcurementPlan::create($validated);
         } catch (\Throwable $e) {
+            Log::error('Procurement plan item creation failed.', [
+                'user_id' => auth()->id(),
+                'program_plan_id' => $validated['program_plan_id'] ?? null,
+                'exception' => $e,
+            ]);
+
             return redirect()->route('procurement.plans.create')
                 ->withInput()
-                ->with('error', 'Failed to create procurement plan: ' . $e->getMessage());
+                ->with('error', 'The procurement plan item could not be saved. Please review the fields and try again.');
         }
 
         return redirect()->route('procurement.plans.index')
@@ -214,8 +234,9 @@ class ProcurementPlanController extends Controller
         $this->assertProcurementPlanInScope($plan);
 
         $activities = $this->scopedActivitiesQuery()->orderBy('name')->get();
-        $subActivities = $plan->activity_id
-            ? $this->scopedSubActivitiesQuery()->where('activity_id', $plan->activity_id)->orderBy('name')->get()
+        $selectedActivityId = old('activity_id', $plan->activity_id);
+        $subActivities = $selectedActivityId
+            ? $this->scopedSubActivitiesQuery()->where('activity_id', $selectedActivityId)->orderBy('name')->get()
             : collect();
         $methods = ProcurementMethodPlanned::active()->orderBy('method_name')->get();
         $geographics = ProcurementGeographic::active()->orderBy('name')->get();
@@ -226,7 +247,10 @@ class ProcurementPlanController extends Controller
             ->orderBy('approval_order')
             ->get();
         $programPlans = $this->applyProcurementProgramPlanScope(
-            ProcurementProgramPlan::where('is_active', true)
+            ProcurementProgramPlan::with('governanceNode')
+                ->where(fn ($query) => $query
+                    ->where('is_active', true)
+                    ->orWhere('id', $plan->program_plan_id))
         )
             ->orderBy('name')
             ->get();
@@ -251,22 +275,29 @@ class ProcurementPlanController extends Controller
     public function update(Request $request, ProcurementPlan $plan)
     {
         $this->assertProcurementPlanInScope($plan);
+        $this->normalizePlanRequest($request);
 
         $validated = $request->validate([
-            'procurement_code' => 'required|string|max:50|unique:myb_procurement_plans,procurement_code,' . $plan->id,
+            'procurement_code' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('myb_procurement_plans', 'procurement_code')->ignore($plan->id),
+            ],
+            'is_code_auto_generated' => 'required|boolean',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'activity_id' => 'nullable|exists:myb_activities,id',
+            'activity_id' => 'required|exists:myb_activities,id',
             'sub_activity_id' => 'nullable|exists:myb_sub_activities,id',
-            'method_planned_id' => 'nullable|exists:myb_procurement_method_planned,id',
+            'method_planned_id' => 'required|exists:myb_procurement_method_planned,id',
             'program_plan_id' => 'required|exists:myb_procurement_program_plans,id',
             'geographic_id' => 'nullable|exists:myb_procurement_geographics,id',
             'stage_id' => 'nullable|exists:myb_procurement_stages,id',
             'status_id' => 'nullable|exists:myb_procurement_statuses,id',
             'step_stage_id' => 'nullable|exists:myb_procurement_step_stages,id',
             'step_approval_id' => 'nullable|exists:myb_procurement_step_approvals,id',
-            'is_launched' => 'boolean',
-            'estimated_start_date' => 'nullable|date',
+            'is_launched' => 'required|boolean',
+            'estimated_start_date' => 'required|date',
             'estimated_end_date' => 'nullable|date|after_or_equal:estimated_start_date',
             'estimated_budget' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|max:10',
@@ -285,24 +316,35 @@ class ProcurementPlanController extends Controller
         }
 
         $validated['governance_node_id'] = $this->resolveProcurementPlanNodeId($validated);
+        $this->ensureStepApprovalMatchesNode($validated['step_approval_id'] ?? null, $validated['governance_node_id']);
+        $validated['procurement_code'] = strtoupper(trim($validated['procurement_code']));
+        $validated['is_code_auto_generated'] = $request->boolean('is_code_auto_generated');
+        $validated['is_launched'] = $request->boolean('is_launched');
+        $validated['currency'] = strtoupper(trim((string) ($validated['currency'] ?? 'USD'))) ?: 'USD';
+        $validated['fiscal_year'] ??= Carbon::parse($validated['estimated_start_date'])->year;
         $validated['updated_by'] = auth()->id();
 
-        // If just launched now
-        if ($validated['is_launched'] && !$plan->is_launched) {
-            $validated['launched_at'] = now();
-        }
+        $validated['launched_at'] = $validated['is_launched']
+            ? ($plan->launched_at ?? now())
+            : null;
+        $validated['estimated_end_date'] = $this->calculatedEndDate(
+            $validated['method_planned_id'],
+            $validated['estimated_start_date']
+        );
 
-        // Auto-calculate end date if method changed or start date changed
-        if ($request->filled('method_planned_id') && $request->filled('estimated_start_date')) {
-            $method = ProcurementMethodPlanned::find($request->method_planned_id);
-            if ($method && !$request->filled('estimated_end_date')) {
-                $validated['estimated_end_date'] = \Carbon\Carbon::parse($request->estimated_start_date)
-                    ->addDays($method->method_target_days)
-                    ->format('Y-m-d');
-            }
-        }
+        try {
+            $plan->update($validated);
+        } catch (\Throwable $e) {
+            Log::error('Procurement plan item update failed.', [
+                'user_id' => auth()->id(),
+                'procurement_plan_id' => $plan->id,
+                'exception' => $e,
+            ]);
 
-        $plan->update($validated);
+            return back()
+                ->withInput()
+                ->with('error', 'The procurement plan item could not be updated. Please review the fields and try again.');
+        }
 
         return redirect()->route('procurement.plans.index')
             ->with('success', 'Procurement plan updated successfully.');
@@ -348,8 +390,12 @@ class ProcurementPlanController extends Controller
      */
     public function generateCode(Request $request)
     {
-        $methodAbbr = $request->get('method_abbr', 'CS');
-        $geoAbbr = $request->get('geo_abbr', 'CQS');
+        $validated = $request->validate([
+            'method_abbr' => ['nullable', 'string', 'max:8', 'regex:/^[A-Za-z0-9-]+$/'],
+            'geo_abbr' => ['nullable', 'string', 'max:8', 'regex:/^[A-Za-z0-9-]+$/'],
+        ]);
+        $methodAbbr = strtoupper($validated['method_abbr'] ?? 'CS');
+        $geoAbbr = strtoupper($validated['geo_abbr'] ?? 'CQS');
 
         $code = ProcurementPlan::generateCode($methodAbbr, $geoAbbr);
 
@@ -368,24 +414,21 @@ class ProcurementPlanController extends Controller
             return response()->json([]);
         }
 
-        $subActivities = SubActivity::query()
+        $subActivities = $this->scopedSubActivitiesQuery()
             ->select('myb_sub_activities.id', 'myb_sub_activities.name')
-            ->join('myb_budget_commitments as commitments', function ($join) use ($scopedNodeIds) {
-                $join->on('commitments.allocation_id', '=', 'myb_sub_activities.id')
+            ->whereExists(function ($commitments) use ($scopedNodeIds) {
+                $commitments->selectRaw('1')
+                    ->from('myb_budget_commitments as commitments')
+                    ->whereColumn('commitments.allocation_id', 'myb_sub_activities.id')
                     ->where('commitments.allocation_level', '=', 'sub_activity')
                     ->where('commitments.status', '=', BudgetCommitment::STATUS_APPROVED);
 
                 if ($scopedNodeIds !== null) {
-                    $join->whereIn('commitments.governance_node_id', $scopedNodeIds)
+                    $commitments->whereIn('commitments.governance_node_id', $scopedNodeIds)
                         ->whereNotNull('commitments.governance_node_id');
                 }
             })
             ->where('myb_sub_activities.activity_id', $activity->id)
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
-                $query->whereIn('myb_sub_activities.governance_node_id', $scopedNodeIds)
-                    ->whereNotNull('myb_sub_activities.governance_node_id');
-            })
-            ->distinct()
             ->orderBy('myb_sub_activities.name')
             ->get();
 
@@ -403,8 +446,7 @@ class ProcurementPlanController extends Controller
         ]);
 
         $method = ProcurementMethodPlanned::find($request->method_id);
-        $startDate = \Carbon\Carbon::parse($request->start_date);
-        $endDate = $startDate->addDays($method->method_target_days);
+        $endDate = Carbon::parse($request->start_date)->addDays($method->method_target_days);
 
         return response()->json([
             'end_date' => $endDate->format('Y-m-d'),
@@ -414,7 +456,7 @@ class ProcurementPlanController extends Controller
 
     private function scopedActivitiesQuery()
     {
-        $query = Activity::with('project');
+        $query = Activity::with(['governanceNode', 'project.governanceNode']);
         $scopedNodeIds = $this->scopedNodeIds();
 
         if ($scopedNodeIds === null) {
@@ -616,7 +658,10 @@ class ProcurementPlanController extends Controller
                 ?? $subActivity->activity?->governance_node_id
                 ?? $subActivity->activity?->project?->governance_node_id;
 
-            if (!$nodeId || !in_array($nodeId, $scopedNodeIds, true)) {
+            if (
+                !$nodeId
+                || !in_array((string) $nodeId, array_map('strval', $scopedNodeIds), true)
+            ) {
                 throw ValidationException::withMessages([
                     'sub_activity_id' => 'Selected sub activity is not within your governance scope.',
                 ]);
@@ -638,5 +683,39 @@ class ProcurementPlanController extends Controller
                 'sub_activity_id' => 'Selected sub activity does not have an approved commitment.',
             ]);
         }
+    }
+
+    private function ensureStepApprovalMatchesNode(?string $stepApprovalId, string $nodeId): void
+    {
+        if (! $stepApprovalId) {
+            return;
+        }
+
+        $stepApproval = ProcurementStepApproval::findOrFail($stepApprovalId);
+        if (
+            $stepApproval->governance_node_id
+            && (string) $stepApproval->governance_node_id !== (string) $nodeId
+        ) {
+            throw ValidationException::withMessages([
+                'step_approval_id' => 'The selected approval process belongs to a different portfolio.',
+            ]);
+        }
+    }
+
+    private function calculatedEndDate(string $methodId, string $startDate): string
+    {
+        $method = ProcurementMethodPlanned::findOrFail($methodId);
+
+        return Carbon::parse($startDate)
+            ->addDays((int) $method->method_target_days)
+            ->format('Y-m-d');
+    }
+
+    private function normalizePlanRequest(Request $request): void
+    {
+        $request->merge([
+            'procurement_code' => strtoupper(trim((string) $request->input('procurement_code'))),
+            'currency' => strtoupper(trim((string) $request->input('currency', 'USD'))) ?: 'USD',
+        ]);
     }
 }

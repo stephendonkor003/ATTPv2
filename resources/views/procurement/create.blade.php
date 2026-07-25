@@ -173,6 +173,57 @@
             color: #334155;
         }
 
+        .procurement-create .document-upload-zone {
+            border: 1px dashed #94a3b8;
+            border-radius: 16px;
+            padding: 1rem;
+            background: linear-gradient(145deg, #f8fafc, #f0fdfa);
+        }
+
+        .procurement-create .document-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;
+            gap: 0.85rem;
+            align-items: end;
+            padding: 1rem;
+            border: 1px solid #dbe7e5;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+        }
+
+        .procurement-create .document-row + .document-row {
+            margin-top: 0.85rem;
+        }
+
+        .procurement-create .document-row-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            margin-right: 0.4rem;
+            border-radius: 50%;
+            background: rgba(15, 118, 110, 0.12);
+            color: #0f766e;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .procurement-create .document-file-name {
+            display: block;
+            min-height: 1.2rem;
+            margin-top: 0.3rem;
+            color: #64748b;
+            font-size: 0.78rem;
+        }
+
+        @media (max-width: 768px) {
+            .procurement-create .document-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .procurement-create .ck-editor__editable {
             min-height: 220px;
         }
@@ -293,10 +344,16 @@
         </div>
 
         {{-- ================= FORM ================= --}}
-        <form method="POST" action="{{ route('procurements.store') }}" id="procurementForm">
+        <form method="POST" action="{{ route('procurements.store') }}" id="procurementForm"
+            enctype="multipart/form-data">
             @csrf
 
             {{-- ================= ERRORS ================= --}}
+            @if (session('error'))
+                <div class="alert alert-danger mb-4" role="alert">
+                    <i class="feather-alert-circle me-2"></i>{{ session('error') }}
+                </div>
+            @endif
             @if ($errors->any())
                 <div class="alert alert-danger mb-4">
                     <h6 class="fw-semibold mb-2">Please fix the following errors:</h6>
@@ -542,6 +599,86 @@
                             </div>
                         </div>
                     </div>
+
+                    {{-- ================= SECTION: DOCUMENTS ================= --}}
+                    <div class="card section-card mt-4">
+                        <div class="card-header section-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                            <div>
+                                <h6 class="mb-1">Procurement Documents</h6>
+                                <small class="text-muted">
+                                    Attach specifications, terms of reference, schedules, or bidding templates.
+                                </small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="section-step">Step 6</span>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="addDocumentBtn">
+                                    <i class="feather-plus me-1"></i>Add Document
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="document-upload-zone">
+                                <div class="d-flex align-items-start gap-3 mb-3">
+                                    <span class="btn btn-light btn-icon rounded-circle flex-shrink-0">
+                                        <i class="feather-file-text text-primary"></i>
+                                    </span>
+                                    <div>
+                                        <div class="fw-semibold text-dark">Named downloadable documents</div>
+                                        <small class="text-muted">
+                                            Add up to 20 files. PDF, Office, CSV, text, image, and ZIP files are accepted;
+                                            maximum 20 MB each.
+                                        </small>
+                                    </div>
+                                </div>
+
+                                @php
+                                    $documentRows = old('documents', [['name' => '']]);
+                                @endphp
+
+                                <div id="documentRows">
+                                    @foreach ($documentRows as $index => $documentRow)
+                                        <div class="document-row" data-document-row>
+                                            <div>
+                                                <label class="form-label fw-semibold">
+                                                    <span class="document-row-number">{{ $loop->iteration }}</span>
+                                                    Document Name
+                                                </label>
+                                                <input type="text" name="documents[{{ $index }}][name]"
+                                                    value="{{ $documentRow['name'] ?? '' }}"
+                                                    class="form-control @error("documents.$index.name") is-invalid @enderror"
+                                                    maxlength="255"
+                                                    placeholder="e.g. Terms of Reference">
+                                                @error("documents.$index.name")
+                                                    <div class="invalid-feedback">{{ $message }}</div>
+                                                @enderror
+                                            </div>
+                                            <div>
+                                                <label class="form-label fw-semibold">Choose File</label>
+                                                <input type="file" name="documents[{{ $index }}][file]"
+                                                    class="form-control document-file-input @error("documents.$index.file") is-invalid @enderror"
+                                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.zip">
+                                                <span class="document-file-name">No file selected</span>
+                                                @error("documents.$index.file")
+                                                    <div class="invalid-feedback">{{ $message }}</div>
+                                                @enderror
+                                            </div>
+                                            <button type="button" class="btn btn-outline-danger remove-document-btn"
+                                                aria-label="Remove document">
+                                                <i class="feather-trash-2"></i>
+                                            </button>
+                                        </div>
+                                    @endforeach
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center mt-3">
+                                    <small class="text-muted" id="documentCountText">1 of 20 document rows</small>
+                                    <small class="text-success">
+                                        <i class="feather-shield me-1"></i>Files are stored securely
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="col-lg-4">
@@ -555,6 +692,7 @@
                                 <li>Set the application window and duration for vendors.</li>
                                 <li>Use a descriptive title that matches the plan scope.</li>
                                 <li>Keep the description concise and actionable.</li>
+                                <li>Attach and clearly name all bidder-facing documents.</li>
                             </ul>
 
                             <button class="btn btn-success w-100" id="saveBtn">
@@ -568,6 +706,28 @@
         </form>
 
     </div>
+
+    <template id="procurementDocumentTemplate">
+        <div class="document-row" data-document-row>
+            <div>
+                <label class="form-label fw-semibold">
+                    <span class="document-row-number">__NUMBER__</span>
+                    Document Name
+                </label>
+                <input type="text" name="documents[__INDEX__][name]" class="form-control" maxlength="255"
+                    placeholder="e.g. Terms of Reference">
+            </div>
+            <div>
+                <label class="form-label fw-semibold">Choose File</label>
+                <input type="file" name="documents[__INDEX__][file]" class="form-control document-file-input"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.zip">
+                <span class="document-file-name">No file selected</span>
+            </div>
+            <button type="button" class="btn btn-outline-danger remove-document-btn" aria-label="Remove document">
+                <i class="feather-trash-2"></i>
+            </button>
+        </div>
+    </template>
 
     {{-- ================= CKEDITOR ================= --}}
     <script src="https://cdn.ckeditor.com/ckeditor5/40.2.0/classic/ckeditor.js"></script>
@@ -609,6 +769,81 @@
             const visibilityInput = document.getElementById('visibility_type');
             const vendorCategoryWrapper = document.getElementById('vendorCategoryWrapper');
             const vendorCategoriesInput = document.getElementById('vendor_categories');
+            const documentRows = document.getElementById('documentRows');
+            const addDocumentBtn = document.getElementById('addDocumentBtn');
+            const documentTemplate = document.getElementById('procurementDocumentTemplate');
+            const documentCountText = document.getElementById('documentCountText');
+            let documentIndex = documentRows
+                ? Array.from(documentRows.querySelectorAll('[data-document-row]')).reduce((highest, row) => {
+                    const input = row.querySelector('input[name*="[name]"]');
+                    const match = input?.name.match(/documents\[(\d+)\]/);
+                    return Math.max(highest, match ? Number(match[1]) : 0);
+                }, -1) + 1
+                : 0;
+
+            const updateDocumentRows = () => {
+                if (!documentRows) {
+                    return;
+                }
+
+                const rows = Array.from(documentRows.querySelectorAll('[data-document-row]'));
+                rows.forEach((row, index) => {
+                    const number = row.querySelector('.document-row-number');
+                    if (number) {
+                        number.textContent = String(index + 1);
+                    }
+
+                    const removeButton = row.querySelector('.remove-document-btn');
+                    if (removeButton) {
+                        removeButton.disabled = rows.length === 1;
+                    }
+                });
+
+                if (documentCountText) {
+                    documentCountText.textContent = `${rows.length} of 20 document ${rows.length === 1 ? 'row' : 'rows'}`;
+                }
+
+                if (addDocumentBtn) {
+                    addDocumentBtn.disabled = rows.length >= 20;
+                }
+            };
+
+            documentRows?.addEventListener('change', event => {
+                if (!event.target.matches('.document-file-input')) {
+                    return;
+                }
+
+                const fileName = event.target.closest('[data-document-row]')?.querySelector('.document-file-name');
+                if (fileName) {
+                    fileName.textContent = event.target.files?.[0]?.name || 'No file selected';
+                }
+            });
+
+            documentRows?.addEventListener('click', event => {
+                const removeButton = event.target.closest('.remove-document-btn');
+                if (!removeButton || documentRows.querySelectorAll('[data-document-row]').length <= 1) {
+                    return;
+                }
+
+                removeButton.closest('[data-document-row]')?.remove();
+                updateDocumentRows();
+            });
+
+            addDocumentBtn?.addEventListener('click', () => {
+                if (!documentTemplate || !documentRows || documentRows.querySelectorAll('[data-document-row]').length >= 20) {
+                    return;
+                }
+
+                const nextNumber = documentRows.querySelectorAll('[data-document-row]').length + 1;
+                const markup = documentTemplate.innerHTML
+                    .replaceAll('__INDEX__', String(documentIndex++))
+                    .replaceAll('__NUMBER__', String(nextNumber));
+                documentRows.insertAdjacentHTML('beforeend', markup);
+                updateDocumentRows();
+                documentRows.lastElementChild?.querySelector('input[type="text"]')?.focus();
+            });
+
+            updateDocumentRows();
 
             const toggleVendorCategories = () => {
                 if (!visibilityInput || !vendorCategoryWrapper || !vendorCategoriesInput) {

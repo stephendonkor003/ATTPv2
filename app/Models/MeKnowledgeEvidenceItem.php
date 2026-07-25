@@ -28,11 +28,16 @@ class MeKnowledgeEvidenceItem extends BaseModel
         'mime_type',
         'file_size',
         'external_url',
+        'validation_status',
+        'validated_by',
+        'validated_at',
+        'validation_notes',
         'created_by',
     ];
 
     protected $casts = [
         'file_size' => 'integer',
+        'validated_at' => 'datetime',
     ];
 
     public function portfolio(): BelongsTo
@@ -43,6 +48,11 @@ class MeKnowledgeEvidenceItem extends BaseModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function validatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'validated_by');
     }
 
     public function indicators(): HasMany

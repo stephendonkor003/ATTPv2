@@ -13,11 +13,30 @@
         @if (session('success'))
             <div class="alert alert-success">{{ session('success') }}</div>
         @endif
+        @if ($errors->any())
+            <div class="alert alert-danger" role="alert">
+                <div class="fw-semibold mb-1">The procurement plan could not be saved.</div>
+                <ul class="mb-0">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        @if ($governanceNodes->isEmpty())
+            <div class="alert alert-warning">
+                <i class="feather-alert-triangle me-2"></i>
+                No active portfolio is available in your governance scope. A portfolio assignment is required before
+                a procurement plan can be created.
+            </div>
+        @endif
 
         <div class="card shadow-sm mb-3">
             <div class="card-body">
                 <form action="{{ route('procurement.structure.store') }}" method="POST" class="row g-3">
                     @csrf
+                    <input type="hidden" name="is_active" value="1">
                     @if ($canChoosePortfolio)
                         <div class="col-md-6">
                             <label class="form-label" for="governance_node_id">Portfolio <span class="text-danger">*</span></label>
@@ -84,7 +103,8 @@
                     </div>
 
                     <div class="col-12">
-                        <button class="btn btn-primary btn-sm" type="submit">
+                        <button class="btn btn-primary btn-sm" type="submit"
+                            @disabled($governanceNodes->isEmpty())>
                             <i class="feather-save me-1"></i> Save Plan
                         </button>
                     </div>
@@ -104,6 +124,7 @@
                                 <th>Duration</th>
                                 <th>Created By</th>
                                 <th>Created At</th>
+                                <th>Status</th>
                                 <th class="text-center">Procurements</th>
                                 <th class="text-end">Actions</th>
                             </tr>
@@ -122,6 +143,11 @@
                                     </td>
                                     <td>{{ $plan->creator->name ?? '—' }}</td>
                                     <td>{{ $plan->created_at->format('M d, Y') }}</td>
+                                    <td>
+                                        <span class="badge {{ $plan->is_active ? 'bg-success' : 'bg-secondary' }}">
+                                            {{ $plan->is_active ? 'Active' : 'Archived' }}
+                                        </span>
+                                    </td>
                                     <td class="text-center">
                                         <span class="badge bg-info text-dark">{{ $plan->procurements_count }}</span>
                                     </td>
@@ -130,6 +156,12 @@
                                             class="btn btn-sm btn-outline-warning me-1">
                                             <i class="feather-edit-2 me-1"></i> Edit
                                         </a>
+                                        @if ($plan->is_active)
+                                            <a href="{{ route('procurement.plans.create', ['program_plan_id' => $plan->id]) }}"
+                                                class="btn btn-sm btn-outline-success me-1">
+                                                <i class="feather-plus me-1"></i> Add Item
+                                            </a>
+                                        @endif
                                         <a href="{{ route('procurement.plans.sheet', ['program_plan_id' => $plan->id]) }}"
                                             class="btn btn-sm btn-outline-primary">
                                             <i class="feather-eye me-1"></i> View Sheet
@@ -138,7 +170,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-3">
+                                    <td colspan="8" class="text-center text-muted py-3">
                                         No program plans yet. Create one to start populating procurements.
                                     </td>
                                 </tr>

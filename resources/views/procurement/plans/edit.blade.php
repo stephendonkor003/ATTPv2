@@ -43,9 +43,11 @@
         @endif
 
         {{-- ================= FORM ================= --}}
-        <form action="{{ route('procurement.plans.update', $plan) }}" method="POST">
+        <form action="{{ route('procurement.plans.update', $plan) }}" method="POST" id="procurementPlanForm">
             @csrf
             @method('PUT')
+            <input type="hidden" name="is_code_auto_generated" id="is_code_auto_generated"
+                value="{{ old('is_code_auto_generated', $plan->is_code_auto_generated ? '1' : '0') }}">
 
             <div class="card shadow-sm">
                 <div class="card-header bg-white">
@@ -91,9 +93,19 @@
                                 name="activity_id" required>
                                 <option value="">Select Activity</option>
                                 @foreach ($activities as $activity)
+                                    @php
+                                        $activityNodeId = $activity->governance_node_id
+                                            ?? $activity->project?->governance_node_id;
+                                        $activityNodeName = $activity->governanceNode?->name
+                                            ?? $activity->project?->governanceNode?->name;
+                                    @endphp
                                     <option value="{{ $activity->id }}"
+                                        data-node-id="{{ $activityNodeId }}"
                                         {{ old('activity_id', $plan->activity_id) == $activity->id ? 'selected' : '' }}>
                                         {{ $activity->name }}
+                                        @if ($activityNodeName)
+                                            — {{ $activityNodeName }}
+                                        @endif
                                     </option>
                                 @endforeach
                             </select>
@@ -118,6 +130,9 @@
                             @error('sub_activity_id')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
+                            <small class="text-muted" id="subActivityHelp">
+                                Only sub-activities with an approved commitment are offered after changing the activity.
+                            </small>
                         </div>
 
                         {{-- Method Planned --}}
@@ -136,6 +151,32 @@
                                 @endforeach
                             </select>
                             @error('method_planned_id')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        {{-- Program Plan --}}
+                        <div class="col-md-6">
+                            <label for="program_plan_id" class="form-label">Procurement Plan <span
+                                    class="text-danger">*</span></label>
+                            <select class="form-select @error('program_plan_id') is-invalid @enderror"
+                                id="program_plan_id" name="program_plan_id" required>
+                                <option value="">Select procurement plan</option>
+                                @foreach ($programPlans as $programPlan)
+                                    <option value="{{ $programPlan->id }}"
+                                        data-node-id="{{ $programPlan->governance_node_id }}"
+                                        {{ old('program_plan_id', $plan->program_plan_id) == $programPlan->id ? 'selected' : '' }}>
+                                        {{ $programPlan->name }}
+                                        @if ($programPlan->governanceNode)
+                                            — {{ $programPlan->governanceNode->name }}
+                                        @endif
+                                        @unless ($programPlan->is_active)
+                                            (Archived)
+                                        @endunless
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('program_plan_id')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
@@ -202,12 +243,34 @@
 
                         {{-- Estimated Budget --}}
                         <div class="col-md-4">
-                            <label for="estimated_budget" class="form-label">Estimated Budget (USD)</label>
+                            <label for="estimated_budget" class="form-label">Estimated Budget</label>
                             <input type="number" step="0.01"
                                 class="form-control @error('estimated_budget') is-invalid @enderror" id="estimated_budget"
                                 name="estimated_budget" value="{{ old('estimated_budget', $plan->estimated_budget) }}"
                                 placeholder="0.00">
                             @error('estimated_budget')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="currency" class="form-label">Currency</label>
+                            <input type="text" maxlength="10"
+                                class="form-control text-uppercase @error('currency') is-invalid @enderror"
+                                id="currency" name="currency" value="{{ old('currency', $plan->currency ?: 'USD') }}"
+                                placeholder="USD">
+                            @error('currency')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="fiscal_year" class="form-label">Fiscal Year</label>
+                            <input type="number" min="2000" max="2100"
+                                class="form-control @error('fiscal_year') is-invalid @enderror"
+                                id="fiscal_year" name="fiscal_year"
+                                value="{{ old('fiscal_year', $plan->fiscal_year) }}">
+                            @error('fiscal_year')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
@@ -274,6 +337,7 @@
                                 <option value="">Select Step Approval</option>
                                 @foreach ($stepApprovals as $stepApproval)
                                     <option value="{{ $stepApproval->id }}"
+                                        data-node-id="{{ $stepApproval->governance_node_id }}"
                                         {{ old('step_approval_id', $plan->step_approval_id) == $stepApproval->id ? 'selected' : '' }}>
                                         {{ $stepApproval->name }}
                                     </option>
@@ -311,7 +375,7 @@
                         <a href="{{ route('procurement.plans.index') }}" class="btn btn-outline-secondary">
                             Cancel
                         </a>
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary" id="saveProcurementPlanBtn">
                             <i class="feather-save me-1"></i> Update Plan
                         </button>
                     </div>
@@ -325,63 +389,160 @@
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('procurementPlanForm');
+            const programPlanSelect = document.getElementById('program_plan_id');
             const activitySelect = document.getElementById('activity_id');
             const subActivitySelect = document.getElementById('sub_activity_id');
+            const subActivityHelp = document.getElementById('subActivityHelp');
+            const stepApprovalSelect = document.getElementById('step_approval_id');
             const methodSelect = document.getElementById('method_planned_id');
             const startDateInput = document.getElementById('estimated_start_date');
             const endDateInput = document.getElementById('estimated_end_date');
             const generateCodeBtn = document.getElementById('generateCodeBtn');
             const procurementCodeInput = document.getElementById('procurement_code');
+            const autoGeneratedInput = document.getElementById('is_code_auto_generated');
+            const saveButton = document.getElementById('saveProcurementPlanBtn');
 
-            // Regenerate procurement code
-            generateCodeBtn.addEventListener('click', function() {
-                if (confirm('Are you sure you want to regenerate the procurement code?')) {
-                    fetch('{{ route('procurement.plans.generate-code') }}')
-                        .then(response => response.json())
-                        .then(data => {
-                            procurementCodeInput.value = data.code;
-                        })
-                        .catch(error => console.error('Error:', error));
+            async function fetchJson(url) {
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
                 }
-            });
 
-            // Load sub-activities when activity changes
-            activitySelect.addEventListener('change', function() {
-                const activityId = this.value;
+                return response.json();
+            }
+
+            async function generateCode() {
+                if (!window.confirm('Generate a new procurement code for this item?')) {
+                    return;
+                }
+
+                generateCodeBtn.disabled = true;
+                generateCodeBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating';
+
+                try {
+                    const data = await fetchJson('{{ route('procurement.plans.generate-code') }}');
+                    procurementCodeInput.value = data.code;
+                    autoGeneratedInput.value = '1';
+                } catch (error) {
+                    window.alert('A new procurement code could not be generated. Please try again.');
+                } finally {
+                    generateCodeBtn.disabled = false;
+                    generateCodeBtn.innerHTML = '<i class="feather-refresh-cw me-1"></i> Regenerate';
+                }
+            }
+
+            function filterOptionsByPortfolio(select, nodeId) {
+                Array.from(select.options).forEach(option => {
+                    if (!option.value) {
+                        return;
+                    }
+
+                    const optionNodeId = option.dataset.nodeId || '';
+                    const incompatible = Boolean(nodeId && optionNodeId && optionNodeId !== nodeId);
+                    option.hidden = incompatible;
+                    option.disabled = incompatible;
+                });
+
+                if (select.selectedOptions[0]?.disabled) {
+                    select.value = '';
+                }
+            }
+
+            function clearSubActivities(message = 'Only sub-activities with an approved commitment are available.') {
                 subActivitySelect.innerHTML = '<option value="">Select Sub Activity</option>';
+                subActivityHelp.textContent = message;
+            }
 
-                if (activityId) {
-                    fetch(`{{ url('procurement/plans/sub-activities') }}/${activityId}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            data.forEach(subActivity => {
-                                const option = document.createElement('option');
-                                option.value = subActivity.id;
-                                option.textContent = subActivity.name;
-                                subActivitySelect.appendChild(option);
-                            });
-                        })
-                        .catch(error => console.error('Error:', error));
+            function applyPortfolioFilter() {
+                const nodeId = programPlanSelect.selectedOptions[0]?.dataset.nodeId || '';
+                const previousActivityId = activitySelect.value;
+
+                filterOptionsByPortfolio(activitySelect, nodeId);
+                filterOptionsByPortfolio(stepApprovalSelect, nodeId);
+
+                if (previousActivityId && !activitySelect.value) {
+                    clearSubActivities('Choose an activity in the selected plan portfolio.');
                 }
-            });
+            }
 
-            // Calculate end date when method or start date changes
+            async function loadSubActivities(selectedId = '') {
+                const activityId = this.value;
+                clearSubActivities();
+
+                if (!activityId) {
+                    return;
+                }
+
+                subActivitySelect.disabled = true;
+                subActivityHelp.textContent = 'Loading approved sub-activities…';
+
+                try {
+                    const data = await fetchJson(`{{ url('procurement/plans/sub-activities') }}/${activityId}`);
+                    data.forEach(subActivity => {
+                        const option = document.createElement('option');
+                        option.value = subActivity.id;
+                        option.textContent = subActivity.name;
+                        option.selected = String(subActivity.id) === String(selectedId);
+                        subActivitySelect.appendChild(option);
+                    });
+
+                    subActivityHelp.textContent = data.length
+                        ? 'Only sub-activities with an approved commitment are available.'
+                        : 'No approved committed sub-activities are available for this activity.';
+                } catch (error) {
+                    subActivityHelp.textContent = 'Sub-activities could not be loaded. Retry by selecting the activity again.';
+                } finally {
+                    subActivitySelect.disabled = false;
+                }
+            }
+
             function calculateEndDate() {
                 const methodOption = methodSelect.options[methodSelect.selectedIndex];
                 const startDate = startDateInput.value;
 
                 if (methodOption && methodOption.dataset.targetDays && startDate) {
                     const targetDays = parseInt(methodOption.dataset.targetDays);
-                    const start = new Date(startDate);
-                    start.setDate(start.getDate() + targetDays);
+                    const [year, month, day] = startDate.split('-').map(Number);
+                    const start = new Date(Date.UTC(year, month - 1, day));
+                    start.setUTCDate(start.getUTCDate() + targetDays);
 
                     const endDate = start.toISOString().split('T')[0];
                     endDateInput.value = endDate;
+                } else {
+                    endDateInput.value = '';
                 }
             }
 
+            generateCodeBtn.addEventListener('click', generateCode);
+            procurementCodeInput.addEventListener('input', () => autoGeneratedInput.value = '0');
+            programPlanSelect.addEventListener('change', function() {
+                applyPortfolioFilter();
+                loadSubActivities.call(activitySelect);
+            });
+            activitySelect.addEventListener('change', function() {
+                loadSubActivities.call(activitySelect);
+            });
             methodSelect.addEventListener('change', calculateEndDate);
             startDateInput.addEventListener('change', calculateEndDate);
+
+            form.addEventListener('submit', function() {
+                if (!form.checkValidity()) {
+                    return;
+                }
+
+                saveButton.disabled = true;
+                saveButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
+            });
+
+            applyPortfolioFilter();
+            calculateEndDate();
         });
     </script>
 @endpush

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\Sector;
+use App\Services\MeReportingNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -25,6 +26,8 @@ class MeKnowledgeEvidenceController extends Controller
             'store',
             'destroy',
         ]);
+        $this->middleware('permission:me.performance_reports.review|me.configuration.manage')
+            ->only('validateEvidence');
     }
 
     public function index(Request $request)
@@ -95,7 +98,7 @@ class MeKnowledgeEvidenceController extends Controller
         $storedPath = $file?->store('me/knowledge-evidence', 'local');
 
         try {
-            MeKnowledgeEvidenceItem::create([
+            $evidence = MeKnowledgeEvidenceItem::create([
                 'portfolio_id' => $validated['portfolio_id'],
                 'title' => trim((string) $validated['title']),
                 'document_type' => $validated['document_type'],
@@ -107,6 +110,16 @@ class MeKnowledgeEvidenceController extends Controller
                 'external_url' => $validated['external_url'] ?? null,
                 'created_by' => auth()->id(),
             ]);
+            if ($evidence->document_type === 'means_of_verification') {
+                $notifications = app(MeReportingNotificationService::class);
+                $notifications->reminder($evidence, 'repository_mov_validation_required', [
+                    'title' => 'Repository MOV requires validation',
+                    'message' => $evidence->title.' was added and is awaiting validation.',
+                    'severity' => 'info',
+                    'url' => route('budget.me.rebuild.knowledge-repository', ['q' => $evidence->title]),
+                    'category' => 'mov_validation',
+                ], $notifications->reviewers('me.performance_reports.review'));
+            }
         } catch (\Throwable $exception) {
             if ($storedPath) {
                 Storage::disk('local')->delete($storedPath);
@@ -151,6 +164,28 @@ class MeKnowledgeEvidenceController extends Controller
         return redirect()
             ->route('budget.me.rebuild.knowledge-repository')
             ->with('success', 'Evidence item removed from the repository.');
+    }
+
+    public function validateEvidence(Request $request, MeKnowledgeEvidenceItem $evidence)
+    {
+        $this->assertRepositoryItemInCurrentScope($evidence);
+        $validated = $request->validate([
+            'validation_status' => ['required', Rule::in(['validated', 'rejected'])],
+            'validation_notes' => ['nullable', 'string', 'max:5000'],
+        ]);
+        if ($validated['validation_status'] === 'rejected' && blank($validated['validation_notes'] ?? null)) {
+            throw ValidationException::withMessages([
+                'validation_notes' => 'Explain why this Means of Verification was rejected.',
+            ]);
+        }
+        $evidence->update([
+            'validation_status' => $validated['validation_status'],
+            'validated_by' => $request->user()->id,
+            'validated_at' => now(),
+            'validation_notes' => $validated['validation_notes'] ?? null,
+        ]);
+
+        return back()->with('success', 'Means of Verification validation recorded.');
     }
 
     protected function scopeRepositoryQuery($query): void

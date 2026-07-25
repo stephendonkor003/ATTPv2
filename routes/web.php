@@ -112,6 +112,10 @@ use App\Http\Controllers\{
 	    MeModuleController,
         MeKnowledgeEvidenceController,
         MeDataEntryController,
+        MePerformanceReportController,
+        MePerformanceReportDashboardController,
+        MeMissionReportController,
+        MeReportingNotificationController,
         MeIndicatorController,
         MeDataSourceController,
         MeSurveyController,
@@ -727,6 +731,10 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:finance.access'])
             ->middleware('permission:finance.executions.view')
             ->name('execution.dashboard.export.pdf');
 
+          Route::get('execution/dashboard/export/status', [MasterDashboard::class, 'executionDashboardExportStatus'])
+            ->middleware('permission:finance.executions.view')
+            ->name('execution.dashboard.export.status');
+
 
 
 
@@ -1287,8 +1295,6 @@ Route::middleware(['auth', 'not.funding.partner'])
                     ->name('results-framework');
                 Route::get('data-quality-and-approval-workflow', [MeModuleController::class, 'dataQuality'])
                     ->name('data-quality');
-                Route::get('reporting-and-dashboard', [MeModuleController::class, 'reportingDashboard'])
-                    ->name('reporting-dashboard');
                 Route::get('management-dashboard', [MeModuleController::class, 'managementDashboard'])
                     ->name('management-dashboard');
                 Route::get('knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'index'])
@@ -1297,10 +1303,16 @@ Route::middleware(['auth', 'not.funding.partner'])
                     ->name('data-governance');
             });
 
+        Route::get('me/rebuild/reporting-and-dashboard', [MePerformanceReportDashboardController::class, 'index'])
+            ->middleware('permission:me.performance_reports.view|me.performance_reports.review|me.performance_reports.archive|me.data_entry.view|me.data_entry.manage|me.configuration.view|me.configuration.manage')
+            ->name('me.rebuild.reporting-dashboard');
+
         Route::post('me/knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'store'])
             ->name('me.knowledge-evidence.store');
         Route::get('me/knowledge-and-evidence-repository/{evidence}/download', [MeKnowledgeEvidenceController::class, 'download'])
             ->name('me.knowledge-evidence.download');
+        Route::post('me/knowledge-and-evidence-repository/{evidence}/validate', [MeKnowledgeEvidenceController::class, 'validateEvidence'])
+            ->name('me.knowledge-evidence.validate');
         Route::delete('me/knowledge-and-evidence-repository/{evidence}', [MeKnowledgeEvidenceController::class, 'destroy'])
             ->name('me.knowledge-evidence.destroy');
 
@@ -1323,6 +1335,46 @@ Route::middleware(['auth', 'not.funding.partner'])
                 Route::post('collections', 'storeCollection')->name('collections.store');
                 Route::put('collections/{collection}', 'updateCollection')->name('collections.update');
                 Route::post('collections/{collection}/close', 'closeCollection')->name('collections.close');
+            });
+
+        Route::prefix('me/data-entry/performance-reports')
+            ->name('me.performance-reports.')
+            ->controller(MePerformanceReportController::class)
+            ->group(function () {
+                Route::get('create', 'create')->name('create');
+                Route::post('/', 'store')->name('store');
+                Route::get('{report}/edit', 'edit')->name('edit');
+                Route::put('{report}', 'update')->name('update');
+                Route::post('{report}/submit', 'submit')->name('submit');
+                Route::post('{report}/review', 'review')->name('review');
+                Route::post('{report}/archive', 'archive')->name('archive');
+                Route::get('{report}/documents/{document}', 'downloadDocument')->name('documents.download');
+                Route::delete('{report}/documents/{document}', 'destroyDocument')->name('documents.destroy');
+            });
+
+        Route::prefix('me/mission-reports')
+            ->name('me.mission-reports.')
+            ->controller(MeMissionReportController::class)
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::get('create', 'create')->name('create');
+                Route::post('/', 'store')->name('store');
+                Route::get('{missionReport}/edit', 'edit')->name('edit');
+                Route::put('{missionReport}', 'update')->name('update');
+                Route::post('{missionReport}/submit', 'submit')->name('submit');
+                Route::post('{missionReport}/review', 'review')->name('review');
+                Route::post('{missionReport}/archive', 'archive')->name('archive');
+                Route::get('{missionReport}/documents/{document}', 'downloadDocument')->name('documents.download');
+                Route::delete('{missionReport}/documents/{document}', 'destroyDocument')->name('documents.destroy');
+            });
+
+        Route::prefix('me/reporting-notifications')
+            ->name('me.reporting-notifications.')
+            ->controller(MeReportingNotificationController::class)
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('read-all', 'readAll')->name('read-all');
+                Route::post('{notification}/read', 'read')->name('read');
             });
 
         // Indicators (centralized setup page)
@@ -1541,6 +1593,12 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::post('activities/{activity}/revert-reallocation', [ActivityController::class, 'revertReallocation'])
             ->middleware('permission:activities.edit')
             ->name('activities.reallocation.revert');
+        Route::post('activities/{activity}/return-previous-reallocation', [ActivityController::class, 'returnToPreviousReallocation'])
+            ->middleware('permission:activities.edit')
+            ->name('activities.reallocation.return-previous');
+        Route::post('activities/{activity}/complete-reallocation', [ActivityController::class, 'completeReallocation'])
+            ->middleware('permission:activities.edit')
+            ->name('activities.reallocation.complete');
         Route::delete('activities/{activity}', [ActivityController::class, 'destroy'])
             ->middleware('permission:activities.delete')
             ->name('activities.destroy');
@@ -1917,6 +1975,9 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::post('/{procurement}/notify-vendors', [ProcurementController::class, 'notifyVendors'])
             ->middleware('permission:vendor.outreach.send')
             ->name('notify-vendors');
+
+        Route::get('/{procurement}/documents/{document}/download', [ProcurementController::class, 'downloadDocument'])
+            ->name('documents.download');
 
         // ?? GENERIC ROUTE MUST ALWAYS BE LAST
         Route::get('/{procurement}', [ProcurementController::class, 'show'])
@@ -2399,6 +2460,10 @@ Route::prefix('public/procurement')->group(function () {
 
     Route::get('/{procurement}', [PublicProcurementController::class, 'show'])
         ->name('public.procurement.show');
+
+    Route::get('/{procurement}/documents/{document}/download', [PublicProcurementController::class, 'downloadDocument'])
+        ->middleware('throttle:60,1')
+        ->name('public.procurement.documents.download');
 
     Route::post('/{procurement}/apply', [PublicProcurementController::class, 'submit'])
         ->middleware('throttle:20,1')
@@ -3179,6 +3244,8 @@ Route::middleware(['auth'])
             ->name('procurements.index');
         Route::get('/procurements/{procurement}', [VendorProcurementController::class, 'show'])
             ->name('procurements.show');
+        Route::get('/procurements/{procurement}/documents/{document}/download', [VendorProcurementController::class, 'downloadDocument'])
+            ->name('procurements.documents.download');
         Route::post('/procurements/{procurement}', [VendorProcurementController::class, 'submit'])
             ->name('procurements.submit');
         Route::get('/clarifications', [VendorPortalController::class, 'clarifications'])
@@ -3678,6 +3745,36 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
         Route::get('/me-data', [\App\Http\Controllers\ThinkTankMeDataController::class, 'index'])
             ->middleware(['think.tank.area:me', 'permission:think_tank.me.view|think_tank.me.submit'])
             ->name('me-data.index');
+        Route::get('/me-data/performance-reports', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'index'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.view|think_tank.me.reports.manage'])
+            ->name('performance-reports.index');
+        Route::get('/me-data/notifications', [\App\Http\Controllers\MeReportingNotificationController::class, 'portalIndex'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.notifications.view'])
+            ->name('reporting-notifications.index');
+        Route::post('/me-data/notifications/read-all', [\App\Http\Controllers\MeReportingNotificationController::class, 'portalReadAll'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.notifications.view'])
+            ->name('reporting-notifications.read-all');
+        Route::post('/me-data/notifications/{notification}/read', [\App\Http\Controllers\MeReportingNotificationController::class, 'portalRead'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.notifications.view'])
+            ->name('reporting-notifications.read');
+        Route::post('/me-data/performance-reports', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'store'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.manage'])
+            ->name('performance-reports.store');
+        Route::get('/me-data/performance-reports/{report}/edit', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'edit'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.view|think_tank.me.reports.manage'])
+            ->name('performance-reports.edit');
+        Route::put('/me-data/performance-reports/{report}', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'update'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.manage'])
+            ->name('performance-reports.update');
+        Route::post('/me-data/performance-reports/{report}/submit', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'submit'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.submit'])
+            ->name('performance-reports.submit');
+        Route::get('/me-data/performance-reports/{report}/documents/{document}', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'downloadDocument'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.view|think_tank.me.reports.manage'])
+            ->name('performance-reports.documents.download');
+        Route::delete('/me-data/performance-reports/{report}/documents/{document}', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'destroyDocument'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.manage'])
+            ->name('performance-reports.documents.destroy');
         Route::get('/me-data/{assignment}', [\App\Http\Controllers\ThinkTankMeDataController::class, 'show'])
             ->middleware(['think.tank.area:me', 'permission:think_tank.me.view|think_tank.me.submit'])
             ->name('me-data.show');

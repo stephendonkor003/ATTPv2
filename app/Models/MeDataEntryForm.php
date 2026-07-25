@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -18,6 +19,7 @@ class MeDataEntryForm extends BaseModel
 
     protected $fillable = [
         'portfolio_id',
+        'project_component_id',
         'indicator_id',
         'title',
         'description',
@@ -65,6 +67,24 @@ class MeDataEntryForm extends BaseModel
         return $this->belongsTo(Indicator::class, 'indicator_id');
     }
 
+    public function projectComponent(): BelongsTo
+    {
+        return $this->belongsTo(Project::class, 'project_component_id');
+    }
+
+    public function indicators(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Indicator::class,
+            'me_data_entry_form_indicators',
+            'form_id',
+            'indicator_id'
+        )
+            ->withPivot(['is_primary', 'sort_order'])
+            ->withTimestamps()
+            ->orderByPivot('sort_order');
+    }
+
     public function responsiblePerson(): BelongsTo
     {
         return $this->belongsTo(User::class, 'responsible_user_id');
@@ -87,6 +107,11 @@ class MeDataEntryForm extends BaseModel
     public function collections(): HasMany
     {
         return $this->hasMany(MeDataCollection::class, 'form_id');
+    }
+
+    public function performanceReports(): HasMany
+    {
+        return $this->hasMany(MePerformanceReport::class, 'form_id');
     }
 
     public function createdBy(): BelongsTo

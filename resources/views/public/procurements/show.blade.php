@@ -230,6 +230,56 @@
             border: 1px solid #ddd;
             padding: 8px;
         }
+
+        .document-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1rem;
+            margin-top: 1.25rem;
+        }
+
+        .document-download {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            padding: 1rem;
+            border: 1px solid #e4d7dc;
+            border-radius: 12px;
+            color: #522b39;
+            text-decoration: none;
+            background: linear-gradient(145deg, #fff, #fff8fb);
+            transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+        }
+
+        .document-download:hover {
+            transform: translateY(-2px);
+            border-color: #a70d53;
+            box-shadow: 0 8px 18px rgba(82, 43, 57, .12);
+        }
+
+        .document-download-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            flex: 0 0 42px;
+            border-radius: 12px;
+            background: #a70d53;
+            color: #fff;
+            font-weight: 700;
+            font-size: .72rem;
+        }
+
+        .document-download strong,
+        .document-download small {
+            display: block;
+        }
+
+        .document-download small {
+            margin-top: .25rem;
+            color: #7a6670;
+        }
     </style>
 </head>
 
@@ -316,6 +366,29 @@
                 </div>
             </div> --}}
         </div>
+
+        @if ($procurement->documents->isNotEmpty())
+            <div class="card">
+                <h3>Procurement Documents</h3>
+                <p style="color:#7a6670;margin:.4rem 0 0;">
+                    Download the official specifications and bidder information for this procurement.
+                </p>
+                <div class="document-grid">
+                    @foreach ($procurement->documents as $document)
+                        <a class="document-download"
+                            href="{{ route('public.procurement.documents.download', [$procurement, $document]) }}">
+                            <span class="document-download-icon">
+                                {{ strtoupper(pathinfo($document->original_name, PATHINFO_EXTENSION) ?: 'FILE') }}
+                            </span>
+                            <span>
+                                <strong>{{ $document->document_name }}</strong>
+                                <small>{{ $document->original_name }} · {{ $document->formatted_size }}</small>
+                            </span>
+                        </a>
+                    @endforeach
+                </div>
+            </div>
+        @endif
 
         {{-- ===== APPLICATION FORM ===== --}}
         <div class="card">

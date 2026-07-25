@@ -7,10 +7,12 @@ use App\Models\DynamicForm;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
+use App\Models\ProcurementDocument;
 use App\Models\VendorCategory;
 use App\Services\ProcurementSubmissionScreeningService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class VendorProcurementController extends Controller
 {
@@ -70,6 +72,7 @@ class VendorProcurementController extends Controller
         }
 
         $this->assertVendorCategoryAccess($user, $procurement);
+        $procurement->load('documents');
 
         $form = DynamicForm::approved()
             ->where('procurement_id', $procurement->id)
@@ -91,6 +94,39 @@ class VendorProcurementController extends Controller
             'form' => $form,
             'existingSubmission' => $existingSubmission,
         ]);
+    }
+
+    public function downloadDocument(
+        Request $request,
+        Procurement $procurement,
+        ProcurementDocument $document
+    ) {
+        $user = $request->user();
+        $this->assertVendor($user);
+
+        $procurement->autoCloseIfExpired();
+        abort_if(($procurement->visibility_type ?? 'public') !== 'vendor_group', 404);
+        abort_if(! $procurement->isApplicationOpen(), 404);
+        $this->assertVendorCategoryAccess($user, $procurement);
+
+        abort_unless((string) $document->procurement_id === (string) $procurement->id, 404);
+
+        $path = (string) $document->file_path;
+        $expectedPrefix = "procurements/{$procurement->id}/documents/";
+        abort_unless($path !== '' && str_starts_with($path, $expectedPrefix), 404);
+
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists($path), 404, 'Procurement document file not found.');
+
+        return $disk->download(
+            $path,
+            basename($document->original_name ?: $path),
+            [
+                'Content-Type' => $document->mime_type ?: 'application/octet-stream',
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, no-store, max-age=0',
+            ]
+        );
     }
 
     public function submit(

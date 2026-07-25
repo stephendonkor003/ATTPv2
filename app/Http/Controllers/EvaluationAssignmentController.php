@@ -9,7 +9,7 @@ use App\Models\EvaluationAssignment;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\Sector;
-use App\Models\User;
+use App\Support\ProcurementReviewAssignees;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
@@ -50,7 +50,9 @@ class EvaluationAssignmentController extends Controller
         $evaluationsByPortfolioId = $evaluations->groupBy(fn (Evaluation $evaluation) => (string) $evaluation->portfolio_id);
         $procurementPortfolioIds = $this->portfolioIdsByProcurement($procurements);
 
-        $evaluators = User::orderBy('name')->get();
+        $evaluators = ProcurementReviewAssignees::query()
+            ->orderBy('name')
+            ->get();
 
         return view('evaluations.assign-hub', compact(
             'procurements',
@@ -63,19 +65,27 @@ class EvaluationAssignmentController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'evaluation_id' => 'required|exists:evaluations,id',
             'procurement_id' => 'required|exists:procurements,id',
-            'user_id' => 'required|exists:users,id',
+            'user_id' => [
+                'required',
+                'uuid',
+                ProcurementReviewAssignees::existsRule(),
+            ],
             'assignment_type' => 'required|in:procurement,submission',
             'submission_id' => 'required_if:assignment_type,submission|nullable|exists:form_submissions,id',
+        ], [
+            'user_id.exists' => ProcurementReviewAssignees::INELIGIBLE_MESSAGE,
         ]);
 
-        $procurement = Procurement::findOrFail($request->procurement_id);
+        $evaluator = ProcurementReviewAssignees::query()
+            ->findOrFail($validated['user_id']);
+        $procurement = Procurement::findOrFail($validated['procurement_id']);
         $this->assertProcurementManageable($procurement);
 
         $evaluation = Evaluation::query()
-            ->whereKey($request->evaluation_id)
+            ->whereKey($validated['evaluation_id'])
             ->where('status', 'active')
             ->whereIn('type', ['services', 'goods'])
             ->whereNotNull('portfolio_id')
@@ -88,11 +98,11 @@ class EvaluationAssignmentController extends Controller
         }
 
         $exists = EvaluationAssignment::where([
-            'evaluation_id' => $request->evaluation_id,
-            'procurement_id' => $request->procurement_id,
-            'user_id' => $request->user_id,
-            'form_submission_id' => $request->assignment_type === 'submission'
-                ? $request->submission_id
+            'evaluation_id' => $validated['evaluation_id'],
+            'procurement_id' => $validated['procurement_id'],
+            'user_id' => $validated['user_id'],
+            'form_submission_id' => $validated['assignment_type'] === 'submission'
+                ? $validated['submission_id']
                 : null,
         ])->exists();
 
@@ -101,9 +111,9 @@ class EvaluationAssignmentController extends Controller
         }
 
         $submission = null;
-        if ($request->assignment_type === 'submission') {
-            $submission = FormSubmission::where('id', $request->submission_id)
-                ->where('procurement_id', $request->procurement_id)
+        if ($validated['assignment_type'] === 'submission') {
+            $submission = FormSubmission::where('id', $validated['submission_id'])
+                ->where('procurement_id', $validated['procurement_id'])
                 ->first();
 
             if (! $submission) {
@@ -112,18 +122,17 @@ class EvaluationAssignmentController extends Controller
         }
 
         EvaluationAssignment::create([
-            'evaluation_id' => $request->evaluation_id,
-            'procurement_id' => $request->procurement_id,
-            'form_submission_id' => $request->assignment_type === 'submission'
-                ? $request->submission_id
+            'evaluation_id' => $validated['evaluation_id'],
+            'procurement_id' => $validated['procurement_id'],
+            'form_submission_id' => $validated['assignment_type'] === 'submission'
+                ? $validated['submission_id']
                 : null,
-            'user_id' => $request->user_id,
+            'user_id' => $validated['user_id'],
             'assigned_by' => Auth::id(),
             'assigned_at' => now(),
             'status' => 'assigned',
         ]);
 
-        $evaluator = User::find($request->user_id);
         if ($evaluator?->email) {
             Mail::to($evaluator->email)->send(
                 new EvaluationAssigned($evaluator, $evaluation, $procurement, $submission)
