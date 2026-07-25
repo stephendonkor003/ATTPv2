@@ -31,7 +31,8 @@ class ProjectController extends Controller
         $projects = Project::with([
             'program.sector',
             'governanceNode.level',
-            'activities.subActivities',
+            'activities.allocations',
+            'activities.subActivities.allocations',
             'allocations',
             'indicators',
         ])
@@ -51,6 +52,8 @@ class ProjectController extends Controller
                 $project->setAttribute('activities_count', $activities->count());
                 $project->setAttribute('sub_activities_count', $subActivities->count());
                 $project->setAttribute('allocations_total', $project->allocations->sum(fn ($allocation) => (float) ($allocation->amount ?? 0)));
+                $project->setAttribute('activity_allocations_total', $activities->flatMap->allocations->sum(fn ($allocation) => (float) ($allocation->amount ?? 0)));
+                $project->setAttribute('sub_activity_allocations_total', $subActivities->flatMap->allocations->sum(fn ($allocation) => (float) ($allocation->amount ?? 0)));
                 $project->setAttribute('duration_years_display', $project->total_years ?: (($project->start_year && $project->end_year) ? (($project->end_year - $project->start_year) + 1) : null));
                 $project->setAttribute('latest_structure_update_at', collect([
                     $project->updated_at,
@@ -91,6 +94,8 @@ class ProjectController extends Controller
             'indicators' => $projects->sum(fn ($project) => $project->indicators->count()),
             'total_budget' => $projects->sum(fn ($project) => (float) ($project->total_budget ?? 0)),
             'allocation_total' => $projects->sum('allocations_total'),
+            'activity_allocation_total' => $projects->sum('activity_allocations_total'),
+            'sub_activity_allocation_total' => $projects->sum('sub_activity_allocations_total'),
             'governance_assigned' => $projects->filter(fn ($project) => filled($project->governance_node_id))->count(),
         ];
 
@@ -270,8 +275,10 @@ class ProjectController extends Controller
             'activity_allocation_total' => $activityAllocationTotal,
             'sub_activity_allocation_total' => $subActivityAllocationTotal,
             'remaining_allocation' => max($projectBudget - $allocationTotal, 0),
+            'remaining_to_activities' => max($allocationTotal - $activityAllocationTotal, 0),
             'allocation_percent' => $projectBudget > 0 ? min(100, round(($allocationTotal / $projectBudget) * 100)) : 0,
             'activity_percent' => $allocationTotal > 0 ? min(100, round(($activityAllocationTotal / $allocationTotal) * 100)) : 0,
+            'sub_activity_percent' => $activityAllocationTotal > 0 ? min(100, round(($subActivityAllocationTotal / $activityAllocationTotal) * 100)) : 0,
         ];
 
         $activities->each(function ($activity) {

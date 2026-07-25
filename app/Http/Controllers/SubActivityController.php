@@ -74,6 +74,12 @@ class SubActivityController extends Controller
         $activity->setAttribute('sub_activities_count', $activity->subActivities->count());
     });
 
+    $projects->each(function ($project) {
+        $project->setAttribute('component_allocation_total', (float) $project->allocations->sum('amount'));
+        $project->setAttribute('activity_allocation_total', (float) $project->activities->sum('allocation_total'));
+        $project->setAttribute('sub_activity_allocation_total', (float) $project->activities->sum('sub_activity_allocation_total'));
+    });
+
     $subActivityStats = [
         'programs' => $programs->count(),
         'projects' => $projects->count(),

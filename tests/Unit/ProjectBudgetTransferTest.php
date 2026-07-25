@@ -401,3 +401,26 @@ it('reports sub-activity gaps and overallocations per activity without netting b
         ->and($payload['summary']['sub_activity_overallocation'])->toBe(20.00)
         ->and($payload['summary']['sub_activity_progress'])->toBe(75.0);
 });
+
+it('labels component envelopes and child allocations separately on budget screens', function () {
+    $root = dirname(__DIR__, 2);
+    $projectIndex = file_get_contents($root.'/resources/views/budget/projects/index.blade.php');
+    $projectShow = file_get_contents($root.'/resources/views/budget/projects/show.blade.php');
+    $subActivityIndex = file_get_contents($root.'/resources/views/subactivities/index.blade.php');
+    $projectController = file_get_contents($root.'/app/Http/Controllers/ProjectController.php');
+
+    expect($projectIndex)
+        ->toContain('Component envelope:')
+        ->toContain('Activity allocation:')
+        ->toContain('Sub-activity allocation:')
+        ->and($projectShow)
+        ->toContain('Assigned to sub-activities')
+        ->toContain('Sub-Activity Allocation')
+        ->and($subActivityIndex)
+        ->toContain('Envelope:')
+        ->toContain('Activities:')
+        ->toContain('Sub-activities:')
+        ->and($projectController)
+        ->toContain("'activities.allocations'")
+        ->toContain("'activities.subActivities.allocations'");
+});

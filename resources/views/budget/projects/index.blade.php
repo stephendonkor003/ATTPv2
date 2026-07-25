@@ -321,7 +321,7 @@
             <div class="project-summary-item">
                 <span class="project-summary-icon wine"><i class="feather-pie-chart"></i></span>
                 <div>
-                    <div class="project-summary-label">Allocated</div>
+                    <div class="project-summary-label">Envelope Coverage</div>
                     <div class="project-summary-value">{{ $allocationCoverage }}%</div>
                 </div>
             </div>
@@ -423,7 +423,13 @@
                                             <span>{{ number_format($project->indicators->count()) }} indicators</span>
                                         </div>
                                         <div class="project-muted-line mt-1">
-                                            Allocated: {{ number_format((float) $project->allocations_total, 2) }}
+                                            Component envelope: {{ number_format((float) $project->allocations_total, 2) }}
+                                        </div>
+                                        <div class="project-muted-line">
+                                            Activity allocation: {{ number_format((float) $project->activity_allocations_total, 2) }}
+                                        </div>
+                                        <div class="project-muted-line">
+                                            Sub-activity allocation: {{ number_format((float) $project->sub_activity_allocations_total, 2) }}
                                         </div>
                                     </td>
                                     <td class="text-end">

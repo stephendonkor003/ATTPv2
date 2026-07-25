@@ -282,6 +282,7 @@
         };
         $allocationPercent = $projectStats['allocation_percent'] ?? 0;
         $activityPercent = $projectStats['activity_percent'] ?? 0;
+        $subActivityPercent = $projectStats['sub_activity_percent'] ?? 0;
     @endphp
 
     <div class="nxl-container project-show-workspace">
@@ -435,6 +436,16 @@
                     </div>
                 </div>
 
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small fw-semibold mb-1">
+                        <span>Assigned to sub-activities</span>
+                        <span>{{ number_format($projectStats['sub_activity_allocation_total'], 2) }}</span>
+                    </div>
+                    <div class="project-budget-bar">
+                        <span style="width: {{ $subActivityPercent }}%;"></span>
+                    </div>
+                </div>
+
                 <div class="project-detail-row">
                     <span>Project Budget</span>
                     <strong>{{ number_format($projectStats['project_budget'], 2) }} {{ $currency }}</strong>
@@ -448,8 +459,12 @@
                     <strong>{{ number_format($projectStats['activity_allocation_total'], 2) }} {{ $currency }}</strong>
                 </div>
                 <div class="project-detail-row">
-                    <span>Remaining</span>
-                    <strong>{{ number_format($projectStats['remaining_allocation'], 2) }} {{ $currency }}</strong>
+                    <span>Sub-Activity Allocation</span>
+                    <strong>{{ number_format($projectStats['sub_activity_allocation_total'], 2) }} {{ $currency }}</strong>
+                </div>
+                <div class="project-detail-row">
+                    <span>Envelope Not Assigned to Activities</span>
+                    <strong>{{ number_format($projectStats['remaining_to_activities'], 2) }} {{ $currency }}</strong>
                 </div>
             </div>
         </div>

@@ -927,7 +927,7 @@
             <div class="sub-summary-card">
                 <span class="sub-summary-icon slate"><i class="feather-dollar-sign"></i></span>
                 <div>
-                    <div class="sub-summary-label">Allocated</div>
+                    <div class="sub-summary-label">Sub-Activity Allocation</div>
                     <div class="sub-summary-value" style="font-size: 1.02rem;">{{ number_format((float) $subActivityStats['allocation_total'], 2) }}</div>
                 </div>
             </div>
@@ -954,7 +954,7 @@
                     $programProjects = $program->projects;
                     $programActivities = $programProjects->flatMap->activities;
                     $programSubActivities = $programActivities->flatMap->subActivities;
-                    $programAllocation = $programSubActivities->sum('allocation_total');
+                    $programSubActivityAllocation = $programSubActivities->sum('allocation_total');
                     $programCollapseId = 'programSubFlow' . $program->id;
                 @endphp
 
@@ -974,7 +974,7 @@
                             <span>{{ number_format($programProjects->count()) }} projects</span>
                             <span>{{ number_format($programActivities->count()) }} activities</span>
                             <span>{{ number_format($programSubActivities->count()) }} sub</span>
-                            <span>{{ number_format((float) $programAllocation, 2) }} allocated</span>
+                            <span>{{ number_format((float) $programSubActivityAllocation, 2) }} in sub-activities</span>
                         </div>
                     </button>
 
@@ -983,7 +983,9 @@
                             @php
                                 $projectActivities = $project->activities;
                                 $projectSubActivities = $projectActivities->flatMap->subActivities;
-                                $projectAllocation = $projectSubActivities->sum('allocation_total');
+                                $componentEnvelope = (float) $project->component_allocation_total;
+                                $projectActivityAllocation = (float) $project->activity_allocation_total;
+                                $projectSubActivityAllocation = (float) $project->sub_activity_allocation_total;
                                 $projectCollapseId = 'projectSubFlow' . $project->id;
                             @endphp
 
@@ -1002,7 +1004,9 @@
                                     <div class="sub-node-metrics">
                                         <span>{{ number_format($projectActivities->count()) }} activities</span>
                                         <span>{{ number_format($projectSubActivities->count()) }} sub</span>
-                                        <span>{{ number_format((float) $projectAllocation, 2) }} allocated</span>
+                                        <span>Envelope: {{ number_format($componentEnvelope, 2) }}</span>
+                                        <span>Activities: {{ number_format($projectActivityAllocation, 2) }}</span>
+                                        <span>Sub-activities: {{ number_format($projectSubActivityAllocation, 2) }}</span>
                                     </div>
                                 </button>
 
@@ -1034,7 +1038,7 @@
                                                 </div>
                                                 <div class="sub-node-metrics">
                                                     <span>{{ number_format($activitySubActivities->count()) }} sub</span>
-                                                    <span>{{ number_format($activitySubAllocation, 2) }} {{ $currency }}</span>
+                                                    <span>{{ number_format($activitySubAllocation, 2) }} {{ $currency }} in sub-activities</span>
                                                     <span>{{ $activityUsagePercent }}% used</span>
                                                 </div>
                                             </button>
