@@ -28,9 +28,23 @@ class ExecutionDashboardChartBuilder
     public function dataset(
         Collection|array $rows,
         array $totals,
-        array $radarMetrics
+        array $radarMetrics,
+        Collection|array $componentBreakdownRows = []
     ): array {
         $rows = collect($rows)->values();
+        $componentBreakdownRows = collect($componentBreakdownRows)
+            ->map(fn ($row) => [
+                'component_id' => $row['component_id'] ?? null,
+                'sub_component_id' => $row['sub_component_id'] ?? null,
+                'level' => $row['level'] ?? 'component',
+                'label' => (string) ($row['label'] ?? ''),
+                'allocation' => round((float) ($row['allocation'] ?? 0), 2),
+                'commitment' => round((float) ($row['commitment'] ?? 0), 2),
+                'disbursement' => round((float) ($row['disbursement'] ?? 0), 2),
+                'remaining' => round((float) ($row['remaining'] ?? 0), 2),
+            ])
+            ->values()
+            ->all();
         $labels = $rows->pluck('year')->map(fn ($year) => (string) $year)->all();
         $allocations = $rows->pluck('allocation')->map(fn ($value) => (float) $value)->all();
         $commitments = $rows->pluck('commitment')->map(fn ($value) => (float) $value)->all();
@@ -91,6 +105,7 @@ class ExecutionDashboardChartBuilder
             'mix' => $mix,
             'quality_labels' => $qualityLabels,
             'quality_values' => $qualityValues,
+            'component_breakdown' => $componentBreakdownRows,
         ];
         $dataset['snapshot_hash'] = hash(
             'sha256',

@@ -4,6 +4,23 @@
     @php
         $rows = collect($executionBreakdownRows ?? []);
         $componentRows = collect($componentBreakdownRows ?? []);
+        $isSubComponentBreakdown = ($componentBreakdownLevel ?? 'component') === 'sub_component';
+        $breakdownTitle = $isSubComponentBreakdown
+            ? 'Sub-component Execution Performance Breakdown'
+            : 'Component Breakdown';
+        $breakdownNote = $isSubComponentBreakdown
+            ? 'Execution performance for every sub-component within the selected component'
+            : 'Total budget envelope followed by component-level execution using the same financial columns';
+        $breakdownColumnLabel = $isSubComponentBreakdown ? 'Sub-component' : 'Component';
+        $breakdownTotalLabel = $isSubComponentBreakdown
+            ? 'Selected component and all sub-components'
+            : 'All selected components';
+        $globalBreakdownTitle = $isSubComponentBreakdown
+            ? 'Selected Component - Global Execution Performance'
+            : 'Execution Performance Breakdown';
+        $globalBreakdownNote = $isSubComponentBreakdown
+            ? 'Overall year-by-year execution performance for the selected component before the sub-component detail'
+            : 'Year-by-year global commitments, planned commitments, disbursements, remaining balance, and rates';
         $totals = $executionBreakdownTotals ?? [
             'allocation' => $totalAllocation ?? 0,
             'commitment' => $totalCommitment ?? 0,
@@ -822,75 +839,8 @@
         <section class="execution-table-panel">
             <div class="execution-panel-head">
                 <div>
-                    <h5 class="execution-panel-title">Component Breakdown</h5>
-                    <p class="execution-panel-note">Total budget envelope followed by component-level execution using the same financial columns</p>
-                </div>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table table-bordered table-striped align-middle w-100">
-                    <thead>
-                        <tr class="text-center">
-                            <th>Component</th>
-                            <th class="text-end">Global Commitments</th>
-                            <th class="text-end">Planned Commitments</th>
-                            <th class="text-end">Disbursed Amount</th>
-                            <th class="text-end">Remaining</th>
-                            <th class="text-center">Commitment Rate</th>
-                            <th class="text-center">Disbursement Rate</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @php
-                            $totalExecutionClass = ($totals['execution_rate'] ?? 0) < 50 ? 'rate-low' : (($totals['execution_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
-                            $totalDisbursementClass = ($totals['disbursement_rate'] ?? 0) < 50 ? 'rate-low' : (($totals['disbursement_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
-                        @endphp
-                        <tr class="execution-total-row">
-                            <td class="execution-component-label">
-                                <strong>Total</strong>
-                                <span>All selected components</span>
-                            </td>
-                            <td class="text-end fw-bold">{{ number_format($totals['allocation'], 2) }}</td>
-                            <td class="text-end fw-bold">{{ number_format($totals['commitment'], 2) }}</td>
-                            <td class="text-end fw-bold">{{ number_format($totals['disbursement'], 2) }}</td>
-                            <td class="text-end fw-bold">{{ number_format($totals['remaining'], 2) }}</td>
-                            <td class="text-center"><span class="execution-rate-pill {{ $totalExecutionClass }}">{{ $percent($totals['execution_rate']) }}</span></td>
-                            <td class="text-center"><span class="execution-rate-pill {{ $totalDisbursementClass }}">{{ $percent($totals['disbursement_rate']) }}</span></td>
-                        </tr>
-                        @foreach ($componentRows as $component)
-                            @php
-                                $executionClass = ($component['execution_rate'] ?? 0) < 50 ? 'rate-low' : (($component['execution_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
-                                $disbursementClass = ($component['disbursement_rate'] ?? 0) < 50 ? 'rate-low' : (($component['disbursement_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
-                            @endphp
-                            <tr>
-                                <td class="execution-component-label">
-                                    <strong>{{ $component['label'] }}</strong>
-                                    @if (!empty($component['description']))
-                                        <span>{{ $component['description'] }}</span>
-                                    @endif
-                                </td>
-                                <td class="text-end">{{ number_format($component['allocation'], 2) }}</td>
-                                <td class="text-end">{{ number_format($component['commitment'], 2) }}</td>
-                                <td class="text-end">{{ number_format($component['disbursement'], 2) }}</td>
-                                <td class="text-end fw-semibold">{{ number_format($component['remaining'], 2) }}</td>
-                                <td class="text-center">
-                                    <span class="execution-rate-pill {{ $executionClass }}">{{ $percent($component['execution_rate']) }}</span>
-                                </td>
-                                <td class="text-center">
-                                    <span class="execution-rate-pill {{ $disbursementClass }}">{{ $percent($component['disbursement_rate']) }}</span>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="execution-table-panel">
-            <div class="execution-panel-head">
-                <div>
-                    <h5 class="execution-panel-title">Execution Performance Breakdown</h5>
-                    <p class="execution-panel-note">Year-by-year global commitments, planned commitments, disbursements, remaining balance, and rates</p>
+                    <h5 class="execution-panel-title">{{ $globalBreakdownTitle }}</h5>
+                    <p class="execution-panel-note">{{ $globalBreakdownNote }}</p>
                 </div>
             </div>
 
@@ -950,6 +900,73 @@
                     and shown separately in the component breakdown.
                 </div>
             @endif
+        </section>
+
+        <section class="execution-table-panel">
+            <div class="execution-panel-head">
+                <div>
+                    <h5 class="execution-panel-title">{{ $breakdownTitle }}</h5>
+                    <p class="execution-panel-note">{{ $breakdownNote }}</p>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle w-100">
+                    <thead>
+                        <tr class="text-center">
+                            <th>{{ $breakdownColumnLabel }}</th>
+                            <th class="text-end">Global Commitments</th>
+                            <th class="text-end">Planned Commitments</th>
+                            <th class="text-end">Disbursed Amount</th>
+                            <th class="text-end">Remaining</th>
+                            <th class="text-center">Commitment Rate</th>
+                            <th class="text-center">Disbursement Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @php
+                            $totalExecutionClass = ($totals['execution_rate'] ?? 0) < 50 ? 'rate-low' : (($totals['execution_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
+                            $totalDisbursementClass = ($totals['disbursement_rate'] ?? 0) < 50 ? 'rate-low' : (($totals['disbursement_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
+                        @endphp
+                        <tr class="execution-total-row">
+                            <td class="execution-component-label">
+                                <strong>Total</strong>
+                                <span>{{ $breakdownTotalLabel }}</span>
+                            </td>
+                            <td class="text-end fw-bold">{{ number_format($totals['allocation'], 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($totals['commitment'], 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($totals['disbursement'], 2) }}</td>
+                            <td class="text-end fw-bold">{{ number_format($totals['remaining'], 2) }}</td>
+                            <td class="text-center"><span class="execution-rate-pill {{ $totalExecutionClass }}">{{ $percent($totals['execution_rate']) }}</span></td>
+                            <td class="text-center"><span class="execution-rate-pill {{ $totalDisbursementClass }}">{{ $percent($totals['disbursement_rate']) }}</span></td>
+                        </tr>
+                        @foreach ($componentRows as $component)
+                            @php
+                                $executionClass = ($component['execution_rate'] ?? 0) < 50 ? 'rate-low' : (($component['execution_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
+                                $disbursementClass = ($component['disbursement_rate'] ?? 0) < 50 ? 'rate-low' : (($component['disbursement_rate'] ?? 0) < 80 ? 'rate-mid' : 'rate-good');
+                            @endphp
+                            <tr>
+                                <td class="execution-component-label">
+                                    <strong>{{ $component['label'] }}</strong>
+                                    @if (!empty($component['description']))
+                                        <span>{{ $component['description'] }}</span>
+                                    @endif
+                                </td>
+                                <td class="text-end">{{ number_format($component['allocation'], 2) }}</td>
+                                <td class="text-end">{{ number_format($component['commitment'], 2) }}</td>
+                                <td class="text-end">{{ number_format($component['disbursement'], 2) }}</td>
+                                <td class="text-end fw-semibold">{{ number_format($component['remaining'], 2) }}</td>
+                                <td class="text-center">
+                                    <span class="execution-rate-pill {{ $executionClass }}">{{ $percent($component['execution_rate']) }}</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="execution-rate-pill {{ $disbursementClass }}">{{ $percent($component['disbursement_rate']) }}</span>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
         </section>
 
         <section class="execution-insight-panel">

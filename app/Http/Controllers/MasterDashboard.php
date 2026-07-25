@@ -14,6 +14,7 @@ use Throwable;
 use App\Models\Sector;
 use App\Models\Program;
 use App\Models\Project;
+use App\Models\Activity;
 use App\Models\BudgetCommitment;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementPurchaseOrder;
@@ -323,6 +324,24 @@ class MasterDashboard extends Controller
                 ]);
             })
             ->when($scopeType !== 'global', function ($q) use ($scopeType, $scope) {
+                if ($scopeType === 'project') {
+                    $projectScope = $this->projectExecutionScopeIds($scope);
+
+                    $q->where(function ($scopeQuery) use ($scopeType, $scope, $projectScope) {
+                        if (! empty($projectScope['sub_activity_ids'])) {
+                            $scopeQuery->whereIn('sub_activity_id', $projectScope['sub_activity_ids']);
+                        } else {
+                            $scopeQuery->whereRaw('1 = 0');
+                        }
+
+                        $scopeQuery->orWhereHas('purchaseOrder', function ($poQuery) use ($scopeType, $scope) {
+                            $this->applyExecutionScopeToPurchaseOrderQuery($poQuery, $scopeType, $scope);
+                        });
+                    });
+
+                    return;
+                }
+
                 $q->whereHas('purchaseOrder', function ($poQuery) use ($scopeType, $scope) {
                     $this->applyExecutionScopeToPurchaseOrderQuery($poQuery, $scopeType, $scope);
                 });
@@ -438,8 +457,13 @@ class MasterDashboard extends Controller
             $hasPortfolioScope,
             $yearStart,
             $yearEnd,
-            $totalAllocation
+            $totalAllocation,
+            $totalCommitment,
+            $totalDisbursements
         );
+        $componentBreakdownLevel = $scopeType === 'project'
+            ? 'sub_component'
+            : 'component';
 
         $peakCommitmentRow = $executionBreakdownRows
             ->sortByDesc('commitment')
@@ -503,7 +527,8 @@ class MasterDashboard extends Controller
         $executionChartData = app(ExecutionDashboardChartBuilder::class)->dataset(
             $executionBreakdownRows,
             $executionBreakdownTotals,
-            $radarMetrics
+            $radarMetrics,
+            $componentBreakdownRows
         );
 
         /* ============================================================
@@ -546,6 +571,7 @@ class MasterDashboard extends Controller
             'executionBreakdownRows',
             'executionBreakdownTotals',
             'componentBreakdownRows',
+            'componentBreakdownLevel',
             'executionSummary',
             'executionFilters',
             'executionChartData',
@@ -618,14 +644,25 @@ class MasterDashboard extends Controller
         bool $hasPortfolioScope,
         ?int $yearStart,
         ?int $yearEnd,
-        float $budgetEnvelope
+        float $budgetEnvelope,
+        float $totalCommitment,
+        float $totalDisbursements
     ) {
+        if ($scopeType === 'project') {
+            return $this->subComponentExecutionBreakdown(
+                $scope,
+                $yearStart,
+                $yearEnd,
+                $budgetEnvelope,
+                $totalCommitment,
+                $totalDisbursements
+            );
+        }
+
         $componentQuery = Project::query()
             ->select(['id', 'program_id', 'name', 'total_budget']);
 
-        if ($scopeType === 'project') {
-            $componentQuery->where('id', $scope->id);
-        } elseif ($scopeType === 'program') {
+        if ($scopeType === 'program') {
             $componentQuery->where('program_id', $scope->id);
         } elseif ($scopeType === 'sector') {
             $componentQuery->whereHas('program', fn ($q) => $q->where('sector_id', $scope->id));
@@ -709,6 +746,207 @@ class MasterDashboard extends Controller
         }
 
         return $rows->values();
+    }
+
+    private function subComponentExecutionBreakdown(
+        Project $component,
+        ?int $yearStart,
+        ?int $yearEnd,
+        float $budgetEnvelope,
+        float $totalCommitment,
+        float $totalDisbursements
+    ) {
+        $subComponents = Activity::query()
+            ->where('project_id', $component->id)
+            ->select(['id', 'project_id', 'name', 'description'])
+            ->get()
+            ->sortBy(fn (Activity $activity) => mb_strtolower((string) $activity->name))
+            ->values();
+
+        $subComponentIds = $subComponents
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        $allocationBySubComponent = empty($subComponentIds)
+            ? collect()
+            : DB::table('myb_activity_allocations')
+                ->whereIn('activity_id', $subComponentIds)
+                ->when($yearStart && $yearEnd, fn ($q) => $q->whereBetween('year', [$yearStart, $yearEnd]))
+                ->select('activity_id', DB::raw('SUM(amount) as total'))
+                ->groupBy('activity_id')
+                ->pluck('total', 'activity_id');
+
+        $commitmentBySubComponent = empty($subComponentIds)
+            ? collect()
+            : $this->commitmentsByExecutionSubComponent($subComponentIds);
+        $disbursementBySubComponent = empty($subComponentIds)
+            ? collect()
+            : $this->disbursementsByExecutionSubComponent($subComponentIds, $yearStart, $yearEnd);
+
+        $rows = $subComponents->map(function (Activity $subComponent) use (
+            $component,
+            $allocationBySubComponent,
+            $commitmentBySubComponent,
+            $disbursementBySubComponent
+        ) {
+            $subComponentId = (string) $subComponent->id;
+            $allocation = round((float) $allocationBySubComponent->get($subComponentId, 0), 2);
+            $commitment = round((float) $commitmentBySubComponent->get($subComponentId, 0), 2);
+            $disbursement = round((float) $disbursementBySubComponent->get($subComponentId, 0), 2);
+
+            return [
+                'component_id' => (string) $component->id,
+                'sub_component_id' => $subComponentId,
+                'level' => 'sub_component',
+                'label' => (string) $subComponent->name,
+                'description' => filled($subComponent->description)
+                    ? (string) $subComponent->description
+                    : 'Activity under the selected component.',
+                'name' => (string) $subComponent->name,
+                'allocation' => $allocation,
+                'commitment' => $commitment,
+                'disbursement' => $disbursement,
+                'remaining' => round($allocation - $commitment, 2),
+                'execution_rate' => $allocation > 0
+                    ? max(0, round(($commitment / $allocation) * 100, 1))
+                    : 0,
+                'disbursement_rate' => $allocation > 0
+                    ? max(0, round(($disbursement / $allocation) * 100, 1))
+                    : 0,
+            ];
+        })->values();
+
+        $componentLevelAllocation = round($budgetEnvelope - (float) $rows->sum('allocation'), 2);
+        $componentLevelCommitment = round($totalCommitment - (float) $rows->sum('commitment'), 2);
+        $componentLevelDisbursement = round($totalDisbursements - (float) $rows->sum('disbursement'), 2);
+        $requiresReconciliation = $componentLevelAllocation < -0.01
+            || $componentLevelCommitment < -0.01
+            || $componentLevelDisbursement < -0.01;
+
+        if (
+            abs($componentLevelAllocation) > 0.01
+            || abs($componentLevelCommitment) > 0.01
+            || abs($componentLevelDisbursement) > 0.01
+        ) {
+            $rows->push([
+                'component_id' => (string) $component->id,
+                'sub_component_id' => null,
+                'level' => 'component_reconciliation',
+                'label' => $requiresReconciliation
+                    ? 'Component Reconciliation Adjustment'
+                    : 'Component-level / Unassigned Balance',
+                'description' => $requiresReconciliation
+                    ? 'Sub-component figures exceed one or more selected component totals; this adjustment keeps the breakdown reconciled.'
+                    : 'Amounts held at component level or not assigned to a specific sub-component.',
+                'name' => 'Component-level reconciliation',
+                'allocation' => $componentLevelAllocation,
+                'commitment' => $componentLevelCommitment,
+                'disbursement' => $componentLevelDisbursement,
+                'remaining' => round($componentLevelAllocation - $componentLevelCommitment, 2),
+                'execution_rate' => $componentLevelAllocation > 0
+                    ? max(0, round(($componentLevelCommitment / $componentLevelAllocation) * 100, 1))
+                    : 0,
+                'disbursement_rate' => $componentLevelAllocation > 0
+                    ? max(0, round(($componentLevelDisbursement / $componentLevelAllocation) * 100, 1))
+                    : 0,
+            ]);
+        }
+
+        return $rows->values();
+    }
+
+    private function commitmentsByExecutionSubComponent(array $subComponentIds)
+    {
+        $activityExpression = "
+            CASE
+                WHEN c.allocation_level = 'activity' THEN c.allocation_id
+                WHEN c.allocation_level = 'sub_activity' THEN c_sub_activity.activity_id
+                WHEN pr.allocation_level = 'activity' THEN pr.allocation_id
+                WHEN pr.allocation_level = 'sub_activity' THEN pr_sub_activity.activity_id
+                ELSE NULL
+            END
+        ";
+
+        return DB::table('myb_budget_commitments as c')
+            ->leftJoin('myb_purchase_requests as pr', 'pr.id', '=', 'c.purchase_request_id')
+            ->leftJoin('myb_sub_activities as c_sub_activity', function ($join) {
+                $join->on('c_sub_activity.id', '=', 'c.allocation_id')
+                    ->where('c.allocation_level', '=', 'sub_activity');
+            })
+            ->leftJoin('myb_sub_activities as pr_sub_activity', function ($join) {
+                $join->on('pr_sub_activity.id', '=', 'pr.allocation_id')
+                    ->where('pr.allocation_level', '=', 'sub_activity');
+            })
+            ->whereIn('c.status', [
+                BudgetCommitment::STATUS_SUBMITTED,
+                BudgetCommitment::STATUS_APPROVED,
+            ])
+            ->whereIn(DB::raw("({$activityExpression})"), $subComponentIds)
+            ->selectRaw("{$activityExpression} as sub_component_id")
+            ->selectRaw('SUM(c.commitment_amount) as total')
+            ->groupByRaw($activityExpression)
+            ->pluck('total', 'sub_component_id');
+    }
+
+    private function disbursementsByExecutionSubComponent(
+        array $subComponentIds,
+        ?int $yearStart,
+        ?int $yearEnd
+    ) {
+        $allocationActivityExpression = fn (string $alias, string $subActivityAlias) => "
+            CASE
+                WHEN {$alias}.allocation_level = 'activity' THEN {$alias}.allocation_id
+                WHEN {$alias}.allocation_level = 'sub_activity' THEN {$subActivityAlias}.activity_id
+                ELSE NULL
+            END
+        ";
+
+        $prActivityExpression = $allocationActivityExpression('pr', 'pr_sub_activity');
+        $commitmentActivityExpression = $allocationActivityExpression('bc', 'bc_sub_activity');
+        $commitmentRequestActivityExpression = $allocationActivityExpression('bc_pr', 'bc_pr_sub_activity');
+        $activityExpression = "
+            COALESCE(
+                d_sub_activity.activity_id,
+                po_sub_activity.activity_id,
+                {$prActivityExpression},
+                {$commitmentActivityExpression},
+                {$commitmentRequestActivityExpression}
+            )
+        ";
+
+        return DB::table('procurement_disbursements as d')
+            ->leftJoin('procurement_purchase_orders as po', 'po.id', '=', 'd.purchase_order_id')
+            ->leftJoin('myb_purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
+            ->leftJoin('myb_budget_commitments as bc', 'bc.id', '=', 'po.budget_commitment_id')
+            ->leftJoin('myb_purchase_requests as bc_pr', 'bc_pr.id', '=', 'bc.purchase_request_id')
+            ->leftJoin('myb_sub_activities as d_sub_activity', 'd_sub_activity.id', '=', 'd.sub_activity_id')
+            ->leftJoin('myb_sub_activities as po_sub_activity', 'po_sub_activity.id', '=', 'po.sub_activity_id')
+            ->leftJoin('myb_sub_activities as pr_sub_activity', function ($join) {
+                $join->on('pr_sub_activity.id', '=', 'pr.allocation_id')
+                    ->where('pr.allocation_level', '=', 'sub_activity');
+            })
+            ->leftJoin('myb_sub_activities as bc_sub_activity', function ($join) {
+                $join->on('bc_sub_activity.id', '=', 'bc.allocation_id')
+                    ->where('bc.allocation_level', '=', 'sub_activity');
+            })
+            ->leftJoin('myb_sub_activities as bc_pr_sub_activity', function ($join) {
+                $join->on('bc_pr_sub_activity.id', '=', 'bc_pr.allocation_id')
+                    ->where('bc_pr.allocation_level', '=', 'sub_activity');
+            })
+            ->whereNotNull('d.paid_at')
+            ->whereIn('d.status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+            ->when($yearStart && $yearEnd, function ($q) use ($yearStart, $yearEnd) {
+                $q->whereBetween('d.paid_at', [
+                    Carbon::create((int) $yearStart, 1, 1)->startOfDay(),
+                    Carbon::create((int) $yearEnd, 12, 31)->endOfDay(),
+                ]);
+            })
+            ->whereIn(DB::raw("({$activityExpression})"), $subComponentIds)
+            ->selectRaw("{$activityExpression} as sub_component_id")
+            ->selectRaw('SUM(d.amount) as total')
+            ->groupByRaw($activityExpression)
+            ->pluck('total', 'sub_component_id');
     }
 
     private function commitmentsByExecutionComponent(array $componentIds)

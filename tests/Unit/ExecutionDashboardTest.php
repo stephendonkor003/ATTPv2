@@ -30,6 +30,49 @@ it('prevents a PDF with figures from a different dashboard snapshot', function (
         ->and($method->invoke($controller, 'invalid', $snapshot))->toBeFalse();
 });
 
+it('includes the component breakdown in the shared web and PDF snapshot', function () {
+    $builder = new ExecutionDashboardChartBuilder();
+    $baseBreakdown = [
+        [
+            'component_id' => 'component-1',
+            'sub_component_id' => 'sub-component-a',
+            'level' => 'sub_component',
+            'label' => 'Sub-component A',
+            'allocation' => 1_000_000,
+            'commitment' => 400_000,
+            'disbursement' => 250_000,
+            'remaining' => 600_000,
+        ],
+    ];
+
+    $first = $builder->dataset(
+        executionDashboardTestRows(),
+        executionDashboardTestTotals(),
+        executionDashboardTestRadarMetrics(),
+        $baseBreakdown
+    );
+    $second = $builder->dataset(
+        executionDashboardTestRows(),
+        executionDashboardTestTotals(),
+        executionDashboardTestRadarMetrics(),
+        [
+            [
+                ...$baseBreakdown[0],
+                'allocation' => 1_000_001,
+                'remaining' => 600_001,
+            ],
+        ]
+    );
+
+    expect($first['component_breakdown'][0])
+        ->toMatchArray([
+            'level' => 'sub_component',
+            'label' => 'Sub-component A',
+            'allocation' => 1_000_000.0,
+        ])
+        ->and($first['snapshot_hash'])->not->toBe($second['snapshot_hash']);
+});
+
 it('builds printable SVG versions of every execution dashboard graph', function () {
     $builder = new ExecutionDashboardChartBuilder();
     $dataset = $builder->dataset(
@@ -60,6 +103,29 @@ it('builds printable SVG versions of every execution dashboard graph', function 
         ->and($dataset['cumulative_commitment'])->toBe([4_000_000.0, 12_000_000.0])
         ->and($dataset['cumulative_disbursement'])->toBe([2_500_000.0, 7_500_000.0])
         ->and($dataset['snapshot_hash'])->toHaveLength(64);
+});
+
+it('shows selected component global performance before its sub-component breakdown', function () {
+    $webTemplate = file_get_contents(
+        dirname(__DIR__, 2) . '/resources/views/finance/execution/dashboard.blade.php'
+    );
+    $pdfTemplate = file_get_contents(
+        dirname(__DIR__, 2) . '/resources/views/finance/execution/dashboard_pdf.blade.php'
+    );
+
+    foreach ([$webTemplate, $pdfTemplate] as $template) {
+        expect($template)
+            ->toContain("\$componentBreakdownLevel ?? 'component'")
+            ->toContain('Selected Component - Global Execution Performance')
+            ->toContain('Sub-component Execution Performance Breakdown')
+            ->toContain("\$breakdownColumnLabel")
+            ->toContain('Selected component and all sub-components');
+    }
+
+    expect(strpos($webTemplate, '<h5 class="execution-panel-title">{{ $globalBreakdownTitle }}</h5>'))
+        ->toBeLessThan(strpos($webTemplate, '<h5 class="execution-panel-title">{{ $breakdownTitle }}</h5>'))
+        ->and(strpos($pdfTemplate, '<div class="section-title">{{ $globalBreakdownTitle }}</div>'))
+        ->toBeLessThan(strpos($pdfTemplate, '<div class="section-title">{{ $breakdownTitle }}</div>'));
 });
 
 it('uses a native downloader compatible PDF request with resilient status tracking', function () {
