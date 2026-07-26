@@ -158,4 +158,9 @@ class ConsortiumThinkTank extends BaseModel
     {
         return $this->hasMany(MePerformanceReport::class, 'think_tank_member_id');
     }
+
+    public function biAnnualSiteVisitProfiles(): HasMany
+    {
+        return $this->hasMany(BiAnnualSiteVisitProfile::class, 'think_tank_member_id');
+    }
 }

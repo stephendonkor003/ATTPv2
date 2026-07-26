@@ -64,6 +64,21 @@ class ExecutionDashboardChartBuilder
         $totalAllocation = (float) ($totals['allocation'] ?? 0);
         $totalCommitment = (float) ($totals['commitment'] ?? 0);
         $totalDisbursement = (float) ($totals['disbursement'] ?? 0);
+        $cumulativeUnpaidCommitments = array_map(
+            fn ($commitment, $disbursement) => round(
+                max((float) $commitment - (float) $disbursement, 0),
+                2
+            ),
+            $cumulativeCommitment,
+            $cumulativeDisbursement
+        );
+        $cumulativeGlobalRemaining = array_map(
+            fn ($commitment) => round(
+                max($totalAllocation - (float) $commitment, 0),
+                2
+            ),
+            $cumulativeCommitment
+        );
         $mix = [
             [
                 'label' => 'Disbursed',
@@ -78,6 +93,23 @@ class ExecutionDashboardChartBuilder
             [
                 'label' => 'Remaining Global Commitments',
                 'value' => max($totalAllocation - $totalCommitment, 0),
+                'color' => '#2563eb',
+            ],
+        ];
+        $mixTrend = [
+            [
+                'label' => 'Disbursed',
+                'values' => $cumulativeDisbursement,
+                'color' => '#168a5b',
+            ],
+            [
+                'label' => 'Unpaid Commitments',
+                'values' => $cumulativeUnpaidCommitments,
+                'color' => '#d65a31',
+            ],
+            [
+                'label' => 'Remaining Global Commitments',
+                'values' => $cumulativeGlobalRemaining,
                 'color' => '#2563eb',
             ],
         ];
@@ -100,9 +132,12 @@ class ExecutionDashboardChartBuilder
             'cumulative_commitment' => $cumulativeCommitment,
             'cumulative_disbursement' => $cumulativeDisbursement,
             'cumulative_remaining' => $cumulativeRemaining,
+            'cumulative_unpaid_commitments' => $cumulativeUnpaidCommitments,
+            'cumulative_global_remaining' => $cumulativeGlobalRemaining,
             'cumulative_execution_rates' => $cumulativeExecutionRates,
             'cumulative_disbursement_rates' => $cumulativeDisbursementRates,
             'mix' => $mix,
+            'mix_trend' => $mixTrend,
             'quality_labels' => $qualityLabels,
             'quality_values' => $qualityValues,
             'component_breakdown' => $componentBreakdownRows,
@@ -124,9 +159,35 @@ class ExecutionDashboardChartBuilder
         $cumulativeRemaining = (array) ($dataset['cumulative_remaining'] ?? []);
         $cumulativeExecutionRates = (array) ($dataset['cumulative_execution_rates'] ?? []);
         $cumulativeDisbursementRates = (array) ($dataset['cumulative_disbursement_rates'] ?? []);
-        $mix = (array) ($dataset['mix'] ?? []);
+        $mixTrend = (array) ($dataset['mix_trend'] ?? []);
         $qualityLabels = (array) ($dataset['quality_labels'] ?? []);
         $qualityValues = (array) ($dataset['quality_values'] ?? []);
+
+        if ($mixTrend === []) {
+            $cumulativeUnpaidCommitments = (array) (
+                $dataset['cumulative_unpaid_commitments']
+                ?? array_map(
+                    fn ($commitment, $disbursement) => max(
+                        (float) $commitment - (float) $disbursement,
+                        0
+                    ),
+                    $cumulativeCommitment,
+                    $cumulativeDisbursement
+                )
+            );
+            $cumulativeGlobalRemaining = (array) (
+                $dataset['cumulative_global_remaining']
+                ?? array_map(
+                    fn ($remaining) => max((float) $remaining, 0),
+                    $cumulativeRemaining
+                )
+            );
+            $mixTrend = [
+                ['label' => 'Disbursed', 'values' => $cumulativeDisbursement, 'color' => '#168a5b'],
+                ['label' => 'Unpaid Commitments', 'values' => $cumulativeUnpaidCommitments, 'color' => '#d65a31'],
+                ['label' => 'Remaining Global Commitments', 'values' => $cumulativeGlobalRemaining, 'color' => '#2563eb'],
+            ];
+        }
 
         return [
             'global_trend' => $this->dataUri($this->lineChart($labels, [
@@ -134,7 +195,9 @@ class ExecutionDashboardChartBuilder
                 ['label' => 'Planned Commitments', 'values' => $cumulativeCommitment, 'color' => '#b7791f'],
                 ['label' => 'Disbursements', 'values' => $cumulativeDisbursement, 'color' => '#168a5b'],
             ])),
-            'execution_mix' => $this->dataUri($this->doughnutChart($mix, $currency)),
+            'execution_mix' => $this->dataUri(
+                $this->executionMixLineChart($labels, $mixTrend, $currency)
+            ),
             'rate_movement' => $this->dataUri($this->lineChart($labels, [
                 ['label' => 'Commitment Rate', 'values' => $cumulativeExecutionRates, 'color' => '#0f766e'],
                 ['label' => 'Disbursement Rate', 'values' => $cumulativeDisbursementRates, 'color' => '#6d5bd0'],
@@ -317,6 +380,98 @@ class ExecutionDashboardChartBuilder
         }
 
         return $svg . $this->svgEnd();
+    }
+
+    private function executionMixLineChart(array $labels, array $series, string $currency): string
+    {
+        $left = 66;
+        $right = 22;
+        $top = 72;
+        $bottom = 40;
+        $plotWidth = self::WIDTH - $left - $right;
+        $plotHeight = self::HEIGHT - $top - $bottom;
+        $allValues = collect($series)->flatMap(
+            fn ($item) => (array) ($item['values'] ?? [])
+        );
+        $maxValue = $this->niceMaximum((float) $allValues->max());
+
+        $svg = $this->svgStart();
+        $svg .= '<g data-chart="execution-mix-line">';
+        $svg .= sprintf(
+            '<rect x="%d" y="%d" width="%.2f" height="%.2f" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>',
+            $left,
+            $top,
+            $plotWidth,
+            $plotHeight
+        );
+        $svg .= $this->grid($left, $top, $plotWidth, $plotHeight, $maxValue, false);
+        $svg .= $this->xLabels($labels, $left, $top + $plotHeight, $plotWidth);
+
+        $legendPositions = [66, 282, 502];
+        $preparedSeries = [];
+        foreach (array_values($series) as $seriesIndex => $item) {
+            $values = array_values((array) ($item['values'] ?? []));
+            $color = (string) ($item['color'] ?? '#2563eb');
+            $label = (string) ($item['label'] ?? '');
+            $legendX = $legendPositions[$seriesIndex]
+                ?? ($left + ($seriesIndex * ($plotWidth / max(1, count($series)))));
+            $latestValue = (float) ($values[array_key_last($values)] ?? 0);
+
+            $svg .= '<line x1="' . $legendX . '" y1="19" x2="' . ($legendX + 12) . '" y2="19" stroke="' . $this->escape($color) . '" stroke-width="4" stroke-linecap="round"/>';
+            $svg .= '<circle cx="' . ($legendX + 6) . '" cy="19" r="3.2" fill="#ffffff" stroke="' . $this->escape($color) . '" stroke-width="2"/>';
+            $svg .= '<text x="' . ($legendX + 18) . '" y="22" class="legend-strong">' . $this->escape($label) . '</text>';
+            $svg .= '<text x="' . ($legendX + 18) . '" y="42" class="mix-legend-value">'
+                . $this->escape($currency . ' ' . $this->formatAxis($latestValue))
+                . '</text>';
+
+            $points = [];
+            foreach ($values as $valueIndex => $value) {
+                $x = $this->pointX($valueIndex, count($labels), $left, $plotWidth);
+                $y = $top + $plotHeight - (((float) $value / $maxValue) * $plotHeight);
+                $points[] = [round($x, 2), round($y, 2)];
+            }
+            $preparedSeries[] = [
+                'color' => $color,
+                'points' => $points,
+            ];
+        }
+
+        if ($labels !== []) {
+            $latestX = $this->pointX(count($labels) - 1, count($labels), $left, $plotWidth);
+            $svg .= '<line x1="' . $latestX . '" y1="' . $top . '" x2="' . $latestX . '" y2="' . ($top + $plotHeight) . '" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 4"/>';
+        }
+
+        foreach (array_reverse($preparedSeries) as $prepared) {
+            if ($prepared['points'] === []) {
+                continue;
+            }
+
+            $pointString = implode(
+                ' ',
+                array_map(
+                    fn ($point) => $point[0] . ',' . $point[1],
+                    $prepared['points']
+                )
+            );
+            $firstX = $prepared['points'][0][0];
+            $lastX = $prepared['points'][array_key_last($prepared['points'])][0];
+            $baseline = $top + $plotHeight;
+            $areaPoints = $firstX . ',' . $baseline . ' ' . $pointString . ' ' . $lastX . ',' . $baseline;
+
+            $svg .= '<polygon points="' . $areaPoints . '" fill="'
+                . $this->escape($prepared['color']) . '" fill-opacity=".075"/>';
+            $svg .= '<polyline points="' . $pointString . '" fill="none" stroke="'
+                . $this->escape($prepared['color'])
+                . '" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>';
+
+            foreach ($prepared['points'] as $point) {
+                $svg .= '<circle cx="' . $point[0] . '" cy="' . $point[1]
+                    . '" r="4" fill="#ffffff" stroke="' . $this->escape($prepared['color'])
+                    . '" stroke-width="2.3"/>';
+            }
+        }
+
+        return $svg . '</g>' . $this->svgEnd();
     }
 
     private function doughnutChart(array $segments, string $currency): string
@@ -540,6 +695,7 @@ class ExecutionDashboardChartBuilder
             . '.axis{font:11px DejaVu Sans,Arial,sans-serif;fill:#64748b}'
             . '.legend{font:10px DejaVu Sans,Arial,sans-serif;fill:#475569}'
             . '.legend-strong{font:bold 11px DejaVu Sans,Arial,sans-serif;fill:#0f172a}'
+            . '.mix-legend-value{font:bold 12px DejaVu Sans,Arial,sans-serif;fill:#334155}'
             . '.value-label{font:bold 10px DejaVu Sans,Arial,sans-serif;fill:#334155}'
             . '.donut-label{font:10px DejaVu Sans,Arial,sans-serif;fill:#64748b}'
             . '.donut-value{font:bold 17px DejaVu Sans,Arial,sans-serif;fill:#0f172a}'

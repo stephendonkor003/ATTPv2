@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class NewsPost extends BaseModel
@@ -77,6 +78,16 @@ class NewsPost extends BaseModel
             return $path;
         }
 
+        if (! Storage::disk('public')->exists($this->coverImageStoragePath())) {
+            return null;
+        }
+
+        return route('news.cover', $this);
+    }
+
+    public function coverImageStoragePath(): string
+    {
+        $path = str_replace('\\', '/', trim((string) $this->cover_image_path));
         $path = ltrim($path, '/');
 
         if (Str::startsWith($path, 'public/')) {
@@ -84,10 +95,10 @@ class NewsPost extends BaseModel
         }
 
         if (Str::startsWith($path, 'storage/')) {
-            return asset($path);
+            $path = Str::after($path, 'storage/');
         }
 
-        return asset('storage/' . $path);
+        return $path;
     }
 
     public function getRouteKeyName(): string

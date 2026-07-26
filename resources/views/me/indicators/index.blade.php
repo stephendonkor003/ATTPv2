@@ -109,6 +109,12 @@
     @endcan
 @endsection
 
+@can('me.configuration.manage')
+    @push('modals')
+        @include('me.indicators.partials.disaggregation-modal')
+    @endpush
+@endcan
+
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -270,6 +276,14 @@
                 const primary = disaggregationForm.querySelector('[data-disaggregation-level="primary"]');
                 const secondary = disaggregationForm.querySelector('[data-disaggregation-level="secondary"]');
                 const tertiary = disaggregationForm.querySelector('[data-disaggregation-level="tertiary"]');
+
+                disaggregationModalElement.addEventListener('show.bs.modal', () => {
+                    document.body.classList.add('me-disaggregation-modal-open');
+                });
+
+                disaggregationModalElement.addEventListener('hidden.bs.modal', () => {
+                    document.body.classList.remove('me-disaggregation-modal-open');
+                });
 
                 const synchronizeDisaggregationLevels = (clearChildren = false) => {
                     if (!(primary instanceof HTMLInputElement)

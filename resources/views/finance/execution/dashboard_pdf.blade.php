@@ -224,6 +224,12 @@
             page-break-inside: avoid;
         }
 
+        .chart-card--mix {
+            background: #fbfdff;
+            border-top: 3px solid #2563eb;
+            padding-top: 8px;
+        }
+
         .chart-title {
             color: #10212f;
             font-size: 11px;
@@ -239,6 +245,12 @@
         .chart-image {
             display: block;
             height: auto;
+            width: 100%;
+        }
+
+        .chart-image--large {
+            margin: 0 auto;
+            max-width: 100%;
             width: 100%;
         }
 
@@ -550,21 +562,23 @@
 
     <table class="chart-grid">
         <tr>
-            <td style="width: 66.66%;">
+            <td style="width: 100%;">
                 <div class="chart-card">
                     <div class="chart-title">Global, Planned, and Disbursed</div>
                     <div class="chart-note">Cumulative execution trend</div>
                     @if (!empty($charts['global_trend']))
-                        <img class="chart-image" src="{{ $charts['global_trend'] }}" alt="Global, planned, and disbursed chart">
+                        <img class="chart-image chart-image--large" src="{{ $charts['global_trend'] }}" alt="Global, planned, and disbursed chart">
                     @endif
                 </div>
             </td>
-            <td style="width: 33.34%;">
-                <div class="chart-card">
+        </tr>
+        <tr>
+            <td style="width: 100%;">
+                <div class="chart-card chart-card--mix">
                     <div class="chart-title">Execution Mix</div>
-                    <div class="chart-note">Disbursed, planned not paid, and remaining global commitments</div>
+                    <div class="chart-note">Cumulative yearly movement of disbursed, unpaid, and remaining global commitments</div>
                     @if (!empty($charts['execution_mix']))
-                        <img class="chart-image" src="{{ $charts['execution_mix'] }}" alt="Execution mix chart">
+                        <img class="chart-image chart-image--large" src="{{ $charts['execution_mix'] }}" alt="Execution mix chart">
                     @endif
                 </div>
             </td>

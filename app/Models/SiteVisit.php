@@ -2,8 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\BaseModel;
-
 class SiteVisit extends BaseModel
 {
     protected $fillable = [
@@ -68,5 +66,10 @@ class SiteVisit extends BaseModel
     public function approvals()
     {
         return $this->hasMany(SiteVisitApproval::class);
+    }
+
+    public function biAnnualProfile()
+    {
+        return $this->hasOne(BiAnnualSiteVisitProfile::class, 'site_visit_id');
     }
 }

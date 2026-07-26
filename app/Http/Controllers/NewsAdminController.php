@@ -45,11 +45,10 @@ class NewsAdminController extends Controller
 
     public function store(Request $request)
     {
+        $action = (string) $request->input('action', 'draft');
         $data = $this->validated($request);
         $data['created_by'] = $request->user()?->id;
-        $data['status'] = $request->input('action') === 'submit' ? 'submitted' : 'draft';
-        $data['submitted_by'] = $data['status'] === 'submitted' ? $request->user()?->id : null;
-        $data['submitted_at'] = $data['status'] === 'submitted' ? now() : null;
+        $data = array_merge($data, $this->workflowData($request, null, $action));
         $storedPublicPaths = [];
         $storedLocalPaths = [];
 
@@ -82,7 +81,11 @@ class NewsAdminController extends Controller
                 ->with('error', 'The news post could not be saved. Please check the files and try again.');
         }
 
-        return redirect()->route('system.news.edit', $post)->with('success', 'News post saved.');
+        $notificationWarning = $this->notifyPublishedPost($post->fresh());
+
+        return redirect()
+            ->route('system.news.edit', $post)
+            ->with('success', $this->saveSuccessMessage($post->fresh(), $action, $notificationWarning));
     }
 
     public function edit(NewsPost $post, GalleryImageService $gallery)
@@ -98,7 +101,9 @@ class NewsAdminController extends Controller
 
     public function update(Request $request, NewsPost $post)
     {
+        $action = (string) $request->input('action', 'save');
         $data = $this->validated($request);
+        $data = array_merge($data, $this->workflowData($request, $post, $action));
         $oldCoverPath = $post->cover_image_path;
         $newCoverPath = null;
         $storedPublicPaths = [];
@@ -113,12 +118,6 @@ class NewsAdminController extends Controller
                 );
                 $storedPublicPaths[] = $newCoverPath;
                 $data['cover_image_path'] = $newCoverPath;
-            }
-
-            if ($request->input('action') === 'submit') {
-                $data['status'] = 'submitted';
-                $data['submitted_by'] = $request->user()?->id;
-                $data['submitted_at'] = now();
             }
 
             DB::transaction(function () use ($request, $post, $data, &$storedLocalPaths) {
@@ -143,7 +142,12 @@ class NewsAdminController extends Controller
             Storage::disk('public')->delete($oldCoverPath);
         }
 
-        return redirect()->route('system.news.edit', $post)->with('success', 'News post updated.');
+        $post->refresh();
+        $notificationWarning = $this->notifyPublishedPost($post);
+
+        return redirect()
+            ->route('system.news.edit', $post)
+            ->with('success', $this->saveSuccessMessage($post, $action, $notificationWarning));
     }
 
     public function approve(Request $request, NewsPost $post)
@@ -176,20 +180,22 @@ class NewsAdminController extends Controller
                 : null,
         ]);
 
-        if ($post->status === 'published') {
-            try {
-                $this->notifySubscribers($post->fresh());
-            } catch (Throwable $exception) {
-                Log::warning('News subscriber notification failed.', [
-                    'news_post_id' => $post->id,
-                    'message' => $exception->getMessage(),
-                ]);
+        $post->refresh();
+        $notificationWarning = $this->notifyPublishedPost($post);
 
-                return back()->with('success', 'News approval saved. Subscriber email notification failed because the mail server connection was closed.');
-            }
+        if ($post->isPublished()) {
+            $message = 'News approved, published, and now visible on the public news page.';
+        } elseif ($post->status === 'published' && $post->published_at?->isFuture()) {
+            $message = 'News approved and scheduled. It will appear publicly on '.$post->published_at->format('d M Y H:i').'.';
+        } else {
+            $message = 'News approval saved. It is not public until the decision is set to “Approve and publish.”';
         }
 
-        return back()->with('success', 'News approval saved.');
+        if ($notificationWarning) {
+            $message .= ' '.$notificationWarning;
+        }
+
+        return back()->with('success', $message);
     }
 
     public function destroyAttachment(NewsPost $post, NewsAttachment $attachment)
@@ -234,7 +240,7 @@ class NewsAdminController extends Controller
             'cover_image' => "nullable|image|max:{$uploadLimits['cover_kb']}",
             'attachments' => 'nullable|array|max:10',
             'attachments.*' => "nullable|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip,jpg,jpeg,png|max:{$uploadLimits['attachment_kb']}",
-            'action' => 'required|in:draft,submit',
+            'action' => 'required|in:save,draft,submit,publish',
         ], [
             'cover_image.max' => "The cover image must not be larger than {$uploadLimits['cover_label']}.",
             'attachments.max' => 'You may upload no more than 10 attachments at a time.',
@@ -254,6 +260,55 @@ class NewsAdminController extends Controller
         unset($data['cover_image'], $data['attachments'], $data['action']);
 
         return $data;
+    }
+
+    private function workflowData(Request $request, ?NewsPost $post, string $action): array
+    {
+        $userId = $request->user()?->id;
+
+        if ($action === 'publish') {
+            abort_unless(
+                $request->user()?->canAny(['news.approve', 'communications.respond']),
+                403,
+                'You do not have permission to publish news.'
+            );
+
+            return [
+                'status' => 'published',
+                'submitted_by' => $post?->submitted_by ?: $userId,
+                'submitted_at' => $post?->submitted_at ?: now(),
+                'approved_by' => $userId,
+                'approved_at' => now(),
+                'published_at' => $post?->isPublished() ? $post->published_at : now(),
+                'review_notes' => null,
+            ];
+        }
+
+        if ($action === 'submit') {
+            return [
+                'status' => 'submitted',
+                'submitted_by' => $userId,
+                'submitted_at' => now(),
+                'approved_by' => null,
+                'approved_at' => null,
+                'published_at' => null,
+                'review_notes' => null,
+            ];
+        }
+
+        if ($action === 'draft' || ! $post?->exists) {
+            return [
+                'status' => 'draft',
+                'submitted_by' => null,
+                'submitted_at' => null,
+                'approved_by' => null,
+                'approved_at' => null,
+                'published_at' => null,
+                'review_notes' => null,
+            ];
+        }
+
+        return [];
     }
 
     private function storeAttachments(Request $request, NewsPost $post, array &$storedPaths): void
@@ -411,6 +466,44 @@ class NewsAdminController extends Controller
         });
 
         $post->update(['notified_at' => now()]);
+    }
+
+    private function notifyPublishedPost(NewsPost $post): ?string
+    {
+        if (! $post->isPublished()) {
+            return null;
+        }
+
+        try {
+            $this->notifySubscribers($post);
+        } catch (Throwable $exception) {
+            Log::warning('News subscriber notification failed.', [
+                'news_post_id' => $post->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return 'The article is public, but subscriber email notification could not be queued.';
+        }
+
+        return null;
+    }
+
+    private function saveSuccessMessage(NewsPost $post, string $action, ?string $notificationWarning): string
+    {
+        $message = match ($action) {
+            'publish' => 'News published successfully and is now visible on the public news page.',
+            'submit' => 'News submitted for approval. It will become public after an approver publishes it.',
+            'draft' => 'News draft saved. Drafts are not shown on the public news page.',
+            default => $post->isPublished()
+                ? 'Live news article updated successfully.'
+                : 'News post updated successfully.',
+        };
+
+        if ($notificationWarning) {
+            $message .= ' '.$notificationWarning;
+        }
+
+        return $message;
     }
 
     private function sanitizeNewsHtml(string $html): string

@@ -52,6 +52,7 @@ class DatabaseSeeder extends Seeder
             ApprovedWorkPlanSeeder::class,
             AttpWorkPlan2025Seeder::class,
             ConsortiumThinkTankMembershipSeeder::class,
+            BiAnnualSiteVisitQuestionnaireSeeder::class,
             RolePermissionSeeder::class,
             MasterAdminSeeder::class,
             ChirwaSuperAdminSeeder::class,

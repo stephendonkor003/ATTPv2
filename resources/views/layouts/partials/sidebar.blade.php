@@ -1718,45 +1718,66 @@
 
 
                 {{-- ================= SITE VISITS ================= --}}
-                {{-- ================= SITE VISITS ================= --}}
-                @canany(['site_visits.view', 'site_visits.create', 'site_visits.approve'])
+                @canany(['site_visits.view', 'site_visits.create', 'site_visits.approve',
+                    'biannual_site_visits.view', 'biannual_site_visits.create',
+                    'biannual_site_visits.respond', 'biannual_site_visits.submit',
+                    'biannual_site_visits.approve', 'biannual_site_visits.export',
+                    'biannual_site_visits.templates.manage'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.site_visits') }}</label>
                     </li>
 
-                    @can('site_visits.view')
-                        <li class="nxl-item">
-                            <a href="{{ route('site-visits.index') }}" class="nxl-link">
-                                <i class="feather-map-pin me-2"></i>
-                                Site Visits
-                            </a>
-                        </li>
-                    @endcan
+                    <li class="nxl-item nxl-hasmenu">
+                        <a href="javascript:void(0);" class="nxl-link">
+                            <span class="nxl-micon"><i class="feather-map-pin"></i></span>
+                            <span class="nxl-mtext">Site Visits</span>
+                            <span class="nxl-arrow"><i class="feather-chevron-right"></i></span>
+                        </a>
+                        <ul class="nxl-submenu">
+                            @canany(['site_visits.view', 'site_visits.create', 'site_visits.approve'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('site-visits.index') }}"
+                                        class="nxl-link {{ request()->routeIs('site-visits.*') ? 'active' : '' }}">
+                                        <i class="feather-briefcase me-2"></i>
+                                        Procurement Site Visits
+                                    </a>
+                                </li>
+                            @endcanany
 
-                    @can('site_visits.create')
-                        <li class="nxl-item">
-                            <a href="{{ route('site-visits.create') }}" class="nxl-link">
-                                <i class="feather-plus-square me-2"></i>
-                                Create Site Visit
-                            </a>
-                        </li>
-                    @endcan
+                              @canany(['biannual_site_visits.view', 'biannual_site_visits.create',
+                                  'biannual_site_visits.respond', 'biannual_site_visits.submit',
+                                  'biannual_site_visits.approve', 'biannual_site_visits.export'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('biannual-site-visits.index') }}"
+                                        class="nxl-link {{ request()->routeIs('biannual-site-visits.*') && !request()->routeIs('biannual-site-visits.templates.*') && !request()->routeIs('biannual-site-visits.reports.*') ? 'active' : '' }}">
+                                        <i class="feather-activity me-2"></i>
+                                        Bi-Annual Site Visits
+                                    </a>
+                                </li>
+                            @endcanany
 
-                    @can('site_visits.approve')
-                        <li class="nxl-item">
-                            <a href="{{ route('site-visits.index', ['filter' => 'pending']) }}" class="nxl-link">
-                                <i class="feather-check-circle me-2"></i>
-                                Pending Approvals
-                            </a>
-                        </li>
+                            @canany(['biannual_site_visits.view', 'biannual_site_visits.approve',
+                                'biannual_site_visits.export'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('biannual-site-visits.reports.submitted') }}"
+                                        class="nxl-link {{ request()->routeIs('biannual-site-visits.reports.*') ? 'active' : '' }}">
+                                        <i class="feather-file-text me-2"></i>
+                                        Submitted Visit Reports
+                                    </a>
+                                </li>
+                            @endcanany
 
-                        <li class="nxl-item">
-                            <a href="{{ route('site-visits.reports.index') }}" class="nxl-link">
-                                <i class="feather-bar-chart-2 me-2"></i>
-                                Site Visit Reports
-                            </a>
-                        </li>
-                    @endcan
+                            @can('biannual_site_visits.templates.manage')
+                                <li class="nxl-item">
+                                    <a href="{{ route('biannual-site-visits.templates.index') }}"
+                                        class="nxl-link {{ request()->routeIs('biannual-site-visits.templates.*') ? 'active' : '' }}">
+                                        <i class="feather-sliders me-2"></i>
+                                        Questionnaire Builder
+                                    </a>
+                                </li>
+                            @endcan
+                        </ul>
+                    </li>
                 @endcanany
 
 

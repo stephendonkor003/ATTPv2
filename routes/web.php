@@ -2753,8 +2753,53 @@ use App\Http\Controllers\{
     SiteVisitGroupController,
     SiteVisitObservationController,
     SiteVisitMediaController,
-    ProcurementSiteVisitReportController
+    ProcurementSiteVisitReportController,
+    BiAnnualSiteVisitController,
+    BiAnnualSiteVisitTemplateController
 };
+
+Route::middleware(['auth', 'not.funding.partner'])
+    ->prefix('biannual-site-visits')
+    ->name('biannual-site-visits.')
+    ->group(function () {
+        Route::get('/', [BiAnnualSiteVisitController::class, 'index'])->name('index');
+        Route::get('/create', [BiAnnualSiteVisitController::class, 'create'])->name('create');
+        Route::post('/', [BiAnnualSiteVisitController::class, 'store'])->name('store');
+
+        Route::get('/templates', [BiAnnualSiteVisitTemplateController::class, 'index'])
+            ->name('templates.index');
+        Route::post('/templates', [BiAnnualSiteVisitTemplateController::class, 'store'])
+            ->name('templates.store');
+        Route::post('/templates/import', [BiAnnualSiteVisitTemplateController::class, 'import'])
+            ->name('templates.import');
+        Route::get('/templates/{template}/preview', [BiAnnualSiteVisitTemplateController::class, 'preview'])
+            ->name('templates.preview');
+        Route::get('/templates/{template}/preview/pdf', [BiAnnualSiteVisitTemplateController::class, 'previewPdf'])
+            ->name('templates.preview.pdf');
+        Route::get('/templates/{template}/edit', [BiAnnualSiteVisitTemplateController::class, 'edit'])
+            ->name('templates.edit');
+        Route::put('/templates/{template}', [BiAnnualSiteVisitTemplateController::class, 'update'])
+            ->name('templates.update');
+        Route::post('/templates/{template}/publish', [BiAnnualSiteVisitTemplateController::class, 'publish'])
+            ->name('templates.publish');
+        Route::post('/templates/{template}/duplicate', [BiAnnualSiteVisitTemplateController::class, 'duplicate'])
+            ->name('templates.duplicate');
+
+        Route::get('/reports/submitted', [BiAnnualSiteVisitController::class, 'submittedReport'])
+            ->name('reports.submitted');
+        Route::get('/reports/submitted/pdf', [BiAnnualSiteVisitController::class, 'submittedReportPdf'])
+            ->name('reports.submitted.pdf');
+
+        Route::get('/{visit}', [BiAnnualSiteVisitController::class, 'show'])->name('show');
+        Route::put('/{visit}/answers', [BiAnnualSiteVisitController::class, 'updateAnswers'])
+            ->name('answers.update');
+        Route::post('/{visit}/submit', [BiAnnualSiteVisitController::class, 'submit'])
+            ->name('submit');
+        Route::post('/{visit}/review', [BiAnnualSiteVisitController::class, 'review'])
+            ->name('review');
+        Route::get('/{visit}/pdf', [BiAnnualSiteVisitController::class, 'pdf'])
+            ->name('pdf');
+    });
 
 Route::middleware(['auth', 'not.funding.partner'])
     ->prefix('site-visits')
@@ -3023,6 +3068,7 @@ Route::get('/events', [ApplicantController::class, 'events'])->name('events');
 Route::get('/news', [\App\Http\Controllers\PublicNewsController::class, 'index'])->name('news.index');
 Route::post('/news/subscribe', [\App\Http\Controllers\PublicNewsController::class, 'subscribe'])->name('news.subscribe');
 Route::get('/news/unsubscribe/{token}', [\App\Http\Controllers\PublicNewsController::class, 'unsubscribe'])->name('news.unsubscribe');
+Route::get('/news/{post}/cover', [\App\Http\Controllers\PublicNewsController::class, 'cover'])->name('news.cover');
 Route::get('/news/{post}', [\App\Http\Controllers\PublicNewsController::class, 'show'])->name('news.show');
 Route::get('/news/{post}/attachments/{attachment}', [\App\Http\Controllers\PublicNewsController::class, 'download'])->name('news.attachments.download');
 

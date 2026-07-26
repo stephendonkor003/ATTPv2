@@ -29,7 +29,10 @@ class SiteVisitController extends Controller
             'submission.values',
             'group.leader',
             'assignment.user',
-        ]);
+        ])->where(function ($typeQuery) {
+            $typeQuery->whereNull('visit_type')
+                ->orWhere('visit_type', '!=', 'biannual_monitoring');
+        });
 
         if ($user->can('site_visits.approve') || $this->userHasSiteVisitPortfolioScope($user)) {
             $this->applySiteVisitPortfolioScope($query);
@@ -126,6 +129,7 @@ class SiteVisitController extends Controller
                 'procurement_id' => $validated['procurement_id'],
                 'form_submission_id' => $validated['form_submission_id'],
                 'assignment_type' => $validated['assignment_type'],
+                'visit_type' => 'procurement',
                 'visit_date' => $validated['visit_date'],
                 'status' => 'draft',
                 'created_by' => auth()->id(),
@@ -163,6 +167,8 @@ class SiteVisitController extends Controller
 
     public function show(SiteVisit $siteVisit)
     {
+        abort_if($siteVisit->visit_type === 'biannual_monitoring', 404);
+
         $user = auth()->user();
 
         $siteVisit->loadMissing([

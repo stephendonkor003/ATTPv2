@@ -711,6 +711,267 @@
         opacity: .72;
     }
 
+    /*
+     * Render the register modal at document level and above the admin chrome.
+     * The theme's default navy backdrop is intentionally softened here so the
+     * white dialog remains the clear focal point.
+     */
+    .modal.me-disaggregation-modal {
+        --me-disaggregation-green-950: #07382b;
+        --me-disaggregation-green-800: #0b5c45;
+        --me-disaggregation-green-700: #117a59;
+        --me-disaggregation-green-100: #e8f5ef;
+        --me-disaggregation-ink: #17251f;
+        --me-disaggregation-muted: #62716a;
+        --me-disaggregation-border: #d8e5df;
+        z-index: 3200;
+    }
+
+    body.me-disaggregation-modal-open .modal-backdrop {
+        z-index: 3190 !important;
+        background-color: #071a14 !important;
+    }
+
+    body.me-disaggregation-modal-open .modal-backdrop.show {
+        opacity: .58 !important;
+    }
+
+    .me-disaggregation-modal .modal-dialog {
+        max-width: 640px;
+    }
+
+    .me-disaggregation-modal .modal-content {
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, .72);
+        border-radius: 1.05rem;
+        background: #fff;
+        color: var(--me-disaggregation-ink);
+        box-shadow:
+            0 32px 90px rgba(2, 20, 14, .38),
+            0 0 0 1px rgba(7, 56, 43, .1);
+    }
+
+    .me-disaggregation-modal form {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .me-disaggregation-modal .modal-header {
+        align-items: flex-start;
+        padding: 1.3rem 1.4rem;
+        border-bottom: 1px solid var(--me-disaggregation-border);
+        background:
+            radial-gradient(circle at 92% 8%, rgba(211, 162, 41, .2), transparent 30%),
+            linear-gradient(130deg, #f7fcf9 0%, #eaf6f0 100%);
+    }
+
+    .me-disaggregation-modal .me-disaggregation-heading {
+        display: flex;
+        align-items: flex-start;
+        gap: .8rem;
+        min-width: 0;
+        padding-right: .75rem;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-heading-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 2.65rem;
+        height: 2.65rem;
+        border: 1px solid #cce4d8;
+        border-radius: .75rem;
+        background: #fff;
+        color: var(--me-disaggregation-green-700);
+        font-size: 1.05rem;
+        box-shadow: 0 8px 18px rgba(11, 92, 69, .1);
+    }
+
+    .me-disaggregation-modal .modal-title {
+        margin: 0;
+        color: var(--me-disaggregation-green-950);
+        font-size: 1.08rem;
+        font-weight: 800;
+        line-height: 1.35;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-heading p {
+        margin: .2rem 0 0;
+        color: var(--me-disaggregation-muted);
+        font-size: .74rem;
+        line-height: 1.45;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-indicator {
+        display: none;
+        margin-top: .5rem;
+        padding: .3rem .5rem;
+        border: 1px solid #cfe3d8;
+        border-radius: .45rem;
+        background: rgba(255, 255, 255, .78);
+        color: var(--me-disaggregation-green-800);
+        font-size: .7rem;
+        font-weight: 750;
+        line-height: 1.35;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-indicator:not(:empty) {
+        display: inline-flex;
+    }
+
+    .me-disaggregation-modal .btn-close {
+        flex: 0 0 auto;
+        margin: .1rem 0 0 auto;
+        padding: .55rem;
+        border-radius: .5rem;
+        background-color: rgba(255, 255, 255, .82);
+    }
+
+    .me-disaggregation-modal .btn-close:focus-visible {
+        box-shadow: 0 0 0 .2rem rgba(17, 122, 89, .17);
+    }
+
+    .me-disaggregation-modal .modal-body {
+        padding: 1.35rem 1.4rem 1.45rem;
+        background: #fff;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-note {
+        display: flex;
+        align-items: flex-start;
+        gap: .6rem;
+        margin-bottom: 1.2rem;
+        padding: .72rem .8rem;
+        border: 1px solid #d3e7dd;
+        border-radius: .65rem;
+        background: #f4faf7;
+        color: #3c6252;
+        font-size: .72rem;
+        line-height: 1.5;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-note i {
+        flex: 0 0 auto;
+        margin-top: .15rem;
+        color: var(--me-disaggregation-green-700);
+    }
+
+    .me-disaggregation-modal .me-disaggregation-level {
+        position: relative;
+        display: grid;
+        grid-template-columns: 2rem minmax(0, 1fr);
+        gap: .75rem;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-level + .me-disaggregation-level {
+        margin-top: .9rem;
+        padding-top: .9rem;
+        border-top: 1px solid #edf2ef;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-step {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        align-self: start;
+        width: 2rem;
+        height: 2rem;
+        border: 1px solid #c9e0d5;
+        border-radius: 999px;
+        background: var(--me-disaggregation-green-100);
+        color: var(--me-disaggregation-green-800);
+        font-size: .72rem;
+        font-weight: 850;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-field {
+        min-width: 0;
+    }
+
+    .me-disaggregation-modal .form-label {
+        margin-bottom: .42rem;
+        color: #294239;
+        font-size: .78rem;
+        font-weight: 800;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-optional {
+        margin-left: .3rem;
+        color: #7d8a84;
+        font-size: .62rem;
+        font-weight: 650;
+    }
+
+    .me-disaggregation-modal .form-control {
+        min-height: 44px;
+        border-color: #c8d8d1;
+        border-radius: .58rem;
+        background-color: #fff;
+        color: var(--me-disaggregation-ink);
+        font-size: .82rem;
+    }
+
+    .me-disaggregation-modal .form-control:focus {
+        border-color: var(--me-disaggregation-green-700);
+        box-shadow: 0 0 0 .2rem rgba(17, 122, 89, .13);
+    }
+
+    .me-disaggregation-modal .form-control:disabled {
+        border-color: #e0e7e3;
+        background: #f2f5f3;
+        color: #8b9690;
+        cursor: not-allowed;
+    }
+
+    .me-disaggregation-modal .form-text {
+        margin-top: .32rem;
+        color: var(--me-disaggregation-muted);
+        font-size: .67rem;
+        line-height: 1.4;
+    }
+
+    .me-disaggregation-modal .modal-footer {
+        gap: .55rem;
+        padding: .95rem 1.4rem;
+        border-top: 1px solid var(--me-disaggregation-border);
+        background: #f9fcfa;
+    }
+
+    .me-disaggregation-modal .modal-footer .btn,
+    .me-disaggregation-modal .me-disaggregation-save {
+        min-height: 42px;
+        border-radius: .58rem;
+        font-size: .78rem;
+        font-weight: 800;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-save {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: .42rem;
+        padding: .62rem 1rem;
+        border: 1px solid var(--me-disaggregation-green-800);
+        background: var(--me-disaggregation-green-800);
+        color: #fff;
+        box-shadow: 0 9px 20px rgba(11, 92, 69, .2);
+    }
+
+    .me-disaggregation-modal .me-disaggregation-save:hover,
+    .me-disaggregation-modal .me-disaggregation-save:focus-visible {
+        border-color: var(--me-disaggregation-green-950);
+        background: var(--me-disaggregation-green-950);
+        color: #fff;
+    }
+
+    .me-disaggregation-modal .me-disaggregation-save:focus-visible {
+        outline: 3px solid rgba(17, 122, 89, .18);
+        outline-offset: 2px;
+    }
+
     @media (max-width: 991.98px) {
         .me-results-framework .me-summary-grid {
             grid-template-columns: 1fr;
@@ -745,6 +1006,29 @@
     }
 
     @media (max-width: 575.98px) {
+        .me-disaggregation-modal .modal-content {
+            border: 0;
+            border-radius: 0;
+        }
+
+        .me-disaggregation-modal .modal-header,
+        .me-disaggregation-modal .modal-body,
+        .me-disaggregation-modal .modal-footer {
+            padding-right: 1rem;
+            padding-left: 1rem;
+        }
+
+        .me-disaggregation-modal .modal-footer {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .me-disaggregation-modal .modal-footer .btn,
+        .me-disaggregation-modal .me-disaggregation-save {
+            width: 100%;
+            margin: 0;
+        }
+
         .me-inline-config-modal .modal-content {
             border-radius: 0;
         }

@@ -23,9 +23,9 @@ class PublicNewsController extends Controller
         if ($request->filled('q')) {
             $search = '%' . trim((string) $request->input('q')) . '%';
             $query->where(function ($builder) use ($search) {
-                $builder->where('title', 'like', $search)
-                    ->orWhere('excerpt', 'like', $search)
-                    ->orWhere('body', 'like', $search);
+                $builder->whereLike('title', $search, caseSensitive: false)
+                    ->orWhereLike('excerpt', $search, caseSensitive: false)
+                    ->orWhereLike('body', $search, caseSensitive: false);
             });
         }
 
@@ -96,6 +96,29 @@ class PublicNewsController extends Controller
         ]);
 
         return redirect()->route('news.index')->with('success', 'You have been unsubscribed from ATTP news updates.');
+    }
+
+    public function cover(Request $request, NewsPost $post)
+    {
+        $canPreview = $request->user()?->canAny([
+            'news.manage',
+            'news.approve',
+            'communications.respond',
+        ]) ?? false;
+
+        abort_unless($post->isPublished() || $canPreview, 404);
+        abort_if(blank($post->cover_image_path), 404);
+
+        $path = $post->coverImageStoragePath();
+
+        abort_unless(Storage::disk('public')->exists($path), 404);
+
+        return Storage::disk('public')->response($path, null, [
+            'Cache-Control' => $post->isPublished()
+                ? 'public, max-age=86400'
+                : 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function download(NewsPost $post, NewsAttachment $attachment)

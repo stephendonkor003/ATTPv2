@@ -531,9 +531,60 @@
             min-height: 310px;
         }
 
+        .execution-panel.span-12 { grid-column: span 12; }
         .execution-panel.span-8 { grid-column: span 8; }
         .execution-panel.span-6 { grid-column: span 6; }
         .execution-panel.span-4 { grid-column: span 4; }
+
+        .execution-panel--primary {
+            min-height: 390px;
+        }
+
+        .execution-panel--primary .execution-chart {
+            min-height: 315px;
+        }
+
+        .execution-panel--mix {
+            min-height: 440px;
+            position: relative;
+            overflow: hidden;
+            border-color: rgba(37, 99, 235, .22);
+            background:
+                radial-gradient(circle at 92% 0%, rgba(37, 99, 235, .11), transparent 32%),
+                linear-gradient(145deg, #ffffff 0%, #f8fbff 100%);
+            box-shadow: 0 16px 36px rgba(37, 99, 235, .1);
+        }
+
+        .execution-panel--mix::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto;
+            height: 4px;
+            background: linear-gradient(90deg, #168a5b 0 33.33%, #d65a31 33.33% 66.66%, #2563eb 66.66%);
+        }
+
+        .execution-panel--mix .execution-chart {
+            min-height: 365px;
+            padding: .8rem .9rem .4rem;
+            border: 1px solid rgba(148, 163, 184, .22);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, .82);
+        }
+
+        .execution-mix-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            padding: .4rem .68rem;
+            border: 1px solid rgba(37, 99, 235, .18);
+            border-radius: 999px;
+            color: #1d4ed8;
+            background: rgba(239, 246, 255, .92);
+            font-size: .74rem;
+            font-weight: 850;
+            letter-spacing: .02em;
+            white-space: nowrap;
+        }
 
         .execution-panel-head {
             display: flex;
@@ -755,7 +806,7 @@
         </section>
 
         <section class="execution-grid">
-            <div class="execution-panel span-8">
+            <div class="execution-panel span-12 execution-panel--primary">
                 <div class="execution-panel-head">
                     <div>
                         <h6 class="execution-panel-title">Global, Planned, and Disbursed</h6>
@@ -765,12 +816,16 @@
                 <div class="execution-chart"><canvas id="executionLineChart"></canvas></div>
             </div>
 
-            <div class="execution-panel span-4">
+            <div class="execution-panel span-12 execution-panel--mix">
                 <div class="execution-panel-head">
                     <div>
                         <h6 class="execution-panel-title">Execution Mix</h6>
-                        <p class="execution-panel-note">Disbursed, planned not paid, and remaining global commitments</p>
+                        <p class="execution-panel-note">How disbursed, unpaid, and remaining global commitments move cumulatively by year</p>
                     </div>
+                    <span class="execution-mix-badge">
+                        <i class="feather-trending-up"></i>
+                        Cumulative line view
+                    </span>
                 </div>
                 <div class="execution-chart"><canvas id="executionMixChart"></canvas></div>
             </div>
@@ -1324,13 +1379,20 @@
             const cumulativeDisbursementRates = chartData.cumulative_disbursement_rates || cumulativeAllocation.map((value, index) => (
                 value > 0 ? (Number(cumulativeDisbursement[index] || 0) / value) * 100 : 0
             ));
-            const unpaidCommitments = Math.max(Number(totals.commitment || 0) - Number(totals.disbursement || 0), 0);
-            const mixValues = Array.isArray(chartData.mix) && chartData.mix.length
-                ? chartData.mix.map(item => Number(item.value || 0))
+            const cumulativeUnpaidCommitments = chartData.cumulative_unpaid_commitments
+                || cumulativeCommitment.map((value, index) => (
+                    Math.max(Number(value || 0) - Number(cumulativeDisbursement[index] || 0), 0)
+                ));
+            const cumulativeGlobalRemaining = chartData.cumulative_global_remaining
+                || cumulativeCommitment.map(value => (
+                    Math.max(Number(totals.allocation || 0) - Number(value || 0), 0)
+                ));
+            const mixTrend = Array.isArray(chartData.mix_trend) && chartData.mix_trend.length
+                ? chartData.mix_trend
                 : [
-                Math.max(Number(totals.disbursement || 0), 0),
-                unpaidCommitments,
-                Math.max(Number(totals.remaining || 0), 0),
+                    { label: 'Disbursed', values: cumulativeDisbursement, color: '#168a5b' },
+                    { label: 'Unpaid Commitments', values: cumulativeUnpaidCommitments, color: '#d65a31' },
+                    { label: 'Remaining Global Commitments', values: cumulativeGlobalRemaining, color: '#2563eb' },
             ];
             const qualityLabels = chartData.quality_labels
                 || ['Commitment Rate', 'Timeliness', 'Consistency', 'Coverage', 'Risk Control'];
@@ -1430,21 +1492,118 @@
             });
 
             makeChart('executionMixChart', {
-                type: 'doughnut',
+                type: 'line',
                 data: {
-                    labels: ['Disbursed', 'Unpaid Commitments', 'Remaining Global Commitments'],
-                    datasets: [{
-                        data: mixValues,
-                        backgroundColor: ['#168a5b', '#d65a31', '#2563eb'],
-                        borderColor: '#fff',
-                        borderWidth: 3
-                    }]
+                    labels,
+                    datasets: mixTrend.map((series, index) => {
+                        const color = series.color || ['#168a5b', '#d65a31', '#2563eb'][index] || '#2563eb';
+                        const fills = [
+                            'rgba(22,138,91,.11)',
+                            'rgba(214,90,49,.09)',
+                            'rgba(37,99,235,.08)'
+                        ];
+
+                        return {
+                            label: series.label,
+                            data: (series.values || []).map(value => Number(value || 0)),
+                            borderColor: color,
+                            backgroundColor: fills[index] || 'rgba(37,99,235,.08)',
+                            pointBackgroundColor: '#ffffff',
+                            pointBorderColor: color,
+                            pointBorderWidth: 2.5,
+                            pointRadius: 4,
+                            pointHoverRadius: 7,
+                            pointHoverBackgroundColor: color,
+                            pointHoverBorderColor: '#ffffff',
+                            pointHoverBorderWidth: 3,
+                            borderWidth: 3,
+                            fill: 'origin',
+                            tension: .4,
+                            cubicInterpolationMode: 'monotone',
+                            order: 3 - index,
+                        };
+                    })
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    cutout: '62%',
-                    plugins: commonPlugins
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    layout: {
+                        padding: {
+                            top: 4,
+                            right: 8,
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                usePointStyle: true,
+                                pointStyle: 'line',
+                                boxWidth: 26,
+                                boxHeight: 8,
+                                padding: 18,
+                                font: {
+                                    weight: 700,
+                                },
+                                sort: (first, second) => first.datasetIndex - second.datasetIndex,
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, .94)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#e2e8f0',
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            callbacks: {
+                                title: items => items.length ? `Execution mix · ${items[0].label}` : '',
+                                label: context => {
+                                    const value = Number(context.parsed.y || 0);
+                                    const envelope = Math.max(Number(totals.allocation || 0), 1);
+                                    const share = (value / envelope) * 100;
+                                    return ` ${context.dataset.label}: ${money(value)} (${share.toFixed(1)}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false,
+                            },
+                            border: {
+                                display: false,
+                            },
+                            ticks: {
+                                color: '#475569',
+                                font: {
+                                    weight: 700,
+                                },
+                                padding: 8,
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            suggestedMax: Number(totals.allocation || 0),
+                            grid: {
+                                color: 'rgba(148, 163, 184, .2)',
+                                drawTicks: false,
+                            },
+                            border: {
+                                display: false,
+                            },
+                            ticks: {
+                                callback: value => compactMoney(value),
+                                padding: 10,
+                                maxTicksLimit: 6,
+                            }
+                        }
+                    }
                 }
             });
 

@@ -268,12 +268,13 @@
             ],
             [
                 'title' => 'Site Visits',
-                'desc' => 'Plan, approve, and report on site engagements.',
+                'desc' => 'Manage procurement engagements and twice-yearly Think Tank monitoring.',
                 'icon' => 'map-pin',
                 'card_style' => 'background: linear-gradient(150deg, #22d3ee1a 0%, #ffffff 68%); border-color: #22d3ee2e;',
                 'icon_style' => 'background: linear-gradient(145deg, #22d3ee2e 0%, #22d3ee4d 100%); color: #0f172a;',
                 'links' => [
-                    ['label' => 'All Visits', 'route' => 'site-visits.index', 'permissions' => ['site_visits.view']],
+                    ['label' => 'Procurement Visits', 'route' => 'site-visits.index', 'permissions' => ['site_visits.view']],
+                    ['label' => 'Bi-Annual Visits', 'route' => 'biannual-site-visits.index', 'permissions' => ['biannual_site_visits.view']],
                 ],
             ],
             [

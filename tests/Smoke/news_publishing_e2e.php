@@ -67,6 +67,9 @@ class NewsPublishingSmoke
                 ->get(route('system.news.create'))
                 ->assertOk()
                 ->assertSee('Create News')
+                ->assertSee('Public visibility')
+                ->assertSee('Publishing checklist')
+                ->assertSee('Publish now')
                 ->assertSee('maximum 10 MB')
                 ->assertSee('maximum 20 MB each');
 
@@ -159,7 +162,7 @@ class NewsPublishingSmoke
             $this->actingAs($user)
                 ->get(route('system.news.edit', $post))
                 ->assertOk()
-                ->assertSee($post->cover_image_path, false);
+                ->assertSee(route('news.cover', $post), false);
 
             $this->get(route('news.show', $post))->assertNotFound();
 
@@ -182,14 +185,58 @@ class NewsPublishingSmoke
             $this->get(route('news.index'))
                 ->assertOk()
                 ->assertSee($title)
-                ->assertSee($post->cover_image_path, false);
+                ->assertSee(route('news.cover', $post), false);
 
             $this->get(route('news.show', $post))
                 ->assertOk()
                 ->assertSee($title)
-                ->assertSee($post->cover_image_path, false)
+                ->assertSee(route('news.cover', $post), false)
                 ->assertSee('Downloads')
                 ->assertSee('brief.pdf');
+
+            $this->get(route('news.cover', $post))->assertOk();
+
+            $directTitle = 'Direct Public News ' . Str::upper(Str::random(5));
+
+            $this->actingAs($user)
+                ->postWithCsrf(route('system.news.store'), [
+                    'title' => $directTitle,
+                    'category' => 'press',
+                    'excerpt' => 'Published directly by an authorized communications user.',
+                    'body' => '<p>This article should be public immediately without a second approval form.</p>',
+                    'action' => 'publish',
+                ])
+                ->assertRedirect();
+
+            $directPost = NewsPost::where('title', $directTitle)->firstOrFail();
+            $this->assertSame('published', $directPost->status, 'Direct publishing did not set the published status.');
+            $this->assertTrue($directPost->isPublished(), 'Direct publishing did not make the article publicly visible.');
+
+            $this->get(route('news.index', ['q' => Str::lower($directTitle)]))
+                ->assertOk()
+                ->assertSee($directTitle);
+
+            $this->get(route('news.show', $directPost))
+                ->assertOk()
+                ->assertSee($directTitle);
+
+            $updatedDirectBody = '<p>The live article was updated without losing public visibility.</p>';
+            $this->actingAs($user)
+                ->putWithCsrf(route('system.news.update', $directPost), [
+                    'title' => $directTitle,
+                    'slug' => $directPost->slug,
+                    'category' => 'press',
+                    'excerpt' => $directPost->excerpt,
+                    'body' => $updatedDirectBody,
+                    'action' => 'save',
+                ])
+                ->assertRedirect();
+
+            $directPost->refresh();
+            $this->assertTrue($directPost->isPublished(), 'Saving a live article unexpectedly removed it from the public page.');
+            $this->get(route('news.show', $directPost))
+                ->assertOk()
+                ->assertSee('The live article was updated without losing public visibility.');
 
             $attachment = NewsAttachment::where('news_post_id', $post->id)->first();
             $this->get(route('news.attachments.download', [$post, $attachment]))
@@ -255,6 +302,14 @@ class NewsPublishingSmoke
 
         return $this->withSession(['_token' => $token])
             ->post($uri, ['_token' => $token, ...$data]);
+    }
+
+    private function putWithCsrf(string $uri, array $data = [])
+    {
+        $token = Str::random(40);
+
+        return $this->withSession(['_token' => $token])
+            ->put($uri, ['_token' => $token, ...$data]);
     }
 
     private function assertTrue(bool $condition, string $message): void

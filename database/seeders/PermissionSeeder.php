@@ -190,6 +190,15 @@ class PermissionSeeder extends Seeder
             ['name' => 'site_visits.submit', 'module' => 'procurement', 'description' => 'Submit site visits for approval'],
             ['name' => 'site_visits.approve', 'module' => 'procurement', 'description' => 'Approve or reject site visits'],
 
+            // Bi-Annual Monitoring Site Visits
+            ['name' => 'biannual_site_visits.view', 'module' => 'M&E', 'description' => 'View bi-annual monitoring site visits'],
+            ['name' => 'biannual_site_visits.create', 'module' => 'M&E', 'description' => 'Schedule bi-annual monitoring site visits and assign teams'],
+            ['name' => 'biannual_site_visits.respond', 'module' => 'M&E', 'description' => 'Complete assigned bi-annual monitoring questionnaires'],
+            ['name' => 'biannual_site_visits.submit', 'module' => 'M&E', 'description' => 'Submit completed bi-annual monitoring questionnaires'],
+            ['name' => 'biannual_site_visits.approve', 'module' => 'M&E', 'description' => 'Review, return, and approve bi-annual monitoring site visits'],
+            ['name' => 'biannual_site_visits.templates.manage', 'module' => 'M&E', 'description' => 'Build, import, version, and publish bi-annual questionnaires'],
+            ['name' => 'biannual_site_visits.export', 'module' => 'M&E', 'description' => 'Export bi-annual monitoring site visit reports'],
+
             // System Audit
             ['name' => 'system.audit.view', 'module' => 'system', 'description' => 'View system activity audit logs'],
 
