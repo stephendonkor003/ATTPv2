@@ -159,44 +159,24 @@ class ExecutionDashboardChartBuilder
         $cumulativeRemaining = (array) ($dataset['cumulative_remaining'] ?? []);
         $cumulativeExecutionRates = (array) ($dataset['cumulative_execution_rates'] ?? []);
         $cumulativeDisbursementRates = (array) ($dataset['cumulative_disbursement_rates'] ?? []);
-        $mixTrend = (array) ($dataset['mix_trend'] ?? []);
+        $mix = (array) ($dataset['mix'] ?? []);
         $qualityLabels = (array) ($dataset['quality_labels'] ?? []);
         $qualityValues = (array) ($dataset['quality_values'] ?? []);
 
-        if ($mixTrend === []) {
-            $cumulativeUnpaidCommitments = (array) (
-                $dataset['cumulative_unpaid_commitments']
-                ?? array_map(
-                    fn ($commitment, $disbursement) => max(
-                        (float) $commitment - (float) $disbursement,
-                        0
-                    ),
-                    $cumulativeCommitment,
-                    $cumulativeDisbursement
-                )
-            );
-            $cumulativeGlobalRemaining = (array) (
-                $dataset['cumulative_global_remaining']
-                ?? array_map(
-                    fn ($remaining) => max((float) $remaining, 0),
-                    $cumulativeRemaining
-                )
-            );
-            $mixTrend = [
-                ['label' => 'Disbursed', 'values' => $cumulativeDisbursement, 'color' => '#168a5b'],
-                ['label' => 'Unpaid Commitments', 'values' => $cumulativeUnpaidCommitments, 'color' => '#d65a31'],
-                ['label' => 'Remaining Global Commitments', 'values' => $cumulativeGlobalRemaining, 'color' => '#2563eb'],
+        if ($mix === []) {
+            $latestCommitment = (float) ($cumulativeCommitment[array_key_last($cumulativeCommitment)] ?? 0);
+            $latestDisbursement = (float) ($cumulativeDisbursement[array_key_last($cumulativeDisbursement)] ?? 0);
+            $latestAllocation = (float) ($cumulativeAllocation[array_key_last($cumulativeAllocation)] ?? 0);
+            $mix = [
+                ['label' => 'Disbursed', 'value' => max($latestDisbursement, 0), 'color' => '#168a5b'],
+                ['label' => 'Unpaid Commitments', 'value' => max($latestCommitment - $latestDisbursement, 0), 'color' => '#d65a31'],
+                ['label' => 'Remaining Global Commitments', 'value' => max($latestAllocation - $latestCommitment, 0), 'color' => '#2563eb'],
             ];
         }
 
         return [
-            'global_trend' => $this->dataUri($this->lineChart($labels, [
-                ['label' => 'Global Commitments', 'values' => $cumulativeAllocation, 'color' => '#2563eb'],
-                ['label' => 'Planned Commitments', 'values' => $cumulativeCommitment, 'color' => '#b7791f'],
-                ['label' => 'Disbursements', 'values' => $cumulativeDisbursement, 'color' => '#168a5b'],
-            ])),
             'execution_mix' => $this->dataUri(
-                $this->executionMixLineChart($labels, $mixTrend, $currency)
+                $this->pieChart($mix, $currency)
             ),
             'rate_movement' => $this->dataUri($this->lineChart($labels, [
                 ['label' => 'Commitment Rate', 'values' => $cumulativeExecutionRates, 'color' => '#0f766e'],
@@ -382,139 +362,84 @@ class ExecutionDashboardChartBuilder
         return $svg . $this->svgEnd();
     }
 
-    private function executionMixLineChart(array $labels, array $series, string $currency): string
+    private function pieChart(array $segments, string $currency): string
     {
-        $left = 66;
-        $right = 22;
-        $top = 72;
-        $bottom = 40;
-        $plotWidth = self::WIDTH - $left - $right;
-        $plotHeight = self::HEIGHT - $top - $bottom;
-        $allValues = collect($series)->flatMap(
-            fn ($item) => (array) ($item['values'] ?? [])
-        );
-        $maxValue = $this->niceMaximum((float) $allValues->max());
-
-        $svg = $this->svgStart();
-        $svg .= '<g data-chart="execution-mix-line">';
-        $svg .= sprintf(
-            '<rect x="%d" y="%d" width="%.2f" height="%.2f" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>',
-            $left,
-            $top,
-            $plotWidth,
-            $plotHeight
-        );
-        $svg .= $this->grid($left, $top, $plotWidth, $plotHeight, $maxValue, false);
-        $svg .= $this->xLabels($labels, $left, $top + $plotHeight, $plotWidth);
-
-        $legendPositions = [66, 282, 502];
-        $preparedSeries = [];
-        foreach (array_values($series) as $seriesIndex => $item) {
-            $values = array_values((array) ($item['values'] ?? []));
-            $color = (string) ($item['color'] ?? '#2563eb');
-            $label = (string) ($item['label'] ?? '');
-            $legendX = $legendPositions[$seriesIndex]
-                ?? ($left + ($seriesIndex * ($plotWidth / max(1, count($series)))));
-            $latestValue = (float) ($values[array_key_last($values)] ?? 0);
-
-            $svg .= '<line x1="' . $legendX . '" y1="19" x2="' . ($legendX + 12) . '" y2="19" stroke="' . $this->escape($color) . '" stroke-width="4" stroke-linecap="round"/>';
-            $svg .= '<circle cx="' . ($legendX + 6) . '" cy="19" r="3.2" fill="#ffffff" stroke="' . $this->escape($color) . '" stroke-width="2"/>';
-            $svg .= '<text x="' . ($legendX + 18) . '" y="22" class="legend-strong">' . $this->escape($label) . '</text>';
-            $svg .= '<text x="' . ($legendX + 18) . '" y="42" class="mix-legend-value">'
-                . $this->escape($currency . ' ' . $this->formatAxis($latestValue))
-                . '</text>';
-
-            $points = [];
-            foreach ($values as $valueIndex => $value) {
-                $x = $this->pointX($valueIndex, count($labels), $left, $plotWidth);
-                $y = $top + $plotHeight - (((float) $value / $maxValue) * $plotHeight);
-                $points[] = [round($x, 2), round($y, 2)];
-            }
-            $preparedSeries[] = [
-                'color' => $color,
-                'points' => $points,
-            ];
-        }
-
-        if ($labels !== []) {
-            $latestX = $this->pointX(count($labels) - 1, count($labels), $left, $plotWidth);
-            $svg .= '<line x1="' . $latestX . '" y1="' . $top . '" x2="' . $latestX . '" y2="' . ($top + $plotHeight) . '" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 4"/>';
-        }
-
-        foreach (array_reverse($preparedSeries) as $prepared) {
-            if ($prepared['points'] === []) {
-                continue;
-            }
-
-            $pointString = implode(
-                ' ',
-                array_map(
-                    fn ($point) => $point[0] . ',' . $point[1],
-                    $prepared['points']
-                )
-            );
-            $firstX = $prepared['points'][0][0];
-            $lastX = $prepared['points'][array_key_last($prepared['points'])][0];
-            $baseline = $top + $plotHeight;
-            $areaPoints = $firstX . ',' . $baseline . ' ' . $pointString . ' ' . $lastX . ',' . $baseline;
-
-            $svg .= '<polygon points="' . $areaPoints . '" fill="'
-                . $this->escape($prepared['color']) . '" fill-opacity=".075"/>';
-            $svg .= '<polyline points="' . $pointString . '" fill="none" stroke="'
-                . $this->escape($prepared['color'])
-                . '" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>';
-
-            foreach ($prepared['points'] as $point) {
-                $svg .= '<circle cx="' . $point[0] . '" cy="' . $point[1]
-                    . '" r="4" fill="#ffffff" stroke="' . $this->escape($prepared['color'])
-                    . '" stroke-width="2.3"/>';
-            }
-        }
-
-        return $svg . '</g>' . $this->svgEnd();
-    }
-
-    private function doughnutChart(array $segments, string $currency): string
-    {
-        $cx = 180;
+        $segments = collect($segments)
+            ->map(fn ($segment) => [
+                'label' => (string) ($segment['label'] ?? 'Unspecified'),
+                'value' => max((float) ($segment['value'] ?? 0), 0),
+                'color' => (string) ($segment['color'] ?? '#94a3b8'),
+            ])
+            ->values()
+            ->all();
+        $total = (float) collect($segments)->sum('value');
+        $angleTotal = max($total, 1);
+        $cx = 190;
         $cy = 150;
-        $radius = 82;
-        $circumference = 2 * M_PI * $radius;
-        $total = max(1, (float) collect($segments)->sum('value'));
-        $offset = 0.0;
+        $radius = 108;
+        $startAngle = -M_PI / 2;
         $svg = $this->svgStart();
-        $svg .= "<circle cx=\"{$cx}\" cy=\"{$cy}\" r=\"{$radius}\" fill=\"none\" stroke=\"#e2e8f0\" stroke-width=\"34\"/>";
+        $svg .= '<g data-chart="execution-mix-pie">';
+
+        if ($total <= 0) {
+            $svg .= "<circle cx=\"{$cx}\" cy=\"{$cy}\" r=\"{$radius}\" fill=\"#e2e8f0\"/>";
+        }
 
         foreach ($segments as $segment) {
-            $length = ((float) $segment['value'] / $total) * $circumference;
-            $gap = max(0, $circumference - $length);
-            $svg .= sprintf(
-                '<circle cx="%d" cy="%d" r="%d" fill="none" stroke="%s" stroke-width="34" stroke-dasharray="%.3f %.3f" stroke-dashoffset="%.3f" transform="rotate(-90 %d %d)"/>',
-                $cx,
-                $cy,
-                $radius,
-                $segment['color'],
-                $length,
-                $gap,
-                -$offset,
-                $cx,
-                $cy
-            );
-            $offset += $length;
-        }
+            $share = $segment['value'] / $angleTotal;
+            $endAngle = $startAngle + (2 * M_PI * $share);
 
-        $svg .= '<text x="' . $cx . '" y="' . ($cy - 4) . '" text-anchor="middle" class="donut-label">' . $this->escape($currency) . '</text>';
-        $svg .= '<text x="' . $cx . '" y="' . ($cy + 19) . '" text-anchor="middle" class="donut-value">' . $this->escape($this->formatAxis($total)) . '</text>';
+            if ($segment['value'] > 0 && $share >= 0.999999) {
+                $svg .= "<circle cx=\"{$cx}\" cy=\"{$cy}\" r=\"{$radius}\" fill=\"{$segment['color']}\" stroke=\"#ffffff\" stroke-width=\"3\"/>";
+            } elseif ($segment['value'] > 0) {
+                $startX = $cx + cos($startAngle) * $radius;
+                $startY = $cy + sin($startAngle) * $radius;
+                $endX = $cx + cos($endAngle) * $radius;
+                $endY = $cy + sin($endAngle) * $radius;
+                $largeArc = ($endAngle - $startAngle) > M_PI ? 1 : 0;
+                $svg .= sprintf(
+                    '<path d="M %.2f %.2f L %.2f %.2f A %d %d 0 %d 1 %.2f %.2f Z" fill="%s" stroke="#ffffff" stroke-width="3"/>',
+                    $cx,
+                    $cy,
+                    $startX,
+                    $startY,
+                    $radius,
+                    $radius,
+                    $largeArc,
+                    $endX,
+                    $endY,
+                    $this->escape($segment['color'])
+                );
+
+                if ($share >= 0.08) {
+                    $labelAngle = $startAngle + (($endAngle - $startAngle) / 2);
+                    $labelX = $cx + cos($labelAngle) * ($radius * 0.62);
+                    $labelY = $cy + sin($labelAngle) * ($radius * 0.62);
+                    $svg .= sprintf(
+                        '<text x="%.2f" y="%.2f" text-anchor="middle" dominant-baseline="middle" class="pie-share">%s</text>',
+                        $labelX,
+                        $labelY,
+                        number_format($share * 100, 1).'%'
+                    );
+                }
+            }
+
+            $startAngle = $endAngle;
+        }
 
         foreach ($segments as $index => $segment) {
-            $y = 82 + ($index * 65);
-            $share = ((float) $segment['value'] / $total) * 100;
+            $y = 82 + ($index * 68);
+            $share = $total > 0 ? ((float) $segment['value'] / $total) * 100 : 0;
             $svg .= "<rect x=\"350\" y=\"" . ($y - 12) . "\" width=\"13\" height=\"13\" rx=\"3\" fill=\"{$segment['color']}\"/>";
             $svg .= '<text x="374" y="' . $y . '" class="legend-strong">' . $this->escape($segment['label']) . '</text>';
-            $svg .= '<text x="374" y="' . ($y + 19) . '" class="legend">' . $this->escape($currency . ' ' . number_format((float) $segment['value'], 2)) . ' · ' . number_format($share, 1) . '%</text>';
+            $svg .= '<text x="374" y="' . ($y + 20) . '" class="mix-legend-value">'
+                . $this->escape($currency.' '.number_format((float) $segment['value'], 2))
+                . '</text>';
+            $svg .= '<text x="650" y="' . ($y + 20) . '" text-anchor="end" class="legend">'
+                . number_format($share, 1).'%</text>';
         }
 
-        return $svg . $this->svgEnd();
+        return $svg.'</g>'.$this->svgEnd();
     }
 
     private function radarChart(array $labels, array $values): string
@@ -696,9 +621,8 @@ class ExecutionDashboardChartBuilder
             . '.legend{font:10px DejaVu Sans,Arial,sans-serif;fill:#475569}'
             . '.legend-strong{font:bold 11px DejaVu Sans,Arial,sans-serif;fill:#0f172a}'
             . '.mix-legend-value{font:bold 12px DejaVu Sans,Arial,sans-serif;fill:#334155}'
+            . '.pie-share{font:bold 11px DejaVu Sans,Arial,sans-serif;fill:#ffffff}'
             . '.value-label{font:bold 10px DejaVu Sans,Arial,sans-serif;fill:#334155}'
-            . '.donut-label{font:10px DejaVu Sans,Arial,sans-serif;fill:#64748b}'
-            . '.donut-value{font:bold 17px DejaVu Sans,Arial,sans-serif;fill:#0f172a}'
             . '.bubble-label{font:bold 9px DejaVu Sans,Arial,sans-serif;fill:#7c2d12}'
             . '</style><rect width="760" height="300" fill="#ffffff"/>';
     }

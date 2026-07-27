@@ -563,22 +563,11 @@
     <table class="chart-grid">
         <tr>
             <td style="width: 100%;">
-                <div class="chart-card">
-                    <div class="chart-title">Global, Planned, and Disbursed</div>
-                    <div class="chart-note">Cumulative execution trend</div>
-                    @if (!empty($charts['global_trend']))
-                        <img class="chart-image chart-image--large" src="{{ $charts['global_trend'] }}" alt="Global, planned, and disbursed chart">
-                    @endif
-                </div>
-            </td>
-        </tr>
-        <tr>
-            <td style="width: 100%;">
                 <div class="chart-card chart-card--mix">
                     <div class="chart-title">Execution Mix</div>
-                    <div class="chart-note">Cumulative yearly movement of disbursed, unpaid, and remaining global commitments</div>
+                    <div class="chart-note">Current share of disbursed, unpaid, and remaining global commitments</div>
                     @if (!empty($charts['execution_mix']))
-                        <img class="chart-image chart-image--large" src="{{ $charts['execution_mix'] }}" alt="Execution mix chart">
+                        <img class="chart-image chart-image--large" src="{{ $charts['execution_mix'] }}" alt="Execution mix pie chart">
                     @endif
                 </div>
             </td>

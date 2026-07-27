@@ -83,7 +83,6 @@ it('builds printable SVG versions of every execution dashboard graph', function 
     $charts = $builder->buildFromDataset($dataset);
 
     expect($charts)->toHaveKeys([
-        'global_trend',
         'execution_mix',
         'rate_movement',
         'cumulative_momentum',
@@ -110,13 +109,14 @@ it('builds printable SVG versions of every execution dashboard graph', function 
         ->and($dataset['cumulative_unpaid_commitments'])->toBe([1_500_000.0, 4_500_000.0])
         ->and($dataset['cumulative_global_remaining'])->toBe([46_000_000.0, 38_000_000.0])
         ->and($dataset['mix_trend'][2]['values'])->toBe([46_000_000.0, 38_000_000.0])
-        ->and($executionMixSvg)->toContain('data-chart="execution-mix-line"')
-        ->toContain('<polyline')
+        ->and($executionMixSvg)->toContain('data-chart="execution-mix-pie"')
+        ->toContain('<path')
+        ->not->toContain('<polyline')
         ->toContain('Remaining Global Commitments')
         ->and($dataset['snapshot_hash'])->toHaveLength(64);
 });
 
-it('places an enlarged execution mix below the primary line graph on web and PDF', function () {
+it('renders execution mix as a pie and removes the duplicate global trend from web and PDF', function () {
     $webTemplate = file_get_contents(
         dirname(__DIR__, 2) . '/resources/views/finance/execution/dashboard.blade.php'
     );
@@ -128,23 +128,24 @@ it('places an enlarged execution mix below the primary line graph on web and PDF
     $mixChartScript = substr($webTemplate, $mixChartStart, $mixChartEnd - $mixChartStart);
 
     expect($webTemplate)
-        ->toContain('execution-panel span-12 execution-panel--primary')
         ->toContain('execution-panel span-12 execution-panel--mix')
         ->toContain('.execution-panel--mix .execution-chart')
-        ->and(strpos($webTemplate, '<canvas id="executionLineChart"></canvas>'))
-        ->toBeLessThan(strpos($webTemplate, '<canvas id="executionMixChart"></canvas>'));
+        ->toContain('<canvas id="executionMixChart"></canvas>')
+        ->not->toContain('<canvas id="executionLineChart"></canvas>')
+        ->not->toContain('<h6 class="execution-panel-title">Global, Planned, and Disbursed</h6>');
 
     expect($pdfTemplate)
         ->toContain('.chart-image--large')
         ->toContain('class="chart-image chart-image--large"')
         ->toContain('chart-card chart-card--mix')
-        ->and(strpos($pdfTemplate, "\$charts['global_trend']"))
-        ->toBeLessThan(strpos($pdfTemplate, "\$charts['execution_mix']"));
+        ->toContain("\$charts['execution_mix']")
+        ->not->toContain("\$charts['global_trend']")
+        ->not->toContain('<div class="chart-title">Global, Planned, and Disbursed</div>');
 
     expect($mixChartScript)
-        ->toContain("type: 'line'")
-        ->toContain('datasets: mixTrend.map')
-        ->not->toContain("type: 'doughnut'");
+        ->toContain("type: 'pie'")
+        ->toContain('data: mixSegments.map')
+        ->not->toContain("type: 'line'");
 });
 
 it('shows selected component global performance before its sub-component breakdown', function () {

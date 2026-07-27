@@ -1585,7 +1585,12 @@ class BudgetReportController extends Controller
         $label = 'Life to date';
         $yearRange = range(min($defaultStartYear, $defaultEndYear), max($defaultStartYear, $defaultEndYear));
 
-        if ($mode === 'multi_year') {
+        if ($mode === 'life_to_date') {
+            $startDate = Carbon::create(min($defaultStartYear, $defaultEndYear), 1, 1)->startOfDay();
+            $endDate = Carbon::create(max($defaultStartYear, $defaultEndYear), 12, 31)->endOfDay();
+            $label = min($defaultStartYear, $defaultEndYear) . ' - ' . max($defaultStartYear, $defaultEndYear)
+                . ' | Executive dashboard period';
+        } elseif ($mode === 'multi_year') {
             $startYear = (int) $request->input('start_year', $defaultStartYear);
             $endYear = (int) $request->input('end_year', $defaultEndYear);
             if ($endYear < $startYear) {
@@ -1847,7 +1852,10 @@ class BudgetReportController extends Controller
             ? collect()
             : BudgetCommitment::with('purchaseRequest')
                 ->whereIn('program_funding_id', $fundingIds)
-                ->where('status', BudgetCommitment::STATUS_APPROVED)
+                ->whereIn('status', [
+                    BudgetCommitment::STATUS_SUBMITTED,
+                    BudgetCommitment::STATUS_APPROVED,
+                ])
                 ->where(function ($query) use ($projectIds, $activityIds, $subActivityIds, $hasActivityFilter, $hasSubActivityFilter) {
                     if (! $hasActivityFilter && ! $hasSubActivityFilter && ! empty($projectIds)) {
                         $query->orWhere(function ($projectQuery) use ($projectIds) {
@@ -1896,16 +1904,21 @@ class BudgetReportController extends Controller
 
         $purchaseOrderIds = $purchaseOrders->pluck('id')->filter()->unique()->values()->all();
         $invoiceIdsFromPurchaseOrders = $purchaseOrders->pluck('invoice_id')->filter()->unique()->values()->all();
+        $dashboardAligned = ($filters['mode'] ?? 'life_to_date') === 'life_to_date'
+            && empty($filters['funding_id'])
+            && empty($filters['project_id'])
+            && empty($filters['activity_id'])
+            && empty($filters['sub_activity_id']);
 
         $invoices = (empty($invoiceIdsFromPurchaseOrders) && empty($subActivityIds))
             ? collect()
             : ProcurementInvoice::query()
-                ->where(function ($query) use ($invoiceIdsFromPurchaseOrders, $subActivityIds) {
+                ->where(function ($query) use ($invoiceIdsFromPurchaseOrders, $subActivityIds, $dashboardAligned) {
                     if (! empty($invoiceIdsFromPurchaseOrders)) {
                         $query->whereIn('id', $invoiceIdsFromPurchaseOrders);
                     }
 
-                    if (! empty($subActivityIds)) {
+                    if (! $dashboardAligned && ! empty($subActivityIds)) {
                         $method = empty($invoiceIdsFromPurchaseOrders) ? 'whereIn' : 'orWhereIn';
                         $query->{$method}('sub_activity_id', $subActivityIds);
                     }
@@ -1917,18 +1930,19 @@ class BudgetReportController extends Controller
 
         $disbursements = (empty($purchaseOrderIds) && empty($subActivityIds))
             ? collect()
-            : ProcurementDisbursement::query()
-                ->where(function ($query) use ($purchaseOrderIds, $subActivityIds) {
+            : ProcurementDisbursement::with('purchaseOrder.invoice')
+                ->where(function ($query) use ($purchaseOrderIds, $subActivityIds, $dashboardAligned) {
                     if (! empty($purchaseOrderIds)) {
                         $query->whereIn('purchase_order_id', $purchaseOrderIds);
                     }
 
-                    if (! empty($subActivityIds)) {
+                    if (! $dashboardAligned && ! empty($subActivityIds)) {
                         $method = empty($purchaseOrderIds) ? 'whereIn' : 'orWhereIn';
                         $query->{$method}('sub_activity_id', $subActivityIds);
                     }
                 })
-                ->whereNotIn('status', ['cancelled', 'void', 'failed'])
+                ->whereNotNull('paid_at')
+                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
                 ->get()
                 ->filter(fn (ProcurementDisbursement $disbursement) => $this->withinProjectPositionPeriod($this->resolveDisbursementDate($disbursement), $filters))
                 ->values();
@@ -2008,20 +2022,55 @@ class BudgetReportController extends Controller
 
         $displayRows = $this->filterProjectPositionRows($projectRows, $filters);
 
+        $scheduledAllocation = round((float) $totals['budget'], 2);
+        $budgetEnvelope = $this->projectFinancialPositionBudgetEnvelope(
+            $program,
+            $filters,
+            $approvedFunding,
+            $scheduledAllocation
+        );
+        $invoiceComposition = $invoices
+            ->groupBy(fn (ProcurementInvoice $invoice): string => strtolower((string) ($invoice->status ?: 'unspecified')))
+            ->map(fn ($rows, string $status): array => [
+                'status' => $status,
+                'count' => $rows->count(),
+                'amount' => round((float) $rows->sum('amount'), 2),
+            ])
+            ->sortByDesc('amount')
+            ->values();
+        $unlinkedDisbursements = $disbursements
+            ->filter(fn (ProcurementDisbursement $disbursement): bool => ! $disbursement->purchaseOrder?->invoice_id)
+            ->values();
+        $invoiceExceptions = $this->projectFinancialPositionInvoiceExceptions($unlinkedDisbursements);
+
+        $totals['scheduled_allocation'] = $scheduledAllocation;
+        $totals['budget'] = round($budgetEnvelope, 2);
         $totals['approved_funding'] = round($approvedFunding, 2);
         $totals['funding_balance'] = round($approvedFunding - $totals['disbursed'], 2);
-        $totals['allocation_balance'] = round($approvedFunding - $totals['budget'], 2);
-        $totals['uncommitted_budget'] = round($totals['budget'] - $totals['committed'], 2);
+        $totals['allocation_balance'] = round($budgetEnvelope - $scheduledAllocation, 2);
+        $totals['uncommitted_budget'] = round($budgetEnvelope - $totals['committed'], 2);
         $totals['unpaid_commitments'] = round(max($totals['committed'] - $totals['disbursed'], 0), 2);
         $totals['invoice_balance'] = round($totals['invoiced'] - $totals['disbursed'], 2);
-        $totals['commitment_rate'] = $totals['budget'] > 0 ? round(($totals['committed'] / $totals['budget']) * 100, 1) : 0;
-        $totals['disbursement_rate'] = $totals['committed'] > 0 ? min(100, round(($totals['disbursed'] / $totals['committed']) * 100, 1)) : 0;
+        $totals['commitment_rate'] = $budgetEnvelope > 0 ? round(($totals['committed'] / $budgetEnvelope) * 100, 2) : 0;
+        $totals['disbursement_rate'] = $budgetEnvelope > 0 ? round(($totals['disbursed'] / $budgetEnvelope) * 100, 2) : 0;
 
         return [
             'currency' => $program->sector?->currency ?? $fundings->first()?->currency ?? $program->currency ?? 'USD',
+            'dashboard_aligned' => $dashboardAligned,
             'rows' => $displayRows,
             'all_rows' => $projectRows,
             'totals' => $totals,
+            'controls' => [
+                'invoice_coverage_rate' => $totals['disbursed'] > 0
+                    ? round(min(100, ($totals['invoiced'] / $totals['disbursed']) * 100), 1)
+                    : 100.0,
+                'invoice_gap' => round(max($totals['disbursed'] - $totals['invoiced'], 0), 2),
+                'unlinked_disbursement_count' => $unlinkedDisbursements->count(),
+                'unlinked_disbursement_amount' => round((float) $unlinkedDisbursements->sum('amount'), 2),
+                'invoice_exception_count' => $invoiceExceptions->count(),
+            ],
+            'invoice_composition' => $invoiceComposition,
+            'invoice_exceptions' => $invoiceExceptions,
             'counts' => [
                 'projects' => $projectRows->count(),
                 'activities' => $projectRows->sum(fn ($row) => collect($row['children'] ?? [])->count()),
@@ -2039,6 +2088,73 @@ class BudgetReportController extends Controller
                 'disbursed' => $displayRows->pluck('disbursed')->values(),
             ],
         ];
+    }
+
+    private function projectFinancialPositionBudgetEnvelope(
+        Program $program,
+        array $filters,
+        float $approvedFunding,
+        float $scheduledAllocation
+    ): float {
+        if (! empty($filters['funding_id'])) {
+            return round($approvedFunding > 0 ? $approvedFunding : $scheduledAllocation, 2);
+        }
+
+        if (! empty($filters['project_id'])) {
+            $project = $program->projects->first(
+                fn (Project $project): bool => (string) $project->id === (string) $filters['project_id']
+            );
+
+            return round(
+                (float) ($project?->total_budget ?? 0) > 0
+                    ? (float) $project->total_budget
+                    : $scheduledAllocation,
+                2
+            );
+        }
+
+        if (
+            ! empty($filters['activity_id'])
+            || ! empty($filters['sub_activity_id'])
+            || ($filters['mode'] ?? 'life_to_date') !== 'life_to_date'
+        ) {
+            return round($scheduledAllocation, 2);
+        }
+
+        $declaredEnvelope = (float) ($program->total_budget ?? 0);
+
+        return round(
+            $declaredEnvelope > 0
+                ? $declaredEnvelope
+                : ($approvedFunding > 0 ? $approvedFunding : $scheduledAllocation),
+            2
+        );
+    }
+
+    private function projectFinancialPositionInvoiceExceptions($disbursements)
+    {
+        return collect($disbursements)
+            ->groupBy(fn (ProcurementDisbursement $disbursement): string => $disbursement->purchase_order_id
+                ? 'purchase-order:'.$disbursement->purchase_order_id
+                : 'direct:'.($disbursement->sub_activity_id ?: $disbursement->id))
+            ->map(function ($rows): array {
+                /** @var ProcurementDisbursement $first */
+                $first = $rows->first();
+                $purchaseOrder = $first->purchaseOrder;
+
+                return [
+                    'purchase_order_reference' => $purchaseOrder?->reference_no ?: 'No purchase order',
+                    'purchase_order_status' => $purchaseOrder?->status ?: 'unlinked',
+                    'purchase_order_amount' => round((float) ($purchaseOrder?->amount ?? 0), 2),
+                    'payment_count' => $rows->count(),
+                    'paid_amount' => round((float) $rows->sum('amount'), 2),
+                    'payment_references' => $this->formatReferenceDisplay(
+                        $rows->pluck('reference_no')->filter()->unique()->values()->all()
+                    ),
+                ];
+            })
+            ->sortByDesc('paid_amount')
+            ->values();
     }
 
     private function withinProjectPositionPeriod($date, array $filters): bool
@@ -2141,8 +2257,6 @@ class BudgetReportController extends Controller
         $purchaseOrders = (float) $direct['purchase_orders'] + (float) $children['purchase_orders'];
         $invoiced = (float) $direct['invoiced'] + (float) $children['invoiced'];
         $disbursed = (float) $direct['disbursed'] + (float) $children['disbursed'];
-        $committed = max($committed, $disbursed);
-
         return [
             'label' => $label,
             'level' => $level,
@@ -2156,7 +2270,7 @@ class BudgetReportController extends Controller
             'po_balance' => round($purchaseOrders - $disbursed, 2),
             'invoice_balance' => round($invoiced - $disbursed, 2),
             'commitment_rate' => $budget > 0 ? round(($committed / $budget) * 100, 1) : 0,
-            'disbursement_rate' => $committed > 0 ? min(100, round(($disbursed / $committed) * 100, 1)) : 0,
+            'disbursement_rate' => $budget > 0 ? round(($disbursed / $budget) * 100, 1) : 0,
             'references' => $direct['references'] ?? [],
             'children' => collect(),
         ];

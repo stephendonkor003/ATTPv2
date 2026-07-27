@@ -265,39 +265,61 @@
     <table class="summary-table">
         <tr>
             <td><div class="summary-label">Approved Funding</div><div class="summary-value">{{ $money($totals['approved_funding'] ?? 0) }}</div></td>
-            <td><div class="summary-label">Program Budget</div><div class="summary-value">{{ $money($totals['budget'] ?? 0) }}</div></td>
+            <td><div class="summary-label">Budget Envelope</div><div class="summary-value">{{ $money($totals['budget'] ?? 0) }}</div></td>
             <td><div class="summary-label">Committed</div><div class="summary-value">{{ $money($totals['committed'] ?? 0) }}</div></td>
             <td><div class="summary-label">Disbursed</div><div class="summary-value">{{ $money($totals['disbursed'] ?? 0) }}</div></td>
         </tr>
         <tr>
             <td><div class="summary-label">Purchase Orders</div><div class="summary-value">{{ $money($totals['purchase_orders'] ?? 0) }}</div></td>
             <td><div class="summary-label">Invoices</div><div class="summary-value">{{ $money($totals['invoiced'] ?? 0) }}</div></td>
-            <td><div class="summary-label">Funding Balance</div><div class="summary-value">{{ $money($totals['funding_balance'] ?? 0) }}</div></td>
+            <td><div class="summary-label">Scheduled Allocation</div><div class="summary-value">{{ $money($totals['scheduled_allocation'] ?? 0) }}</div></td>
             <td><div class="summary-label">Unpaid Commitments</div><div class="summary-value">{{ $money($totals['unpaid_commitments'] ?? 0) }}</div></td>
         </tr>
     </table>
 </div>
 
 <div class="section">
-    <div class="section-title">Balance Sheet Checks</div>
+    <div class="section-title">Executive Controls</div>
     <table class="balance-table">
         <tr>
-            <td>Approved funding less program budget</td>
+            <td>Envelope less scheduled allocations</td>
             <td class="{{ ($totals['allocation_balance'] ?? 0) < 0 ? 'negative' : 'positive' }}">{{ $money($totals['allocation_balance'] ?? 0) }}</td>
-            <td>Program budget less approved commitments</td>
+            <td>Budget envelope less commitments</td>
             <td class="{{ ($totals['uncommitted_budget'] ?? 0) < 0 ? 'negative' : 'positive' }}">{{ $money($totals['uncommitted_budget'] ?? 0) }}</td>
         </tr>
         <tr>
-            <td>Approved commitments less disbursements</td>
+            <td>Recognized commitments less disbursements</td>
             <td class="{{ ($totals['unpaid_commitments'] ?? 0) < 0 ? 'negative' : '' }}">{{ $money($totals['unpaid_commitments'] ?? 0) }}</td>
-            <td>Invoices less disbursements</td>
+            <td>Recorded invoices less disbursements</td>
             <td class="{{ ($totals['invoice_balance'] ?? 0) < 0 ? 'negative' : '' }}">{{ $money($totals['invoice_balance'] ?? 0) }}</td>
         </tr>
         <tr>
-            <td>Commitment utilization</td>
-            <td>{{ number_format($totals['commitment_rate'] ?? 0, 1) }}%</td>
-            <td>Disbursement utilization</td>
-            <td>{{ number_format($totals['disbursement_rate'] ?? 0, 1) }}%</td>
+            <td>Commitment utilization of envelope</td>
+            <td>{{ number_format($totals['commitment_rate'] ?? 0, 2) }}%</td>
+            <td>Disbursement utilization of envelope</td>
+            <td>{{ number_format($totals['disbursement_rate'] ?? 0, 2) }}%</td>
+        </tr>
+    </table>
+</div>
+
+<div class="section">
+    <div class="section-title">Accounting Integrity</div>
+    <table class="balance-table">
+        <tr>
+            <td>Invoice coverage of paid disbursements</td>
+            <td>{{ number_format($position['controls']['invoice_coverage_rate'] ?? 0, 1) }}%</td>
+            <td>Net invoice coverage gap</td>
+            <td class="{{ ($position['controls']['invoice_gap'] ?? 0) > 0 ? 'negative' : 'positive' }}">
+                {{ $money($position['controls']['invoice_gap'] ?? 0) }}
+            </td>
+        </tr>
+        <tr>
+            <td>Payments without a linked PO invoice</td>
+            <td>{{ number_format($position['controls']['unlinked_disbursement_count'] ?? 0) }}</td>
+            <td>Value paid without a linked PO invoice</td>
+            <td class="{{ ($position['controls']['unlinked_disbursement_amount'] ?? 0) > 0 ? 'negative' : 'positive' }}">
+                {{ $money($position['controls']['unlinked_disbursement_amount'] ?? 0) }}
+            </td>
         </tr>
     </table>
 </div>
@@ -308,12 +330,12 @@
         <thead>
             <tr>
                 <th style="width: 22%;">Structure</th>
-                <th style="width: 7%;">Budget</th>
+                <th style="width: 7%;">Scheduled</th>
                 <th style="width: 7%;">Commit.</th>
                 <th style="width: 6.2%;">PO</th>
                 <th style="width: 6.2%;">Invoice</th>
                 <th style="width: 6.2%;">Paid</th>
-                <th style="width: 6.2%;">Budg. Bal.</th>
+                <th style="width: 6.2%;">Sched. Bal.</th>
                 <th style="width: 6.2%;">Unpaid</th>
                 <th style="width: 4.4%;">Com.%</th>
                 <th style="width: 4.4%;">Pay%</th>
