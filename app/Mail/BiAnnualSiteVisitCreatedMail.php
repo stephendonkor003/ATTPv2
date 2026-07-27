@@ -21,7 +21,6 @@ class BiAnnualSiteVisitCreatedMail extends Mailable implements ShouldQueue
         public bool $isLeader,
         public string $portfolioName
     ) {
-        $this->onQueue('mail');
         $this->afterCommit();
     }
 

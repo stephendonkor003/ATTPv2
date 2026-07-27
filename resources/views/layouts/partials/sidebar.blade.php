@@ -362,7 +362,7 @@
     .attp-admin-sidebar,
     .attp-admin-sidebar .navbar-wrapper,
     .attp-admin-sidebar .navbar-content {
-        background: linear-gradient(180deg, #064e3b 0%, #047857 48%, #065f46 100%) !important;
+        background: linear-gradient(180deg, #064f6d 0%, #087493 48%, #075a78 100%) !important;
     }
 
     .attp-admin-sidebar .nxl-navbar .nxl-caption label,
@@ -388,7 +388,7 @@
     }
 
     .attp-admin-sidebar .nxl-submenu {
-        background: rgba(2, 44, 34, 0.22);
+        background: rgba(3, 47, 66, 0.26);
     }
 
     .attp-admin-sidebar .admin-sidebar-search-meta,
@@ -413,6 +413,25 @@
     .attp-admin-sidebar .sidebar-footer-card h6,
     .attp-admin-sidebar .sidebar-footer-card p {
         color: #ffffff !important;
+    }
+
+    .attp-admin-sidebar .attp-sidebar-brand {
+        overflow: hidden;
+        padding: .35rem .45rem;
+        border: 1px solid rgba(255, 255, 255, .22);
+        border-radius: 14px;
+        background: #086f91;
+        box-shadow: 0 12px 24px rgba(3, 47, 66, .28);
+    }
+
+    .attp-admin-sidebar .attp-sidebar-brand-logo {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 0;
+        border-radius: 9px;
+        background: #086f91;
+        object-fit: contain;
     }
 
     .nxl-navbar.sidebar-search-active .sidebar-search-hidden {
@@ -466,25 +485,15 @@
                         </div>
                     </div>
                 @else
-                    <div class="card border-0 shadow-sm position-relative overflow-hidden"
-                        style="background: linear-gradient(135deg, #0f172a 0%, #0ea5e9 50%, #10b981 100%); color:#f8fafc; border-radius:14px;">
-                        <div
-                            style="position:absolute; inset:0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15), transparent 45%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.18), transparent 40%);">
-                        </div>
-                        <div class="card-body py-3 d-flex align-items-center gap-3 position-relative">
-                            <span class="module-icon" style="background: rgba(255,255,255,0.18); color:#f8fafc;">
-                                <i class="feather-cpu"></i>
-                            </span>
-                            <div class="flex-grow-1">
-                                <div class="fw-bold">ATTP Control Center</div>
-                                <div class="small text-white-50">Operations & Oversight</div>
-                            </div>
-                        </div>
+                    <div class="attp-sidebar-brand">
+                        <img src="{{ asset('assets/images/attp-logo.jpeg') }}"
+                            alt="Africa Think Tank Platform"
+                            class="attp-sidebar-brand-logo">
                     </div>
                 @endif
                 <div class="mt-2">
                     <div class="d-flex align-items-center px-3 py-2 rounded-3 shadow-sm"
-                        style="background: linear-gradient(120deg, #0ea5e9 0%, #6366f1 100%); color:#f8fafc;">
+                        style="background: linear-gradient(120deg, #0a7899 0%, #07526f 100%); color:#f8fafc;">
                         <i class="feather-star me-2"></i>
                         <span id="au-aspiration-ticker" class="small" style="line-height:1.3;">Loading
                             aspiration...</span>

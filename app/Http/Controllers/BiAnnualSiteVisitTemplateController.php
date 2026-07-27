@@ -57,6 +57,10 @@ class BiAnnualSiteVisitTemplateController extends Controller
         $definition = $this->templates->canonicalDefinition(
             $template->questionnaireSnapshot()
         );
+        $pdfParameters = ['template' => $template];
+        if ($thinkTank) {
+            $pdfParameters['think_tank_member_id'] = $thinkTank->id;
+        }
 
         return view('biannual-site-visits.templates.preview', [
             'template' => $template,
@@ -66,10 +70,7 @@ class BiAnnualSiteVisitTemplateController extends Controller
             'logoDataUri' => $this->branding->logoDataUri(),
             'pdfUrl' => route(
                 'biannual-site-visits.templates.preview.pdf',
-                [
-                    'template' => $template,
-                    'think_tank_member_id' => $thinkTank->id,
-                ]
+                $pdfParameters
             ),
         ]);
     }
@@ -385,10 +386,14 @@ class BiAnnualSiteVisitTemplateController extends Controller
     }
 
     /**
-     * @return array{0: ConsortiumThinkTank, 1: string}
+     * @return array{0: ConsortiumThinkTank|null, 1: string}
      */
     private function previewContext(Request $request): array
     {
+        if (! $request->filled('think_tank_member_id')) {
+            return [null, BiAnnualSiteVisitBrandingService::FALLBACK_PORTFOLIO_NAME];
+        }
+
         $validated = $request->validate([
             'think_tank_member_id' => [
                 'required',

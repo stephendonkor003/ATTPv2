@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends(request()->boolean('embed') ? 'layouts.embedded' : 'layouts.app')
 
 @section('title', 'Questionnaire Preview — '.$template->name)
 @section('lean_admin_scripts', '1')
@@ -6,6 +6,17 @@
 @push('styles')
     @include('biannual-site-visits.partials.styles')
     <style>
+        .basv-preview-brand-logo {
+            width: 112px;
+            height: 64px;
+            flex: 0 0 auto;
+            border: 1px solid rgba(255, 255, 255, .3);
+            border-radius: .75rem;
+            background: #086f91;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
+            object-fit: cover;
+        }
+
         .basv-preview-shell {
             display: grid;
             grid-template-columns: minmax(205px, 260px) minmax(0, 1fr);
@@ -274,27 +285,37 @@
     <main class="nxl-container">
         <div class="nxl-content basv-page">
             <div class="basv-hero">
-                <div>
-                    <span class="basv-eyebrow">
-                        <i class="feather-eye"></i> Questionnaire preview
-                        <span>·</span> Version {{ $template->version }}
-                    </span>
-                    <h1>{{ $template->name }}</h1>
-                    <p>
-                        A read-only preview for {{ $thinkTank->name }} under the
-                        <strong>{{ $portfolioName }}</strong> portfolio.
-                    </p>
+                <div class="d-flex align-items-center gap-3">
+                    <img src="{{ asset('assets/images/attp-logo.jpeg') }}"
+                        alt="Africa Think Tank Platform" class="basv-preview-brand-logo d-none d-sm-block">
+                    <div>
+                        <span class="basv-eyebrow">
+                            <i class="feather-eye"></i> Questionnaire preview
+                            <span>·</span> Version {{ $template->version }}
+                        </span>
+                        <h1>{{ $template->name }}</h1>
+                        <p>
+                            @if ($thinkTank)
+                                A read-only preview for {{ $thinkTank->name }} under the
+                                <strong>{{ $portfolioName }}</strong> portfolio.
+                            @else
+                                A clean, read-only library preview of this reusable ATTP questionnaire template.
+                            @endif
+                        </p>
+                    </div>
                 </div>
                 <div class="basv-hero-actions">
-                    @can('biannual_site_visits.create')
-                        <a href="{{ route('biannual-site-visits.create') }}" class="basv-btn basv-btn-light">
-                            <i class="feather-arrow-left"></i> Schedule Visit
-                        </a>
-                    @else
-                        <a href="{{ route('biannual-site-visits.index') }}" class="basv-btn basv-btn-light">
-                            <i class="feather-arrow-left"></i> Visit Register
-                        </a>
-                    @endcan
+                    @unless (request()->boolean('embed'))
+                        @can('biannual_site_visits.create')
+                            <a href="{{ route('biannual-site-visits.create') }}" class="basv-btn basv-btn-light">
+                                <i class="feather-arrow-left"></i> Schedule Visit
+                            </a>
+                        @else
+                            <a href="{{ route('biannual-site-visits.index') }}" class="basv-btn basv-btn-light">
+                                <i class="feather-arrow-left"></i> Visit Register
+                            </a>
+                        @endcan
+                    @endunless
                     <a href="{{ $pdfUrl }}" class="basv-btn basv-btn-light">
                         <i class="feather-download"></i> Download PDF
                     </a>
@@ -333,7 +354,7 @@
                             </div>
                             <div>
                                 <dt>Think Tank</dt>
-                                <dd>{{ $thinkTank->name }}</dd>
+                                <dd>{{ $thinkTank?->name ?: 'Not assigned — template library' }}</dd>
                             </div>
                             <div>
                                 <dt>Template</dt>

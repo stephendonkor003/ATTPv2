@@ -76,13 +76,13 @@ class BiAnnualSiteVisitBrandingService
 
     public function logoDataUri(): ?string
     {
-        $path = public_path('admin/assets/images/logo-full.png');
+        $path = public_path('assets/images/attp-logo.jpeg');
         if (! File::isFile($path)) {
             return null;
         }
 
         $contents = File::get($path);
 
-        return 'data:image/png;base64,'.base64_encode($contents);
+        return 'data:image/jpeg;base64,'.base64_encode($contents);
     }
 }

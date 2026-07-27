@@ -432,15 +432,20 @@
         <div class="eyebrow">Bi-Annual Site Visit · Field Questionnaire</div>
         <h1>{{ $template->name }}</h1>
         <p>
-            This working copy is prepared for <strong>{{ $thinkTank->name }}</strong> and is branded to the
-            <strong>{{ $portfolioName }}</strong> portfolio. Record clear, evidence-based responses in the spaces provided.
+            @if ($thinkTank)
+                This working copy is prepared for <strong>{{ $thinkTank->name }}</strong> and is branded to the
+                <strong>{{ $portfolioName }}</strong> portfolio.
+            @else
+                This reusable library copy is issued by the <strong>Africa Think Tank Platform</strong>.
+            @endif
+            Record clear, evidence-based responses in the spaces provided.
         </p>
     </section>
 
     <table class="meta-table">
         <tr>
             <td><span class="label">Portfolio</span><span class="value">{{ $portfolioName }}</span></td>
-            <td><span class="label">Think Tank</span><span class="value">{{ $thinkTank->name }}</span></td>
+            <td><span class="label">Think Tank</span><span class="value">{{ $thinkTank?->name ?: 'Not assigned' }}</span></td>
             <td><span class="label">Questionnaire</span><span class="value">{{ $template->code }} · v{{ $template->version }}</span></td>
             <td><span class="label">Generated</span><span class="value">{{ now()->format('d M Y, H:i') }}</span></td>
         </tr>

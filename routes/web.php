@@ -2791,6 +2791,10 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('reports.submitted.pdf');
 
         Route::get('/{visit}', [BiAnnualSiteVisitController::class, 'show'])->name('show');
+        Route::post('/{visit}/team-members', [BiAnnualSiteVisitController::class, 'addTeamMembers'])
+            ->name('team-members.store');
+        Route::put('/{visit}/team', [BiAnnualSiteVisitController::class, 'updateTeam'])
+            ->name('team.update');
         Route::put('/{visit}/answers', [BiAnnualSiteVisitController::class, 'updateAnswers'])
             ->name('answers.update');
         Route::post('/{visit}/submit', [BiAnnualSiteVisitController::class, 'submit'])

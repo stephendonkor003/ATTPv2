@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesSiteVisitsToPortfolio;
 use App\Mail\BiAnnualSiteVisitCreatedMail;
+use App\Mail\UserAccountCreated;
 use App\Models\BiAnnualSiteVisitAnswer;
 use App\Models\BiAnnualSiteVisitProfile;
 use App\Models\BiAnnualSiteVisitTemplate;
 use App\Models\ConsortiumThinkTank;
+use App\Models\Permission;
 use App\Models\Sector;
 use App\Models\SiteVisit;
 use App\Models\SiteVisitGroup;
@@ -23,6 +25,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -32,6 +35,19 @@ use Illuminate\View\View;
 class BiAnnualSiteVisitController extends Controller
 {
     use ScopesSiteVisitsToPortfolio;
+
+    private const TEAM_SPECIALISMS = [
+        'Project Coordinator',
+        'Finance Management Specialist',
+        'Senior Procurement Advisor',
+        'M&E Officer',
+        'Technical Advisor',
+        'Project Aide Administrative Assistant',
+        'CDCP Representative',
+        'CCP Representative',
+        'PMRM Representative',
+        'World Bank Representative',
+    ];
 
     public function __construct(
         private readonly BiannualQuestionnaire $questionnaire,
@@ -101,7 +117,28 @@ class BiAnnualSiteVisitController extends Controller
             ->orderByDesc('starts_on')
             ->paginate(20);
 
-        return view('biannual-site-visits.index', compact('visits', 'years', 'stats'));
+        $canManageTeams = $user->can('biannual_site_visits.create');
+        $teamAssignableUsers = $canManageTeams
+            ? $this->activeInternalStaffQuery()
+                ->with('role')
+                ->orderBy('name')
+                ->get(['id', 'name', 'email', 'role_id'])
+                ->filter(fn (User $staff): bool => filter_var($staff->email, FILTER_VALIDATE_EMAIL))
+                ->values()
+            : collect();
+        $specialistRoles = self::TEAM_SPECIALISMS;
+
+        return view(
+            'biannual-site-visits.index',
+            compact(
+                'visits',
+                'years',
+                'stats',
+                'canManageTeams',
+                'teamAssignableUsers',
+                'specialistRoles'
+            )
+        );
     }
 
     public function create(Request $request): View
@@ -129,35 +166,20 @@ class BiAnnualSiteVisitController extends Controller
             ->orderByDesc('version')
             ->get();
 
-        $usersQuery = User::query()
-            ->with(['role.permissions', 'permissions'])
-            ->where(fn (Builder $query) => $query
-                ->whereNull('is_disabled')
-                ->orWhere('is_disabled', false))
-            ->where(fn (Builder $query) => $query
-                ->whereNull('is_blacklisted')
-                ->orWhere('is_blacklisted', false))
-            ->where(fn (Builder $query) => $query
-                ->whereNull('user_type')
-                ->orWhereNotIn('user_type', [
-                    'funding_partner',
-                    'vendor',
-                    'think_tank',
-                    'applicant',
-                    'member_state',
-                ]))
+        $usersQuery = $this->activeInternalStaffQuery()
+            ->with('role')
             ->orderBy('name');
-        $this->applyBiAnnualAssignableUserScope($usersQuery, $request->user());
         $users = $usersQuery
             ->get(['id', 'name', 'email', 'role_id'])
-            ->filter(fn (User $user): bool => filter_var($user->email, FILTER_VALIDATE_EMAIL)
-                && (
-                    $user->can('biannual_site_visits.respond')
-                    || $user->can('biannual_site_visits.approve')
-                ))
+            ->filter(fn (User $user): bool => filter_var($user->email, FILTER_VALIDATE_EMAIL))
             ->values();
 
-        return view('biannual-site-visits.create', compact('thinkTanks', 'templates', 'users'));
+        $specialistRoles = self::TEAM_SPECIALISMS;
+
+        return view(
+            'biannual-site-visits.create',
+            compact('thinkTanks', 'templates', 'users', 'specialistRoles')
+        );
     }
 
     public function store(Request $request): RedirectResponse
@@ -182,20 +204,36 @@ class BiAnnualSiteVisitController extends Controller
             'objectives' => ['nullable', 'string', 'max:10000'],
             'group_name' => ['required', 'string', 'max:255'],
             'team_members' => ['required', 'array', 'min:1'],
-            'team_members.*' => ['required', 'uuid', 'distinct', 'exists:users,id'],
-            'team_specialisms' => ['nullable', 'array'],
-            'team_specialisms.*' => ['nullable', 'string', 'max:120'],
-            'group_leader_id' => ['required', 'uuid', 'exists:users,id'],
+            'team_members.*' => ['required', 'string', 'max:80', 'distinct'],
+            'team_specialisms' => ['required', 'array', 'min:1'],
+            'team_specialisms.*' => ['required', 'string', Rule::in(self::TEAM_SPECIALISMS)],
+            'group_leader_id' => ['required', 'string', 'max:80'],
+            'new_team_members' => ['nullable', 'array'],
+            'new_team_members.*.name' => ['required', 'string', 'max:255'],
+            'new_team_members.*.email' => ['required', 'email:rfc', 'max:255'],
         ], [
             'team_members.min' => 'Select at least one monitoring-team member.',
             'team_members.*.distinct' => 'Each monitoring-team member must be different.',
         ]);
 
-        if (! in_array($validated['group_leader_id'], $validated['team_members'], true)) {
+        $teamReferences = array_values($validated['team_members']);
+
+        if (count($validated['team_specialisms']) !== count($teamReferences)) {
+            throw ValidationException::withMessages([
+                'team_specialisms' => 'Select one approved specialist role for every monitoring-team member.',
+            ]);
+        }
+
+        if (! in_array($validated['group_leader_id'], $teamReferences, true)) {
             throw ValidationException::withMessages([
                 'group_leader_id' => 'The team lead must be one of the selected monitoring-team members.',
             ]);
         }
+
+        [$existingMemberIds, $newMemberInputs] = $this->resolveTeamReferences(
+            $teamReferences,
+            (array) ($validated['new_team_members'] ?? [])
+        );
 
         $this->assertBiAnnualThinkTankInScope(
             (string) $validated['think_tank_member_id'],
@@ -214,43 +252,17 @@ class BiAnnualSiteVisitController extends Controller
             ]);
         }
 
-        if ($this->userHasSiteVisitPortfolioScope($request->user())) {
-            $this->assertAssignableSiteVisitUsersInScope($validated['team_members']);
-        }
-
-        $activeTeam = User::query()
-            ->with(['role.permissions', 'permissions'])
-            ->whereIn('id', $validated['team_members'])
-            ->where(fn (Builder $query) => $query
-                ->whereNull('is_disabled')
-                ->orWhere('is_disabled', false))
-            ->where(fn (Builder $query) => $query
-                ->whereNull('is_blacklisted')
-                ->orWhere('is_blacklisted', false))
-            ->where(fn (Builder $query) => $query
-                ->whereNull('user_type')
-                ->orWhereNotIn('user_type', [
-                    'funding_partner',
-                    'vendor',
-                    'think_tank',
-                    'applicant',
-                    'member_state',
-                ]))
+        $activeExistingTeam = $this->activeInternalStaffQuery()
+            ->whereIn('id', $existingMemberIds)
             ->get();
 
-        if (
-            $activeTeam->count() !== count($validated['team_members'])
-            || $activeTeam->contains(
-                fn (User $user): bool => ! $user->can('biannual_site_visits.respond')
-                    && ! $user->can('biannual_site_visits.approve')
-            )
-        ) {
+        if ($activeExistingTeam->count() !== count($existingMemberIds)) {
             throw ValidationException::withMessages([
-                'team_members' => 'Every selected monitoring-team member must be an active internal user authorized to complete assessments.',
+                'team_members' => 'Every selected monitoring-team member must have an active internal staff account.',
             ]);
         }
 
-        if ($activeTeam->contains(
+        if ($activeExistingTeam->contains(
             fn (User $user): bool => ! filter_var($user->email, FILTER_VALIDATE_EMAIL)
         )) {
             throw ValidationException::withMessages([
@@ -258,16 +270,16 @@ class BiAnnualSiteVisitController extends Controller
             ]);
         }
 
-        $leader = $activeTeam->firstWhere('id', $validated['group_leader_id']);
-        if (
-            ! $leader
-            || (
-                ! $leader->can('biannual_site_visits.submit')
-                && ! $leader->can('biannual_site_visits.approve')
-            )
-        ) {
+        $permissions = Permission::query()
+            ->whereIn('name', [
+                'biannual_site_visits.respond',
+                'biannual_site_visits.submit',
+            ])
+            ->pluck('id', 'name');
+
+        if ($permissions->count() !== 2) {
             throw ValidationException::withMessages([
-                'group_leader_id' => 'The team lead is not authorized to submit Bi-Annual Site Visits.',
+                'team_members' => 'Bi-Annual Site Visit member permissions are not configured. Run the latest database migrations before scheduling.',
             ]);
         }
 
@@ -292,13 +304,64 @@ class BiAnnualSiteVisitController extends Controller
             ->withStructure()
             ->findOrFail($validated['template_id']);
 
-        $profile = DB::transaction(function () use (
+        [$profile, $newAccounts] = DB::transaction(function () use (
             $validated,
+            $teamReferences,
+            $newMemberInputs,
+            $activeExistingTeam,
+            $permissions,
             $half,
             $template,
             $request,
             $portfolioSnapshot
         ) {
+            $usersByReference = $activeExistingTeam->keyBy(
+                fn (User $user): string => (string) $user->id
+            );
+            $newAccounts = [];
+
+            foreach ($newMemberInputs as $key => $input) {
+                $temporaryPassword = Str::password(12);
+                $user = User::create([
+                    'name' => $input['name'],
+                    'email' => $input['email'],
+                    'password' => Hash::make($temporaryPassword),
+                    'user_type' => 'staff',
+                    'governance_node_id' => $request->user()->governance_node_id,
+                    'must_change_password' => true,
+                    'is_disabled' => false,
+                    'is_blacklisted' => false,
+                ]);
+
+                $reference = 'new:'.$key;
+                $usersByReference->put($reference, $user);
+                $newAccounts[] = [
+                    'user' => $user,
+                    'temporary_password' => $temporaryPassword,
+                ];
+            }
+
+            $resolvedMemberIds = collect($teamReferences)
+                ->map(fn (string $reference): string => (string) $usersByReference
+                    ->get($reference)
+                    ->id)
+                ->all();
+            $leaderId = (string) $usersByReference
+                ->get($validated['group_leader_id'])
+                ->id;
+
+            foreach ($teamReferences as $reference) {
+                /** @var User $teamMember */
+                $teamMember = $usersByReference->get($reference);
+                $permissionIds = [(string) $permissions['biannual_site_visits.respond']];
+
+                if ((string) $teamMember->id === $leaderId) {
+                    $permissionIds[] = (string) $permissions['biannual_site_visits.submit'];
+                }
+
+                $teamMember->permissions()->syncWithoutDetaching($permissionIds);
+            }
+
             $siteVisit = SiteVisit::create([
                 'assignment_type' => 'group',
                 'visit_type' => BiAnnualSiteVisitProfile::VISIT_TYPE,
@@ -311,15 +374,15 @@ class BiAnnualSiteVisitController extends Controller
             $group = SiteVisitGroup::create([
                 'site_visit_id' => $siteVisit->id,
                 'group_name' => $validated['group_name'],
-                'leader_id' => $validated['group_leader_id'],
+                'leader_id' => $leaderId,
             ]);
 
             $specialisms = [];
-            foreach ($validated['team_members'] as $index => $userId) {
+            foreach ($resolvedMemberIds as $index => $userId) {
                 SiteVisitGroupMember::create([
                     'group_id' => $group->id,
                     'user_id' => $userId,
-                    'role' => (string) $userId === (string) $validated['group_leader_id']
+                    'role' => (string) $userId === $leaderId
                         ? 'leader'
                         : 'member',
                 ]);
@@ -327,7 +390,7 @@ class BiAnnualSiteVisitController extends Controller
                 $specialisms[$userId] = $validated['team_specialisms'][$index] ?? null;
             }
 
-            return BiAnnualSiteVisitProfile::create([
+            $profile = BiAnnualSiteVisitProfile::create([
                 'site_visit_id' => $siteVisit->id,
                 'think_tank_member_id' => $validated['think_tank_member_id'],
                 'template_id' => $template->id,
@@ -353,6 +416,8 @@ class BiAnnualSiteVisitController extends Controller
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
+
+            return [$profile, $newAccounts];
         });
 
         $profile->loadMissing([
@@ -361,26 +426,353 @@ class BiAnnualSiteVisitController extends Controller
             'thinkTank.consortium.programFunding.program.sector',
             'template',
         ]);
-        $portfolioName = $this->branding->portfolioNameForVisit($profile);
-        $leaderId = (string) $profile->siteVisit?->group?->leader_id;
 
-        $profile->siteVisit?->group?->members
-            ?->map(fn (SiteVisitGroupMember $member) => $member->user)
-            ->filter(fn (?User $user): bool => $user
-                && filter_var($user->email, FILTER_VALIDATE_EMAIL))
-            ->unique(fn (User $user): string => (string) $user->id)
-            ->each(function (User $recipient) use ($profile, $portfolioName, $leaderId): void {
-                Mail::to($recipient)->queue(new BiAnnualSiteVisitCreatedMail(
-                    $profile,
-                    $recipient,
-                    (string) $recipient->id === $leaderId,
-                    $portfolioName
-                ));
-            });
+        foreach ($newAccounts as $account) {
+            $accountMail = (new UserAccountCreated(
+                $account['user'],
+                $account['temporary_password']
+            ))
+                ->afterCommit();
+
+            Mail::to($account['user'])->queue($accountMail);
+        }
+
+        $this->queueVisitAssignmentEmails(
+            $profile,
+            $profile->siteVisit?->group?->members
+                ?->map(fn (SiteVisitGroupMember $member) => $member->user) ?? collect()
+        );
 
         return redirect()
             ->route('biannual-site-visits.show', $profile)
             ->with('success', 'Bi-Annual Site Visit scheduled with the selected monitoring team.');
+    }
+
+    public function addTeamMembers(
+        Request $request,
+        BiAnnualSiteVisitProfile $visit
+    ): RedirectResponse {
+        $this->authorizePermission($request->user(), 'biannual_site_visits.create');
+        $this->loadVisit($visit);
+        $this->assertBiAnnualProfileInScope($visit, $request->user());
+
+        $validated = $request->validate([
+            'team_members' => ['required', 'array', 'min:1'],
+            'team_members.*' => ['required', 'uuid', 'distinct'],
+            'team_specialisms' => ['required', 'array'],
+            'team_specialisms.*' => ['nullable', 'string', Rule::in(self::TEAM_SPECIALISMS)],
+        ], [
+            'team_members.required' => 'Select at least one staff member to add.',
+            'team_members.min' => 'Select at least one staff member to add.',
+            'team_members.*.distinct' => 'Each staff member may only be selected once.',
+        ]);
+
+        $memberIds = collect($validated['team_members'])
+            ->map(fn ($id): string => (string) $id)
+            ->unique()
+            ->values();
+        $group = $visit->siteVisit?->group;
+
+        abort_unless($group, 422, 'This visit does not have a monitoring team.');
+
+        $existingMemberIds = $group->members
+            ->pluck('user_id')
+            ->map(fn ($id): string => (string) $id);
+        $alreadyAssigned = $memberIds->intersect($existingMemberIds);
+
+        if ($alreadyAssigned->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'team_members' => 'One or more selected staff members are already assigned to this visit.',
+            ]);
+        }
+
+        $members = $this->activeInternalStaffQuery()
+            ->whereIn('id', $memberIds)
+            ->get();
+
+        if ($members->count() !== $memberIds->count()) {
+            throw ValidationException::withMessages([
+                'team_members' => 'Every selected monitoring-team member must have an active internal staff account.',
+            ]);
+        }
+
+        if ($members->contains(
+            fn (User $member): bool => ! filter_var($member->email, FILTER_VALIDATE_EMAIL)
+        )) {
+            throw ValidationException::withMessages([
+                'team_members' => 'Every monitoring-team member must have a valid email address so the assignment notification can be delivered.',
+            ]);
+        }
+
+        $specialisms = collect($validated['team_specialisms'] ?? []);
+        foreach ($memberIds as $memberId) {
+            if (! in_array($specialisms->get($memberId), self::TEAM_SPECIALISMS, true)) {
+                throw ValidationException::withMessages([
+                    "team_specialisms.{$memberId}" => 'Select an approved specialist role for every new team member.',
+                ]);
+            }
+        }
+
+        $respondPermissionId = Permission::query()
+            ->where('name', 'biannual_site_visits.respond')
+            ->value('id');
+
+        if (! $respondPermissionId) {
+            throw ValidationException::withMessages([
+                'team_members' => 'The Bi-Annual Site Visit response permission is not configured. Run the latest database migrations before assigning members.',
+            ]);
+        }
+
+        DB::transaction(function () use (
+            $visit,
+            $group,
+            $members,
+            $memberIds,
+            $specialisms,
+            $respondPermissionId,
+            $request
+        ): void {
+            SiteVisitGroup::query()
+                ->whereKey($group->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $concurrentlyAssigned = SiteVisitGroupMember::query()
+                ->where('group_id', $group->id)
+                ->whereIn('user_id', $memberIds)
+                ->exists();
+
+            if ($concurrentlyAssigned) {
+                throw ValidationException::withMessages([
+                    'team_members' => 'One or more selected staff members are already assigned to this visit.',
+                ]);
+            }
+
+            foreach ($members as $member) {
+                SiteVisitGroupMember::create([
+                    'group_id' => $group->id,
+                    'user_id' => $member->id,
+                    'role' => 'member',
+                ]);
+
+                $member->permissions()->syncWithoutDetaching([(string) $respondPermissionId]);
+            }
+
+            $settings = (array) $visit->settings;
+            $storedSpecialisms = (array) data_get($settings, 'team_specialisms', []);
+
+            foreach ($memberIds as $memberId) {
+                $storedSpecialisms[$memberId] = $specialisms->get($memberId);
+            }
+
+            data_set($settings, 'team_specialisms', $storedSpecialisms);
+            $visit->forceFill([
+                'settings' => $settings,
+                'updated_by' => $request->user()->id,
+            ])->save();
+        });
+
+        $visit->load([
+            'siteVisit.group.leader',
+            'siteVisit.group.members.user',
+            'thinkTank.consortium.programFunding.program.sector',
+            'template',
+        ]);
+        $recipients = $visit->siteVisit->group->members
+            ->whereIn('user_id', $memberIds)
+            ->map(fn (SiteVisitGroupMember $member) => $member->user);
+        $this->queueVisitAssignmentEmails($visit, $recipients);
+
+        return redirect()
+            ->route('biannual-site-visits.index')
+            ->with(
+                'success',
+                trans_choice(
+                    '{1} :count monitoring-team member was added and their assignment email was queued.|[2,*] :count monitoring-team members were added and their assignment emails were queued.',
+                    $memberIds->count(),
+                    ['count' => $memberIds->count()]
+                )
+            );
+    }
+
+    public function updateTeam(
+        Request $request,
+        BiAnnualSiteVisitProfile $visit
+    ): RedirectResponse {
+        $this->authorizePermission($request->user(), 'biannual_site_visits.create');
+        $this->loadVisit($visit);
+        $this->assertBiAnnualProfileInScope($visit, $request->user());
+
+        $validated = $request->validate([
+            'group_leader_id' => ['required', 'uuid'],
+            'remove_members' => ['nullable', 'array'],
+            'remove_members.*' => ['required', 'uuid', 'distinct'],
+        ], [
+            'group_leader_id.required' => 'Select the monitoring-team leader.',
+            'remove_members.*.distinct' => 'Each team member may only be removed once.',
+        ]);
+
+        $group = $visit->siteVisit?->group;
+        abort_unless($group, 422, 'This visit does not have a monitoring team.');
+
+        $leaderId = (string) $validated['group_leader_id'];
+        $removeIds = collect($validated['remove_members'] ?? [])
+            ->map(fn ($id): string => (string) $id)
+            ->unique()
+            ->values();
+        $currentIds = $group->members
+            ->pluck('user_id')
+            ->map(fn ($id): string => (string) $id)
+            ->unique()
+            ->values();
+
+        if ($removeIds->diff($currentIds)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'remove_members' => 'Only currently assigned team members can be removed.',
+            ]);
+        }
+
+        $remainingIds = $currentIds->diff($removeIds)->values();
+        if ($remainingIds->isEmpty()) {
+            throw ValidationException::withMessages([
+                'remove_members' => 'A monitoring team must retain at least one member.',
+            ]);
+        }
+
+        if (! $remainingIds->contains($leaderId)) {
+            throw ValidationException::withMessages([
+                'group_leader_id' => 'The selected team leader must remain assigned to this visit.',
+            ]);
+        }
+
+        $newLeader = $this->activeInternalStaffQuery()
+            ->whereKey($leaderId)
+            ->first();
+
+        if (! $newLeader || ! filter_var($newLeader->email, FILTER_VALIDATE_EMAIL)) {
+            throw ValidationException::withMessages([
+                'group_leader_id' => 'Select an active internal staff member with a valid email as team leader.',
+            ]);
+        }
+
+        $permissions = Permission::query()
+            ->whereIn('name', [
+                'biannual_site_visits.respond',
+                'biannual_site_visits.submit',
+            ])
+            ->pluck('id', 'name');
+
+        if ($permissions->count() !== 2) {
+            throw ValidationException::withMessages([
+                'group_leader_id' => 'Bi-Annual Site Visit leader permissions are not configured. Run the latest database migrations before changing the leader.',
+            ]);
+        }
+
+        $leaderChanged = (string) $group->leader_id !== $leaderId;
+
+        DB::transaction(function () use (
+            $visit,
+            $group,
+            $leaderId,
+            $removeIds,
+            $permissions,
+            $newLeader,
+            $request
+        ): void {
+            $lockedGroup = SiteVisitGroup::query()
+                ->whereKey($group->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedMembers = SiteVisitGroupMember::query()
+                ->where('group_id', $lockedGroup->id)
+                ->get();
+            $lockedIds = $lockedMembers
+                ->pluck('user_id')
+                ->map(fn ($id): string => (string) $id)
+                ->unique()
+                ->values();
+
+            if ($removeIds->diff($lockedIds)->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'remove_members' => 'The monitoring team changed while you were editing it. Refresh and try again.',
+                ]);
+            }
+
+            $lockedRemainingIds = $lockedIds->diff($removeIds)->values();
+            if (
+                $lockedRemainingIds->isEmpty()
+                || ! $lockedRemainingIds->contains($leaderId)
+            ) {
+                throw ValidationException::withMessages([
+                    'group_leader_id' => 'The selected team leader must remain assigned to this visit.',
+                ]);
+            }
+
+            if ($removeIds->isNotEmpty()) {
+                SiteVisitGroupMember::query()
+                    ->where('group_id', $lockedGroup->id)
+                    ->whereIn('user_id', $removeIds)
+                    ->delete();
+            }
+
+            SiteVisitGroupMember::query()
+                ->where('group_id', $lockedGroup->id)
+                ->update(['role' => 'member']);
+            SiteVisitGroupMember::query()
+                ->where('group_id', $lockedGroup->id)
+                ->where('user_id', $leaderId)
+                ->update(['role' => 'leader']);
+            $lockedGroup->update(['leader_id' => $leaderId]);
+
+            $newLeader->permissions()->syncWithoutDetaching([
+                (string) $permissions['biannual_site_visits.respond'],
+                (string) $permissions['biannual_site_visits.submit'],
+            ]);
+
+            $settings = (array) $visit->settings;
+            $storedSpecialisms = (array) data_get($settings, 'team_specialisms', []);
+            foreach ($removeIds as $removeId) {
+                unset($storedSpecialisms[$removeId]);
+            }
+
+            data_set($settings, 'team_specialisms', $storedSpecialisms);
+            $visit->forceFill([
+                'settings' => $settings,
+                'updated_by' => $request->user()->id,
+            ])->save();
+        });
+
+        $visit->load([
+            'siteVisit.group.leader',
+            'siteVisit.group.members.user',
+            'thinkTank.consortium.programFunding.program.sector',
+            'template',
+        ]);
+
+        if ($leaderChanged) {
+            $this->queueVisitAssignmentEmails($visit, collect([$newLeader]));
+        }
+
+        $messages = [];
+        if ($removeIds->isNotEmpty()) {
+            $messages[] = trans_choice(
+                '{1} :count team member was removed|[2,*] :count team members were removed',
+                $removeIds->count(),
+                ['count' => $removeIds->count()]
+            );
+        }
+        if ($leaderChanged) {
+            $messages[] = 'the team leader was changed and their notification email was queued';
+        }
+
+        return redirect()
+            ->route('biannual-site-visits.index')
+            ->with(
+                'success',
+                $messages === []
+                    ? 'The monitoring team is already up to date.'
+                    : ucfirst(implode(', and ', $messages)).'.'
+            );
     }
 
     public function submittedReport(Request $request): View
@@ -1436,44 +1828,6 @@ class BiAnnualSiteVisitController extends Controller
         });
     }
 
-    private function applyBiAnnualAssignableUserScope(Builder $query, User $user): void
-    {
-        if (! $this->userHasSiteVisitPortfolioScope($user)) {
-            return;
-        }
-
-        $nodeIds = $this->userHasAssignedPortfolioScope($user)
-            ? $this->assignedPortfolioNodeIds($user)
-            : array_values(array_filter([(string) $user->governance_node_id]));
-
-        if ($nodeIds === []) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        $portfolioUserIds = Sector::query()
-            ->whereIn('governance_node_id', $nodeIds)
-            ->get(['portfolio_manager_user_id', 'me_manager_user_id'])
-            ->flatMap(fn (Sector $sector): array => [
-                $sector->portfolio_manager_user_id,
-                $sector->me_manager_user_id,
-            ])
-            ->filter()
-            ->map(fn ($id): string => (string) $id)
-            ->unique()
-            ->values()
-            ->all();
-
-        $query->where(function (Builder $scope) use ($nodeIds, $portfolioUserIds): void {
-            $scope->whereIn('governance_node_id', $nodeIds);
-
-            if ($portfolioUserIds !== []) {
-                $scope->orWhereIn('id', $portfolioUserIds);
-            }
-        });
-    }
-
     private function assertBiAnnualThinkTankInScope(string $thinkTankId, User $user): void
     {
         if (! $this->userHasSiteVisitPortfolioScope($user)) {
@@ -1688,6 +2042,122 @@ class BiAnnualSiteVisitController extends Controller
                 $leader->can('biannual_site_visits.submit')
                 || $leader->can('biannual_site_visits.approve')
             );
+    }
+
+    private function activeInternalStaffQuery(): Builder
+    {
+        return User::query()
+            ->where(fn (Builder $query) => $query
+                ->whereNull('is_disabled')
+                ->orWhere('is_disabled', false))
+            ->where(fn (Builder $query) => $query
+                ->whereNull('is_blacklisted')
+                ->orWhere('is_blacklisted', false))
+            ->where(fn (Builder $query) => $query
+                ->whereNull('user_type')
+                ->orWhereNotIn('user_type', [
+                    'funding_partner',
+                    'vendor',
+                    'think_tank',
+                    'applicant',
+                    'member_state',
+                ]));
+    }
+
+    /**
+     * @param  iterable<int, User|null>  $recipients
+     */
+    private function queueVisitAssignmentEmails(
+        BiAnnualSiteVisitProfile $visit,
+        iterable $recipients
+    ): void {
+        $portfolioName = $this->branding->portfolioNameForVisit($visit);
+        $leaderId = (string) $visit->siteVisit?->group?->leader_id;
+
+        collect($recipients)
+            ->filter(fn (?User $recipient): bool => $recipient
+                && filter_var($recipient->email, FILTER_VALIDATE_EMAIL))
+            ->unique(fn (User $recipient): string => (string) $recipient->id)
+            ->each(function (User $recipient) use (
+                $visit,
+                $portfolioName,
+                $leaderId
+            ): void {
+                Mail::to($recipient)->queue(new BiAnnualSiteVisitCreatedMail(
+                    $visit,
+                    $recipient,
+                    (string) $recipient->id === $leaderId,
+                    $portfolioName
+                ));
+            });
+    }
+
+    /**
+     * @param  list<string>  $teamReferences
+     * @param  array<string, array{name?: mixed, email?: mixed}>  $submittedNewMembers
+     * @return array{0: list<string>, 1: array<string, array{name: string, email: string}>}
+     */
+    private function resolveTeamReferences(
+        array $teamReferences,
+        array $submittedNewMembers
+    ): array {
+        $existingMemberIds = [];
+        $newMemberInputs = [];
+
+        foreach ($teamReferences as $index => $reference) {
+            if (! Str::startsWith($reference, 'new:')) {
+                if (! Str::isUuid($reference)) {
+                    throw ValidationException::withMessages([
+                        "team_members.{$index}" => 'Select a valid active staff account.',
+                    ]);
+                }
+
+                $existingMemberIds[] = $reference;
+
+                continue;
+            }
+
+            $key = Str::after($reference, 'new:');
+            if (
+                ! preg_match('/\A[a-zA-Z0-9_-]{1,40}\z/', $key)
+                || ! isset($submittedNewMembers[$key])
+            ) {
+                throw ValidationException::withMessages([
+                    "team_members.{$index}" => 'The new staff account details are missing. Add the staff member again.',
+                ]);
+            }
+
+            $newMemberInputs[$key] = [
+                'name' => trim((string) ($submittedNewMembers[$key]['name'] ?? '')),
+                'email' => Str::lower(trim((string) ($submittedNewMembers[$key]['email'] ?? ''))),
+            ];
+        }
+
+        $emailGroups = collect($newMemberInputs)
+            ->groupBy(fn (array $member): string => $member['email']);
+        $duplicateEmail = $emailGroups->first(
+            fn ($members, string $email): bool => $email === '' || $members->count() > 1
+        );
+
+        if ($duplicateEmail) {
+            throw ValidationException::withMessages([
+                'new_team_members' => 'Each new staff member must have a distinct email address.',
+            ]);
+        }
+
+        $newEmails = collect($newMemberInputs)->pluck('email')->values();
+        if (
+            $newEmails->isNotEmpty()
+            && User::query()
+                ->whereIn(DB::raw('LOWER(email)'), $newEmails->all())
+                ->exists()
+        ) {
+            throw ValidationException::withMessages([
+                'new_team_members' => 'A new staff email already belongs to an account. Select that person from the active staff list instead.',
+            ]);
+        }
+
+        return [array_values($existingMemberIds), $newMemberInputs];
     }
 
     private function blankAnswerValue(mixed $value): bool

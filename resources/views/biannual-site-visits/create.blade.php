@@ -9,13 +9,10 @@
 
 @section('content')
     @php
-        $defaultSpecialisms = [
-            'Team coordination & governance',
-            'Procurement',
-            'Financial management',
-            'Research & ethics',
-            'MEAL & safeguards',
-        ];
+        $defaultSpecialisms = $specialistRoles;
+        $pendingTeamMembers = is_array(old('new_team_members'))
+            ? old('new_team_members')
+            : [];
         $oldTeamMembers = old('team_members');
         $hasOldTeam = is_array($oldTeamMembers);
         $initialTeamMembers = $hasOldTeam
@@ -44,11 +41,6 @@
             && $initialSelectedCount === count($initialTeamMembers)
             && ! $initialHasDuplicates;
         $eligibleTeamMemberCount = $users->count();
-        $eligibleTeamLeaderCount = $users->filter(
-            static fn ($user) => $user->can('biannual_site_visits.submit')
-                || $user->can('biannual_site_visits.approve')
-        )->count();
-        $teamPoolReady = $eligibleTeamMemberCount >= 1 && $eligibleTeamLeaderCount >= 1;
     @endphp
 
     <main class="nxl-container">
@@ -57,8 +49,8 @@
                 <div>
                     <span class="basv-eyebrow"><i class="feather-calendar"></i> New monitoring cycle</span>
                     <h1>Schedule a Bi-Annual Site Visit</h1>
-                    <p>Select the Think Tank and published questionnaire, then build the monitoring team from the
-                        authorized members available. One selected member must be the team lead.</p>
+                    <p>Select the Think Tank and published questionnaire, then build the monitoring team from all
+                        active staff accounts. One selected member must be the team lead.</p>
                 </div>
                 <div class="basv-hero-actions">
                     <a href="{{ route('biannual-site-visits.index') }}" class="basv-btn basv-btn-light">
@@ -175,7 +167,7 @@
                     <div class="basv-card-head">
                         <div>
                             <h2><i class="feather-users me-2"></i>Monitoring team</h2>
-                            <div class="basv-help">Add as many authorized monitoring members as the visit needs. At least one distinct member and a team lead are required.</div>
+                            <div class="basv-help">Select from all active staff accounts, assign one of the approved specialist roles, and choose a team lead.</div>
                         </div>
                         <span class="basv-badge">Step 2 of 2</span>
                     </div>
@@ -187,14 +179,9 @@
                         </div>
 
                         @if ($eligibleTeamMemberCount < 1)
-                            <div class="basv-alert danger">
-                                No authorized monitoring members are available. Grant assessment permission to at
-                                least one active internal user before scheduling this visit.
-                            </div>
-                        @elseif ($eligibleTeamLeaderCount < 1)
-                            <div class="basv-alert danger">
-                                No available monitoring member has submission authority. Grant at least one member
-                                permission to submit Bi-Annual Site Visits before scheduling.
+                            <div class="basv-alert">
+                                No active staff accounts are currently available. Use <strong>Add new staff account</strong>
+                                below to create and assign the first team member.
                             </div>
                         @endif
 
@@ -211,24 +198,29 @@
                                     </div>
                                     <div class="basv-help mt-1" id="team-builder-status" aria-live="polite">
                                         @if ($initialTeamComplete)
-                                            The team selection is valid. Add more authorized members if needed, or choose the lead.
+                                            The team selection is valid. Add more staff if needed, or choose the lead.
                                         @elseif (count($initialSelectedMembers) < count($initialTeamMembers))
                                             Select a team member before adding the next row.
                                         @elseif ($initialHasDuplicates)
                                             Replace duplicate team members before continuing.
                                         @else
-                                            Select at least one authorized monitoring member.
+                                            Select at least one active staff member.
                                         @endif
                                     </div>
                                 </div>
-                                <button type="button" class="basv-btn basv-btn-ghost" id="add-team-member"
-                                    @disabled(
-                                        count($initialTeamMembers) >= $eligibleTeamMemberCount
-                                        || count($initialSelectedMembers) < count($initialTeamMembers)
-                                        || $initialHasDuplicates
-                                    )>
-                                    <i class="feather-user-plus" aria-hidden="true"></i> Add team member
-                                </button>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button type="button" class="basv-btn basv-btn-ghost" id="add-team-member"
+                                        @disabled(
+                                            count($initialSelectedMembers) < count($initialTeamMembers)
+                                            || $initialHasDuplicates
+                                        )>
+                                        <i class="feather-plus" aria-hidden="true"></i> Add team row
+                                    </button>
+                                    <button type="button" class="basv-btn basv-btn-primary" id="show-new-staff-form"
+                                        aria-expanded="false" aria-controls="new-staff-panel">
+                                        <i class="feather-user-plus" aria-hidden="true"></i> Add new staff account
+                                    </button>
+                                </div>
                             </div>
                             <div class="basv-progress basv-team-progress" aria-hidden="true">
                                 <span id="team-progress-bar"
@@ -243,9 +235,47 @@
                                         'specialism' => $hasOldTeam
                                             ? ($initialTeamSpecialisms[$position] ?? '')
                                             : ($defaultSpecialisms[$position] ?? ''),
+                                        'pendingTeamMembers' => $pendingTeamMembers,
                                     ])
                                 @endforeach
                             </div>
+                        </div>
+
+                        <div class="basv-new-staff mt-3" id="new-staff-panel" hidden>
+                            <div>
+                                <strong>Add a staff member without leaving this visit</strong>
+                                <div class="basv-help">
+                                    An active ATTP staff account will be created when the visit is scheduled.
+                                    The staff member will receive their temporary login details and the team assignment by email.
+                                </div>
+                            </div>
+                            <div class="basv-form-grid mt-3">
+                                <div>
+                                    <label class="form-label" for="new_staff_name">Full name</label>
+                                    <input class="form-control" id="new_staff_name" maxlength="255"
+                                        autocomplete="name" placeholder="Staff member's full name">
+                                </div>
+                                <div>
+                                    <label class="form-label" for="new_staff_email">Email address</label>
+                                    <input class="form-control" id="new_staff_email" type="email" maxlength="255"
+                                        autocomplete="email" placeholder="name@example.org">
+                                </div>
+                            </div>
+                            <div class="basv-help text-danger" id="new-staff-error" role="alert" hidden></div>
+                            <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
+                                <button type="button" class="basv-btn basv-btn-ghost" id="cancel-new-staff">Cancel</button>
+                                <button type="button" class="basv-btn basv-btn-primary" id="add-new-staff-to-team">
+                                    <i class="feather-user-check" aria-hidden="true"></i> Add staff member to team
+                                </button>
+                            </div>
+                        </div>
+                        <div id="pending-staff-inputs">
+                            @foreach ($pendingTeamMembers as $pendingKey => $pendingMember)
+                                <input type="hidden" name="new_team_members[{{ $pendingKey }}][name]"
+                                    value="{{ is_array($pendingMember) ? ($pendingMember['name'] ?? '') : '' }}">
+                                <input type="hidden" name="new_team_members[{{ $pendingKey }}][email]"
+                                    value="{{ is_array($pendingMember) ? ($pendingMember['email'] ?? '') : '' }}">
+                            @endforeach
                         </div>
 
                         <div class="mt-3">
@@ -253,7 +283,7 @@
                             <select class="form-select" id="group_leader_id" name="group_leader_id" required>
                                 <option value="">Choose one of the selected members</option>
                             </select>
-                            <div class="basv-help">Only selected members with submission authority can be team lead and submit the consolidated questionnaire.</div>
+                            <div class="basv-help">Any selected active staff member can lead. The lead receives permission to submit the consolidated questionnaire.</div>
                         </div>
 
                         <template id="team-member-row-template">
@@ -261,6 +291,7 @@
                                 'position' => '__INDEX__',
                                 'selectedMember' => '',
                                 'specialism' => '',
+                                'pendingTeamMembers' => $pendingTeamMembers,
                             ])
                         </template>
                         <noscript>
@@ -275,8 +306,7 @@
                     <a href="{{ route('biannual-site-visits.index') }}" class="basv-btn basv-btn-ghost">Cancel</a>
                     <button class="basv-btn basv-btn-primary" id="schedule-visit-button" type="submit"
                         data-questionnaire-ready="{{ $templates->isNotEmpty() ? '1' : '0' }}"
-                        data-team-pool-ready="{{ $teamPoolReady ? '1' : '0' }}"
-                        @disabled($templates->isEmpty() || ! $teamPoolReady || ! $initialTeamComplete)>
+                        @disabled($templates->isEmpty() || ! $initialTeamComplete)>
                         <i class="feather-check"></i> Schedule visit
                     </button>
                 </div>
@@ -288,9 +318,9 @@
 @push('scripts')
     <script>
         (() => {
-            const availableMembers = @json($eligibleTeamMemberCount);
             const minimumMembers = 1;
             const defaultSpecialisms = @json($defaultSpecialisms);
+            const initialPendingStaff = @json($pendingTeamMembers);
             const teamMembers = document.getElementById('team-members');
             const rowTemplate = document.getElementById('team-member-row-template');
             const addButton = document.getElementById('add-team-member');
@@ -301,12 +331,28 @@
             const progressBar = document.getElementById('team-progress-bar');
             const scheduleButton = document.getElementById('schedule-visit-button');
             const questionnaireReady = scheduleButton.dataset.questionnaireReady === '1';
-            const teamPoolReady = scheduleButton.dataset.teamPoolReady === '1';
             const thinkTankSelect = document.getElementById('think_tank_member_id');
             const templateSelect = document.getElementById('template_id');
             const previewLink = document.getElementById('preview-questionnaire');
             const pdfLink = document.getElementById('download-questionnaire-pdf');
             const previewHelp = document.getElementById('questionnaire-preview-help');
+            const newStaffPanel = document.getElementById('new-staff-panel');
+            const showNewStaffButton = document.getElementById('show-new-staff-form');
+            const cancelNewStaffButton = document.getElementById('cancel-new-staff');
+            const addNewStaffButton = document.getElementById('add-new-staff-to-team');
+            const newStaffName = document.getElementById('new_staff_name');
+            const newStaffEmail = document.getElementById('new_staff_email');
+            const newStaffError = document.getElementById('new-staff-error');
+            const pendingStaffInputs = document.getElementById('pending-staff-inputs');
+            const pendingStaff = new Map(
+                Object.entries(initialPendingStaff || {}).map(([key, member]) => [
+                    key,
+                    {
+                        name: String(member?.name || '').trim(),
+                        email: String(member?.email || '').trim().toLowerCase(),
+                    },
+                ])
+            );
             let preferredLeader = @json(old('group_leader_id'));
 
             const rows = () => [...teamMembers.querySelectorAll('[data-team-row]')];
@@ -315,15 +361,20 @@
                 const currentRows = rows();
                 const selectedMembers = memberSelects().map(select => select.value).filter(Boolean);
                 const uniqueMembers = new Set(selectedMembers);
+                const selectedSpecialisms = currentRows
+                    .map(row => row.querySelector('.team-specialism-input').value)
+                    .filter(Boolean);
 
                 return {
                     rowCount: currentRows.length,
                     selectedCount: uniqueMembers.size,
                     hasBlank: selectedMembers.length < currentRows.length,
+                    hasBlankSpecialism: selectedSpecialisms.length < currentRows.length,
                     hasDuplicates: uniqueMembers.size !== selectedMembers.length,
                     complete: currentRows.length >= minimumMembers
                         && uniqueMembers.size === currentRows.length
-                        && selectedMembers.length === currentRows.length,
+                        && selectedMembers.length === currentRows.length
+                        && selectedSpecialisms.length === currentRows.length,
                 };
             };
 
@@ -348,11 +399,30 @@
                 });
             }
 
+            function addPendingOption(select, key, member) {
+                const reference = `new:${key}`;
+                if ([...select.options].some(option => option.value === reference)) return;
+
+                const option = new Option(
+                    `${member.name} — ${member.email} · New staff account`,
+                    reference
+                );
+                option.dataset.canLead = '1';
+                option.dataset.email = member.email;
+                option.dataset.pendingStaff = '1';
+                select.add(option);
+            }
+
+            function hydratePendingOptions(select) {
+                pendingStaff.forEach((member, key) => addPendingOption(select, key, member));
+            }
+
             function refreshTeamOptions() {
                 const selects = memberSelects();
                 const selected = selects.map(select => select.value).filter(Boolean);
 
                 selects.forEach(current => {
+                    hydratePendingOptions(current);
                     [...current.options].forEach(option => {
                         if (!option.value) return;
                         option.disabled = option.value !== current.value && selected.includes(option.value);
@@ -379,27 +449,25 @@
                 refreshTeamOptions();
 
                 const state = teamState();
-                const availableSlots = Math.max(0, availableMembers - state.rowCount);
 
                 countLabel.textContent = `${state.selectedCount} ${state.selectedCount === 1 ? 'member' : 'members'} selected`;
                 completionBadge.textContent = state.complete ? 'Team ready' : 'Needs attention';
                 if (state.complete) {
-                    statusText.textContent = availableSlots > 0
-                        ? 'The team selection is valid. Add more authorized members if needed, or choose the lead.'
-                        : 'All available authorized members have been selected. Choose the team lead.';
+                    statusText.textContent = 'The team selection is valid. Add more staff if needed, or choose the lead.';
                 } else if (state.hasBlank) {
                     statusText.textContent = 'Select a team member before adding the next row.';
+                } else if (state.hasBlankSpecialism) {
+                    statusText.textContent = 'Select a specialist role for every team member.';
                 } else if (state.hasDuplicates) {
                     statusText.textContent = 'Replace duplicate team members before continuing.';
                 } else {
-                    statusText.textContent = 'Select at least one authorized monitoring member.';
+                    statusText.textContent = 'Select at least one active staff member.';
                 }
                 progressBar.style.width = `${(state.selectedCount / Math.max(state.rowCount, 1)) * 100}%`;
-                addButton.disabled = state.rowCount >= availableMembers
-                    || state.hasBlank
+                addButton.disabled = state.hasBlank
+                    || state.hasBlankSpecialism
                     || state.hasDuplicates;
                 scheduleButton.disabled = !questionnaireReady
-                    || !teamPoolReady
                     || !state.complete
                     || !leaderSelect.value;
             }
@@ -437,15 +505,25 @@
 
             function addTeamMember() {
                 const state = teamState();
-                if (state.rowCount >= availableMembers) return;
-                if (state.hasBlank || state.hasDuplicates) {
-                    memberSelects().find(select => !select.value)?.focus();
+                if (state.hasBlank || state.hasBlankSpecialism || state.hasDuplicates) {
+                    const incompleteRow = rows().find(row =>
+                        !row.querySelector('.team-member-select').value
+                        || !row.querySelector('.team-specialism-input').value
+                    );
+                    incompleteRow
+                        ?.querySelector(
+                            incompleteRow.querySelector('.team-member-select').value
+                                ? '.team-specialism-input'
+                                : '.team-member-select'
+                        )
+                        ?.focus();
                     return;
                 }
 
                 teamMembers.append(rowTemplate.content.cloneNode(true));
                 const currentRows = rows();
                 const newRow = currentRows[currentRows.length - 1];
+                hydratePendingOptions(newRow.querySelector('.team-member-select'));
                 const assignedSpecialisms = new Set(
                     currentRows
                         .slice(0, -1)
@@ -459,7 +537,107 @@
                 newRow.querySelector('.team-member-select').focus();
             }
 
+            function setNewStaffPanel(open) {
+                newStaffPanel.hidden = !open;
+                showNewStaffButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+                newStaffError.hidden = true;
+                newStaffError.textContent = '';
+
+                if (open) {
+                    newStaffName.focus();
+                } else {
+                    newStaffName.value = '';
+                    newStaffEmail.value = '';
+                }
+            }
+
+            function addPendingStaffInputs(key, member) {
+                const wrapper = document.createElement('span');
+                wrapper.dataset.pendingStaffInputs = key;
+
+                const nameInput = document.createElement('input');
+                nameInput.type = 'hidden';
+                nameInput.name = `new_team_members[${key}][name]`;
+                nameInput.value = member.name;
+
+                const emailInput = document.createElement('input');
+                emailInput.type = 'hidden';
+                emailInput.name = `new_team_members[${key}][email]`;
+                emailInput.value = member.email;
+
+                wrapper.append(nameInput, emailInput);
+                pendingStaffInputs.append(wrapper);
+            }
+
+            function addNewStaffToTeam() {
+                const member = {
+                    name: newStaffName.value.trim(),
+                    email: newStaffEmail.value.trim().toLowerCase(),
+                };
+
+                if (!member.name) {
+                    newStaffError.textContent = 'Enter the staff member’s full name.';
+                    newStaffError.hidden = false;
+                    newStaffName.focus();
+                    return;
+                }
+
+                if (!newStaffEmail.checkValidity() || !member.email) {
+                    newStaffError.textContent = 'Enter a valid staff email address.';
+                    newStaffError.hidden = false;
+                    newStaffEmail.focus();
+                    return;
+                }
+
+                const emailAlreadyExists = [...document.querySelectorAll('.team-member-select option[data-email]')]
+                    .some(option => option.dataset.email.toLowerCase() === member.email);
+                if (emailAlreadyExists) {
+                    newStaffError.textContent = 'This email is already in the staff list. Select that account instead.';
+                    newStaffError.hidden = false;
+                    newStaffEmail.focus();
+                    return;
+                }
+
+                const key = `staff_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+                const reference = `new:${key}`;
+                pendingStaff.set(key, member);
+                addPendingStaffInputs(key, member);
+
+                let targetRow = rows().find(row => !row.querySelector('.team-member-select').value);
+                if (!targetRow) {
+                    teamMembers.append(rowTemplate.content.cloneNode(true));
+                    targetRow = rows()[rows().length - 1];
+                    const assignedSpecialisms = new Set(
+                        rows()
+                            .slice(0, -1)
+                            .map(row => row.querySelector('.team-specialism-input').value)
+                            .filter(Boolean)
+                    );
+                    targetRow.querySelector('.team-specialism-input').value = defaultSpecialisms.find(
+                        specialism => !assignedSpecialisms.has(specialism)
+                    ) || '';
+                }
+
+                memberSelects().forEach(select => addPendingOption(select, key, member));
+                targetRow.querySelector('.team-member-select').value = reference;
+                setNewStaffPanel(false);
+                refreshBuilder();
+
+                if (!targetRow.querySelector('.team-specialism-input').value) {
+                    targetRow.querySelector('.team-specialism-input').focus();
+                }
+            }
+
             addButton.addEventListener('click', addTeamMember);
+            showNewStaffButton.addEventListener('click', () => setNewStaffPanel(newStaffPanel.hidden));
+            cancelNewStaffButton.addEventListener('click', () => setNewStaffPanel(false));
+            addNewStaffButton.addEventListener('click', addNewStaffToTeam);
+            newStaffEmail.addEventListener('keydown', event => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addNewStaffToTeam();
+                }
+            });
             thinkTankSelect.addEventListener('change', refreshQuestionnaireLinks);
             templateSelect.addEventListener('change', refreshQuestionnaireLinks);
             leaderSelect.addEventListener('change', () => {
@@ -467,7 +645,7 @@
                 refreshBuilder();
             });
             teamMembers.addEventListener('change', event => {
-                if (event.target.matches('.team-member-select')) refreshBuilder();
+                if (event.target.matches('.team-member-select, .team-specialism-input')) refreshBuilder();
             });
             teamMembers.addEventListener('click', event => {
                 const removeButton = event.target.closest('[data-remove-team-member]');
@@ -492,8 +670,20 @@
                 event.preventDefault();
                 statusText.textContent = state.complete
                     ? 'Choose a team lead before scheduling the visit.'
-                    : 'Select at least one distinct monitoring-team member before scheduling the visit.';
-                (state.complete ? leaderSelect : memberSelects().find(select => !select.value) || addButton).focus();
+                    : 'Select a distinct active staff member and specialist role for every team row.';
+                const incompleteRow = rows().find(row =>
+                    !row.querySelector('.team-member-select').value
+                    || !row.querySelector('.team-specialism-input').value
+                );
+                (
+                    state.complete
+                        ? leaderSelect
+                        : incompleteRow?.querySelector(
+                            incompleteRow.querySelector('.team-member-select').value
+                                ? '.team-specialism-input'
+                                : '.team-member-select'
+                        ) || addButton
+                ).focus();
             });
 
             refreshBuilder();

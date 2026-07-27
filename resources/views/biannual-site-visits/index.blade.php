@@ -114,6 +114,17 @@
                                     @php
                                         $status = $visit->siteVisit?->status ?: 'draft';
                                         $progress = (float) ($visit->completion_percentage ?? 0);
+                                        $teamSpecialisms = (array) data_get($visit->settings, 'team_specialisms', []);
+                                        $teamRoster = $visit->siteVisit?->group?->members
+                                            ?->map(fn ($member) => [
+                                                'id' => (string) $member->user_id,
+                                                'name' => $member->user?->name ?: 'Monitoring team member',
+                                                'email' => $member->user?->email ?: 'No email recorded',
+                                                'specialism' => $teamSpecialisms[(string) $member->user_id] ?? 'Specialist role not set',
+                                                'is_leader' => (string) $member->user_id
+                                                    === (string) $visit->siteVisit?->group?->leader_id,
+                                            ])
+                                            ->values() ?? collect();
                                     @endphp
                                     <tr>
                                         <td>
@@ -150,10 +161,36 @@
                                         </td>
                                         <td><span class="basv-badge {{ $status }}">{{ str_replace('_', ' ', $status) }}</span></td>
                                         <td class="text-end">
-                                            <a href="{{ route('biannual-site-visits.show', $visit) }}"
-                                                class="basv-btn basv-btn-ghost">
-                                                Open <i class="feather-arrow-right"></i>
-                                            </a>
+                                            <div class="basv-register-actions">
+                                                @if ($canManageTeams)
+                                                    <button type="button" class="basv-btn basv-btn-primary"
+                                                        data-add-team-members
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#add-team-members-modal"
+                                                        data-action="{{ route('biannual-site-visits.team-members.store', $visit) }}"
+                                                        data-visit-id="{{ $visit->id }}"
+                                                        data-visit-title="{{ $visit->title ?: 'Monitoring Site Visit' }}"
+                                                        data-visit-reference="{{ $visit->reference_number }}"
+                                                        data-existing-members="{{ $visit->siteVisit?->group?->members?->pluck('user_id')->values()->toJson() ?: '[]' }}">
+                                                        <i class="feather-user-plus"></i> Add members
+                                                    </button>
+                                                    <button type="button" class="basv-btn basv-btn-ghost"
+                                                        data-manage-team
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#manage-team-modal"
+                                                        data-action="{{ route('biannual-site-visits.team.update', $visit) }}"
+                                                        data-visit-id="{{ $visit->id }}"
+                                                        data-visit-title="{{ $visit->title ?: 'Monitoring Site Visit' }}"
+                                                        data-visit-reference="{{ $visit->reference_number }}"
+                                                        data-team-roster="{{ $teamRoster->toJson() }}">
+                                                        <i class="feather-settings"></i> Manage team
+                                                    </button>
+                                                @endif
+                                                <a href="{{ route('biannual-site-visits.show', $visit) }}"
+                                                    class="basv-btn basv-btn-ghost">
+                                                    Open <i class="feather-arrow-right"></i>
+                                                </a>
+                                            </div>
                                         </td>
                                     </tr>
                                 @endforeach
@@ -167,4 +204,424 @@
             </div>
         </div>
     </main>
+
+    @if ($canManageTeams)
+        <div class="modal fade basv-team-modal" id="add-team-members-modal" tabindex="-1"
+            aria-labelledby="add-team-members-title" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <form method="POST" action="#" class="modal-content basv-page" id="add-team-members-form">
+                    @csrf
+                    <input type="hidden" name="_team_visit_id" id="team-assignment-visit-id"
+                        value="{{ old('_team_visit_id') }}">
+
+                    <div class="modal-header">
+                        <div class="basv-modal-heading-icon">
+                            <i class="feather-users" aria-hidden="true"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <span class="basv-modal-kicker">Monitoring team assignment</span>
+                            <h2 class="modal-title" id="add-team-members-title">Add team members</h2>
+                            <div class="basv-modal-meta" id="team-assignment-reference">
+                                Select one or more active staff accounts.
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                            aria-label="Close team member assignment"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="basv-team-modal-toolbar">
+                            <div class="basv-member-search">
+                                <i class="feather-search" aria-hidden="true"></i>
+                                <label class="visually-hidden" for="team-member-search">Search staff</label>
+                                <input type="search" class="form-control" id="team-member-search"
+                                    placeholder="Search by name, email, or system role">
+                            </div>
+                            <span class="basv-selection-count" id="team-selection-count">0 selected</span>
+                        </div>
+
+                        <div class="basv-assignment-note">
+                            <i class="feather-mail" aria-hidden="true"></i>
+                            <span>Each newly assigned member will receive a queued email with the visit details and a link to open the assignment.</span>
+                        </div>
+
+                        <div class="basv-member-options" id="team-member-options">
+                            @forelse ($teamAssignableUsers as $staff)
+                                @php
+                                    $staffSearch = \Illuminate\Support\Str::lower(implode(' ', [
+                                        $staff->name,
+                                        $staff->email,
+                                        $staff->role?->name,
+                                    ]));
+                                @endphp
+                                <div class="basv-member-option" data-member-option
+                                    data-search="{{ $staffSearch }}" data-user-id="{{ $staff->id }}">
+                                    <label class="basv-member-identity" for="team-member-{{ $staff->id }}">
+                                        <input class="form-check-input" type="checkbox"
+                                            name="team_members[]" value="{{ $staff->id }}"
+                                            id="team-member-{{ $staff->id }}" data-team-member-checkbox>
+                                        <span class="basv-member-avatar">
+                                            {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($staff->name ?: 'S', 0, 1)) }}
+                                        </span>
+                                        <span>
+                                            <strong>{{ $staff->name }}</strong>
+                                            <small>{{ $staff->email }}</small>
+                                            <small>{{ $staff->role?->name ?: 'Staff account' }}</small>
+                                        </span>
+                                    </label>
+                                    <div>
+                                        <label class="visually-hidden"
+                                            for="team-specialism-{{ $staff->id }}">Specialist role for {{ $staff->name }}</label>
+                                        <select class="form-select" name="team_specialisms[{{ $staff->id }}]"
+                                            id="team-specialism-{{ $staff->id }}" data-team-specialism disabled>
+                                            <option value="">Choose specialist role</option>
+                                            @foreach ($specialistRoles as $specialistRole)
+                                                <option value="{{ $specialistRole }}">{{ $specialistRole }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="basv-member-empty">
+                                    <i class="feather-user-x"></i>
+                                    <strong>No active staff accounts are available</strong>
+                                    <span>Activate a staff account with a valid email before assigning the team.</span>
+                                </div>
+                            @endforelse
+                        </div>
+
+                        <div class="basv-member-empty" id="team-member-no-results" hidden>
+                            <i class="feather-search"></i>
+                            <strong>No available staff match this search</strong>
+                            <span>Try a different name, email, or role.</span>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="basv-btn basv-btn-ghost"
+                            data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="basv-btn basv-btn-primary"
+                            id="save-team-members" disabled>
+                            <i class="feather-user-plus"></i>
+                            Add selected members
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="modal fade basv-team-modal" id="manage-team-modal" tabindex="-1"
+            aria-labelledby="manage-team-title" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <form method="POST" action="#" class="modal-content basv-page" id="manage-team-form">
+                    @csrf
+                    @method('PUT')
+                    <input type="hidden" name="_team_manage_visit_id" id="team-management-visit-id"
+                        value="{{ old('_team_manage_visit_id') }}">
+
+                    <div class="modal-header">
+                        <div class="basv-modal-heading-icon">
+                            <i class="feather-user-check" aria-hidden="true"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <span class="basv-modal-kicker">Leadership &amp; membership</span>
+                            <h2 class="modal-title" id="manage-team-title">Manage monitoring team</h2>
+                            <div class="basv-modal-meta" id="team-management-reference">
+                                Change the team leader or remove assigned members.
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"
+                            aria-label="Close team management"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="basv-assignment-note">
+                            <i class="feather-info" aria-hidden="true"></i>
+                            <span>Select exactly one team leader. Members marked for removal cannot be selected as leader, and at least one member must remain assigned.</span>
+                        </div>
+
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+                            <strong class="basv-management-label">Current monitoring team</strong>
+                            <span class="basv-selection-count" id="team-remaining-count">0 remaining</span>
+                        </div>
+
+                        <div class="basv-manage-team-list" id="manage-team-members"></div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="basv-btn basv-btn-ghost"
+                            data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="basv-btn basv-btn-primary"
+                            id="save-team-management">
+                            <i class="feather-save"></i>
+                            Save team changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
 @endsection
+
+@if ($canManageTeams)
+    @push('scripts')
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const modalElement = document.getElementById('add-team-members-modal');
+                const form = document.getElementById('add-team-members-form');
+                const title = document.getElementById('add-team-members-title');
+                const reference = document.getElementById('team-assignment-reference');
+                const visitIdInput = document.getElementById('team-assignment-visit-id');
+                const searchInput = document.getElementById('team-member-search');
+                const countLabel = document.getElementById('team-selection-count');
+                const saveButton = document.getElementById('save-team-members');
+                const noResults = document.getElementById('team-member-no-results');
+                const options = [...document.querySelectorAll('[data-member-option]')];
+                const triggers = [...document.querySelectorAll('[data-add-team-members]')];
+
+                if (!modalElement || !form) return;
+
+                const updateSelection = () => {
+                    const selected = options.filter(option => {
+                        const checkbox = option.querySelector('[data-team-member-checkbox]');
+                        return checkbox && checkbox.checked && !checkbox.disabled;
+                    });
+
+                    countLabel.textContent = `${selected.length} ${selected.length === 1 ? 'member' : 'members'} selected`;
+                    saveButton.disabled = selected.length === 0;
+                };
+
+                const filterOptions = () => {
+                    const query = (searchInput.value || '').trim().toLowerCase();
+                    let visible = 0;
+
+                    options.forEach(option => {
+                        const available = option.dataset.unavailable !== '1';
+                        const matches = !query || option.dataset.search.includes(query);
+                        option.hidden = !available || !matches;
+                        if (available && matches) visible += 1;
+                    });
+
+                    noResults.hidden = visible > 0;
+                };
+
+                const configureModal = trigger => {
+                    let existingMembers = [];
+                    try {
+                        existingMembers = JSON.parse(trigger.dataset.existingMembers || '[]').map(String);
+                    } catch (error) {
+                        existingMembers = [];
+                    }
+
+                    const assigned = new Set(existingMembers);
+                    form.action = trigger.dataset.action;
+                    visitIdInput.value = trigger.dataset.visitId;
+                    title.textContent = `Add members · ${trigger.dataset.visitTitle}`;
+                    reference.textContent = trigger.dataset.visitReference;
+                    searchInput.value = '';
+
+                    options.forEach(option => {
+                        const checkbox = option.querySelector('[data-team-member-checkbox]');
+                        const specialism = option.querySelector('[data-team-specialism]');
+                        const isAssigned = assigned.has(String(option.dataset.userId));
+
+                        option.dataset.unavailable = isAssigned ? '1' : '0';
+                        option.classList.toggle('is-assigned', isAssigned);
+                        checkbox.checked = false;
+                        checkbox.disabled = isAssigned;
+                        specialism.value = '';
+                        specialism.disabled = true;
+                        specialism.required = false;
+                    });
+
+                    filterOptions();
+                    updateSelection();
+                };
+
+                options.forEach(option => {
+                    const checkbox = option.querySelector('[data-team-member-checkbox]');
+                    const specialism = option.querySelector('[data-team-specialism]');
+
+                    checkbox?.addEventListener('change', () => {
+                        specialism.disabled = !checkbox.checked;
+                        specialism.required = checkbox.checked;
+                        if (!checkbox.checked) specialism.value = '';
+                        updateSelection();
+                    });
+                });
+
+                triggers.forEach(trigger => {
+                    trigger.addEventListener('click', () => configureModal(trigger));
+                });
+                searchInput.addEventListener('input', filterOptions);
+
+                modalElement.addEventListener('shown.bs.modal', () => searchInput.focus());
+
+                const failedVisitId = @json((string) old('_team_visit_id'));
+                const oldSelected = @json(array_values((array) old('team_members', [])));
+                const oldSpecialisms = @json((array) old('team_specialisms', []));
+
+                if (failedVisitId) {
+                    const trigger = triggers.find(item => item.dataset.visitId === failedVisitId);
+                    if (trigger) {
+                        configureModal(trigger);
+
+                        oldSelected.map(String).forEach(userId => {
+                            const option = options.find(item => String(item.dataset.userId) === userId);
+                            const checkbox = option?.querySelector('[data-team-member-checkbox]');
+                            const specialism = option?.querySelector('[data-team-specialism]');
+
+                            if (!checkbox || checkbox.disabled || !specialism) return;
+                            checkbox.checked = true;
+                            specialism.disabled = false;
+                            specialism.required = true;
+                            specialism.value = oldSpecialisms[userId] || '';
+                        });
+
+                        updateSelection();
+                        window.bootstrap?.Modal.getOrCreateInstance(modalElement).show();
+                    }
+                }
+
+                const manageModalElement = document.getElementById('manage-team-modal');
+                const manageForm = document.getElementById('manage-team-form');
+                const manageTitle = document.getElementById('manage-team-title');
+                const manageReference = document.getElementById('team-management-reference');
+                const manageVisitIdInput = document.getElementById('team-management-visit-id');
+                const manageList = document.getElementById('manage-team-members');
+                const remainingCount = document.getElementById('team-remaining-count');
+                const manageSaveButton = document.getElementById('save-team-management');
+                const manageTriggers = [...document.querySelectorAll('[data-manage-team]')];
+
+                const updateManagedTeam = () => {
+                    const rows = [...manageList.querySelectorAll('[data-managed-member]')];
+                    const activeRows = rows.filter(row => {
+                        const remove = row.querySelector('[data-remove-managed-member]');
+                        return !remove.checked;
+                    });
+                    let selectedLeader = activeRows.find(row =>
+                        row.querySelector('[data-managed-leader]').checked
+                    );
+
+                    if (!selectedLeader && activeRows.length) {
+                        activeRows[0].querySelector('[data-managed-leader]').checked = true;
+                        selectedLeader = activeRows[0];
+                    }
+
+                    rows.forEach(row => {
+                        const remove = row.querySelector('[data-remove-managed-member]');
+                        const leader = row.querySelector('[data-managed-leader]');
+                        const removed = remove.checked;
+
+                        row.classList.toggle('is-removing', removed);
+                        leader.disabled = removed;
+                        remove.disabled = !removed && activeRows.length <= 1;
+                    });
+
+                    remainingCount.textContent = `${activeRows.length} ${activeRows.length === 1 ? 'member' : 'members'} remaining`;
+                    manageSaveButton.disabled = activeRows.length === 0 || !selectedLeader;
+                };
+
+                const buildManagedMember = member => {
+                    const row = document.createElement('div');
+                    row.className = 'basv-manage-member';
+                    row.dataset.managedMember = '1';
+                    row.dataset.userId = String(member.id);
+
+                    const leaderChoice = document.createElement('label');
+                    leaderChoice.className = 'basv-leader-choice';
+                    const leaderRadio = document.createElement('input');
+                    leaderRadio.type = 'radio';
+                    leaderRadio.name = 'group_leader_id';
+                    leaderRadio.value = String(member.id);
+                    leaderRadio.required = true;
+                    leaderRadio.checked = Boolean(member.is_leader);
+                    leaderRadio.dataset.managedLeader = '1';
+                    const leaderText = document.createElement('span');
+                    leaderText.textContent = 'Leader';
+                    leaderChoice.append(leaderRadio, leaderText);
+
+                    const identity = document.createElement('div');
+                    identity.className = 'basv-managed-identity';
+                    const avatar = document.createElement('span');
+                    avatar.className = 'basv-member-avatar';
+                    avatar.textContent = String(member.name || 'M').trim().charAt(0).toUpperCase();
+                    const details = document.createElement('span');
+                    const name = document.createElement('strong');
+                    name.textContent = member.name || 'Monitoring team member';
+                    const email = document.createElement('small');
+                    email.textContent = member.email || 'No email recorded';
+                    const specialism = document.createElement('small');
+                    specialism.textContent = member.specialism || 'Specialist role not set';
+                    details.append(name, email, specialism);
+                    identity.append(avatar, details);
+
+                    const removeChoice = document.createElement('label');
+                    removeChoice.className = 'basv-remove-choice';
+                    const removeCheckbox = document.createElement('input');
+                    removeCheckbox.type = 'checkbox';
+                    removeCheckbox.name = 'remove_members[]';
+                    removeCheckbox.value = String(member.id);
+                    removeCheckbox.dataset.removeManagedMember = '1';
+                    const removeIcon = document.createElement('i');
+                    removeIcon.className = 'feather-user-minus';
+                    const removeText = document.createElement('span');
+                    removeText.textContent = 'Remove';
+                    removeChoice.append(removeCheckbox, removeIcon, removeText);
+
+                    leaderRadio.addEventListener('change', updateManagedTeam);
+                    removeCheckbox.addEventListener('change', updateManagedTeam);
+                    row.append(leaderChoice, identity, removeChoice);
+
+                    return row;
+                };
+
+                const configureManageModal = trigger => {
+                    let roster = [];
+                    try {
+                        roster = JSON.parse(trigger.dataset.teamRoster || '[]');
+                    } catch (error) {
+                        roster = [];
+                    }
+
+                    manageForm.action = trigger.dataset.action;
+                    manageVisitIdInput.value = trigger.dataset.visitId;
+                    manageTitle.textContent = `Manage team · ${trigger.dataset.visitTitle}`;
+                    manageReference.textContent = trigger.dataset.visitReference;
+                    manageList.replaceChildren(...roster.map(buildManagedMember));
+                    updateManagedTeam();
+                };
+
+                manageTriggers.forEach(trigger => {
+                    trigger.addEventListener('click', () => configureManageModal(trigger));
+                });
+
+                const failedManageVisitId = @json((string) old('_team_manage_visit_id'));
+                const oldManagedLeader = @json((string) old('group_leader_id'));
+                const oldRemovedMembers = @json(array_values((array) old('remove_members', [])));
+
+                if (failedManageVisitId && manageModalElement && manageForm) {
+                    const trigger = manageTriggers.find(
+                        item => item.dataset.visitId === failedManageVisitId
+                    );
+
+                    if (trigger) {
+                        configureManageModal(trigger);
+                        const removed = new Set(oldRemovedMembers.map(String));
+
+                        manageList.querySelectorAll('[data-managed-member]').forEach(row => {
+                            const userId = String(row.dataset.userId);
+                            const leader = row.querySelector('[data-managed-leader]');
+                            const remove = row.querySelector('[data-remove-managed-member]');
+                            leader.checked = userId === oldManagedLeader;
+                            remove.checked = removed.has(userId);
+                        });
+
+                        updateManagedTeam();
+                        window.bootstrap?.Modal.getOrCreateInstance(manageModalElement).show();
+                    }
+                }
+            });
+        </script>
+    @endpush
+@endif

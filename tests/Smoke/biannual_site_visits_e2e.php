@@ -4,6 +4,7 @@
 ini_set('memory_limit', '512M');
 
 use App\Mail\BiAnnualSiteVisitCreatedMail;
+use App\Mail\UserAccountCreated;
 use App\Models\BiAnnualSiteVisitProfile;
 use App\Models\BiAnnualSiteVisitQuestion;
 use App\Models\BiAnnualSiteVisitTemplate;
@@ -95,8 +96,28 @@ class BiAnnualSiteVisitsSmoke
                 'must_change_password' => false,
                 'is_disabled' => false,
             ]));
+            $ordinaryStaff = User::create([
+                'name' => 'Bi-Annual Active Staff Without Permissions',
+                'email' => 'biannual-active-staff-'.Str::lower(Str::random(6)).'@example.test',
+                'password' => Hash::make('Password123!'),
+                'user_type' => 'staff',
+                'role_id' => null,
+                'must_change_password' => false,
+                'is_disabled' => false,
+                'is_blacklisted' => false,
+            ]);
+            $disabledStaff = User::create([
+                'name' => 'Bi-Annual Disabled Staff',
+                'email' => 'biannual-disabled-staff-'.Str::lower(Str::random(6)).'@example.test',
+                'password' => Hash::make('Password123!'),
+                'user_type' => 'staff',
+                'role_id' => null,
+                'must_change_password' => false,
+                'is_disabled' => true,
+                'is_blacklisted' => false,
+            ]);
             $leader = $team->first();
-            $visitTeam = $team->take(3)->values();
+            $visitTeam = $team->take(2)->push($ordinaryStaff)->values();
             $this->assertSameScoreRatingRoundTrip(
                 $admin,
                 $leader,
@@ -116,7 +137,14 @@ class BiAnnualSiteVisitsSmoke
                 ->get(route('biannual-site-visits.index'))
                 ->assertOk()
                 ->assertSee('Bi-Annual Site Visits')
-                ->assertSee('Questionnaire Builder');
+                ->assertSee('Questionnaire Builder')
+                ->assertSee('id="add-team-members-modal"', false)
+                ->assertSee('id="manage-team-modal"', false)
+                ->assertSee('Add selected members')
+                ->assertSee('Save team changes')
+                ->assertSee($ordinaryStaff->email)
+                ->assertSee('assets/images/attp-logo.jpeg')
+                ->assertDontSee('Operations & Oversight');
 
             $this->asUser($admin)
                 ->get(route('biannual-site-visits.create'))
@@ -129,6 +157,11 @@ class BiAnnualSiteVisitsSmoke
                 ->assertSee('id="team-member-row-template"', false)
                 ->assertSee('id="preview-questionnaire"', false)
                 ->assertSee('id="download-questionnaire-pdf"', false)
+                ->assertSee('id="show-new-staff-form"', false)
+                ->assertSee($ordinaryStaff->email)
+                ->assertDontSee($disabledStaff->email)
+                ->assertSee('Project Coordinator')
+                ->assertSee('World Bank Representative')
                 ->assertSee($template->name);
 
             $portfolioSnapshot = app(BiAnnualSiteVisitBrandingService::class)
@@ -162,7 +195,8 @@ class BiAnnualSiteVisitsSmoke
             $this->asUser($portfolioManager)
                 ->get(route('biannual-site-visits.create'))
                 ->assertOk()
-                ->assertSee($thinkTank->name);
+                ->assertSee($thinkTank->name)
+                ->assertSee($ordinaryStaff->email);
             $this->get(route('biannual-site-visits.templates.preview', [
                 'template' => $template,
                 'think_tank_member_id' => $thinkTank->id,
@@ -190,7 +224,31 @@ class BiAnnualSiteVisitsSmoke
                 ->get(route('biannual-site-visits.templates.index'))
                 ->assertOk()
                 ->assertSee('Questionnaire Templates')
-                ->assertSee('142 questions');
+                ->assertSee('142 questions')
+                ->assertSee('id="template-preview-modal"', false)
+                ->assertSee('data-template-preview', false)
+                ->assertSee('Download PDF')
+                ->assertSee('assets/images/attp-logo.jpeg');
+
+            $this->get(route('biannual-site-visits.templates.preview', [
+                'template' => $template,
+                'embed' => 1,
+            ]))
+                ->assertOk()
+                ->assertSee('reusable ATTP questionnaire template')
+                ->assertSee('Not assigned — template library');
+
+            $this->get(route('biannual-site-visits.templates.preview.pdf', $template))
+                ->assertOk()
+                ->assertHeader('content-type', 'application/pdf');
+
+            $this->assertTrue(
+                str_starts_with(
+                    (string) app(BiAnnualSiteVisitBrandingService::class)->logoDataUri(),
+                    'data:image/jpeg;base64,'
+                ),
+                'The Bi-Annual documents are not using the supplied ATTP logo.'
+            );
 
             $payload = [
                 'think_tank_member_id' => $thinkTank->id,
@@ -205,9 +263,9 @@ class BiAnnualSiteVisitsSmoke
                 'group_name' => 'Flexible Smoke Monitoring Team',
                 'team_members' => $visitTeam->pluck('id')->all(),
                 'team_specialisms' => [
-                    'Governance',
-                    'Procurement',
-                    'Financial management',
+                    'Project Coordinator',
+                    'Senior Procurement Advisor',
+                    'Finance Management Specialist',
                 ],
                 'group_leader_id' => $leader->id,
             ];
@@ -251,6 +309,11 @@ class BiAnnualSiteVisitsSmoke
                 $portfolioName,
                 data_get($visit->settings, 'portfolio.name'),
                 'The visit did not snapshot the portfolio used for its watermark.'
+            );
+            $ordinaryStaff->unsetRelations();
+            $this->assertTrue(
+                $ordinaryStaff->can('biannual_site_visits.respond'),
+                'Selecting an active staff member did not grant questionnaire response access.'
             );
             $this->assertSame(
                 142,
@@ -379,16 +442,16 @@ class BiAnnualSiteVisitsSmoke
 
             $leader->update(['role_id' => null]);
             $leader->unsetRelations();
+            $this->assertTrue(
+                $leader->can('biannual_site_visits.submit'),
+                'The selected team lead lost submission access when their role changed.'
+            );
             $this->asUser($leader)
                 ->postWithCsrf(route('biannual-site-visits.submit', $visit))
-                ->assertForbidden();
-            $this->assertSame('draft', $visit->siteVisit->fresh()->status, 'An unauthorized lead submitted the visit.');
-            $leader->update(['role_id' => $monitoringRole->id]);
-            $leader->unsetRelations();
-            $this->asUser($leader);
-            $this->postWithCsrf(route('biannual-site-visits.submit', $visit))
                 ->assertRedirect();
             $this->assertSame('submitted', $visit->siteVisit->fresh()->status, 'Team lead submission failed.');
+            $leader->update(['role_id' => $monitoringRole->id]);
+            $leader->unsetRelations();
 
             $this->asUser($admin);
             $this->postWithCsrf(route('biannual-site-visits.review', $visit), [
@@ -473,6 +536,7 @@ class BiAnnualSiteVisitsSmoke
                         && (string) $mail->recipient->id === (string) $recipient->id
                         && $mail->hasTo($recipient->email)
                         && $mail->portfolioName === $portfolioName
+                        && $mail->queue === null
                 );
             }
             $visitMail = Mail::queued(
@@ -501,6 +565,229 @@ class BiAnnualSiteVisitsSmoke
                     && str_contains($mailHtml, $visit->reference_number)
                     && str_contains($mailHtml, 'Team Leader'),
                 'The assignment email is missing its portfolio, visit, or leader content.'
+            );
+
+            $additionalMembers = $team->slice(2, 2)->values();
+            $this->asUser($admin)
+                ->get(route('biannual-site-visits.index'))
+                ->assertOk()
+                ->assertSee($visit->reference_number)
+                ->assertSee('Add members')
+                ->assertSee(
+                    route('biannual-site-visits.team-members.store', $visit),
+                    false
+                )
+                ->assertSee(
+                    route('biannual-site-visits.team.update', $visit),
+                    false
+                );
+
+            $this->postWithCsrf(
+                route('biannual-site-visits.team-members.store', $visit),
+                [
+                    '_team_visit_id' => $visit->id,
+                    'team_members' => $additionalMembers->pluck('id')->all(),
+                    'team_specialisms' => [
+                        $additionalMembers->get(0)->id => 'M&E Officer',
+                        $additionalMembers->get(1)->id => 'Technical Advisor',
+                    ],
+                ]
+            )
+                ->assertRedirect(route('biannual-site-visits.index'))
+                ->assertSessionHas('success');
+
+            $visit->refresh()->load('siteVisit.group.members');
+            $this->assertSame(
+                $visitTeam->count() + $additionalMembers->count(),
+                $visit->siteVisit->group->members->count(),
+                'The register could not add multiple monitoring-team members.'
+            );
+            $this->assertSame(
+                'M&E Officer',
+                data_get(
+                    $visit->settings,
+                    'team_specialisms.'.$additionalMembers->get(0)->id
+                ),
+                'The added member specialist role was not stored.'
+            );
+
+            foreach ($additionalMembers as $additionalMember) {
+                $additionalMember->unsetRelations();
+                $this->assertTrue(
+                    $additionalMember->can('biannual_site_visits.respond'),
+                    'An added team member did not receive questionnaire response access.'
+                );
+                Mail::assertQueued(
+                    BiAnnualSiteVisitCreatedMail::class,
+                    fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $visit->id
+                        && (string) $mail->recipient->id === (string) $additionalMember->id
+                        && $mail->hasTo($additionalMember->email)
+                        && $mail->queue === null
+                );
+            }
+
+            $visitMailAfterAdd = Mail::queued(
+                BiAnnualSiteVisitCreatedMail::class,
+                fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $visit->id
+            );
+            $this->assertSame(
+                $visitTeam->count() + $additionalMembers->count(),
+                $visitMailAfterAdd->count(),
+                'Adding team members did not queue exactly one assignment email per new member.'
+            );
+
+            $this->postWithCsrf(
+                route('biannual-site-visits.team-members.store', $visit),
+                [
+                    '_team_visit_id' => $visit->id,
+                    'team_members' => [$additionalMembers->first()->id],
+                    'team_specialisms' => [
+                        $additionalMembers->first()->id => 'M&E Officer',
+                    ],
+                ]
+            )->assertSessionHasErrors(['team_members']);
+            $this->assertSame(
+                $visitTeam->count() + $additionalMembers->count(),
+                $visit->siteVisit->group->members()->count(),
+                'A duplicate register assignment created a repeated team member.'
+            );
+
+            $this->putWithCsrf(
+                route('biannual-site-visits.team.update', $visit),
+                [
+                    '_team_manage_visit_id' => $visit->id,
+                    'group_leader_id' => $leader->id,
+                    'remove_members' => [$leader->id],
+                ]
+            )->assertSessionHasErrors(['group_leader_id']);
+            $this->assertSame(
+                (string) $leader->id,
+                (string) $visit->siteVisit->group()->firstOrFail()->leader_id,
+                'The current leader was removed without a valid replacement.'
+            );
+
+            $removedMember = $visitTeam->get(1);
+            $newLeader = $additionalMembers->first();
+            $this->putWithCsrf(
+                route('biannual-site-visits.team.update', $visit),
+                [
+                    '_team_manage_visit_id' => $visit->id,
+                    'group_leader_id' => $newLeader->id,
+                    'remove_members' => [$removedMember->id],
+                ]
+            )
+                ->assertRedirect(route('biannual-site-visits.index'))
+                ->assertSessionHas('success');
+
+            $visit->refresh()->load('siteVisit.group.members');
+            $this->assertSame(
+                (string) $newLeader->id,
+                (string) $visit->siteVisit->group->leader_id,
+                'The selected replacement team leader was not saved.'
+            );
+            $this->assertTrue(
+                ! $visit->siteVisit->group->members
+                    ->contains(fn ($member): bool => (string) $member->user_id === (string) $removedMember->id),
+                'A member marked for removal remains assigned to the visit.'
+            );
+            $this->assertSame(
+                'leader',
+                $visit->siteVisit->group->members
+                    ->firstWhere('user_id', $newLeader->id)
+                    ?->role,
+                'The replacement leader group role was not synchronized.'
+            );
+            $this->assertSame(
+                'member',
+                $visit->siteVisit->group->members
+                    ->firstWhere('user_id', $leader->id)
+                    ?->role,
+                'The former leader was not returned to a regular member role.'
+            );
+            $this->assertSame(
+                null,
+                data_get($visit->settings, 'team_specialisms.'.$removedMember->id),
+                'The removed member specialist role was retained in the visit settings.'
+            );
+            $newLeader->unsetRelations();
+            $this->assertTrue(
+                $newLeader->can('biannual_site_visits.submit'),
+                'The replacement leader did not receive submission access.'
+            );
+            Mail::assertQueued(
+                BiAnnualSiteVisitCreatedMail::class,
+                fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $visit->id
+                    && (string) $mail->recipient->id === (string) $newLeader->id
+                    && $mail->isLeader
+                    && $mail->hasTo($newLeader->email)
+                    && $mail->queue === null
+            );
+            $this->assertSame(
+                $visitTeam->count() + $additionalMembers->count() + 1,
+                Mail::queued(
+                    BiAnnualSiteVisitCreatedMail::class,
+                    fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $visit->id
+                )->count(),
+                'Changing the team leader did not queue exactly one leadership notification.'
+            );
+
+            $newStaffEmail = 'biannual-inline-staff-'.Str::lower(Str::random(6)).'@example.test';
+            $newStaffReference = 'new:smoke_inline_staff';
+            $inlineTitle = 'Bi-Annual Inline Staff '.Str::upper(Str::random(5));
+            $this->asUser($admin)
+                ->postWithCsrf(route('biannual-site-visits.store'), [
+                    'think_tank_member_id' => $thinkTank->id,
+                    'template_id' => $template->id,
+                    'cycle_year' => 2096,
+                    'cycle_half' => 'H1',
+                    'title' => $inlineTitle,
+                    'location' => 'Inline Staff Test Office',
+                    'starts_on' => '2096-03-10',
+                    'ends_on' => '2096-03-11',
+                    'group_name' => 'Inline Staff Monitoring Team',
+                    'team_members' => [$leader->id, $newStaffReference],
+                    'team_specialisms' => [
+                        'Project Coordinator',
+                        'World Bank Representative',
+                    ],
+                    'group_leader_id' => $newStaffReference,
+                    'new_team_members' => [
+                        'smoke_inline_staff' => [
+                            'name' => 'Bi-Annual Inline Staff Member',
+                            'email' => $newStaffEmail,
+                        ],
+                    ],
+                ])
+                ->assertRedirect();
+
+            $inlineStaff = User::query()->where('email', $newStaffEmail)->firstOrFail();
+            $inlineVisit = BiAnnualSiteVisitProfile::query()
+                ->with('siteVisit.group.members')
+                ->where('title', $inlineTitle)
+                ->firstOrFail();
+            $this->assertSame(
+                (string) $inlineStaff->id,
+                (string) $inlineVisit->siteVisit->group->leader_id,
+                'The inline-created staff member was not saved as the selected team lead.'
+            );
+            $inlineStaff->unsetRelations();
+            $this->assertTrue(
+                $inlineStaff->must_change_password
+                    && $inlineStaff->can('biannual_site_visits.respond')
+                    && $inlineStaff->can('biannual_site_visits.submit'),
+                'The inline-created staff account is missing its password or assignment permissions.'
+            );
+            Mail::assertQueued(
+                UserAccountCreated::class,
+                fn (UserAccountCreated $mail): bool => (string) $mail->user->id === (string) $inlineStaff->id
+                    && $mail->hasTo($newStaffEmail)
+                    && $mail->queue === null
+            );
+            Mail::assertQueued(
+                BiAnnualSiteVisitCreatedMail::class,
+                fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
+                    && (string) $mail->recipient->id === (string) $inlineStaff->id
+                    && $mail->isLeader
             );
 
             echo "BIANNUAL_SITE_VISITS_E2E_OK\n";
@@ -711,7 +998,17 @@ class BiAnnualSiteVisitsSmoke
             'objectives' => 'Verify configurable rating values and rubric guidance.',
             'group_name' => 'Custom Rating Monitoring Team',
             'team_members' => $teamMemberIds,
-            'team_specialisms' => array_fill(0, count($teamMemberIds), 'Monitoring'),
+            'team_specialisms' => array_map(
+                fn (int $index): string => [
+                    'Project Coordinator',
+                    'Finance Management Specialist',
+                    'Senior Procurement Advisor',
+                    'M&E Officer',
+                    'Technical Advisor',
+                    'Project Aide Administrative Assistant',
+                ][$index],
+                array_keys($teamMemberIds)
+            ),
             'group_leader_id' => $leader->id,
         ])->assertRedirect();
 

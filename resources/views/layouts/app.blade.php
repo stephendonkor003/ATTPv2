@@ -13,7 +13,7 @@
     <title>@yield('title', 'ATTP || Administration')</title>
 
     <!-- Favicon -->
-    <link rel="shortcut icon" type="image/x-icon" href="{{ asset('admin/assets/images/favicon.ico') }}">
+    <link rel="shortcut icon" type="image/jpeg" href="{{ asset('assets/images/attp-logo.jpeg') }}">
 
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="{{ asset('admin/assets/css/bootstrap.min.css') }}">

@@ -87,13 +87,13 @@ class ProcurementSiteVisitReportController extends Controller
 
     private function logoDataUri(): ?string
     {
-        $path = public_path('admin/assets/images/logo-full.png');
+        $path = public_path('assets/images/attp-logo.jpeg');
 
         if (!is_file($path)) {
             return null;
         }
 
-        return 'data:image/png;base64,' . base64_encode(file_get_contents($path));
+        return 'data:image/jpeg;base64,' . base64_encode(file_get_contents($path));
     }
 
 

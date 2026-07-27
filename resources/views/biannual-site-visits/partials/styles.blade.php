@@ -382,6 +382,371 @@
         color: #8f3333;
     }
 
+    .basv-page .basv-register-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: .45rem;
+        white-space: nowrap;
+    }
+
+    .basv-team-modal .modal-content {
+        overflow: hidden;
+        border: 0;
+        border-radius: 1rem;
+        box-shadow: 0 24px 70px rgba(15, 42, 39, .24);
+    }
+
+    .basv-team-modal .modal-header {
+        gap: .8rem;
+        padding: 1.05rem 1.2rem;
+        border-bottom: 1px solid #dce7e3;
+        background:
+            radial-gradient(circle at 92% 10%, rgba(215, 165, 40, .2), transparent 28%),
+            linear-gradient(125deg, #f4fbf8 0%, #fff 75%);
+    }
+
+    .basv-team-modal .modal-title {
+        margin: .08rem 0;
+        color: #102a27;
+        font-size: 1rem;
+        font-weight: 850;
+    }
+
+    .basv-team-modal .basv-modal-heading-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 42px;
+        height: 42px;
+        border-radius: .75rem;
+        background: #e8f5f1;
+        color: #08765f;
+        font-size: 1rem;
+    }
+
+    .basv-team-modal .basv-modal-kicker {
+        display: block;
+        color: #08765f;
+        font-size: .62rem;
+        font-weight: 850;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .basv-team-modal .basv-modal-meta {
+        color: #61736f;
+        font-size: .69rem;
+        font-weight: 700;
+    }
+
+    .basv-team-modal .modal-body {
+        padding: 1rem 1.2rem 1.2rem;
+        background: #f8fbfa;
+    }
+
+    .basv-team-modal .modal-footer {
+        padding: .85rem 1.2rem;
+        border-top-color: #dce7e3;
+        background: #fff;
+    }
+
+    .basv-team-modal-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .8rem;
+        margin-bottom: .8rem;
+    }
+
+    .basv-member-search {
+        position: relative;
+        flex: 1;
+    }
+
+    .basv-member-search > i {
+        position: absolute;
+        top: 50%;
+        left: .85rem;
+        z-index: 2;
+        color: #738680;
+        transform: translateY(-50%);
+    }
+
+    .basv-page .basv-member-search .form-control {
+        padding-left: 2.45rem;
+        background: #fff;
+    }
+
+    .basv-selection-count {
+        display: inline-flex;
+        align-items: center;
+        min-height: 36px;
+        padding: .35rem .7rem;
+        border: 1px solid #bfe1d6;
+        border-radius: 999px;
+        background: #eaf7f3;
+        color: #075446;
+        font-size: .68rem;
+        font-weight: 850;
+        white-space: nowrap;
+    }
+
+    .basv-assignment-note {
+        display: flex;
+        align-items: flex-start;
+        gap: .55rem;
+        margin-bottom: .8rem;
+        padding: .68rem .75rem;
+        border: 1px solid #d5e6df;
+        border-radius: .65rem;
+        background: #fff;
+        color: #526762;
+        font-size: .68rem;
+        line-height: 1.45;
+    }
+
+    .basv-assignment-note i {
+        margin-top: .1rem;
+        color: #08765f;
+    }
+
+    .basv-member-options {
+        display: grid;
+        gap: .55rem;
+    }
+
+    .basv-member-option {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(225px, .55fr);
+        align-items: center;
+        gap: .8rem;
+        padding: .72rem;
+        border: 1px solid #dce7e3;
+        border-radius: .75rem;
+        background: #fff;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    .basv-member-option:has(input:checked) {
+        border-color: #55ae98;
+        box-shadow: 0 0 0 2px rgba(8, 118, 95, .08);
+    }
+
+    .basv-member-identity {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        min-width: 0;
+        margin: 0;
+        cursor: pointer;
+    }
+
+    .basv-member-identity .form-check-input {
+        flex: 0 0 auto;
+        width: 1.05rem;
+        height: 1.05rem;
+        margin: 0;
+        border-color: #9cafaa;
+    }
+
+    .basv-member-identity .form-check-input:checked {
+        border-color: #08765f;
+        background-color: #08765f;
+    }
+
+    .basv-member-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #e8f5f1;
+        color: #075446;
+        font-size: .72rem;
+        font-weight: 850;
+    }
+
+    .basv-member-identity > span:last-child {
+        min-width: 0;
+    }
+
+    .basv-member-identity strong,
+    .basv-member-identity small {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .basv-member-identity strong {
+        color: #253d37;
+        font-size: .75rem;
+        font-weight: 820;
+    }
+
+    .basv-member-identity small {
+        color: #6b7d78;
+        font-size: .63rem;
+        line-height: 1.45;
+    }
+
+    .basv-member-option .form-select {
+        min-height: 39px;
+        background-color: #fff;
+        font-size: .69rem;
+    }
+
+    .basv-member-empty {
+        padding: 2rem 1rem;
+        color: #6b7d78;
+        text-align: center;
+    }
+
+    .basv-member-empty i,
+    .basv-member-empty strong,
+    .basv-member-empty span {
+        display: block;
+    }
+
+    .basv-member-empty i {
+        margin-bottom: .45rem;
+        color: #9caeaa;
+        font-size: 1.4rem;
+    }
+
+    .basv-member-empty strong {
+        color: #405650;
+        font-size: .77rem;
+    }
+
+    .basv-member-empty span {
+        margin-top: .25rem;
+        font-size: .67rem;
+    }
+
+    .basv-management-label {
+        color: #314b44;
+        font-size: .74rem;
+        font-weight: 850;
+    }
+
+    .basv-manage-team-list {
+        display: grid;
+        gap: .55rem;
+    }
+
+    .basv-manage-member {
+        display: grid;
+        grid-template-columns: 96px minmax(0, 1fr) 105px;
+        align-items: center;
+        gap: .75rem;
+        padding: .72rem;
+        border: 1px solid #dce7e3;
+        border-radius: .75rem;
+        background: #fff;
+        transition: border-color .15s ease, background .15s ease, opacity .15s ease;
+    }
+
+    .basv-manage-member:has([data-managed-leader]:checked) {
+        border-color: #55ae98;
+        box-shadow: inset 4px 0 0 #08765f;
+    }
+
+    .basv-manage-member.is-removing {
+        border-color: #edcccc;
+        background: #fff7f7;
+        opacity: .7;
+        box-shadow: none;
+    }
+
+    .basv-leader-choice,
+    .basv-remove-choice {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: .38rem;
+        min-height: 36px;
+        margin: 0;
+        padding: .35rem .58rem;
+        border: 1px solid #d4e2dd;
+        border-radius: .58rem;
+        background: #f7faf9;
+        color: #536762;
+        font-size: .67rem;
+        font-weight: 820;
+        cursor: pointer;
+    }
+
+    .basv-leader-choice:has(input:checked) {
+        border-color: #9bd0bf;
+        background: #e8f5f1;
+        color: #075446;
+    }
+
+    .basv-leader-choice input,
+    .basv-remove-choice input {
+        width: .95rem;
+        height: .95rem;
+        margin: 0;
+        accent-color: #08765f;
+    }
+
+    .basv-remove-choice {
+        border-color: #efd3d3;
+        background: #fff8f8;
+        color: #9b4444;
+    }
+
+    .basv-remove-choice:has(input:checked) {
+        border-color: #dc9e9e;
+        background: #fbeaea;
+        color: #8d2929;
+    }
+
+    .basv-remove-choice:has(input:disabled) {
+        cursor: not-allowed;
+        opacity: .48;
+    }
+
+    .basv-managed-identity {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        min-width: 0;
+    }
+
+    .basv-managed-identity > span:last-child {
+        min-width: 0;
+    }
+
+    .basv-managed-identity strong,
+    .basv-managed-identity small {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .basv-managed-identity strong {
+        color: #253d37;
+        font-size: .75rem;
+        font-weight: 820;
+    }
+
+    .basv-managed-identity small {
+        color: #6b7d78;
+        font-size: .63rem;
+        line-height: 1.45;
+    }
+
+    .basv-manage-member.is-removing .basv-managed-identity strong {
+        text-decoration: line-through;
+    }
+
     .basv-page .basv-team-grid {
         display: grid;
         gap: .65rem;
@@ -466,6 +831,20 @@
     .basv-page .basv-team-remove:disabled {
         cursor: not-allowed;
         opacity: .38;
+    }
+
+    .basv-page .basv-new-staff {
+        padding: 1rem;
+        border: 1px solid #bfe1d6;
+        border-radius: .85rem;
+        background: #f1faf7;
+        box-shadow: inset 4px 0 0 var(--basv-green);
+    }
+
+    .basv-page .basv-new-staff > div:first-child > strong {
+        color: var(--basv-green-dark);
+        font-size: .82rem;
+        font-weight: 850;
     }
 
     .basv-page .basv-section-nav {
@@ -635,6 +1014,34 @@
         .basv-page .basv-team-toolbar .basv-btn {
             justify-content: center;
             width: 100%;
+        }
+
+        .basv-team-modal-toolbar,
+        .basv-page .basv-register-actions {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .basv-page .basv-register-actions .basv-btn {
+            width: 100%;
+        }
+
+        .basv-member-option {
+            grid-template-columns: 1fr;
+        }
+
+        .basv-manage-member {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
+
+        .basv-managed-identity {
+            grid-column: 1 / -1;
+            grid-row: 1;
+        }
+
+        .basv-leader-choice,
+        .basv-remove-choice {
+            grid-row: 2;
         }
 
         .basv-page .basv-team-row {
