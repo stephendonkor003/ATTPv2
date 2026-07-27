@@ -158,6 +158,8 @@ class BiAnnualSiteVisitsSmoke
                 ->assertSee('id="preview-questionnaire"', false)
                 ->assertSee('id="download-questionnaire-pdf"', false)
                 ->assertSee('id="show-new-staff-form"', false)
+                ->assertSee('list="biannual-specialist-role-options"', false)
+                ->assertSee('choose an existing specialist role or type a new one', false)
                 ->assertSee($ordinaryStaff->email)
                 ->assertDontSee($disabledStaff->email)
                 ->assertSee('Project Coordinator')
@@ -263,7 +265,7 @@ class BiAnnualSiteVisitsSmoke
                 'group_name' => 'Flexible Smoke Monitoring Team',
                 'team_members' => $visitTeam->pluck('id')->all(),
                 'team_specialisms' => [
-                    'Project Coordinator',
+                    'Safeguards & Inclusion Specialist',
                     'Senior Procurement Advisor',
                     'Finance Management Specialist',
                 ],
@@ -304,6 +306,14 @@ class BiAnnualSiteVisitsSmoke
                 $visit->siteVisit->group->members->count(),
                 'The flexible visit team was not saved completely.'
             );
+            $this->assertSame(
+                'Safeguards & Inclusion Specialist',
+                data_get($visit->settings, 'team_specialisms.'.$leader->id),
+                'A newly entered specialist role was not stored.'
+            );
+            $this->get(route('biannual-site-visits.create'))
+                ->assertOk()
+                ->assertSee('Safeguards &amp; Inclusion Specialist', false);
             $this->assertSame('draft', $visit->siteVisit->status, 'New visit did not start as a draft.');
             $this->assertSame(
                 $portfolioName,
@@ -580,7 +590,9 @@ class BiAnnualSiteVisitsSmoke
                 ->assertSee(
                     route('biannual-site-visits.team.update', $visit),
                     false
-                );
+                )
+                ->assertSee('Choose or enter a role')
+                ->assertSee('data-managed-specialism', false);
 
             $this->postWithCsrf(
                 route('biannual-site-visits.team-members.store', $visit),
@@ -589,7 +601,7 @@ class BiAnnualSiteVisitsSmoke
                     'team_members' => $additionalMembers->pluck('id')->all(),
                     'team_specialisms' => [
                         $additionalMembers->get(0)->id => 'M&E Officer',
-                        $additionalMembers->get(1)->id => 'Technical Advisor',
+                        $additionalMembers->get(1)->id => 'Climate Resilience Specialist',
                     ],
                 ]
             )
@@ -674,6 +686,9 @@ class BiAnnualSiteVisitsSmoke
                     '_team_manage_visit_id' => $visit->id,
                     'group_leader_id' => $newLeader->id,
                     'remove_members' => [$removedMember->id],
+                    'team_specialisms' => [
+                        $newLeader->id => 'Lead Climate Resilience Specialist',
+                    ],
                 ]
             )
                 ->assertRedirect(route('biannual-site-visits.index'))
@@ -708,6 +723,11 @@ class BiAnnualSiteVisitsSmoke
                 null,
                 data_get($visit->settings, 'team_specialisms.'.$removedMember->id),
                 'The removed member specialist role was retained in the visit settings.'
+            );
+            $this->assertSame(
+                'Lead Climate Resilience Specialist',
+                data_get($visit->settings, 'team_specialisms.'.$newLeader->id),
+                'An existing team member specialist role could not be edited.'
             );
             $newLeader->unsetRelations();
             $this->assertTrue(

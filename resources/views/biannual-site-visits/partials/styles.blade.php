@@ -641,7 +641,7 @@
 
     .basv-manage-member {
         display: grid;
-        grid-template-columns: 96px minmax(0, 1fr) 105px;
+        grid-template-columns: 86px minmax(145px, 1fr) minmax(190px, .9fr) 100px;
         align-items: center;
         gap: .75rem;
         padding: .72rem;
@@ -741,6 +741,14 @@
         color: #6b7d78;
         font-size: .63rem;
         line-height: 1.45;
+    }
+
+    .basv-managed-role {
+        min-width: 0;
+    }
+
+    .basv-managed-role .form-control {
+        width: 100%;
     }
 
     .basv-manage-member.is-removing .basv-managed-identity strong {
@@ -1039,9 +1047,14 @@
             grid-row: 1;
         }
 
+        .basv-managed-role {
+            grid-column: 1 / -1;
+            grid-row: 2;
+        }
+
         .basv-leader-choice,
         .basv-remove-choice {
-            grid-row: 2;
+            grid-row: 3;
         }
 
         .basv-page .basv-team-row {

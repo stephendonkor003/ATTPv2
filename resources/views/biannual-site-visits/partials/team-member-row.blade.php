@@ -39,18 +39,10 @@
     <div class="team-role">
         <label class="form-label mb-1 team-specialism-label"
             for="team_role_{{ $fieldSuffix }}">Specialist role</label>
-        <select class="form-select team-specialism-input" id="team_role_{{ $fieldSuffix }}"
-            name="team_specialisms[]" required>
-            <option value="">Select specialist role</option>
-            @if ($specialism !== '' && ! in_array($specialism, $specialistRoles, true))
-                <option value="{{ $specialism }}" selected>{{ $specialism }}</option>
-            @endif
-            @foreach ($specialistRoles as $specialistRole)
-                <option value="{{ $specialistRole }}" @selected($specialism === $specialistRole)>
-                    {{ $specialistRole }}
-                </option>
-            @endforeach
-        </select>
+        <input class="form-control team-specialism-input" id="team_role_{{ $fieldSuffix }}"
+            name="team_specialisms[]" list="biannual-specialist-role-options"
+            maxlength="255" value="{{ $specialism }}" autocomplete="off"
+            placeholder="Choose or enter a role" required>
     </div>
     <button type="button" class="basv-team-remove" data-remove-team-member
         title="Remove this team member" aria-label="Remove team member {{ $rowPosition + 1 }}">

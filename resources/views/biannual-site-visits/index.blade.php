@@ -120,7 +120,7 @@
                                                 'id' => (string) $member->user_id,
                                                 'name' => $member->user?->name ?: 'Monitoring team member',
                                                 'email' => $member->user?->email ?: 'No email recorded',
-                                                'specialism' => $teamSpecialisms[(string) $member->user_id] ?? 'Specialist role not set',
+                                                'specialism' => $teamSpecialisms[(string) $member->user_id] ?? '',
                                                 'is_leader' => (string) $member->user_id
                                                     === (string) $visit->siteVisit?->group?->leader_id,
                                             ])
@@ -272,13 +272,11 @@
                                     <div>
                                         <label class="visually-hidden"
                                             for="team-specialism-{{ $staff->id }}">Specialist role for {{ $staff->name }}</label>
-                                        <select class="form-select" name="team_specialisms[{{ $staff->id }}]"
-                                            id="team-specialism-{{ $staff->id }}" data-team-specialism disabled>
-                                            <option value="">Choose specialist role</option>
-                                            @foreach ($specialistRoles as $specialistRole)
-                                                <option value="{{ $specialistRole }}">{{ $specialistRole }}</option>
-                                            @endforeach
-                                        </select>
+                                        <input class="form-control" name="team_specialisms[{{ $staff->id }}]"
+                                            id="team-specialism-{{ $staff->id }}"
+                                            list="biannual-specialist-role-options" maxlength="255"
+                                            autocomplete="off" placeholder="Choose or enter a role"
+                                            data-team-specialism disabled>
                                     </div>
                                 </div>
                             @empty
@@ -310,6 +308,12 @@
             </div>
         </div>
 
+        <datalist id="biannual-specialist-role-options">
+            @foreach ($specialistRoles as $specialistRole)
+                <option value="{{ $specialistRole }}"></option>
+            @endforeach
+        </datalist>
+
         <div class="modal fade basv-team-modal" id="manage-team-modal" tabindex="-1"
             aria-labelledby="manage-team-title" aria-hidden="true">
             <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
@@ -337,7 +341,7 @@
                     <div class="modal-body">
                         <div class="basv-assignment-note">
                             <i class="feather-info" aria-hidden="true"></i>
-                            <span>Select exactly one team leader. Members marked for removal cannot be selected as leader, and at least one member must remain assigned.</span>
+                            <span>Edit each specialist role and select exactly one team leader. Members marked for removal cannot be selected as leader, and at least one member must remain assigned.</span>
                         </div>
 
                         <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
@@ -388,7 +392,10 @@
                     });
 
                     countLabel.textContent = `${selected.length} ${selected.length === 1 ? 'member' : 'members'} selected`;
-                    saveButton.disabled = selected.length === 0;
+                    const allHaveRoles = selected.every(option =>
+                        option.querySelector('[data-team-specialism]')?.value.trim()
+                    );
+                    saveButton.disabled = selected.length === 0 || !allHaveRoles;
                 };
 
                 const filterOptions = () => {
@@ -448,6 +455,7 @@
                         if (!checkbox.checked) specialism.value = '';
                         updateSelection();
                     });
+                    specialism?.addEventListener('input', updateSelection);
                 });
 
                 triggers.forEach(trigger => {
@@ -511,15 +519,23 @@
                     rows.forEach(row => {
                         const remove = row.querySelector('[data-remove-managed-member]');
                         const leader = row.querySelector('[data-managed-leader]');
+                        const specialism = row.querySelector('[data-managed-specialism]');
                         const removed = remove.checked;
 
                         row.classList.toggle('is-removing', removed);
                         leader.disabled = removed;
+                        specialism.disabled = removed;
+                        specialism.required = !removed;
                         remove.disabled = !removed && activeRows.length <= 1;
                     });
 
+                    const hasBlankSpecialism = activeRows.some(row =>
+                        !row.querySelector('[data-managed-specialism]').value.trim()
+                    );
                     remainingCount.textContent = `${activeRows.length} ${activeRows.length === 1 ? 'member' : 'members'} remaining`;
-                    manageSaveButton.disabled = activeRows.length === 0 || !selectedLeader;
+                    manageSaveButton.disabled = activeRows.length === 0
+                        || !selectedLeader
+                        || hasBlankSpecialism;
                 };
 
                 const buildManagedMember = member => {
@@ -551,10 +567,28 @@
                     name.textContent = member.name || 'Monitoring team member';
                     const email = document.createElement('small');
                     email.textContent = member.email || 'No email recorded';
-                    const specialism = document.createElement('small');
-                    specialism.textContent = member.specialism || 'Specialist role not set';
-                    details.append(name, email, specialism);
+                    details.append(name, email);
                     identity.append(avatar, details);
+
+                    const roleField = document.createElement('div');
+                    roleField.className = 'basv-managed-role';
+                    const roleLabel = document.createElement('label');
+                    roleLabel.className = 'form-label mb-1';
+                    roleLabel.htmlFor = `managed-specialism-${member.id}`;
+                    roleLabel.textContent = 'Specialist role';
+                    const roleInput = document.createElement('input');
+                    roleInput.type = 'text';
+                    roleInput.className = 'form-control';
+                    roleInput.id = `managed-specialism-${member.id}`;
+                    roleInput.name = `team_specialisms[${member.id}]`;
+                    roleInput.setAttribute('list', 'biannual-specialist-role-options');
+                    roleInput.maxLength = 255;
+                    roleInput.autocomplete = 'off';
+                    roleInput.placeholder = 'Choose or enter a role';
+                    roleInput.required = true;
+                    roleInput.value = member.specialism || '';
+                    roleInput.dataset.managedSpecialism = '1';
+                    roleField.append(roleLabel, roleInput);
 
                     const removeChoice = document.createElement('label');
                     removeChoice.className = 'basv-remove-choice';
@@ -571,7 +605,8 @@
 
                     leaderRadio.addEventListener('change', updateManagedTeam);
                     removeCheckbox.addEventListener('change', updateManagedTeam);
-                    row.append(leaderChoice, identity, removeChoice);
+                    roleInput.addEventListener('input', updateManagedTeam);
+                    row.append(leaderChoice, identity, roleField, removeChoice);
 
                     return row;
                 };
@@ -599,6 +634,7 @@
                 const failedManageVisitId = @json((string) old('_team_manage_visit_id'));
                 const oldManagedLeader = @json((string) old('group_leader_id'));
                 const oldRemovedMembers = @json(array_values((array) old('remove_members', [])));
+                const oldManagedSpecialisms = @json((array) old('team_specialisms', []));
 
                 if (failedManageVisitId && manageModalElement && manageForm) {
                     const trigger = manageTriggers.find(
@@ -613,8 +649,12 @@
                             const userId = String(row.dataset.userId);
                             const leader = row.querySelector('[data-managed-leader]');
                             const remove = row.querySelector('[data-remove-managed-member]');
+                            const specialism = row.querySelector('[data-managed-specialism]');
                             leader.checked = userId === oldManagedLeader;
                             remove.checked = removed.has(userId);
+                            if (Object.prototype.hasOwnProperty.call(oldManagedSpecialisms, userId)) {
+                                specialism.value = oldManagedSpecialisms[userId] || '';
+                            }
                         });
 
                         updateManagedTeam();

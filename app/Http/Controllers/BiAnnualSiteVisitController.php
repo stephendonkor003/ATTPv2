@@ -36,7 +36,7 @@ class BiAnnualSiteVisitController extends Controller
 {
     use ScopesSiteVisitsToPortfolio;
 
-    private const TEAM_SPECIALISMS = [
+    private const DEFAULT_TEAM_SPECIALISMS = [
         'Project Coordinator',
         'Finance Management Specialist',
         'Senior Procurement Advisor',
@@ -126,7 +126,9 @@ class BiAnnualSiteVisitController extends Controller
                 ->filter(fn (User $staff): bool => filter_var($staff->email, FILTER_VALIDATE_EMAIL))
                 ->values()
             : collect();
-        $specialistRoles = self::TEAM_SPECIALISMS;
+        $specialistRoles = $canManageTeams
+            ? $this->specialistRoles()
+            : [];
 
         return view(
             'biannual-site-visits.index',
@@ -174,7 +176,7 @@ class BiAnnualSiteVisitController extends Controller
             ->filter(fn (User $user): bool => filter_var($user->email, FILTER_VALIDATE_EMAIL))
             ->values();
 
-        $specialistRoles = self::TEAM_SPECIALISMS;
+        $specialistRoles = $this->specialistRoles();
 
         return view(
             'biannual-site-visits.create',
@@ -206,7 +208,7 @@ class BiAnnualSiteVisitController extends Controller
             'team_members' => ['required', 'array', 'min:1'],
             'team_members.*' => ['required', 'string', 'max:80', 'distinct'],
             'team_specialisms' => ['required', 'array', 'min:1'],
-            'team_specialisms.*' => ['required', 'string', Rule::in(self::TEAM_SPECIALISMS)],
+            'team_specialisms.*' => ['required', 'string', 'max:255'],
             'group_leader_id' => ['required', 'string', 'max:80'],
             'new_team_members' => ['nullable', 'array'],
             'new_team_members.*.name' => ['required', 'string', 'max:255'],
@@ -217,10 +219,14 @@ class BiAnnualSiteVisitController extends Controller
         ]);
 
         $teamReferences = array_values($validated['team_members']);
+        $validated['team_specialisms'] = array_map(
+            fn ($specialism): string => trim((string) $specialism),
+            array_values($validated['team_specialisms'])
+        );
 
         if (count($validated['team_specialisms']) !== count($teamReferences)) {
             throw ValidationException::withMessages([
-                'team_specialisms' => 'Select one approved specialist role for every monitoring-team member.',
+                'team_specialisms' => 'Enter one specialist role for every monitoring-team member.',
             ]);
         }
 
@@ -460,7 +466,7 @@ class BiAnnualSiteVisitController extends Controller
             'team_members' => ['required', 'array', 'min:1'],
             'team_members.*' => ['required', 'uuid', 'distinct'],
             'team_specialisms' => ['required', 'array'],
-            'team_specialisms.*' => ['nullable', 'string', Rule::in(self::TEAM_SPECIALISMS)],
+            'team_specialisms.*' => ['required', 'string', 'max:255'],
         ], [
             'team_members.required' => 'Select at least one staff member to add.',
             'team_members.min' => 'Select at least one staff member to add.',
@@ -504,11 +510,12 @@ class BiAnnualSiteVisitController extends Controller
             ]);
         }
 
-        $specialisms = collect($validated['team_specialisms'] ?? []);
+        $specialisms = collect($validated['team_specialisms'] ?? [])
+            ->map(fn ($specialism): string => trim((string) $specialism));
         foreach ($memberIds as $memberId) {
-            if (! in_array($specialisms->get($memberId), self::TEAM_SPECIALISMS, true)) {
+            if (! filled($specialisms->get($memberId))) {
                 throw ValidationException::withMessages([
-                    "team_specialisms.{$memberId}" => 'Select an approved specialist role for every new team member.',
+                    "team_specialisms.{$memberId}" => 'Enter a specialist role for every new team member.',
                 ]);
             }
         }
@@ -607,6 +614,8 @@ class BiAnnualSiteVisitController extends Controller
             'group_leader_id' => ['required', 'uuid'],
             'remove_members' => ['nullable', 'array'],
             'remove_members.*' => ['required', 'uuid', 'distinct'],
+            'team_specialisms' => ['nullable', 'array'],
+            'team_specialisms.*' => ['required', 'string', 'max:255'],
         ], [
             'group_leader_id.required' => 'Select the monitoring-team leader.',
             'remove_members.*.distinct' => 'Each team member may only be removed once.',
@@ -625,6 +634,16 @@ class BiAnnualSiteVisitController extends Controller
             ->map(fn ($id): string => (string) $id)
             ->unique()
             ->values();
+        $submittedSpecialisms = collect($validated['team_specialisms'] ?? [])
+            ->mapWithKeys(fn ($specialism, $memberId): array => [
+                (string) $memberId => trim((string) $specialism),
+            ]);
+
+        if ($submittedSpecialisms->keys()->diff($currentIds)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'team_specialisms' => 'Specialist roles can only be edited for currently assigned team members.',
+            ]);
+        }
 
         if ($removeIds->diff($currentIds)->isNotEmpty()) {
             throw ValidationException::withMessages([
@@ -669,6 +688,11 @@ class BiAnnualSiteVisitController extends Controller
         }
 
         $leaderChanged = (string) $group->leader_id !== $leaderId;
+        $storedSpecialisms = (array) data_get($visit->settings, 'team_specialisms', []);
+        $specialismsChanged = $submittedSpecialisms->contains(
+            fn (string $specialism, string $memberId): bool => ! $removeIds->contains($memberId)
+                && trim((string) ($storedSpecialisms[$memberId] ?? '')) !== $specialism
+        );
 
         DB::transaction(function () use (
             $visit,
@@ -677,6 +701,7 @@ class BiAnnualSiteVisitController extends Controller
             $removeIds,
             $permissions,
             $newLeader,
+            $submittedSpecialisms,
             $request
         ): void {
             $lockedGroup = SiteVisitGroup::query()
@@ -731,6 +756,13 @@ class BiAnnualSiteVisitController extends Controller
 
             $settings = (array) $visit->settings;
             $storedSpecialisms = (array) data_get($settings, 'team_specialisms', []);
+
+            foreach ($submittedSpecialisms as $memberId => $specialism) {
+                if ($lockedRemainingIds->contains((string) $memberId)) {
+                    $storedSpecialisms[(string) $memberId] = $specialism;
+                }
+            }
+
             foreach ($removeIds as $removeId) {
                 unset($storedSpecialisms[$removeId]);
             }
@@ -763,6 +795,9 @@ class BiAnnualSiteVisitController extends Controller
         }
         if ($leaderChanged) {
             $messages[] = 'the team leader was changed and their notification email was queued';
+        }
+        if ($specialismsChanged) {
+            $messages[] = 'specialist roles were updated';
         }
 
         return redirect()
@@ -2062,6 +2097,32 @@ class BiAnnualSiteVisitController extends Controller
                     'applicant',
                     'member_state',
                 ]));
+    }
+
+    /**
+     * Return the built-in suggestions plus any specialist roles entered on earlier visits.
+     *
+     * @return list<string>
+     */
+    private function specialistRoles(): array
+    {
+        $storedRoles = BiAnnualSiteVisitProfile::query()
+            ->get(['settings'])
+            ->flatMap(
+                fn (BiAnnualSiteVisitProfile $visit): array => array_values(
+                    (array) data_get($visit->settings, 'team_specialisms', [])
+                )
+            );
+
+        return collect(self::DEFAULT_TEAM_SPECIALISMS)
+            ->concat($storedRoles)
+            ->filter(fn ($role): bool => is_string($role) || is_numeric($role))
+            ->map(fn ($role): string => trim((string) $role))
+            ->filter(fn (string $role): bool => $role !== '' && mb_strlen($role) <= 255)
+            ->unique(fn (string $role): string => Str::lower($role))
+            ->sort(fn (string $left, string $right): int => strnatcasecmp($left, $right))
+            ->values()
+            ->all();
     }
 
     /**

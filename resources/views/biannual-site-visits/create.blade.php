@@ -167,7 +167,7 @@
                     <div class="basv-card-head">
                         <div>
                             <h2><i class="feather-users me-2"></i>Monitoring team</h2>
-                            <div class="basv-help">Select from all active staff accounts, assign one of the approved specialist roles, and choose a team lead.</div>
+                            <div class="basv-help">Select active staff, choose an existing specialist role or type a new one, and choose a team lead. Role names remain editable.</div>
                         </div>
                         <span class="basv-badge">Step 2 of 2</span>
                     </div>
@@ -239,6 +239,11 @@
                                     ])
                                 @endforeach
                             </div>
+                            <datalist id="biannual-specialist-role-options">
+                                @foreach ($specialistRoles as $specialistRole)
+                                    <option value="{{ $specialistRole }}"></option>
+                                @endforeach
+                            </datalist>
                         </div>
 
                         <div class="basv-new-staff mt-3" id="new-staff-panel" hidden>
@@ -457,7 +462,7 @@
                 } else if (state.hasBlank) {
                     statusText.textContent = 'Select a team member before adding the next row.';
                 } else if (state.hasBlankSpecialism) {
-                    statusText.textContent = 'Select a specialist role for every team member.';
+                    statusText.textContent = 'Choose or enter a specialist role for every team member.';
                 } else if (state.hasDuplicates) {
                     statusText.textContent = 'Replace duplicate team members before continuing.';
                 } else {
