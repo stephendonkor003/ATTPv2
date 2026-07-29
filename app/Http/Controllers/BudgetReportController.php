@@ -861,7 +861,7 @@ class BudgetReportController extends Controller
 
         $filename = 'project-financial-position-'
             . ($data['program']->program_id ?: $data['program']->id)
-            . '-' . now()->format('Ymd-His') . '.pdf';
+            . '-' . $data['reportGeneratedAt']->format('Ymd-His') . '.pdf';
 
         return PDF::loadView('budgetreport.project-financial-position-pdf', $data)
             ->setPaper('a4', 'landscape')
@@ -870,6 +870,19 @@ class BudgetReportController extends Controller
 
     private function buildProjectFinancialPositionReportData(Request $request): array
     {
+        $requestedReportTimezone = substr(
+            trim((string) $request->input('report_timezone', config('app.timezone', 'UTC'))),
+            0,
+            120
+        );
+        try {
+            $reportTimezone = (new \DateTimeZone($requestedReportTimezone ?: 'UTC'))->getName();
+        } catch (Throwable) {
+            $reportTimezone = 'UTC';
+        }
+
+        $reportGeneratedAt = Carbon::now('UTC')->setTimezone($reportTimezone);
+
         $programs = $this->scopedProgramReportQuery()->orderBy('name')->get();
         $selectedProgramId = $request->input('program_id') ?: $programs->first()?->id;
         $program = null;
@@ -942,6 +955,8 @@ class BudgetReportController extends Controller
             'structureFilterLabel' => $structureFilterLabel,
             'filters' => $filters,
             'query' => $request->query(),
+            'reportGeneratedAt' => $reportGeneratedAt,
+            'reportTimezone' => $reportTimezone,
         ];
     }
 
@@ -2044,7 +2059,7 @@ class BudgetReportController extends Controller
                 $projectRow['committed'] = round((float) ($dashboardComponent['commitment'] ?? 0), 2);
                 $projectRow['disbursed'] = round((float) ($dashboardComponent['disbursement'] ?? 0), 2);
                 $projectRow['uncommitted_budget'] = round($projectRow['budget'] - $projectRow['committed'], 2);
-                $projectRow['unpaid_commitments'] = round(max($projectRow['committed'] - $projectRow['disbursed'], 0), 2);
+                $projectRow['unpaid_commitments'] = round(max($projectRow['purchase_orders'] - $projectRow['disbursed'], 0), 2);
                 $projectRow['po_balance'] = round($projectRow['purchase_orders'] - $projectRow['disbursed'], 2);
                 $projectRow['invoice_balance'] = round($projectRow['invoiced'] - $projectRow['disbursed'], 2);
                 $projectRow['commitment_rate'] = $projectRow['budget'] > 0
@@ -2096,10 +2111,17 @@ class BudgetReportController extends Controller
         $totals['funding_balance'] = round($approvedFunding - $totals['disbursed'], 2);
         $totals['allocation_balance'] = round($budgetEnvelope - $scheduledAllocation, 2);
         $totals['uncommitted_budget'] = round($budgetEnvelope - $totals['committed'], 2);
-        $totals['unpaid_commitments'] = round(max($totals['committed'] - $totals['disbursed'], 0), 2);
+        $totals['approved_funding_less_scheduled_allocation'] = round($approvedFunding - $scheduledAllocation, 2);
+        $totals['funding_utilization_gap'] = round($approvedFunding - $totals['committed'], 2);
+        $totals['unprocessed_purchase_requests'] = round(max($totals['committed'] - $totals['purchase_orders'], 0), 2);
+        $totals['unpaid_commitments'] = round(max($totals['purchase_orders'] - $totals['disbursed'], 0), 2);
+        $totals['commitment_pipeline_balance'] = round(
+            $totals['unprocessed_purchase_requests'] + $totals['unpaid_commitments'],
+            2
+        );
         $totals['invoice_balance'] = round($totals['invoiced'] - $totals['disbursed'], 2);
-        $totals['commitment_rate'] = $budgetEnvelope > 0 ? round(($totals['committed'] / $budgetEnvelope) * 100, 2) : 0;
-        $totals['disbursement_rate'] = $budgetEnvelope > 0 ? round(($totals['disbursed'] / $budgetEnvelope) * 100, 2) : 0;
+        $totals['commitment_rate'] = $approvedFunding > 0 ? round(($totals['committed'] / $approvedFunding) * 100, 2) : 0;
+        $totals['disbursement_rate'] = $approvedFunding > 0 ? round(($totals['disbursed'] / $approvedFunding) * 100, 2) : 0;
 
         return [
             'currency' => $program->sector?->currency ?? $fundings->first()?->currency ?? $program->currency ?? 'USD',
@@ -2110,6 +2132,18 @@ class BudgetReportController extends Controller
             'all_rows' => $projectRows,
             'totals' => $totals,
             'controls' => [
+                'commitment_processing_rate' => $totals['committed'] > 0
+                    ? round(($totals['unprocessed_purchase_requests'] / $totals['committed']) * 100, 2)
+                    : 0,
+                'commitment_realization_rate' => $totals['committed'] > 0
+                    ? round(($totals['purchase_orders'] / $totals['committed']) * 100, 2)
+                    : 0,
+                'disbursement_backlog_rate' => $totals['purchase_orders'] > 0
+                    ? round(($totals['unpaid_commitments'] / $totals['purchase_orders']) * 100, 2)
+                    : 0,
+                'disbursement_efficiency_rate' => $totals['purchase_orders'] > 0
+                    ? round(($totals['disbursed'] / $totals['purchase_orders']) * 100, 2)
+                    : 0,
                 'invoice_coverage_rate' => $totals['disbursed'] > 0
                     ? round(min(100, ($totals['invoiced'] / $totals['disbursed']) * 100), 1)
                     : 100.0,
@@ -2315,7 +2349,7 @@ class BudgetReportController extends Controller
             'invoiced' => round($invoiced, 2),
             'disbursed' => round($disbursed, 2),
             'uncommitted_budget' => round($budget - $committed, 2),
-            'unpaid_commitments' => round(max($committed - $disbursed, 0), 2),
+            'unpaid_commitments' => round(max($purchaseOrders - $disbursed, 0), 2),
             'po_balance' => round($purchaseOrders - $disbursed, 2),
             'invoice_balance' => round($invoiced - $disbursed, 2),
             'commitment_rate' => $budget > 0 ? round(($committed / $budget) * 100, 1) : 0,

@@ -89,11 +89,17 @@ class ProjectFinancialPositionReconciliationSmoke
                 );
             }
 
-            $this->assertAmount(60_000, $totals['invoiced'], 'Recorded invoices');
-            $this->assertAmount(119_400, $controls['invoice_gap'], 'Invoice coverage gap');
-            $this->assertAmount(139_400, $controls['unlinked_disbursement_amount'], 'Payments without a linked invoice');
-            $this->assertTrue($controls['unlinked_disbursement_count'] === 2, 'Expected two unlinked paid records.');
-            $this->assertTrue($controls['invoice_exception_count'] === 2, 'Expected two invoice exceptions.');
+            $this->assertAmount(500_000, $totals['approved_funding'], 'Approved funding');
+            $this->assertAmount(500_000, $totals['scheduled_allocation'], 'Scheduled allocation');
+            $this->assertAmount(250_000, $totals['purchase_orders'], 'Purchase orders');
+            $this->assertAmount(250_000, $totals['funding_utilization_gap'], 'Approved funding less commitments');
+            $this->assertAmount(0, $totals['unprocessed_purchase_requests'], 'Unprocessed purchase requests');
+            $this->assertAmount(70_600, $totals['unpaid_commitments'], 'Purchase orders less disbursements');
+            $this->assertAmount(70_600, $totals['commitment_pipeline_balance'], 'Unpaid commitments plus unprocessed purchase requests');
+            $this->assertAmount(0, $controls['commitment_processing_rate'], 'Unprocessed purchase requests ratio');
+            $this->assertAmount(100, $controls['commitment_realization_rate'], 'PO coverage of commitments');
+            $this->assertAmount(28.24, $controls['disbursement_backlog_rate'], 'Unpaid commitments ratio');
+            $this->assertAmount(71.76, $controls['disbursement_efficiency_rate'], 'PO-to-disbursement conversion rate');
             $this->assertTrue($report['position']['dashboard_aligned'] === true, 'The life-to-date report should be dashboard aligned.');
 
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
@@ -102,11 +108,102 @@ class ProjectFinancialPositionReconciliationSmoke
                 ->assertSee('Execution Dashboard source active')
                 ->assertSee('loaded directly from the Execution Dashboard dataset')
                 ->assertSee('Accounting Integrity')
-                ->assertSee('Invoice linkage exceptions')
+                ->assertSee('Funding Utilization Gap')
+                ->assertSee('Purchase Request Total')
+                ->assertSee('Commitment Processing')
+                ->assertSee('Disbursement Efficiency')
+                ->assertDontSee('Recorded Invoices')
+                ->assertDontSee('Invoice linkage exceptions')
                 ->assertSee('500,000.00')
                 ->assertSee('250,000.00')
                 ->assertSee('179,400.00')
+                ->assertSee('70,600.00')
                 ->assertSee('35.88%');
+
+            $webHtml = (string) $webResponse->getContent();
+            $pdfHtml = view('budgetreport.project-financial-position-pdf', $report)->render();
+            $sharedReportInformation = [
+                'Report Context',
+                'Financial Control Summary',
+                'Approved Funding',
+                'Scheduled Allocation',
+                'Funding Utilization Gap',
+                'Purchase Request Total',
+                'Unpaid Commitments',
+                'Execution Dashboard source active',
+                'Executive Controls',
+                'Commitment utilization of Approved Funding',
+                'Accounting Integrity',
+                'Commitment Processing',
+                'Unprocessed purchase requests ÷ committed',
+                'Disbursement Efficiency',
+                'Scheduled Allocation vs Commitments vs Disbursements',
+                'Program Control Split',
+                'Full Program Balance Sheet',
+                'Scheduled total',
+                'Generated in your local time',
+                'Official financial control report',
+                '500,000.00',
+                '250,000.00',
+                '179,400.00',
+                '70,600.00',
+                '35.88%',
+            ];
+
+            foreach ($sharedReportInformation as $information) {
+                $this->assertTrue(
+                    str_contains($webHtml, $information),
+                    "Web financial position is missing shared report information: {$information}"
+                );
+                $this->assertTrue(
+                    str_contains($pdfHtml, $information),
+                    "PDF financial position is missing shared report information: {$information}"
+                );
+            }
+
+            \Carbon\Carbon::setTestNow('2026-07-29T12:34:56.000Z');
+            try {
+                $localTimeReport = $this->financialPositionPayload([
+                    ...$query,
+                    'report_timezone' => 'Africa/Nairobi',
+                ], $admin);
+            } finally {
+                \Carbon\Carbon::setTestNow();
+            }
+            $this->assertTrue(
+                $localTimeReport['reportTimezone'] === 'Africa/Nairobi',
+                'The report did not retain the browser IANA timezone.'
+            );
+            $this->assertTrue(
+                $localTimeReport['reportGeneratedAt']->format('Y-m-d H:i:s T') === '2026-07-29 15:34:56 EAT',
+                'The report timestamp was not converted to the user timezone.'
+            );
+            $localTimeWebHtml = view('budgetreport.project-financial-position', $localTimeReport)->render();
+            $localTimePdfHtml = view('budgetreport.project-financial-position-pdf', $localTimeReport)->render();
+
+            foreach ([
+                '29 Jul 2026, 15:34:56 EAT (Africa/Nairobi)',
+                'Generated in your local time',
+                'ATTP · Project Financial Position',
+            ] as $localFooterInformation) {
+                $this->assertTrue(
+                    str_contains($localTimeWebHtml, $localFooterInformation),
+                    "Web report is missing local timestamp/footer information: {$localFooterInformation}"
+                );
+                $this->assertTrue(
+                    str_contains($localTimePdfHtml, $localFooterInformation),
+                    "PDF report is missing local timestamp/footer information: {$localFooterInformation}"
+                );
+            }
+
+            $this->assertTrue(
+                str_contains($localTimeWebHtml, "searchParams.set('report_timezone', browserTimezone)"),
+                'The PDF export link does not capture the current browser timezone.'
+            );
+            $this->assertTrue(
+                str_contains($localTimePdfHtml, 'class="page-number"'),
+                'The redesigned PDF footer is missing its page counter.'
+            );
 
             $pdfResponse = $this->get(route('budget.reports.project-financial-position.export.pdf', $query));
             $this->assertTrue($pdfResponse->getStatusCode() === 200, 'The financial-position PDF did not generate.');

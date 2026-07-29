@@ -465,7 +465,7 @@
 
         .pfp-control-grid {
             display: grid;
-            grid-template-columns: minmax(220px, .8fr) minmax(260px, 1.2fr) minmax(260px, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 1rem;
             padding: 1rem;
         }
@@ -571,13 +571,54 @@
             font-weight: 900;
         }
 
+        .pfp-report-footer {
+            align-items: center;
+            background: linear-gradient(135deg, #102a43 0%, #176b87 100%);
+            border-top: 4px solid #f4b942;
+            border-radius: 8px;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, .12);
+            color: #dbeafe;
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: 1fr 1.35fr 1fr;
+            margin-top: 1.5rem;
+            padding: 16px 20px;
+        }
+
+        .pfp-report-footer strong {
+            color: #fff;
+            display: block;
+            font-weight: 900;
+        }
+
+        .pfp-report-footer .footer-kicker {
+            color: #f8d77a;
+            font-size: .68rem;
+            font-weight: 900;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+        }
+
+        .pfp-report-footer .footer-copy {
+            color: #dbeafe;
+            font-size: .75rem;
+            margin-top: 3px;
+        }
+
+        .pfp-report-footer .footer-context {
+            border-left: 1px solid rgba(255, 255, 255, .2);
+            border-right: 1px solid rgba(255, 255, 255, .2);
+            padding-inline: 1rem;
+            text-align: center;
+        }
+
+        .pfp-report-footer .footer-time {
+            text-align: right;
+        }
+
         @media (max-width: 1199.98px) {
             .pfp-control-grid {
                 grid-template-columns: 1fr 1fr;
-            }
-
-            .pfp-control-card:last-child {
-                grid-column: 1 / -1;
             }
         }
 
@@ -594,13 +635,26 @@
                 grid-template-columns: 1fr;
             }
 
-            .pfp-control-card:last-child {
-                grid-column: auto;
-            }
-
             .pfp-reconciliation {
                 align-items: flex-start;
                 flex-direction: column;
+            }
+
+            .pfp-report-footer {
+                grid-template-columns: 1fr;
+            }
+
+            .pfp-report-footer .footer-context {
+                border-left: 0;
+                border-right: 0;
+                border-top: 1px solid rgba(255, 255, 255, .2);
+                border-bottom: 1px solid rgba(255, 255, 255, .2);
+                padding: .75rem 0;
+                text-align: left;
+            }
+
+            .pfp-report-footer .footer-time {
+                text-align: left;
             }
         }
 
@@ -626,7 +680,8 @@
             }
 
             .pfp-hero,
-            .pfp-panel-header {
+            .pfp-panel-header,
+            .pfp-report-footer {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
@@ -659,8 +714,8 @@
                     <div>
                         <h3 class="fw-bold text-white mb-2">Project Financial Position</h3>
                         <div class="lead-copy">
-                            One reconciled view of the programme envelope, scheduled allocations, commitments,
-                            invoices, and paid disbursements.
+                            One reconciled view of approved funding, scheduled allocations, commitments,
+                            purchase orders, and paid disbursements.
                         </div>
                     </div>
                     <div class="pfp-actions d-flex flex-column align-items-lg-end gap-2">
@@ -680,9 +735,10 @@
                                 </a>
                             </div>
                             <div class="d-flex flex-wrap justify-content-lg-end gap-2">
-                            <a href="{{ route('budget.reports.project-financial-position.export.pdf', $query ?? request()->query()) }}"
+                            <a id="pfpExportPdf"
+                                href="{{ route('budget.reports.project-financial-position.export.pdf', $query ?? request()->query()) }}"
                                 class="btn btn-warning fw-bold">
-                                    <i class="feather-download me-1"></i> Export PDF
+                                <i class="feather-download me-1"></i> Export PDF
                             </a>
                                 <button type="button" class="btn btn-light" onclick="window.print()">
                                     <i class="feather-printer me-1"></i> Print
@@ -910,22 +966,66 @@
                     $currency = $position['currency'] ?? 'USD';
                     $totals = $position['totals'];
                     $controls = $position['controls'] ?? [];
-                    $invoiceComposition = collect($position['invoice_composition'] ?? []);
-                    $invoiceExceptions = collect($position['invoice_exceptions'] ?? []);
                     $money = fn ($value) => $currency . ' ' . number_format((float) $value, 2);
                     $statCards = [
-                        ['label' => 'Budget Envelope', 'value' => $money($totals['budget'] ?? 0), 'meta' => 'Executive dashboard baseline', 'class' => 'green', 'icon' => 'feather-target'],
-                        ['label' => 'Scheduled Allocation', 'value' => $money($totals['scheduled_allocation'] ?? 0), 'meta' => 'Distributed across programme structure', 'class' => (($totals['allocation_balance'] ?? 0) < 0 ? 'red' : ''), 'icon' => 'feather-layers'],
-                        ['label' => 'Committed', 'value' => $money($totals['committed'] ?? 0), 'meta' => number_format($totals['commitment_rate'] ?? 0, 2).'% of envelope', 'class' => 'gold', 'icon' => 'feather-lock'],
-                        ['label' => 'Paid Disbursements', 'value' => $money($totals['disbursed'] ?? 0), 'meta' => number_format($totals['disbursement_rate'] ?? 0, 2).'% of envelope', 'class' => 'green', 'icon' => 'feather-send'],
-                        ['label' => 'Recorded Invoices', 'value' => $money($totals['invoiced'] ?? 0), 'meta' => number_format($controls['invoice_coverage_rate'] ?? 0, 1).'% payment coverage', 'class' => (($totals['invoice_balance'] ?? 0) < 0 ? 'red' : 'slate'), 'icon' => 'feather-file'],
+                        ['label' => 'Approved Funding', 'value' => $money($totals['approved_funding'] ?? 0), 'meta' => 'Approved funding-partner value', 'class' => 'green', 'icon' => 'feather-target'],
+                        ['label' => 'Scheduled Allocation', 'value' => $money($totals['scheduled_allocation'] ?? 0), 'meta' => 'Executive Dashboard allocation', 'class' => (($totals['approved_funding_less_scheduled_allocation'] ?? 0) < 0 ? 'red' : ''), 'icon' => 'feather-layers'],
+                        ['label' => 'Committed', 'value' => $money($totals['committed'] ?? 0), 'meta' => number_format($totals['commitment_rate'] ?? 0, 2).'% of approved funding', 'class' => 'gold', 'icon' => 'feather-lock'],
+                        ['label' => 'Disbursed', 'value' => $money($totals['disbursed'] ?? 0), 'meta' => number_format($totals['disbursement_rate'] ?? 0, 2).'% of approved funding', 'class' => 'green', 'icon' => 'feather-send'],
                         ['label' => 'Purchase Orders', 'value' => $money($totals['purchase_orders'] ?? 0), 'meta' => number_format($position['counts']['purchase_orders'] ?? 0).' active records', 'class' => 'slate', 'icon' => 'feather-file-text'],
-                        ['label' => 'Available Budget', 'value' => $money($totals['uncommitted_budget'] ?? 0), 'meta' => 'Envelope less commitments', 'class' => (($totals['uncommitted_budget'] ?? 0) < 0 ? 'red' : ''), 'icon' => 'feather-pie-chart'],
-                        ['label' => 'Funding Balance', 'value' => $money($totals['funding_balance'] ?? 0), 'meta' => 'Approved funding less payments', 'class' => (($totals['funding_balance'] ?? 0) < 0 ? 'red' : 'green'), 'icon' => 'feather-pocket'],
+                        ['label' => 'Funding Utilization Gap', 'value' => $money($totals['funding_utilization_gap'] ?? 0), 'meta' => 'Approved funding less commitments', 'class' => (($totals['funding_utilization_gap'] ?? 0) < 0 ? 'red' : ''), 'icon' => 'feather-pie-chart'],
+                        ['label' => 'Purchase Request Total', 'value' => $money($totals['unprocessed_purchase_requests'] ?? 0), 'meta' => 'Unprocessed purchase requests', 'class' => (($totals['unprocessed_purchase_requests'] ?? 0) > 0 ? 'gold' : 'green'), 'icon' => 'feather-clipboard'],
+                        ['label' => 'Unpaid Commitments', 'value' => $money($totals['unpaid_commitments'] ?? 0), 'meta' => 'Purchase orders less disbursements', 'class' => (($totals['unpaid_commitments'] ?? 0) > 0 ? 'gold' : 'green'), 'icon' => 'feather-clock'],
                     ];
                 @endphp
 
-                <div class="row g-3 mt-2">
+                <div class="pfp-panel mt-4">
+                    <div class="pfp-panel-header">
+                        <h5 class="fw-bold mb-1">Report Context</h5>
+                        <div class="small text-muted">Applied scope for the web report and PDF export</div>
+                    </div>
+                    <div class="row g-0">
+                        <div class="col-lg-4 border-end border-bottom p-3 pfp-mini-metric">
+                            <div class="metric-label">Program</div>
+                            <div class="fw-bold">{{ $program->program_id ? $program->program_id . ' - ' : '' }}{{ $program->name }}</div>
+                        </div>
+                        <div class="col-lg-3 border-end border-bottom p-3 pfp-mini-metric">
+                            <div class="metric-label">Funding Partners</div>
+                            <div class="fw-bold">{{ $funders->isEmpty() ? 'N/A' : $funders->pluck('name')->implode(', ') }}</div>
+                        </div>
+                        <div class="col-lg-3 border-end border-bottom p-3 pfp-mini-metric">
+                            <div class="metric-label">Coverage</div>
+                            <div class="fw-bold">{{ $filters['label'] ?? 'Life to date' }}</div>
+                        </div>
+                        <div class="col-lg-2 border-bottom p-3 pfp-mini-metric">
+                            <div class="metric-label">Rows Included</div>
+                            <div class="fw-bold text-capitalize">{{ str_replace('_', ' ', $filterDepth) }}</div>
+                        </div>
+                        <div class="col-lg-6 border-end border-bottom p-3 pfp-mini-metric">
+                            <div class="metric-label">Structure Filter</div>
+                            <div class="fw-bold">{{ $structureFilterLabel ?? 'All projects, activities, and sub-activities' }}</div>
+                        </div>
+                        <div class="col-lg-2 border-end border-bottom p-3 pfp-mini-metric">
+                            <div class="metric-label">Financial Focus</div>
+                            <div class="fw-bold text-capitalize">{{ str_replace('_', ' ', $filterFocus) }}</div>
+                        </div>
+                        <div class="col-lg-3 border-end border-bottom p-3 pfp-mini-metric">
+                            <div class="metric-label">Search</div>
+                            <div class="fw-bold">{{ filled($filters['search'] ?? '') ? $filters['search'] : 'None' }}</div>
+                        </div>
+                        <div class="col-lg-1 border-bottom p-3 pfp-mini-metric">
+                            <div class="metric-label">Zero Lines</div>
+                            <div class="fw-bold">{{ ($filters['include_zero'] ?? true) ? 'Shown' : 'Hidden' }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <h5 class="fw-bold mb-1">Financial Control Summary</h5>
+                    <div class="small text-muted">Approved funding and current execution position for the selected scope</div>
+                </div>
+
+                <div class="row g-3 mt-1">
                     @foreach ($statCards as $card)
                         <div class="col-md-6 col-xl-3">
                             <div class="pfp-stat {{ $card['class'] }}">
@@ -953,7 +1053,7 @@
                             </strong>
                             <span>
                                 {{ ($position['dashboard_aligned'] ?? false)
-                                    ? 'Budget, commitment, disbursement, component totals, and utilization are loaded directly from the Execution Dashboard dataset.'
+                                    ? 'Scheduled allocation, commitment, disbursement, component totals, and utilization are loaded directly from the Execution Dashboard dataset.'
                                     : 'Custom funding, period, or structure filters are active, so totals are intentionally narrower than the programme-wide Executive Dashboard.' }}
                             </span>
                         </div>
@@ -973,27 +1073,19 @@
                             </div>
                             <div class="p-3">
                                 <div class="pfp-balance-line">
-                                    <span>Envelope less scheduled allocations</span>
-                                    <strong class="{{ ($totals['allocation_balance'] ?? 0) < 0 ? 'text-danger' : 'text-success' }}">{{ $money($totals['allocation_balance'] ?? 0) }}</strong>
+                                    <span>Approved Funding less Scheduled Allocation</span>
+                                    <strong class="{{ ($totals['approved_funding_less_scheduled_allocation'] ?? 0) < 0 ? 'text-danger' : 'text-success' }}">{{ $money($totals['approved_funding_less_scheduled_allocation'] ?? 0) }}</strong>
                                 </div>
                                 <div class="pfp-balance-line">
-                                    <span>Budget envelope less commitments</span>
-                                    <strong class="{{ ($totals['uncommitted_budget'] ?? 0) < 0 ? 'text-danger' : 'text-success' }}">{{ $money($totals['uncommitted_budget'] ?? 0) }}</strong>
+                                    <span>Unpaid commitments plus unprocessed purchase requests</span>
+                                    <strong class="{{ ($totals['commitment_pipeline_balance'] ?? 0) < 0 ? 'text-danger' : '' }}">{{ $money($totals['commitment_pipeline_balance'] ?? 0) }}</strong>
                                 </div>
                                 <div class="pfp-balance-line">
-                                    <span>Recognized commitments less disbursements</span>
-                                    <strong class="{{ ($totals['unpaid_commitments'] ?? 0) < 0 ? 'text-danger' : '' }}">{{ $money($totals['unpaid_commitments'] ?? 0) }}</strong>
-                                </div>
-                                <div class="pfp-balance-line">
-                                    <span>Recorded invoices less disbursements</span>
-                                    <strong class="{{ ($totals['invoice_balance'] ?? 0) < 0 ? 'text-danger' : '' }}">{{ $money($totals['invoice_balance'] ?? 0) }}</strong>
-                                </div>
-                                <div class="pfp-balance-line">
-                                    <span>Commitment utilization of envelope</span>
+                                    <span>Commitment utilization of Approved Funding</span>
                                     <strong>{{ number_format($totals['commitment_rate'] ?? 0, 2) }}%</strong>
                                 </div>
                                 <div class="pfp-balance-line">
-                                    <span>Disbursement utilization of envelope</span>
+                                    <span>Disbursement utilization of Approved Funding</span>
                                     <strong>{{ number_format($totals['disbursement_rate'] ?? 0, 2) }}%</strong>
                                 </div>
                             </div>
@@ -1043,101 +1135,67 @@
                 </div>
 
                 <div class="pfp-panel mt-4">
-                    <div class="pfp-panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+                    <div class="pfp-panel-header">
                         <div>
                             <h5 class="fw-bold mb-1">Accounting Integrity</h5>
                             <div class="small text-muted">
-                                Invoice composition and payment-to-invoice linkage for the selected scope
+                                Purchase-request, purchase-order, and disbursement control ratios
                             </div>
                         </div>
-                        <span class="badge {{ ($controls['invoice_gap'] ?? 0) > 0 ? 'bg-warning-subtle text-warning-emphasis' : 'bg-success-subtle text-success' }} align-self-start">
-                            {{ ($controls['invoice_gap'] ?? 0) > 0 ? 'Review required' : 'Fully covered' }}
-                        </span>
                     </div>
                     <div class="pfp-control-grid">
                         <div class="pfp-control-card">
-                            <div class="pfp-control-label">Invoice coverage of paid disbursements</div>
-                            <div class="pfp-control-value">{{ number_format($controls['invoice_coverage_rate'] ?? 0, 1) }}%</div>
+                            <div class="pfp-control-label">Commitment Processing</div>
+                            <div class="small text-muted mb-2">Unprocessed Purchase Requests Ratio</div>
+                            <div class="pfp-control-value">{{ number_format($controls['commitment_processing_rate'] ?? 0, 1) }}%</div>
                             <div class="pfp-coverage-track" aria-hidden="true">
-                                <span style="width: {{ min(100, max(0, (float) ($controls['invoice_coverage_rate'] ?? 0))) }}%"></span>
+                                <span style="width: {{ min(100, max(0, (float) ($controls['commitment_processing_rate'] ?? 0))) }}%"></span>
                             </div>
                             <div class="small text-muted mt-2">
-                                {{ $money($totals['invoiced'] ?? 0) }} recorded invoices against
-                                {{ $money($totals['disbursed'] ?? 0) }} paid.
+                                Unprocessed purchase requests ÷ committed
                             </div>
                         </div>
                         <div class="pfp-control-card">
-                            <div class="pfp-control-label">Recorded invoice composition</div>
-                            <div class="pfp-composition-list">
-                                @forelse ($invoiceComposition as $invoiceGroup)
-                                    <div class="pfp-composition-row">
-                                        <span>
-                                            {{ str_replace('_', ' ', $invoiceGroup['status']) }}
-                                            · {{ number_format($invoiceGroup['count']) }}
-                                        </span>
-                                        <strong>{{ $money($invoiceGroup['amount']) }}</strong>
-                                    </div>
-                                @empty
-                                    <div class="small text-muted">No invoices were recorded for this scope.</div>
-                                @endforelse
+                            <div class="pfp-control-label">Commitment Realization</div>
+                            <div class="small text-muted mb-2">PO Coverage of Commitments</div>
+                            <div class="pfp-control-value">{{ number_format($controls['commitment_realization_rate'] ?? 0, 1) }}%</div>
+                            <div class="pfp-coverage-track" aria-hidden="true">
+                                <span style="width: {{ min(100, max(0, (float) ($controls['commitment_realization_rate'] ?? 0))) }}%"></span>
+                            </div>
+                            <div class="small text-muted mt-2">
+                                Purchase orders ÷ committed
                             </div>
                         </div>
                         <div class="pfp-control-card">
-                            <div class="pfp-control-label">Invoice linkage exceptions</div>
-                            <div class="pfp-control-value">{{ number_format($controls['invoice_exception_count'] ?? 0) }} purchase orders</div>
-                            <div class="small text-muted mt-2">
-                                {{ number_format($controls['unlinked_disbursement_count'] ?? 0) }} payment records worth
-                                <strong>{{ $money($controls['unlinked_disbursement_amount'] ?? 0) }}</strong>
-                                have no invoice linked to their purchase order.
+                            <div class="pfp-control-label">Disbursement Backlog</div>
+                            <div class="small text-muted mb-2">Unpaid Commitments Ratio</div>
+                            <div class="pfp-control-value">{{ number_format($controls['disbursement_backlog_rate'] ?? 0, 1) }}%</div>
+                            <div class="pfp-coverage-track" aria-hidden="true">
+                                <span style="width: {{ min(100, max(0, (float) ($controls['disbursement_backlog_rate'] ?? 0))) }}%"></span>
                             </div>
-                            <div class="small mt-2 {{ ($controls['invoice_gap'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
-                                Net invoice coverage gap: <strong>{{ $money($controls['invoice_gap'] ?? 0) }}</strong>
+                            <div class="small text-muted mt-2">
+                                Unpaid commitments ÷ purchase orders
+                            </div>
+                        </div>
+                        <div class="pfp-control-card">
+                            <div class="pfp-control-label">Disbursement Efficiency</div>
+                            <div class="small text-muted mb-2">PO-to-Disbursement Conversion Rate</div>
+                            <div class="pfp-control-value">{{ number_format($controls['disbursement_efficiency_rate'] ?? 0, 1) }}%</div>
+                            <div class="pfp-coverage-track" aria-hidden="true">
+                                <span style="width: {{ min(100, max(0, (float) ($controls['disbursement_efficiency_rate'] ?? 0))) }}%"></span>
+                            </div>
+                            <div class="small text-muted mt-2">
+                                Disbursed ÷ purchase orders
                             </div>
                         </div>
                     </div>
-
-                    @if ($invoiceExceptions->isNotEmpty())
-                        <details class="pfp-exceptions">
-                            <summary>
-                                Review {{ number_format($invoiceExceptions->count()) }} purchase orders with paid disbursements but no linked invoice
-                            </summary>
-                            <div class="table-responsive border-top">
-                                <table class="table table-sm align-middle">
-                                    <thead>
-                                        <tr>
-                                            <th>Purchase Order</th>
-                                            <th>Status</th>
-                                            <th class="text-end">PO Value</th>
-                                            <th class="text-end">Payment Records</th>
-                                            <th class="text-end">Paid Without Invoice</th>
-                                            <th>Payment References</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach ($invoiceExceptions as $exception)
-                                            <tr>
-                                                <td class="fw-semibold">{{ $exception['purchase_order_reference'] }}</td>
-                                                <td class="text-capitalize">{{ str_replace('_', ' ', $exception['purchase_order_status']) }}</td>
-                                                <td class="text-end">{{ $money($exception['purchase_order_amount']) }}</td>
-                                                <td class="text-end">{{ number_format($exception['payment_count']) }}</td>
-                                                <td class="text-end fw-bold text-danger">{{ $money($exception['paid_amount']) }}</td>
-                                                <td title="{{ $exception['payment_references']['full'] ?? '' }}">
-                                                    {{ $exception['payment_references']['display'] ?? '-' }}
-                                                </td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        </details>
-                    @endif
                 </div>
 
                 <div class="row g-3 mt-1">
                     <div class="col-xl-7">
                         <div class="pfp-panel">
                             <div class="pfp-panel-header">
-                                <h5 class="fw-bold mb-1">Budget vs Commitments vs Disbursements</h5>
+                                <h5 class="fw-bold mb-1">Scheduled Allocation vs Commitments vs Disbursements</h5>
                                 <div class="small soft-note">Project comparison for the selected filters</div>
                             </div>
                             <div class="pfp-chart-box">
@@ -1149,7 +1207,7 @@
                         <div class="pfp-panel">
                             <div class="pfp-panel-header">
                                 <h5 class="fw-bold mb-1">Program Control Split</h5>
-                                <div class="small soft-note">How the programme envelope is currently positioned</div>
+                                <div class="small soft-note">How approved funding is currently positioned</div>
                             </div>
                             <div class="pfp-chart-box">
                                 <canvas id="pfpProgramDoughnutChart" height="125"></canvas>
@@ -1227,6 +1285,30 @@
                     </div>
                 </div>
 
+                <footer class="pfp-report-footer">
+                    <div>
+                        <div class="footer-kicker">Official financial control report</div>
+                        <strong>ATTP · Project Financial Position</strong>
+                        <div class="footer-copy">Reconciled financial execution reporting</div>
+                    </div>
+                    <div class="footer-context">
+                        <div class="footer-kicker">Report scope</div>
+                        <strong>{{ $program->program_id ?: $program->name }}</strong>
+                        <div class="footer-copy">{{ $filters['label'] ?? 'Life to date' }} · {{ $currency }}</div>
+                    </div>
+                    <div class="footer-time">
+                        <div class="footer-kicker">Generated in your local time</div>
+                        <strong>
+                            <time id="pfpGeneratedAt"
+                                datetime="{{ $reportGeneratedAt->toIso8601String() }}"
+                                data-instant="{{ $reportGeneratedAt->copy()->utc()->toIso8601String() }}">
+                                {{ $reportGeneratedAt->format('d M Y, H:i:s T') }} ({{ $reportTimezone }})
+                            </time>
+                        </strong>
+                        <div class="footer-copy" id="pfpGeneratedTimezone">{{ str_replace('_', ' ', $reportTimezone) }}</div>
+                    </div>
+                </footer>
+
                 <script type="application/json" id="pfpChartData">@json($position['chart'])</script>
                 <script type="application/json" id="pfpTotalsData">@json($totals)</script>
                 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1266,14 +1348,15 @@
                             new Chart(doughnutNode, {
                                 type: 'doughnut',
                                 data: {
-                                    labels: ['Disbursed', 'Committed Not Paid', 'Uncommitted Budget'],
+                                    labels: ['Disbursed', 'Unpaid Commitments', 'Unprocessed Purchase Requests', 'Funding Utilization Gap'],
                                     datasets: [{
                                         data: [
                                             Math.max(Number(totals.disbursed || 0), 0),
                                             Math.max(Number(totals.unpaid_commitments || 0), 0),
-                                            Math.max(Number(totals.uncommitted_budget || 0), 0),
+                                            Math.max(Number(totals.unprocessed_purchase_requests || 0), 0),
+                                            Math.max(Number(totals.funding_utilization_gap || 0), 0),
                                         ],
-                                        backgroundColor: ['#1d8f6f', '#f4b942', '#176b87'],
+                                        backgroundColor: ['#1d8f6f', '#f4b942', '#7c5ce7', '#176b87'],
                                         borderWidth: 0,
                                     }],
                                 },
@@ -1292,6 +1375,48 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const exportLink = document.getElementById('pfpExportPdf');
+            const generatedAt = document.getElementById('pfpGeneratedAt');
+            const generatedTimezone = document.getElementById('pfpGeneratedTimezone');
+            const browserTimezone = window.Intl
+                ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
+                : 'UTC';
+
+            if (generatedAt && window.Intl) {
+                const instant = new Date(generatedAt.dataset.instant || generatedAt.dateTime);
+                if (!Number.isNaN(instant.getTime())) {
+                    const formatter = new Intl.DateTimeFormat(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        timeZoneName: 'short',
+                        timeZone: browserTimezone,
+                    });
+                    generatedAt.textContent = `${formatter.format(instant)} (${browserTimezone})`;
+                    generatedAt.dateTime = instant.toISOString();
+                }
+            }
+
+            if (generatedTimezone) {
+                generatedTimezone.textContent = browserTimezone.replace(/_/g, ' ');
+            }
+
+            const syncExportTimeContext = () => {
+                if (!exportLink) {
+                    return;
+                }
+
+                const exportUrl = new URL(exportLink.href, window.location.href);
+                exportUrl.searchParams.set('report_timezone', browserTimezone);
+                exportLink.href = exportUrl.toString();
+            };
+
+            syncExportTimeContext();
+            exportLink?.addEventListener('click', syncExportTimeContext);
+
             const programSelect = document.getElementById('pfpProgramFilter');
             const projectSelect = document.getElementById('pfpProjectFilter');
             const activitySelect = document.getElementById('pfpActivityFilter');
