@@ -144,7 +144,7 @@ class MasterDashboard extends Controller
         ]);
     }
 
-    private function executionDashboardPayload(Request $request): array
+    public function executionDashboardPayload(Request $request): array
     {
         /* ============================================================
          * 1. FILTER INPUTS

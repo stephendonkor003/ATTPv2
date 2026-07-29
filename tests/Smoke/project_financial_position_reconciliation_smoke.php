@@ -59,6 +59,14 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertAmount($dashboard['totalDisbursements'], $totals['disbursed'], 'Paid disbursements');
             $this->assertAmount($dashboard['executionRate'], $totals['commitment_rate'], 'Commitment rate');
             $this->assertAmount($dashboard['disbursementRate'], $totals['disbursement_rate'], 'Disbursement rate');
+            $this->assertTrue(
+                $dashboard['executionChartData']['snapshot_hash'] === $report['position']['execution_dashboard_snapshot'],
+                'The financial position should retain the exact Execution Dashboard snapshot.'
+            );
+            $this->assertTrue(
+                $dashboard['executionBreakdownTotals'] === $report['position']['execution_dashboard_totals'],
+                'The financial position should consume the Execution Dashboard totals without recalculating them.'
+            );
 
             $this->assertAmount(179_400, $dashboard['totalDisbursements'], 'Dashboard paid disbursements including direct payments');
             $this->assertAmount(179_400, $dashboard['componentBreakdownRows']->first()['disbursement'], 'Dashboard component disbursements');
@@ -91,7 +99,8 @@ class ProjectFinancialPositionReconciliationSmoke
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
             $webResponse
                 ->assertOk()
-                ->assertSee('Executive dashboard reconciliation passed')
+                ->assertSee('Execution Dashboard source active')
+                ->assertSee('loaded directly from the Execution Dashboard dataset')
                 ->assertSee('Accounting Integrity')
                 ->assertSee('Invoice linkage exceptions')
                 ->assertSee('500,000.00')

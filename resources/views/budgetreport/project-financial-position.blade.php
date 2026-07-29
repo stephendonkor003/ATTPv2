@@ -948,19 +948,19 @@
                         <div>
                             <strong>
                                 {{ ($position['dashboard_aligned'] ?? false)
-                                    ? 'Executive dashboard reconciliation passed'
+                                    ? 'Execution Dashboard source active'
                                     : 'Filtered financial-position view' }}
                             </strong>
                             <span>
                                 {{ ($position['dashboard_aligned'] ?? false)
-                                    ? 'Budget, commitment, disbursement, and utilization figures use the same programme scope and period as the Executive Dashboard.'
+                                    ? 'Budget, commitment, disbursement, component totals, and utilization are loaded directly from the Execution Dashboard dataset.'
                                     : 'Custom funding, period, or structure filters are active, so totals are intentionally narrower than the programme-wide Executive Dashboard.' }}
                             </span>
                         </div>
                     </div>
                     <a class="btn btn-sm btn-outline-success"
                         href="{{ route('finance.execution.dashboard', ['program_id' => $program->id]) }}">
-                        Compare dashboard <i class="feather-arrow-up-right ms-1"></i>
+                        Open source dashboard <i class="feather-arrow-up-right ms-1"></i>
                     </a>
                 </div>
 

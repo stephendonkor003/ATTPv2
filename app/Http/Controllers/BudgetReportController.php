@@ -915,7 +915,20 @@ class BudgetReportController extends Controller
             }
 
             $funders = $fundings->pluck('funder')->filter()->unique('id')->values();
-            $position = $this->buildProjectFinancialPosition($program, $fundings->pluck('id')->all(), $filters);
+            $dashboardRequest = Request::create(
+                '/finance/execution/dashboard',
+                'GET',
+                ['program_id' => $program->id]
+            );
+            $dashboardRequest->setUserResolver(fn () => $request->user());
+            $executionDashboard = app(MasterDashboard::class)
+                ->executionDashboardPayload($dashboardRequest);
+            $position = $this->buildProjectFinancialPosition(
+                $program,
+                $fundings->pluck('id')->all(),
+                $filters,
+                $executionDashboard
+            );
         }
 
         return [
@@ -1819,7 +1832,12 @@ class BudgetReportController extends Controller
         return true;
     }
 
-    private function buildProjectFinancialPosition(Program $program, array $programFundingIds, array $filters = []): array
+    private function buildProjectFinancialPosition(
+        Program $program,
+        array $programFundingIds,
+        array $filters = [],
+        array $executionDashboard = []
+    ): array
     {
         $fundings = ! empty($programFundingIds)
             ? ProgramFunding::whereIn('id', $programFundingIds)->get()
@@ -1909,6 +1927,11 @@ class BudgetReportController extends Controller
             && empty($filters['project_id'])
             && empty($filters['activity_id'])
             && empty($filters['sub_activity_id']);
+        $dashboardComponents = $dashboardAligned
+            ? collect($executionDashboard['componentBreakdownRows'] ?? [])
+                ->filter(fn ($row) => ! empty($row['component_id']))
+                ->keyBy(fn ($row) => (string) $row['component_id'])
+            : collect();
 
         $invoices = (empty($invoiceIdsFromPurchaseOrders) && empty($subActivityIds))
             ? collect()
@@ -2016,19 +2039,39 @@ class BudgetReportController extends Controller
             );
             $projectRow['children'] = $activityRows;
 
+            if ($dashboardComponent = $dashboardComponents->get((string) $project->id)) {
+                $projectRow['budget'] = round((float) ($dashboardComponent['allocation'] ?? 0), 2);
+                $projectRow['committed'] = round((float) ($dashboardComponent['commitment'] ?? 0), 2);
+                $projectRow['disbursed'] = round((float) ($dashboardComponent['disbursement'] ?? 0), 2);
+                $projectRow['uncommitted_budget'] = round($projectRow['budget'] - $projectRow['committed'], 2);
+                $projectRow['unpaid_commitments'] = round(max($projectRow['committed'] - $projectRow['disbursed'], 0), 2);
+                $projectRow['po_balance'] = round($projectRow['purchase_orders'] - $projectRow['disbursed'], 2);
+                $projectRow['invoice_balance'] = round($projectRow['invoiced'] - $projectRow['disbursed'], 2);
+                $projectRow['commitment_rate'] = $projectRow['budget'] > 0
+                    ? round(($projectRow['committed'] / $projectRow['budget']) * 100, 1)
+                    : 0;
+                $projectRow['disbursement_rate'] = $projectRow['budget'] > 0
+                    ? round(($projectRow['disbursed'] / $projectRow['budget']) * 100, 1)
+                    : 0;
+            }
+
             $projectRows->push($projectRow);
             $totals = $this->addProjectPositionTotals($totals, $projectRow);
         }
 
         $displayRows = $this->filterProjectPositionRows($projectRows, $filters);
 
-        $scheduledAllocation = round((float) $totals['budget'], 2);
-        $budgetEnvelope = $this->projectFinancialPositionBudgetEnvelope(
-            $program,
-            $filters,
-            $approvedFunding,
-            $scheduledAllocation
-        );
+        $scheduledAllocation = $dashboardAligned
+            ? round((float) data_get($executionDashboard, 'executionSummary.scheduled_allocation', $totals['budget']), 2)
+            : round((float) $totals['budget'], 2);
+        $budgetEnvelope = $dashboardAligned
+            ? round((float) ($executionDashboard['totalAllocation'] ?? $scheduledAllocation), 2)
+            : $this->projectFinancialPositionBudgetEnvelope(
+                $program,
+                $filters,
+                $approvedFunding,
+                $scheduledAllocation
+            );
         $invoiceComposition = $invoices
             ->groupBy(fn (ProcurementInvoice $invoice): string => strtolower((string) ($invoice->status ?: 'unspecified')))
             ->map(fn ($rows, string $status): array => [
@@ -2045,6 +2088,10 @@ class BudgetReportController extends Controller
 
         $totals['scheduled_allocation'] = $scheduledAllocation;
         $totals['budget'] = round($budgetEnvelope, 2);
+        if ($dashboardAligned) {
+            $totals['committed'] = round((float) ($executionDashboard['totalCommitment'] ?? $totals['committed']), 2);
+            $totals['disbursed'] = round((float) ($executionDashboard['totalDisbursements'] ?? $totals['disbursed']), 2);
+        }
         $totals['approved_funding'] = round($approvedFunding, 2);
         $totals['funding_balance'] = round($approvedFunding - $totals['disbursed'], 2);
         $totals['allocation_balance'] = round($budgetEnvelope - $scheduledAllocation, 2);
@@ -2057,6 +2104,8 @@ class BudgetReportController extends Controller
         return [
             'currency' => $program->sector?->currency ?? $fundings->first()?->currency ?? $program->currency ?? 'USD',
             'dashboard_aligned' => $dashboardAligned,
+            'execution_dashboard_snapshot' => data_get($executionDashboard, 'executionChartData.snapshot_hash'),
+            'execution_dashboard_totals' => $executionDashboard['executionBreakdownTotals'] ?? null,
             'rows' => $displayRows,
             'all_rows' => $projectRows,
             'totals' => $totals,
