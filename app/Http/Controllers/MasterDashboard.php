@@ -17,7 +17,6 @@ use App\Models\Project;
 use App\Models\Activity;
 use App\Models\BudgetCommitment;
 use App\Models\ProcurementDisbursement;
-use App\Models\ProcurementPurchaseOrder;
 use App\Services\ExecutionDashboardChartBuilder;
 use App\Services\ExecutionInsightBuilder;
 
@@ -318,8 +317,7 @@ class MasterDashboard extends Controller
             : $this->executionScopeSubActivityIds($scopeType, $scope);
 
         $disbursementQuery = ProcurementDisbursement::query()
-            ->whereNotNull('paid_at')
-            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+            ->recognizedPayment()
             ->when($yearStart && $yearEnd, function ($q) use ($yearStart, $yearEnd) {
                 $q->whereBetween('paid_at', [
                     Carbon::create((int) $yearStart, 1, 1)->startOfDay(),
@@ -908,7 +906,9 @@ class MasterDashboard extends Controller
             )
         ";
 
-        return DB::table('procurement_disbursements as d')
+        return ProcurementDisbursement::query()
+            ->from('procurement_disbursements as d')
+            ->recognizedPayment('d')
             ->leftJoin('procurement_purchase_orders as po', 'po.id', '=', 'd.purchase_order_id')
             ->leftJoin('myb_purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
             ->leftJoin('myb_budget_commitments as bc', 'bc.id', '=', 'po.budget_commitment_id')
@@ -927,8 +927,6 @@ class MasterDashboard extends Controller
                 $join->on('bc_pr_sub_activity.id', '=', 'bc_pr.allocation_id')
                     ->where('bc_pr.allocation_level', '=', 'sub_activity');
             })
-            ->whereNotNull('d.paid_at')
-            ->whereIn('d.status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
             ->when($yearStart && $yearEnd, function ($q) use ($yearStart, $yearEnd) {
                 $q->whereBetween('d.paid_at', [
                     Carbon::create((int) $yearStart, 1, 1)->startOfDay(),
@@ -1020,7 +1018,9 @@ class MasterDashboard extends Controller
             )
         ";
 
-        return DB::table('procurement_disbursements as d')
+        return ProcurementDisbursement::query()
+            ->from('procurement_disbursements as d')
+            ->recognizedPayment('d')
             ->leftJoin('procurement_purchase_orders as po', 'po.id', '=', 'd.purchase_order_id')
             ->leftJoin('myb_purchase_requests as pr', 'pr.id', '=', 'po.purchase_request_id')
             ->leftJoin('myb_budget_commitments as bc', 'bc.id', '=', 'po.budget_commitment_id')
@@ -1056,8 +1056,6 @@ class MasterDashboard extends Controller
                     ->where('bc_pr.allocation_level', '=', 'sub_activity');
             })
             ->leftJoin('myb_activities as bc_pr_sub_activity_project', 'bc_pr_sub_activity_project.id', '=', 'bc_pr_sub_activity.activity_id')
-            ->whereNotNull('d.paid_at')
-            ->whereIn('d.status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
             ->when($yearStart && $yearEnd, function ($q) use ($yearStart, $yearEnd) {
                 $q->whereBetween('d.paid_at', [
                     Carbon::create((int) $yearStart, 1, 1)->startOfDay(),

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\BaseModel;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
@@ -59,6 +60,49 @@ class ProcurementDisbursement extends BaseModel
         'goods_receipt_generated_at' => 'datetime',
         'sap_52_series_entered_at' => 'datetime',
     ];
+
+    /**
+     * Limit financial reports to completed payments backed by a live source.
+     *
+     * Legacy PO deletion used to leave paid rows attached only to a
+     * sub-activity. Those rows remain available for audit, but a classification
+     * alone is not evidence that a payment is still financially reportable.
+     */
+    public function scopeRecognizedPayment(Builder $query, ?string $tableAlias = null): Builder
+    {
+        $table = $tableAlias ?: $this->getTable();
+
+        return $query
+            ->whereNotNull("{$table}.paid_at")
+            ->whereIn("{$table}.status", ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+            ->where(function (Builder $sourceQuery) use ($table) {
+                $sourceQuery
+                    ->whereExists(function ($exists) use ($table) {
+                        $exists
+                            ->selectRaw('1')
+                            ->from('procurement_purchase_orders as report_purchase_order')
+                            ->whereColumn('report_purchase_order.id', "{$table}.purchase_order_id");
+                    })
+                    ->orWhereExists(function ($exists) use ($table) {
+                        $exists
+                            ->selectRaw('1')
+                            ->from('procurements as report_procurement')
+                            ->whereColumn('report_procurement.id', "{$table}.procurement_id");
+                    })
+                    ->orWhereExists(function ($exists) use ($table) {
+                        $exists
+                            ->selectRaw('1')
+                            ->from('attp_fund_allocations as report_fund_allocation')
+                            ->whereColumn('report_fund_allocation.id', "{$table}.fund_allocation_id");
+                    })
+                    ->orWhereExists(function ($exists) use ($table) {
+                        $exists
+                            ->selectRaw('1')
+                            ->from('attp_disbursement_requests as report_disbursement_request')
+                            ->whereColumn('report_disbursement_request.id', "{$table}.consortium_disbursement_request_id");
+                    });
+            });
+    }
 
     public function purchaseOrder(): BelongsTo
     {

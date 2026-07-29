@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BudgetReportController;
 use App\Http\Controllers\MasterDashboard;
+use App\Http\Controllers\Procurement\ProcurementPurchaseOrderController;
 use App\Models\Activity;
 use App\Models\BudgetCommitment;
 use App\Models\ProcurementDisbursement;
@@ -68,14 +69,16 @@ class ProjectFinancialPositionReconciliationSmoke
                 'The financial position should consume the Execution Dashboard totals without recalculating them.'
             );
 
-            $this->assertAmount(179_400, $dashboard['totalDisbursements'], 'Dashboard paid disbursements including direct payments');
-            $this->assertAmount(179_400, $dashboard['componentBreakdownRows']->first()['disbursement'], 'Dashboard component disbursements');
-            $this->assertAmount(179_400, $report['position']['all_rows']->first()['disbursed'], 'Financial-position project disbursements');
+            $this->assertAmount(70_000, $dashboard['totalDisbursements'], 'Dashboard recognized paid disbursements');
+            $this->assertAmount(70_000, $dashboard['componentBreakdownRows']->first()['disbursement'], 'Dashboard component disbursements');
+            $this->assertAmount(70_000, $report['position']['all_rows']->first()['disbursed'], 'Financial-position project disbursements');
             $this->assertAmount(
-                109_400,
+                0,
                 $report['position']['all_rows']->first()['children']->first()['children']->first()['disbursed'],
-                'Direct sub-activity disbursement'
+                'Source-less sub-activity payment exclusion'
             );
+            $this->assertAmount(60_000, $totals['invoiced'], 'Recognized invoices');
+            $this->assertAmount(1, $report['position']['counts']['invoices'], 'Recognized invoice count');
 
             foreach ([
                 'sector' => ['sector_id' => $program->sector_id],
@@ -83,9 +86,9 @@ class ProjectFinancialPositionReconciliationSmoke
             ] as $scope => $scopeQuery) {
                 $scopedDashboard = $this->executionDashboardPayload($scopeQuery, $admin);
                 $this->assertAmount(
-                    179_400,
+                    70_000,
                     $scopedDashboard['totalDisbursements'],
-                    ucfirst($scope).' dashboard paid disbursements including direct payments'
+                    ucfirst($scope).' dashboard recognized paid disbursements'
                 );
             }
 
@@ -94,12 +97,12 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertAmount(250_000, $totals['purchase_orders'], 'Purchase orders');
             $this->assertAmount(250_000, $totals['funding_utilization_gap'], 'Approved funding less commitments');
             $this->assertAmount(0, $totals['unprocessed_purchase_requests'], 'Unprocessed purchase requests');
-            $this->assertAmount(70_600, $totals['unpaid_commitments'], 'Purchase orders less disbursements');
-            $this->assertAmount(70_600, $totals['commitment_pipeline_balance'], 'Unpaid commitments plus unprocessed purchase requests');
+            $this->assertAmount(180_000, $totals['unpaid_commitments'], 'Purchase orders less disbursements');
+            $this->assertAmount(180_000, $totals['commitment_pipeline_balance'], 'Unpaid commitments plus unprocessed purchase requests');
             $this->assertAmount(0, $controls['commitment_processing_rate'], 'Unprocessed purchase requests ratio');
             $this->assertAmount(100, $controls['commitment_realization_rate'], 'PO coverage of commitments');
-            $this->assertAmount(28.24, $controls['disbursement_backlog_rate'], 'Unpaid commitments ratio');
-            $this->assertAmount(71.76, $controls['disbursement_efficiency_rate'], 'PO-to-disbursement conversion rate');
+            $this->assertAmount(72, $controls['disbursement_backlog_rate'], 'Unpaid commitments ratio');
+            $this->assertAmount(28, $controls['disbursement_efficiency_rate'], 'PO-to-disbursement conversion rate');
             $this->assertTrue($report['position']['dashboard_aligned'] === true, 'The life-to-date report should be dashboard aligned.');
 
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
@@ -116,9 +119,9 @@ class ProjectFinancialPositionReconciliationSmoke
                 ->assertDontSee('Invoice linkage exceptions')
                 ->assertSee('500,000.00')
                 ->assertSee('250,000.00')
-                ->assertSee('179,400.00')
-                ->assertSee('70,600.00')
-                ->assertSee('35.88%');
+                ->assertSee('70,000.00')
+                ->assertSee('180,000.00')
+                ->assertSee('14.00%');
 
             $webHtml = (string) $webResponse->getContent();
             $pdfHtml = view('budgetreport.project-financial-position-pdf', $report)->render();
@@ -145,9 +148,9 @@ class ProjectFinancialPositionReconciliationSmoke
                 'Official financial control report',
                 '500,000.00',
                 '250,000.00',
-                '179,400.00',
-                '70,600.00',
-                '35.88%',
+                '70,000.00',
+                '180,000.00',
+                '14.00%',
             ];
 
             foreach ($sharedReportInformation as $information) {
@@ -214,6 +217,31 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertTrue(
                 (int) $pdfResponse->headers->get('Content-Length') > 1_000,
                 'The financial-position PDF was unexpectedly empty.'
+            );
+
+            $paidPurchaseOrder = ProcurementPurchaseOrder::query()
+                ->whereHas('budgetCommitment.programFunding', fn ($query) => $query->where('program_id', $program->id))
+                ->whereHas('disbursements', fn ($query) => $query->recognizedPayment())
+                ->firstOrFail();
+            $paidPurchaseOrderId = $paidPurchaseOrder->id;
+            $deleteResponse = $this->app
+                ->make(ProcurementPurchaseOrderController::class)
+                ->destroy($paidPurchaseOrder);
+
+            $this->assertTrue($deleteResponse->isRedirect(), 'A protected PO deletion should redirect with an error.');
+            $this->assertTrue(
+                ProcurementPurchaseOrder::whereKey($paidPurchaseOrderId)->exists(),
+                'A purchase order with recorded payments was deleted.'
+            );
+            $this->assertTrue(
+                ProcurementDisbursement::where('purchase_order_id', $paidPurchaseOrderId)
+                    ->recognizedPayment()
+                    ->exists(),
+                'The protected PO payment lost its source link.'
+            );
+            $this->assertTrue(
+                $deleteResponse->getSession()?->get('errors')?->has('purchase_order') === true,
+                'The protected PO deletion did not explain how to reverse its payments.'
             );
 
             echo "PROJECT_FINANCIAL_POSITION_RECONCILIATION_SMOKE_OK\n";
@@ -329,6 +357,17 @@ class ProjectFinancialPositionReconciliationSmoke
             'approved_by' => $admin->id,
             'approved_at' => now()->setDate(2025, 5, 15),
         ]);
+        ProcurementInvoice::create([
+            'sub_activity_id' => $subActivity->id,
+            'invoice_month' => '2025-08-01',
+            'reference_no' => 'FP-INV-ORPHAN-'.Str::upper($suffix),
+            'amount' => 109_400,
+            'currency' => 'USD',
+            'status' => 'paid',
+            'created_by' => $admin->id,
+            'approved_by' => $admin->id,
+            'approved_at' => now()->setDate(2025, 8, 31),
+        ]);
         $invoicedPurchaseOrder = ProcurementPurchaseOrder::create([
             'invoice_id' => $invoice->id,
             'budget_commitment_id' => $approvedCommitment->id,
@@ -377,7 +416,7 @@ class ProjectFinancialPositionReconciliationSmoke
         ]);
         ProcurementDisbursement::create([
             'sub_activity_id' => $subActivity->id,
-            'reference_no' => 'FP-PAY-DIRECT-'.Str::upper($suffix),
+            'reference_no' => 'FP-PAY-ORPHAN-'.Str::upper($suffix),
             'amount' => 109_400,
             'currency' => 'USD',
             'status' => 'completed',

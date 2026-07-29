@@ -745,8 +745,7 @@ class BudgetReportController extends Controller
             $disbursements = empty($subActivityIds)
                 ? collect()
                 : ProcurementDisbursement::whereIn('sub_activity_id', $subActivityIds)
-                    ->whereNotNull('paid_at')
-                    ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                    ->recognizedPayment()
                     ->get();
 
             $filteredDisbursements = $disbursements->filter(function ($disbursement) use ($filters) {
@@ -1061,8 +1060,7 @@ class BudgetReportController extends Controller
         $disbursements = empty($subActivityIds)
             ? collect()
             : ProcurementDisbursement::whereIn('sub_activity_id', $subActivityIds)
-                ->whereNotNull('paid_at')
-                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
+                ->recognizedPayment()
                 ->get();
 
         $filteredDisbursements = $disbursements->filter(function ($disbursement) use ($filters) {
@@ -1951,6 +1949,7 @@ class BudgetReportController extends Controller
         $invoices = (empty($invoiceIdsFromPurchaseOrders) && empty($subActivityIds))
             ? collect()
             : ProcurementInvoice::query()
+                ->recognizedInvoice()
                 ->where(function ($query) use ($invoiceIdsFromPurchaseOrders, $subActivityIds) {
                     if (! empty($invoiceIdsFromPurchaseOrders)) {
                         $query->whereIn('id', $invoiceIdsFromPurchaseOrders);
@@ -1969,6 +1968,7 @@ class BudgetReportController extends Controller
         $disbursements = (empty($purchaseOrderIds) && empty($subActivityIds))
             ? collect()
             : ProcurementDisbursement::with('purchaseOrder.invoice')
+                ->recognizedPayment()
                 ->where(function ($query) use ($purchaseOrderIds, $subActivityIds) {
                     if (! empty($purchaseOrderIds)) {
                         $query->whereIn('purchase_order_id', $purchaseOrderIds);
@@ -1979,8 +1979,6 @@ class BudgetReportController extends Controller
                         $query->{$method}('sub_activity_id', $subActivityIds);
                     }
                 })
-                ->whereNotNull('paid_at')
-                ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES)
                 ->get()
                 ->filter(fn (ProcurementDisbursement $disbursement) => $this->withinProjectPositionPeriod($this->resolveDisbursementDate($disbursement), $filters))
                 ->values();

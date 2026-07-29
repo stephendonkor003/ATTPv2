@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\BaseModel;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -33,6 +34,30 @@ class ProcurementInvoice extends BaseModel
         'amount' => 'decimal:2',
         'approved_at' => 'datetime',
     ];
+
+    /**
+     * Exclude legacy invoices whose originating PO/procurement was deleted.
+     */
+    public function scopeRecognizedInvoice(Builder $query, ?string $tableAlias = null): Builder
+    {
+        $table = $tableAlias ?: $this->getTable();
+
+        return $query->where(function (Builder $sourceQuery) use ($table) {
+            $sourceQuery
+                ->whereExists(function ($exists) use ($table) {
+                    $exists
+                        ->selectRaw('1')
+                        ->from('procurement_purchase_orders as report_invoice_purchase_order')
+                        ->whereColumn('report_invoice_purchase_order.invoice_id', "{$table}.id");
+                })
+                ->orWhereExists(function ($exists) use ($table) {
+                    $exists
+                        ->selectRaw('1')
+                        ->from('procurements as report_invoice_procurement')
+                        ->whereColumn('report_invoice_procurement.id', "{$table}.procurement_id");
+                });
+        });
+    }
 
     public function procurement(): BelongsTo
     {

@@ -1542,6 +1542,12 @@ HTML;
     {
         $this->assertPurchaseOrderInScope($purchaseOrder);
 
+        if ($purchaseOrder->disbursements()->recognizedPayment()->exists()) {
+            return back()->withErrors([
+                'purchase_order' => 'This purchase order has recorded payments and cannot be deleted. Reverse the payments first so the financial audit trail remains intact.',
+            ]);
+        }
+
         DB::transaction(function () use ($purchaseOrder) {
             $purchaseOrder->disbursements()->update(['purchase_order_id' => null]);
             $this->deleteLineItemEvidenceDocuments($purchaseOrder);
