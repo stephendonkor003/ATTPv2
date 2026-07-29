@@ -103,6 +103,8 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertAmount(100, $controls['commitment_realization_rate'], 'PO coverage of commitments');
             $this->assertAmount(72, $controls['disbursement_backlog_rate'], 'Unpaid commitments ratio');
             $this->assertAmount(28, $controls['disbursement_efficiency_rate'], 'PO-to-disbursement conversion rate');
+            $this->assertAmount(36, $controls['funding_utilization_integrity_gap_rate'], 'Idle committed funds ratio');
+            $this->assertAmount(0, $controls['procurement_pipeline_utilization_gap'], 'Commitment structural gap');
             $this->assertTrue($report['position']['dashboard_aligned'] === true, 'The life-to-date report should be dashboard aligned.');
 
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
@@ -115,6 +117,8 @@ class ProjectFinancialPositionReconciliationSmoke
                 ->assertSee('Purchase Request Total')
                 ->assertSee('Commitment Processing')
                 ->assertSee('Disbursement Efficiency')
+                ->assertSee('Funding Utilization Integrity Gap')
+                ->assertSee('Procurement Pipeline Utilization')
                 ->assertDontSee('Recorded Invoices')
                 ->assertDontSee('Invoice linkage exceptions')
                 ->assertSee('500,000.00')
@@ -140,6 +144,12 @@ class ProjectFinancialPositionReconciliationSmoke
                 'Commitment Processing',
                 'Unprocessed purchase requests ÷ committed',
                 'Disbursement Efficiency',
+                'Funding Utilization Integrity Gap',
+                'Idle Committed Funds Ratio',
+                '(Unpaid commitments + purchase requests) ÷ approved funding',
+                'Procurement Pipeline Utilization',
+                'Commitment Structural Gap',
+                'Committed − (purchase orders + purchase requests)',
                 'Scheduled Allocation vs Commitments vs Disbursements',
                 'Program Control Split',
                 'Full Program Balance Sheet',

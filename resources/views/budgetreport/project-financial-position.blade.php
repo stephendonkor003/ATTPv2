@@ -465,7 +465,7 @@
 
         .pfp-control-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 1rem;
             padding: 1rem;
         }
@@ -1186,6 +1186,25 @@
                             </div>
                             <div class="small text-muted mt-2">
                                 Disbursed ÷ purchase orders
+                            </div>
+                        </div>
+                        <div class="pfp-control-card">
+                            <div class="pfp-control-label">Funding Utilization Integrity Gap</div>
+                            <div class="small text-muted mb-2">Idle Committed Funds Ratio</div>
+                            <div class="pfp-control-value">{{ number_format($controls['funding_utilization_integrity_gap_rate'] ?? 0, 1) }}%</div>
+                            <div class="pfp-coverage-track" aria-hidden="true">
+                                <span style="width: {{ min(100, max(0, (float) ($controls['funding_utilization_integrity_gap_rate'] ?? 0))) }}%"></span>
+                            </div>
+                            <div class="small text-muted mt-2">
+                                (Unpaid commitments + purchase requests) ÷ approved funding
+                            </div>
+                        </div>
+                        <div class="pfp-control-card">
+                            <div class="pfp-control-label">Procurement Pipeline Utilization</div>
+                            <div class="small text-muted mb-2">Commitment Structural Gap</div>
+                            <div class="pfp-control-value">{{ $money($controls['procurement_pipeline_utilization_gap'] ?? 0) }}</div>
+                            <div class="small text-muted mt-2">
+                                Committed − (purchase orders + purchase requests)
                             </div>
                         </div>
                     </div>

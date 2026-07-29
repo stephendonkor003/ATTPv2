@@ -2142,6 +2142,13 @@ class BudgetReportController extends Controller
                 'disbursement_efficiency_rate' => $totals['purchase_orders'] > 0
                     ? round(($totals['disbursed'] / $totals['purchase_orders']) * 100, 2)
                     : 0,
+                'funding_utilization_integrity_gap_rate' => $totals['approved_funding'] > 0
+                    ? round(($totals['commitment_pipeline_balance'] / $totals['approved_funding']) * 100, 2)
+                    : 0,
+                'procurement_pipeline_utilization_gap' => round(
+                    $totals['committed'] - ($totals['purchase_orders'] + $totals['unprocessed_purchase_requests']),
+                    2
+                ),
                 'invoice_coverage_rate' => $totals['disbursed'] > 0
                     ? round(min(100, ($totals['invoiced'] / $totals['disbursed']) * 100), 1)
                     : 100.0,

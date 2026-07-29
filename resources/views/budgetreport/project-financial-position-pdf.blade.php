@@ -547,6 +547,20 @@
             </td>
             <td>{{ number_format($controls['disbursement_efficiency_rate'] ?? 0, 1) }}%</td>
         </tr>
+        <tr>
+            <td>
+                <span class="control-name">Funding Utilization Integrity Gap</span>
+                <span class="control-detail">Idle Committed Funds Ratio</span>
+                <span class="control-detail">(Unpaid commitments + purchase requests) ÷ approved funding</span>
+            </td>
+            <td>{{ number_format($controls['funding_utilization_integrity_gap_rate'] ?? 0, 1) }}%</td>
+            <td>
+                <span class="control-name">Procurement Pipeline Utilization</span>
+                <span class="control-detail">Commitment Structural Gap</span>
+                <span class="control-detail">Committed − (purchase orders + purchase requests)</span>
+            </td>
+            <td>{{ $money($controls['procurement_pipeline_utilization_gap'] ?? 0) }}</td>
+        </tr>
     </table>
 </div>
 
