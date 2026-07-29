@@ -313,6 +313,9 @@ class MasterDashboard extends Controller
          * ============================================================ */
         $yearStart = collect($years)->min();
         $yearEnd = collect($years)->max();
+        $scopeSubActivityIds = $scopeType === 'global'
+            ? []
+            : $this->executionScopeSubActivityIds($scopeType, $scope);
 
         $disbursementQuery = ProcurementDisbursement::query()
             ->whereNotNull('paid_at')
@@ -323,27 +326,17 @@ class MasterDashboard extends Controller
                     Carbon::create((int) $yearEnd, 12, 31)->endOfDay(),
                 ]);
             })
-            ->when($scopeType !== 'global', function ($q) use ($scopeType, $scope) {
-                if ($scopeType === 'project') {
-                    $projectScope = $this->projectExecutionScopeIds($scope);
+            ->when($scopeType !== 'global', function ($q) use ($scopeType, $scope, $scopeSubActivityIds) {
+                $q->where(function ($scopeQuery) use ($scopeType, $scope, $scopeSubActivityIds) {
+                    if (! empty($scopeSubActivityIds)) {
+                        $scopeQuery->whereIn('sub_activity_id', $scopeSubActivityIds);
+                    } else {
+                        $scopeQuery->whereRaw('1 = 0');
+                    }
 
-                    $q->where(function ($scopeQuery) use ($scopeType, $scope, $projectScope) {
-                        if (! empty($projectScope['sub_activity_ids'])) {
-                            $scopeQuery->whereIn('sub_activity_id', $projectScope['sub_activity_ids']);
-                        } else {
-                            $scopeQuery->whereRaw('1 = 0');
-                        }
-
-                        $scopeQuery->orWhereHas('purchaseOrder', function ($poQuery) use ($scopeType, $scope) {
-                            $this->applyExecutionScopeToPurchaseOrderQuery($poQuery, $scopeType, $scope);
-                        });
+                    $scopeQuery->orWhereHas('purchaseOrder', function ($poQuery) use ($scopeType, $scope) {
+                        $this->applyExecutionScopeToPurchaseOrderQuery($poQuery, $scopeType, $scope);
                     });
-
-                    return;
-                }
-
-                $q->whereHas('purchaseOrder', function ($poQuery) use ($scopeType, $scope) {
-                    $this->applyExecutionScopeToPurchaseOrderQuery($poQuery, $scopeType, $scope);
                 });
             });
         if ($hasPortfolioScope) {
@@ -1172,6 +1165,30 @@ class MasterDashboard extends Controller
             'activity_ids' => $activityIds,
             'sub_activity_ids' => $subActivityIds,
         ];
+    }
+
+    private function executionScopeSubActivityIds(string $scopeType, $scope): array
+    {
+        $query = DB::table('myb_sub_activities as sub_activities')
+            ->join('myb_activities as activities', 'activities.id', '=', 'sub_activities.activity_id')
+            ->join('myb_projects as projects', 'projects.id', '=', 'activities.project_id');
+
+        if ($scopeType === 'project') {
+            $query->where('projects.id', $scope->id);
+        } elseif ($scopeType === 'program') {
+            $query->where('projects.program_id', $scope->id);
+        } elseif ($scopeType === 'sector') {
+            $query
+                ->join('myb_programs as programs', 'programs.id', '=', 'projects.program_id')
+                ->where('programs.sector_id', $scope->id);
+        } else {
+            return [];
+        }
+
+        return $query
+            ->pluck('sub_activities.id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
     }
 
     private function applyProjectExecutionAllocationScope($query, array $projectScope): void

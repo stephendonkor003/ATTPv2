@@ -116,7 +116,7 @@ it('builds printable SVG versions of every execution dashboard graph', function 
         ->and($dataset['snapshot_hash'])->toHaveLength(64);
 });
 
-it('renders execution mix as a pie and removes the duplicate global trend from web and PDF', function () {
+it('renders the web execution mix as a doughnut and removes the duplicate global trend from web and PDF', function () {
     $webTemplate = file_get_contents(
         dirname(__DIR__, 2) . '/resources/views/finance/execution/dashboard.blade.php'
     );
@@ -143,9 +143,11 @@ it('renders execution mix as a pie and removes the duplicate global trend from w
         ->not->toContain('<div class="chart-title">Global, Planned, and Disbursed</div>');
 
     expect($mixChartScript)
-        ->toContain("type: 'pie'")
+        ->toContain("type: 'doughnut'")
+        ->toContain("cutout: '62%'")
         ->toContain('data: mixSegments.map')
-        ->not->toContain("type: 'line'");
+        ->not->toContain("type: 'line'")
+        ->not->toContain("type: 'pie'");
 });
 
 it('shows selected component global performance before its sub-component breakdown', function () {

@@ -1913,12 +1913,12 @@ class BudgetReportController extends Controller
         $invoices = (empty($invoiceIdsFromPurchaseOrders) && empty($subActivityIds))
             ? collect()
             : ProcurementInvoice::query()
-                ->where(function ($query) use ($invoiceIdsFromPurchaseOrders, $subActivityIds, $dashboardAligned) {
+                ->where(function ($query) use ($invoiceIdsFromPurchaseOrders, $subActivityIds) {
                     if (! empty($invoiceIdsFromPurchaseOrders)) {
                         $query->whereIn('id', $invoiceIdsFromPurchaseOrders);
                     }
 
-                    if (! $dashboardAligned && ! empty($subActivityIds)) {
+                    if (! empty($subActivityIds)) {
                         $method = empty($invoiceIdsFromPurchaseOrders) ? 'whereIn' : 'orWhereIn';
                         $query->{$method}('sub_activity_id', $subActivityIds);
                     }
@@ -1931,12 +1931,12 @@ class BudgetReportController extends Controller
         $disbursements = (empty($purchaseOrderIds) && empty($subActivityIds))
             ? collect()
             : ProcurementDisbursement::with('purchaseOrder.invoice')
-                ->where(function ($query) use ($purchaseOrderIds, $subActivityIds, $dashboardAligned) {
+                ->where(function ($query) use ($purchaseOrderIds, $subActivityIds) {
                     if (! empty($purchaseOrderIds)) {
                         $query->whereIn('purchase_order_id', $purchaseOrderIds);
                     }
 
-                    if (! $dashboardAligned && ! empty($subActivityIds)) {
+                    if (! empty($subActivityIds)) {
                         $method = empty($purchaseOrderIds) ? 'whereIn' : 'orWhereIn';
                         $query->{$method}('sub_activity_id', $subActivityIds);
                     }

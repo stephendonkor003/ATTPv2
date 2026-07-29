@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BudgetReportController;
 use App\Http\Controllers\MasterDashboard;
+use App\Models\Activity;
 use App\Models\BudgetCommitment;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementInvoice;
@@ -12,6 +13,7 @@ use App\Models\Project;
 use App\Models\ProjectAllocation;
 use App\Models\Role;
 use App\Models\Sector;
+use App\Models\SubActivity;
 use App\Models\User;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithAuthentication;
@@ -58,11 +60,32 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertAmount($dashboard['executionRate'], $totals['commitment_rate'], 'Commitment rate');
             $this->assertAmount($dashboard['disbursementRate'], $totals['disbursement_rate'], 'Disbursement rate');
 
+            $this->assertAmount(179_400, $dashboard['totalDisbursements'], 'Dashboard paid disbursements including direct payments');
+            $this->assertAmount(179_400, $dashboard['componentBreakdownRows']->first()['disbursement'], 'Dashboard component disbursements');
+            $this->assertAmount(179_400, $report['position']['all_rows']->first()['disbursed'], 'Financial-position project disbursements');
+            $this->assertAmount(
+                109_400,
+                $report['position']['all_rows']->first()['children']->first()['children']->first()['disbursed'],
+                'Direct sub-activity disbursement'
+            );
+
+            foreach ([
+                'sector' => ['sector_id' => $program->sector_id],
+                'project' => ['project_id' => $program->projects()->value('id')],
+            ] as $scope => $scopeQuery) {
+                $scopedDashboard = $this->executionDashboardPayload($scopeQuery, $admin);
+                $this->assertAmount(
+                    179_400,
+                    $scopedDashboard['totalDisbursements'],
+                    ucfirst($scope).' dashboard paid disbursements including direct payments'
+                );
+            }
+
             $this->assertAmount(60_000, $totals['invoiced'], 'Recorded invoices');
-            $this->assertAmount(10_000, $controls['invoice_gap'], 'Invoice coverage gap');
-            $this->assertAmount(30_000, $controls['unlinked_disbursement_amount'], 'Payments without a linked invoice');
-            $this->assertTrue($controls['unlinked_disbursement_count'] === 1, 'Expected one unlinked paid record.');
-            $this->assertTrue($controls['invoice_exception_count'] === 1, 'Expected one purchase-order invoice exception.');
+            $this->assertAmount(119_400, $controls['invoice_gap'], 'Invoice coverage gap');
+            $this->assertAmount(139_400, $controls['unlinked_disbursement_amount'], 'Payments without a linked invoice');
+            $this->assertTrue($controls['unlinked_disbursement_count'] === 2, 'Expected two unlinked paid records.');
+            $this->assertTrue($controls['invoice_exception_count'] === 2, 'Expected two invoice exceptions.');
             $this->assertTrue($report['position']['dashboard_aligned'] === true, 'The life-to-date report should be dashboard aligned.');
 
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
@@ -73,8 +96,8 @@ class ProjectFinancialPositionReconciliationSmoke
                 ->assertSee('Invoice linkage exceptions')
                 ->assertSee('500,000.00')
                 ->assertSee('250,000.00')
-                ->assertSee('70,000.00')
-                ->assertSee('14.00%');
+                ->assertSee('179,400.00')
+                ->assertSee('35.88%');
 
             $pdfResponse = $this->get(route('budget.reports.project-financial-position.export.pdf', $query));
             $this->assertTrue($pdfResponse->getStatusCode() === 200, 'The financial-position PDF did not generate.');
@@ -129,6 +152,14 @@ class ProjectFinancialPositionReconciliationSmoke
             'end_year' => 2025,
             'total_years' => 1,
             'total_budget' => 500_000,
+        ]);
+        $activity = Activity::create([
+            'project_id' => $project->id,
+            'name' => 'Financial Position Test Activity '.Str::upper($suffix),
+        ]);
+        $subActivity = SubActivity::create([
+            'activity_id' => $activity->id,
+            'name' => 'Financial Position Test Direct Payment '.Str::upper($suffix),
         ]);
         ProjectAllocation::create([
             'project_id' => $project->id,
@@ -236,6 +267,15 @@ class ProjectFinancialPositionReconciliationSmoke
             'amount' => 5_000,
             'currency' => 'USD',
             'status' => 'pending',
+            'created_by' => $admin->id,
+        ]);
+        ProcurementDisbursement::create([
+            'sub_activity_id' => $subActivity->id,
+            'reference_no' => 'FP-PAY-DIRECT-'.Str::upper($suffix),
+            'amount' => 109_400,
+            'currency' => 'USD',
+            'status' => 'completed',
+            'paid_at' => now()->setDate(2025, 8, 31),
             'created_by' => $admin->id,
         ]);
 

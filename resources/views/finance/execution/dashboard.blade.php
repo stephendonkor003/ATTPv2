@@ -1431,7 +1431,7 @@
             };
 
             makeChart('executionMixChart', {
-                type: 'pie',
+                type: 'doughnut',
                 data: {
                     labels: mixSegments.map(segment => segment.label),
                     datasets: [{
@@ -1449,6 +1449,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     rotation: -90,
+                    cutout: '62%',
                     radius: '88%',
                     layout: {
                         padding: 12
