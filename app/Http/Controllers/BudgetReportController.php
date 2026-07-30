@@ -1871,6 +1871,13 @@ class BudgetReportController extends Controller
             $approvedFunding = (float) $fundings->sum('approved_amount');
         }
 
+        if (! empty($filters['project_id'])) {
+            $selectedProject = $program->projects->first(
+                fn (Project $project): bool => (string) $project->id === (string) $filters['project_id']
+            );
+            $approvedFunding = (float) ($selectedProject?->total_budget ?? 0);
+        }
+
         $structureScope = $this->projectFinancialPositionStructureScope($program, $filters);
         $projectIds = $structureScope['project_ids'];
         $activityIds = $structureScope['activity_ids'];

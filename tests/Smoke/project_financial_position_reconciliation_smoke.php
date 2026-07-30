@@ -107,6 +107,40 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertAmount(0, $controls['procurement_pipeline_utilization_gap'], 'Commitment structural gap');
             $this->assertTrue($report['position']['dashboard_aligned'] === true, 'The life-to-date report should be dashboard aligned.');
 
+            $selectedProject = $program->projects()->firstOrFail();
+            $projectQuery = [
+                'program_id' => $program->id,
+                'project_id' => $selectedProject->id,
+            ];
+            $projectReport = $this->financialPositionPayload($projectQuery, $admin);
+            $this->assertAmount(
+                $selectedProject->total_budget,
+                $projectReport['position']['totals']['approved_funding'],
+                'Project approved funding'
+            );
+            $this->assertAmount(
+                70_000,
+                $projectReport['position']['totals']['funding_utilization_gap'],
+                'Project approved funding less commitments'
+            );
+            $this->assertTrue(
+                $projectReport['position']['dashboard_aligned'] === false,
+                'A project-filtered report should use the project drill-down calculations.'
+            );
+
+            $reserveProject = $program->projects()
+                ->where('id', '!=', $selectedProject->id)
+                ->firstOrFail();
+            $reserveReport = $this->financialPositionPayload([
+                'program_id' => $program->id,
+                'project_id' => $reserveProject->id,
+            ], $admin);
+            $this->assertAmount(
+                $reserveProject->total_budget,
+                $reserveReport['position']['totals']['approved_funding'],
+                'Reserve project approved funding'
+            );
+
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
             $webResponse
                 ->assertOk()
@@ -127,8 +161,20 @@ class ProjectFinancialPositionReconciliationSmoke
                 ->assertSee('180,000.00')
                 ->assertSee('14.00%');
 
+            $projectWebResponse = $this->get(route('budget.reports.project-financial-position', $projectQuery));
+            $projectWebResponse
+                ->assertOk()
+                ->assertSee('Selected project budget allocation')
+                ->assertSee('320,000.00');
+
             $webHtml = (string) $webResponse->getContent();
             $pdfHtml = view('budgetreport.project-financial-position-pdf', $report)->render();
+            $projectPdfHtml = view('budgetreport.project-financial-position-pdf', $projectReport)->render();
+            $this->assertTrue(
+                str_contains($projectPdfHtml, 'Selected project budget allocation')
+                    && str_contains($projectPdfHtml, '320,000.00'),
+                'The project-filtered PDF should display the selected project budget as Approved Funding.'
+            );
             $sharedReportInformation = [
                 'Report Context',
                 'Financial Control Summary',
@@ -295,7 +341,7 @@ class ProjectFinancialPositionReconciliationSmoke
             'start_year' => 2025,
             'end_year' => 2025,
             'total_years' => 1,
-            'total_budget' => 500_000,
+            'total_budget' => 320_000,
         ]);
         $activity = Activity::create([
             'project_id' => $project->id,
@@ -310,7 +356,23 @@ class ProjectFinancialPositionReconciliationSmoke
             'year' => 2025,
             'year_number' => 1,
             'actual_year' => 2025,
-            'amount' => 500_000,
+            'amount' => 320_000,
+        ]);
+        $reserveProject = Project::create([
+            'program_id' => $program->id,
+            'name' => 'Financial Position Test Reserve '.Str::upper($suffix),
+            'currency' => 'USD',
+            'start_year' => 2025,
+            'end_year' => 2025,
+            'total_years' => 1,
+            'total_budget' => 180_000,
+        ]);
+        ProjectAllocation::create([
+            'project_id' => $reserveProject->id,
+            'year' => 2025,
+            'year_number' => 1,
+            'actual_year' => 2025,
+            'amount' => 180_000,
         ]);
         $funding = ProgramFunding::create([
             'program_id' => $program->id,

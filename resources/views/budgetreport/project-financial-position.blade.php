@@ -968,7 +968,7 @@
                     $controls = $position['controls'] ?? [];
                     $money = fn ($value) => $currency . ' ' . number_format((float) $value, 2);
                     $statCards = [
-                        ['label' => 'Approved Funding', 'value' => $money($totals['approved_funding'] ?? 0), 'meta' => 'Approved funding-partner value', 'class' => 'green', 'icon' => 'feather-target'],
+                        ['label' => 'Approved Funding', 'value' => $money($totals['approved_funding'] ?? 0), 'meta' => ! empty($filters['project_id']) ? 'Selected project budget allocation' : 'Approved funding-partner value', 'class' => 'green', 'icon' => 'feather-target'],
                         ['label' => 'Scheduled Allocation', 'value' => $money($totals['scheduled_allocation'] ?? 0), 'meta' => 'Executive Dashboard allocation', 'class' => (($totals['approved_funding_less_scheduled_allocation'] ?? 0) < 0 ? 'red' : ''), 'icon' => 'feather-layers'],
                         ['label' => 'Committed', 'value' => $money($totals['committed'] ?? 0), 'meta' => number_format($totals['commitment_rate'] ?? 0, 2).'% of approved funding', 'class' => 'gold', 'icon' => 'feather-lock'],
                         ['label' => 'Disbursed', 'value' => $money($totals['disbursed'] ?? 0), 'meta' => number_format($totals['disbursement_rate'] ?? 0, 2).'% of approved funding', 'class' => 'green', 'icon' => 'feather-send'],

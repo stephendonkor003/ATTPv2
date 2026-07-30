@@ -457,7 +457,7 @@
     <div class="section-note">Approved funding and current execution position for the selected scope</div>
     <table class="summary-table">
         <tr>
-            <td><div class="summary-label">Approved Funding</div><div class="summary-value">{{ $money($totals['approved_funding'] ?? 0) }}</div><div class="summary-meta">Approved funding-partner value</div></td>
+            <td><div class="summary-label">Approved Funding</div><div class="summary-value">{{ $money($totals['approved_funding'] ?? 0) }}</div><div class="summary-meta">{{ ! empty($filters['project_id']) ? 'Selected project budget allocation' : 'Approved funding-partner value' }}</div></td>
             <td><div class="summary-label">Scheduled Allocation</div><div class="summary-value">{{ $money($totals['scheduled_allocation'] ?? 0) }}</div><div class="summary-meta">Executive Dashboard allocation</div></td>
             <td><div class="summary-label">Committed</div><div class="summary-value">{{ $money($totals['committed'] ?? 0) }}</div><div class="summary-meta">{{ number_format($totals['commitment_rate'] ?? 0, 2) }}% of approved funding</div></td>
             <td><div class="summary-label">Disbursed</div><div class="summary-value">{{ $money($totals['disbursed'] ?? 0) }}</div><div class="summary-meta">{{ number_format($totals['disbursement_rate'] ?? 0, 2) }}% of approved funding</div></td>
