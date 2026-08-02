@@ -14,6 +14,7 @@ use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\PurchaseRequest;
 use App\Models\SystemAuditLog;
+use App\Services\ExecutionDashboardChartBuilder;
 
 use App\Exports\ProgramExport;
 use App\Exports\ProjectExport;
@@ -886,6 +887,7 @@ class BudgetReportController extends Controller
         $selectedProgramId = $request->input('program_id') ?: $programs->first()?->id;
         $program = null;
         $position = null;
+        $executionDashboard = [];
         $funders = collect();
         $fundingOptions = collect();
         $structureOptions = [
@@ -935,6 +937,11 @@ class BudgetReportController extends Controller
             $dashboardRequest->setUserResolver(fn () => $request->user());
             $executionDashboard = app(MasterDashboard::class)
                 ->executionDashboardPayload($dashboardRequest);
+            $executionDashboard['executionChartImages'] = app(ExecutionDashboardChartBuilder::class)
+                ->buildFromDataset(
+                    $executionDashboard['executionChartData'] ?? [],
+                    $executionDashboard['currency'] ?? 'USD'
+                );
             $position = $this->buildProjectFinancialPosition(
                 $program,
                 $fundings->pluck('id')->all(),
@@ -948,6 +955,7 @@ class BudgetReportController extends Controller
             'selectedProgramId' => $selectedProgramId,
             'program' => $program,
             'position' => $position,
+            'executionDashboard' => $executionDashboard,
             'funders' => $funders,
             'fundingOptions' => $fundingOptions,
             'structureOptions' => $structureOptions,

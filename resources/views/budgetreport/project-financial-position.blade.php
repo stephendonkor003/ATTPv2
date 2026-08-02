@@ -723,16 +723,9 @@
                             <div class="pfp-hero-status">
                                 @if ($position['dashboard_aligned'] ?? false)
                                     <span class="pfp-status-pill">
-                                        <i class="feather-check-circle"></i> Reconciled with Executive Dashboard
+                                        <i class="feather-check-circle"></i> Execution analytics integrated
                                     </span>
                                 @endif
-                                <a class="pfp-dashboard-link"
-                                    href="{{ route('finance.execution.dashboard', array_filter([
-                                        'program_id' => $program->id,
-                                        'project_id' => $filters['project_id'] ?? null,
-                                    ])) }}">
-                                    Open Executive Dashboard <i class="feather-arrow-up-right"></i>
-                                </a>
                             </div>
                             <div class="d-flex flex-wrap justify-content-lg-end gap-2">
                             <a id="pfpExportPdf"
@@ -969,7 +962,7 @@
                     $money = fn ($value) => $currency . ' ' . number_format((float) $value, 2);
                     $statCards = [
                         ['label' => 'Approved Funding', 'value' => $money($totals['approved_funding'] ?? 0), 'meta' => ! empty($filters['project_id']) ? 'Selected project budget allocation' : 'Approved funding-partner value', 'class' => 'green', 'icon' => 'feather-target'],
-                        ['label' => 'Scheduled Allocation', 'value' => $money($totals['scheduled_allocation'] ?? 0), 'meta' => 'Executive Dashboard allocation', 'class' => (($totals['approved_funding_less_scheduled_allocation'] ?? 0) < 0 ? 'red' : ''), 'icon' => 'feather-layers'],
+                        ['label' => 'Scheduled Allocation', 'value' => $money($totals['scheduled_allocation'] ?? 0), 'meta' => 'Financial execution allocation', 'class' => (($totals['approved_funding_less_scheduled_allocation'] ?? 0) < 0 ? 'red' : ''), 'icon' => 'feather-layers'],
                         ['label' => 'Committed', 'value' => $money($totals['committed'] ?? 0), 'meta' => number_format($totals['commitment_rate'] ?? 0, 2).'% of approved funding', 'class' => 'gold', 'icon' => 'feather-lock'],
                         ['label' => 'Disbursed', 'value' => $money($totals['disbursed'] ?? 0), 'meta' => number_format($totals['disbursement_rate'] ?? 0, 2).'% of approved funding', 'class' => 'green', 'icon' => 'feather-send'],
                         ['label' => 'Purchase Orders', 'value' => $money($totals['purchase_orders'] ?? 0), 'meta' => number_format($position['counts']['purchase_orders'] ?? 0).' active records', 'class' => 'slate', 'icon' => 'feather-file-text'],
@@ -1048,20 +1041,17 @@
                         <div>
                             <strong>
                                 {{ ($position['dashboard_aligned'] ?? false)
-                                    ? 'Execution Dashboard source active'
+                                    ? 'Financial execution dataset active'
                                     : 'Filtered financial-position view' }}
                             </strong>
                             <span>
                                 {{ ($position['dashboard_aligned'] ?? false)
-                                    ? 'Scheduled allocation, commitment, disbursement, component totals, and utilization are loaded directly from the Execution Dashboard dataset.'
-                                    : 'Custom funding, period, or structure filters are active, so totals are intentionally narrower than the programme-wide Executive Dashboard.' }}
+                                    ? 'Scheduled allocation, commitment, disbursement, component totals, and utilization are loaded directly from the reconciled financial execution dataset.'
+                                    : 'Custom funding, period, or structure filters are active, so totals are intentionally narrower than the programme-wide financial execution analysis.' }}
                             </span>
                         </div>
                     </div>
-                    <a class="btn btn-sm btn-outline-success"
-                        href="{{ route('finance.execution.dashboard', ['program_id' => $program->id]) }}">
-                        Open source dashboard <i class="feather-arrow-up-right ms-1"></i>
-                    </a>
+                    <span class="small fw-semibold">Full execution analysis is included below.</span>
                 </div>
 
                 <div class="row g-3 mt-1">
@@ -1303,6 +1293,8 @@
                         </table>
                     </div>
                 </div>
+
+                @include('budgetreport.partials.execution-dashboard-web')
 
                 <footer class="pfp-report-footer">
                     <div>

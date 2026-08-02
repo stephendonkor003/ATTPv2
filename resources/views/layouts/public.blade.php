@@ -55,7 +55,8 @@
             <a href="{{ route('events') }}">{{ __('landing.events_webinars') }}</a>
             <a href="{{ route('news.index') }}">{{ __('navigation.news_updates') }}</a>
             <a href="{{ route('gallery') }}">{{ __('navigation.gallery') }}</a>
-            <a href="{{ route('public.grievances.create') }}" class="public-grievance-link active">Log a Grievance</a>
+            <a href="{{ route('public.grievances.create') }}"
+                class="public-grievance-link {{ request()->routeIs('public.grievances.*') ? 'active' : '' }}">Log a Grievance</a>
             <a href="{{ route('landing.index') }}#contact">{{ __('navigation.contact') }}</a>
         </nav>
         <div class="nav-actions">

@@ -609,6 +609,59 @@
             </div>
         </header>
 
+        @if ($canManage)
+            <section class="card border-0 shadow-sm mb-4" aria-labelledby="reporting-readiness-title">
+                <div class="card-header bg-white border-bottom d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 py-3">
+                    <div>
+                        <div class="text-uppercase text-muted small fw-semibold">Live commissioning audit</div>
+                        <h2 class="h5 mb-1" id="reporting-readiness-title">Think-tank reporting readiness</h2>
+                        <p class="text-muted small mb-0">
+                            These controls are read directly from the current database. Reporting becomes available
+                            only after every required gate is complete.
+                        </p>
+                    </div>
+                    <div class="text-lg-end flex-shrink-0">
+                        <span class="badge {{ ($reportingReadiness['ready'] ?? false) ? 'bg-success' : 'bg-warning text-dark' }} px-3 py-2">
+                            {{ ($reportingReadiness['ready'] ?? false) ? 'Ready for reporting' : 'Setup incomplete' }}
+                        </span>
+                        <div class="small text-muted mt-1">
+                            {{ number_format((int) ($reportingReadiness['completed'] ?? 0)) }} of
+                            {{ number_format((int) ($reportingReadiness['total'] ?? 0)) }} controls complete
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="progress mb-3" role="progressbar"
+                        aria-label="Reporting readiness"
+                        aria-valuenow="{{ (int) ($reportingReadiness['percentage'] ?? 0) }}"
+                        aria-valuemin="0" aria-valuemax="100" style="height: 8px;">
+                        <div class="progress-bar {{ ($reportingReadiness['ready'] ?? false) ? 'bg-success' : 'bg-warning' }}"
+                            style="width: {{ (int) ($reportingReadiness['percentage'] ?? 0) }}%"></div>
+                    </div>
+                    <div class="row g-3">
+                        @foreach (($reportingReadiness['gates'] ?? []) as $readinessGate)
+                            <div class="col-md-6 col-xl-4">
+                                <article class="border rounded-3 p-3 h-100 bg-light-subtle">
+                                    <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                                        <div class="fw-bold text-dark">{{ $readinessGate['label'] }}</div>
+                                        <span class="badge {{ $readinessGate['complete'] ? 'bg-success' : 'bg-danger' }}">
+                                            {{ $readinessGate['complete'] ? 'Complete' : 'Action required' }}
+                                        </span>
+                                    </div>
+                                    <div class="fw-semibold text-success mb-1">{{ $readinessGate['value'] }}</div>
+                                    <p class="text-muted small mb-3">{{ $readinessGate['detail'] }}</p>
+                                    <a href="{{ route($readinessGate['route'], $readinessGate['query']) }}"
+                                        class="btn btn-sm {{ $readinessGate['complete'] ? 'btn-outline-secondary' : 'btn-outline-success' }}">
+                                        {{ $readinessGate['action'] }} <i class="feather-arrow-right ms-1" aria-hidden="true"></i>
+                                    </a>
+                                </article>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </section>
+        @endif
+
         <section class="me-summary-grid" aria-label="Data entry summary">
             <article class="me-summary-card">
                 <span class="me-summary-icon"><i class="feather-unlock" aria-hidden="true"></i></span>

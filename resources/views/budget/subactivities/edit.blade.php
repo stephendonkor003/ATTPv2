@@ -34,21 +34,43 @@
                     @endif
 
                     @if (($fundingAllocationReconciliation['status'] ?? 'unavailable') === 'ready')
+                        @php
+                            $repairSnapshot = $fundingAllocationReconciliation['snapshot'] ?? [];
+                            $repairSchedule = $fundingAllocationReconciliation['planned_target_schedule'] ?? [];
+                            $currentRepairTotal = (float) ($repairSnapshot['target_total'] ?? 0);
+                        @endphp
                         <div class="alert alert-info">
                             <div class="fw-semibold mb-1">Automatic audited allocation repair available</div>
                             <p class="mb-2">
-                                This server has the audited USD 24.5M legacy schedule and compatible annual budget
-                                capacity. The repair will rephase it across 2026-2028 and move the USD 24,800 sibling
-                                residue out of 2025.
+                                The server currently records USD {{ number_format($currentRepairTotal, 2) }} against
+                                this sub-activity. This protected repair will restore the approved USD 24,500,000.00
+                                envelope, place exactly USD 24,800.00 in 2025, and spread the remaining amount across
+                                2026-2028 without duplicating or increasing the approved total.
                             </p>
+                            <div class="table-responsive mb-2">
+                                <table class="table table-sm table-bordered bg-white mb-0">
+                                    <thead><tr><th>Year</th><th class="text-end">Corrected amount (USD)</th></tr></thead>
+                                    <tbody>
+                                        @foreach ([2025, 2026, 2027, 2028] as $repairYear)
+                                            <tr>
+                                                <td>{{ $repairYear }}</td>
+                                                <td class="text-end">{{ number_format((float) ($repairSchedule[$repairYear] ?? 0), 2) }}</td>
+                                            </tr>
+                                        @endforeach
+                                        <tr class="fw-semibold">
+                                            <td>Total</td>
+                                            <td class="text-end">24,500,000.00</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                             <div class="small mb-2">
-                                Resulting target schedule: 2026 - USD 9,678,500; 2027 - USD 9,678,500;
-                                2028 - USD 5,143,000. The parent schedule will be adjusted only where required, while
-                                preserving its valid server-side envelope and staying within every project year.
+                                The parent activity is adjusted only where necessary. The transaction is blocked and
+                                rolled back unless every resulting activity remains inside its project-year envelope.
                             </div>
                             <form method="POST"
                                 action="{{ route('budget.subactivities.reconcile-funding-allocation', $subActivity->id) }}"
-                                onsubmit="return confirm('Automatically spread USD 24,500,000 across 2026, 2027, and 2028? The parent and sibling schedules will be reconciled in the same transaction.');">
+                                onsubmit="return confirm('Correct 2025 to exactly USD 24,800.00 and spread the remaining approved USD 24,500,000 envelope across 2026-2028?');">
                                 @csrf
                                 <button type="submit" class="btn btn-primary">
                                     <i class="bi bi-calendar2-range me-1"></i> Automatically Spread USD 24,500,000
@@ -59,8 +81,8 @@
                         <div class="alert alert-success">
                             <div class="fw-semibold">Allocation reconciliation complete</div>
                             <div class="small">
-                                The $24.5M schedule, parent envelope, and sibling residue are balanced. Re-running the
-                                repair would make no database changes.
+                                The USD 24,500,000 schedule includes exactly USD 24,800.00 in 2025, and the parent
+                                envelope and sibling allocation remain balanced.
                             </div>
                         </div>
                     @endif

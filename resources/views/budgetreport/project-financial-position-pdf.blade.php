@@ -458,7 +458,7 @@
     <table class="summary-table">
         <tr>
             <td><div class="summary-label">Approved Funding</div><div class="summary-value">{{ $money($totals['approved_funding'] ?? 0) }}</div><div class="summary-meta">{{ ! empty($filters['project_id']) ? 'Selected project budget allocation' : 'Approved funding-partner value' }}</div></td>
-            <td><div class="summary-label">Scheduled Allocation</div><div class="summary-value">{{ $money($totals['scheduled_allocation'] ?? 0) }}</div><div class="summary-meta">Executive Dashboard allocation</div></td>
+            <td><div class="summary-label">Scheduled Allocation</div><div class="summary-value">{{ $money($totals['scheduled_allocation'] ?? 0) }}</div><div class="summary-meta">Financial execution allocation</div></td>
             <td><div class="summary-label">Committed</div><div class="summary-value">{{ $money($totals['committed'] ?? 0) }}</div><div class="summary-meta">{{ number_format($totals['commitment_rate'] ?? 0, 2) }}% of approved funding</div></td>
             <td><div class="summary-label">Disbursed</div><div class="summary-value">{{ $money($totals['disbursed'] ?? 0) }}</div><div class="summary-meta">{{ number_format($totals['disbursement_rate'] ?? 0, 2) }}% of approved funding</div></td>
         </tr>
@@ -471,10 +471,10 @@
     </table>
 
     <div class="source-note {{ ($position['dashboard_aligned'] ?? false) ? '' : 'filtered' }}">
-        <strong>{{ ($position['dashboard_aligned'] ?? false) ? 'Execution Dashboard source active' : 'Filtered financial-position view' }}</strong>
+        <strong>{{ ($position['dashboard_aligned'] ?? false) ? 'Financial execution dataset active' : 'Filtered financial-position view' }}</strong>
         {{ ($position['dashboard_aligned'] ?? false)
-            ? 'Scheduled allocation, commitment, disbursement, component totals, and utilization are loaded directly from the Execution Dashboard dataset.'
-            : 'Custom funding, period, or structure filters are active, so totals are intentionally narrower than the programme-wide Executive Dashboard.' }}
+            ? 'Scheduled allocation, commitment, disbursement, component totals, and utilization are loaded directly from the reconciled financial execution dataset.'
+            : 'Custom funding, period, or structure filters are active, so totals are intentionally narrower than the programme-wide financial execution analysis.' }}
     </div>
 </div>
 
@@ -666,6 +666,8 @@
         </tfoot>
     </table>
 </div>
+
+@include('budgetreport.partials.execution-dashboard-pdf')
 
 <div class="footer">
     <table class="footer-table">

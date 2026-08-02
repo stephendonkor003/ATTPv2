@@ -65,7 +65,9 @@ final class WordManual
 
     public function table(array $rows, array $widths = [], bool $firstRowHeader = true, string $headerFill = 'DCEFE7'): void
     {
-        if ($rows === []) return;
+        if ($rows === []) {
+            return;
+        }
         $columnCount = max(array_map('count', $rows));
         if ($widths === []) {
             $widths = array_fill(0, $columnCount, (int) floor(9360 / $columnCount));
@@ -96,7 +98,7 @@ final class WordManual
         if (! is_dir($directory) && ! mkdir($directory, 0775, true) && ! is_dir($directory)) {
             throw new RuntimeException('Unable to create '.$directory);
         }
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new RuntimeException('Unable to create '.$path);
         }
@@ -137,6 +139,7 @@ final class WordManual
     private function coreProperties(): string
     {
         $date = gmdate('Y-m-d\TH:i:s\Z');
+
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>ATTP MEL Platform Complete User Manual</dc:title><dc:subject>Unified Indicator Performance Tracking, Evidence, Verification and Consolidation</dc:subject><dc:creator>ATTP Secretariat</dc:creator><cp:keywords>ATTP; MEL; M&amp;E; think tanks; indicator tracking</cp:keywords><dc:description>Operational manual for Secretariat M&amp;E Officers, focal persons, reviewers, approvers and think tanks.</dc:description><cp:lastModifiedBy>ATTP Platform</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">'.$date.'</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">'.$date.'</dcterms:modified></cp:coreProperties>';
     }
 
@@ -190,17 +193,18 @@ final class WordManual
         for ($i = 0; $i < 3; $i++) {
             $numbers .= '<w:lvl w:ilvl="'.$i.'"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%'.($i + 1).'."/><w:lvlJc w:val="left"/><w:pPr><w:tabs><w:tab w:val="num" w:pos="'.(720 + $i * 360).'"/></w:tabs><w:ind w:left="'.(720 + $i * 360).'" w:hanging="360"/></w:pPr></w:lvl>';
         }
+
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="multilevel"/>'.$levels.'</w:abstractNum><w:abstractNum w:abstractNumId="2"><w:multiLevelType w:val="multilevel"/>'.$numbers.'</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num></w:numbering>';
     }
 }
 
-$doc = new WordManual();
+$doc = new WordManual;
 $doc->paragraph('AFRICA THINK TANK PLATFORM', 'Subtitle', ['align' => 'center', 'size' => 26, 'bold' => true]);
 $doc->paragraph('ATTP MEL PLATFORM', 'Title');
 $doc->paragraph('Complete User Manual', 'Title');
 $doc->paragraph('Unified Indicator Performance Tracking, Achievement Reporting, Evidence Management, Verification and Consolidation', 'Subtitle');
 $doc->paragraph('For Secretariat M&E Officers, Reviewers, Approvers, Think Tank Focal Persons and Platform Administrators', 'Normal', ['align' => 'center', 'size' => 23, 'bold' => true, 'color' => '334155', 'before' => 240]);
-$doc->paragraph('Version 1.0 · 2 August 2026', 'Normal', ['align' => 'center', 'color' => '64748B', 'before' => 300]);
+$doc->paragraph('Version 1.1 · 2 August 2026', 'Normal', ['align' => 'center', 'color' => '64748B', 'before' => 300]);
 $doc->paragraph('Platform: https://africathinktankplatform.africa', 'Normal', ['align' => 'center', 'color' => '0B6D50']);
 $doc->callout('Document control', 'This manual describes the role-based operating procedure for the implemented ATTP MEL module. Keep it with the active M&E Matrix and update it whenever the approved reporting process changes.');
 $doc->pageBreak();
@@ -277,7 +281,24 @@ $doc->numbered('If no account exists, create it through the authorized user-mana
 $doc->numbered('Use Edit to correct consortium, short label, mapped organization, primary-contact flag or notes.');
 $doc->callout('Expected readiness', 'All 13 organizations should be mapped. Account-linked readiness can be increased as approved accounts are created; it is correct for missing accounts to remain visibly incomplete.');
 
-$doc->heading('4.2 Upload and activate the M&E Matrix', 2);
+$doc->heading('4.2 Use the live reporting-readiness audit', 2);
+$doc->paragraph('Open Monitoring & Evaluation → Data Entry and Performance Tracking. The Think-tank reporting readiness panel reads the current database and prevents an empty reporting screen from being mistaken for a platform failure. It does not create or alter official programme data.');
+$doc->table([
+    ['Readiness gate', 'Completion standard'],
+    ['Think-tank reporting access', 'Every active organization has an enabled, non-blacklisted Think Tank Admin or M&E Officer account.'],
+    ['Controlled M&E Matrix', 'At least one approved matrix version is Active.'],
+    ['Report-ready indicators', 'Each reporting indicator has a component, code, baseline, targets, cadence, unit, responsible officer and linked means of verification.'],
+    ['Published reporting form', 'The form has sections/questions and is linked to the correct component and indicators.'],
+    ['Active reporting period', 'The approved quarterly, semi-annual or annual window is Active.'],
+    ['Open collection', 'A published form and active period are joined and every active think tank is assigned.'],
+]);
+$doc->numbered('Review every red Action required card; the count and explanation come from the current database.');
+$doc->numbered('Select the card action to open the exact configuration page that is blocking reporting.');
+$doc->numbered('If Focal Units shows Login disabled, an authorized user administrator must confirm the account and select Enable login. Never enable an unverified or departed user merely to improve the readiness percentage.');
+$doc->numbered('Return to Data Entry and Performance Tracking after each correction. The assessment recalculates automatically on the next page load.');
+$doc->numbered('Open the collection only when all six controls are complete and the reporting dates have been formally approved.');
+
+$doc->heading('4.3 Upload and activate the M&E Matrix', 2);
 $doc->paragraph('Navigate to Monitoring & Evaluation → M&E Matrix Manager, or /budget/me/matrices.');
 $doc->numbered('Select the portfolio.');
 $doc->numbered('Enter a meaningful Document Title, for example “ATTP Unified Indicator Performance Tracking Matrix”.');
@@ -289,7 +310,7 @@ $doc->numbered('Review the workbook inspection: format, sheet count, data dimens
 $doc->numbered('Select Activate only after review. Activating a version retires the previous active version with the same code.');
 $doc->paragraph('Deleting is permitted only for a draft. Active versions must be retired, preserving their audit history. Every matrix upload is synchronized with the Knowledge Repository.');
 
-$doc->heading('4.3 Configure the indicator register', 2);
+$doc->heading('4.4 Configure the indicator register', 2);
 $doc->paragraph('Navigate to Monitoring & Evaluation → Results Framework and Indicator Management, or /budget/me/indicators.');
 $doc->heading('Required configuration sequence', 3);
 $doc->numbered('Choose the portfolio and project component.');
@@ -304,7 +325,7 @@ $doc->numbered('Save, then configure applicable disaggregation dimensions. Mark 
 $doc->heading('Changing an indicator code', 3);
 $doc->paragraph('Authorized users may edit a code. When changing an existing code, enter a change reason. The old code, new code, actor, reason and timestamp are retained. Never reuse a retired code for a different indicator.');
 
-$doc->heading('4.4 Configure disaggregation', 2);
+$doc->heading('4.5 Configure disaggregation', 2);
 $doc->paragraph('The platform supports multiple simultaneous factors. Select all dimensions applicable to an indicator; there is no three-dimension limit.');
 $doc->table([
     ['Dimension', 'Standard options / use'],
@@ -319,7 +340,7 @@ $doc->table([
 ]);
 $doc->callout('Required versus available', 'A dimension can be available without being mandatory. Make it Required only when the indicator methodology expects that field for every beneficiary combination.');
 
-$doc->heading('4.5 Select aggregation controls correctly', 2);
+$doc->heading('4.6 Select aggregation controls correctly', 2);
 $doc->table([
     ['Organization roll-up', 'Use when', 'Example'],
     ['Sum', 'Each organization reports distinct additive units.', 'Number of separate research products.'],
@@ -331,7 +352,7 @@ $doc->table([
 ]);
 $doc->callout('Financial and statistical control', 'Never sum percentages, ratios, cumulative stock values or the same beneficiary across repeated rows. Use weighted average, latest or non-additive as specified in the indicator methodology.');
 
-$doc->heading('4.6 Create forms, periods and collections', 2);
+$doc->heading('4.7 Create forms, periods and collections', 2);
 $doc->paragraph('Navigate to Monitoring & Evaluation → Data Entry and Performance Tracking.');
 $doc->numbered('Create a reporting form and link it to the correct portfolio, project component and indicators.');
 $doc->numbered('Define the seven report sections and any additional form instructions.');
@@ -430,7 +451,9 @@ foreach ([
     'Evidence: every material claim is traceable to a titled file or repository item.',
     'Narrative: variance, challenges, mitigation, lessons and next steps are specific and internally consistent.',
     'Data protection: no unnecessary sensitive personal data is exposed.',
-] as $item) $doc->bullet($item);
+] as $item) {
+    $doc->bullet($item);
+}
 $doc->heading('6.3 Return or verify', 2);
 $doc->bullet('Return Report: mandatory when correction is needed. Enter actionable notes. The report reopens as Draft for its author.');
 $doc->bullet('Verify Report: select only after checking calculations, disaggregation and evidence. Enter verification notes. Indicator results and report attachments become validated.');
@@ -545,7 +568,9 @@ foreach ([
     'Verifier and approver identities and timestamps.', 'Repository document versions and change notes.',
     'Canonical evidence links to reports and achievements.', 'Matrix versions, active/retired status and approval.',
     'Calculated achievement beneficiary totals and unique combination hashes.',
-] as $item) $doc->bullet($item);
+] as $item) {
+    $doc->bullet($item);
+}
 $doc->heading('12.2 Minimum data-quality rules', 2);
 $doc->bullet('Achievement date must fall within the report period.');
 $doc->bullet('Country is required for Country or National scope; REC is required for REC scope.');
@@ -572,6 +597,8 @@ $doc->heading('14. Troubleshooting Guide');
 $doc->table([
     ['Message / symptom', 'Likely cause', 'Resolution'],
     ['No assigned form', 'Form not published, collection not open, organization not assigned or account mapped incorrectly.', 'Secretariat checks form, dates, assignment and Focal Unit mapping.'],
+    ['Setup incomplete / 0 of 6', 'The database has not yet been commissioned for a reporting cycle.', 'Use each readiness-card action in order; do not create reports by direct database editing.'],
+    ['Login disabled', 'The focal account was disabled through user access management.', 'An authorized user administrator confirms the owner, enables login and verifies M&E access.'],
     ['No indicators due', 'Selected report type does not match indicator cadence.', 'Choose Quarterly, Semi-Annual or Annual as configured; do not force Q2 for H1.'],
     ['Achievement date rejected', 'Date lies outside reporting period.', 'Correct date or create the correct report period.'],
     ['Country / REC required', 'Geographic scope demands that classification.', 'Enter country for Country/National or select REC for REC.'],
@@ -588,13 +615,21 @@ $doc->table([
 
 $doc->heading('15. Operational Checklists');
 $doc->heading('15.1 Secretariat pre-opening checklist', 2);
-foreach (['13 organizations active and mapped', 'Focal contacts confirmed', 'M&E Matrix active', 'Indicator codes/definitions approved', 'Targets and cadence approved', 'Roll-up methods reviewed', 'Disaggregation configured', 'MOV links valid', 'Form published', 'Collection dates set', 'All 13 assigned', 'Notifications tested'] as $item) $doc->bullet('☐ '.$item);
+foreach (['13 organizations active and mapped', 'Focal contacts confirmed', 'M&E Matrix active', 'Indicator codes/definitions approved', 'Targets and cadence approved', 'Roll-up methods reviewed', 'Disaggregation configured', 'MOV links valid', 'Form published', 'Collection dates set', 'All 13 assigned', 'Notifications tested'] as $item) {
+    $doc->bullet('☐ '.$item);
+}
 $doc->heading('15.2 Think tank pre-submission checklist', 2);
-foreach (['Correct period and year', 'All actuals saved', 'At least one achievement per indicator', 'Combined beneficiary rows reconcile', 'Themes/geography/collaborators complete', 'Evidence titles meaningful', 'Evidence opens successfully', 'Seven sections complete', 'Variance and next steps specific', 'Internal organizational review completed'] as $item) $doc->bullet('☐ '.$item);
+foreach (['Correct period and year', 'All actuals saved', 'At least one achievement per indicator', 'Combined beneficiary rows reconcile', 'Themes/geography/collaborators complete', 'Evidence titles meaningful', 'Evidence opens successfully', 'Seven sections complete', 'Variance and next steps specific', 'Internal organizational review completed'] as $item) {
+    $doc->bullet('☐ '.$item);
+}
 $doc->heading('15.3 M&E verification checklist', 2);
-foreach (['Identity and cadence checked', 'Actuals agree to source', 'Targets agree to active matrix', 'Calculations checked', 'No double counting', 'Evidence sufficient', 'Required disaggregation complete', 'Narratives consistent', 'Return/verify notes recorded'] as $item) $doc->bullet('☐ '.$item);
+foreach (['Identity and cadence checked', 'Actuals agree to source', 'Targets agree to active matrix', 'Calculations checked', 'No double counting', 'Evidence sufficient', 'Required disaggregation complete', 'Narratives consistent', 'Return/verify notes recorded'] as $item) {
+    $doc->bullet('☐ '.$item);
+}
 $doc->heading('15.4 Approval and issue checklist', 2);
-foreach (['Verifier is independent', 'All corrections closed', 'Final approval notes recorded', '13-organization completeness reviewed', 'Only approved/archived data consolidated', 'Excel/PDF reviewed', 'Report archived after issue'] as $item) $doc->bullet('☐ '.$item);
+foreach (['Verifier is independent', 'All corrections closed', 'Final approval notes recorded', '13-organization completeness reviewed', 'Only approved/archived data consolidated', 'Excel/PDF reviewed', 'Report archived after issue'] as $item) {
+    $doc->bullet('☐ '.$item);
+}
 
 $doc->heading('16. Excel-to-Platform Field Map');
 $doc->table([

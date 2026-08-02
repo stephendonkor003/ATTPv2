@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Execution Dashboard</title>
+    <title>Financial Execution Analytics</title>
     <style>
         @page { margin: 22px 22px 38px; }
 
@@ -458,7 +458,7 @@
             <tr>
                 <td>
                     <strong style="color: #0f172a;">Africa Think Tank Platform</strong>
-                    &nbsp;·&nbsp; Finance Execution Dashboard
+                    &nbsp;·&nbsp; Financial Execution Analytics
                 </td>
                 <td class="right">
                     {{ $scopeLabel }} &nbsp;·&nbsp; Generated {{ $generatedAt }}
@@ -470,7 +470,7 @@
 
     <div class="header">
         <div class="header-eyebrow">Finance Execution</div>
-        <div class="header-title">Execution Dashboard</div>
+        <div class="header-title">Financial Execution Analytics</div>
         <p class="header-copy">
             {{ $scopeLabel }}. Financial execution performance covering global commitments,
             planned commitments, paid disbursements, variance, momentum, and risk. Generated on {{ $generatedAt }}.

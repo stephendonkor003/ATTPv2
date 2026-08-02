@@ -1762,11 +1762,11 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('reports.ifr');
 
         Route::get('reports/project-financial-position', [BudgetReportController::class, 'projectFinancialPosition'])
-            ->middleware('permission:budget.project_financial_position.view|budget.reports.view')
+            ->middleware('permission:budget.project_financial_position.view|budget.reports.view|finance.executions.view')
             ->name('reports.project-financial-position');
 
         Route::get('reports/project-financial-position/export/pdf', [BudgetReportController::class, 'exportProjectFinancialPositionPdf'])
-            ->middleware('permission:budget.project_financial_position.view|budget.reports.view')
+            ->middleware('permission:budget.project_financial_position.view|budget.reports.view|finance.executions.view')
             ->name('reports.project-financial-position.export.pdf');
 
         Route::match(['get', 'post'], 'reports/ifr/export/pdf', [BudgetReportController::class, 'exportIfrPdf'])

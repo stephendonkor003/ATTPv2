@@ -1121,6 +1121,10 @@
                                         {{ __('admin.ifr_report') }}
                                     </a>
                                 </li>
+                            @endcanany
+
+                            {{-- Project Financial Position (includes execution analytics) --}}
+                            @canany(['budget.reports.view', 'budget.project_financial_position.view', 'finance.executions.view'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.reports.project-financial-position') }}" class="nxl-link">
                                         <i class="feather-briefcase me-2"></i>
@@ -1128,17 +1132,6 @@
                                     </a>
                                 </li>
                             @endcanany
-
-                            {{-- Execution Dashboard --}}
-                            @can('finance.executions.view')
-                                <li class="nxl-item">
-                                    <a href="{{ route('finance.execution.dashboard') }}" class="nxl-link">
-                                        <i class="feather-trending-up me-2"></i>
-                                        {{ __('admin.execution_dashboard') }}
-                                    </a>
-
-                                </li>
-                            @endcan
 
                             {{-- Summary Dashboard --}}
                             @can('budget.summary.view')

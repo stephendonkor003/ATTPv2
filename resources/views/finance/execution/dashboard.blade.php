@@ -699,7 +699,7 @@
     <div class="execution-shell">
         <div class="execution-topbar">
             <div>
-                <h4 class="execution-title">Execution Dashboard</h4>
+                <h4 class="execution-title">Financial Execution Analytics</h4>
                 <div class="execution-scope">{{ $scopeLabel }}</div>
             </div>
             <a
@@ -1060,7 +1060,7 @@
                     class="execution-download-progress"
                     id="executionPdfProgress"
                     role="progressbar"
-                    aria-label="Generating execution dashboard PDF"
+                    aria-label="Generating financial execution analytics PDF"
                     aria-valuetext="Generating report"
                 >
                     <span></span>
@@ -1083,7 +1083,7 @@
     <iframe
         id="executionPdfDownloadFrame"
         name="executionPdfDownloadFrame"
-        title="Execution Dashboard PDF download"
+        title="Financial execution analytics PDF download"
         hidden
     ></iframe>
 
@@ -1217,7 +1217,7 @@
                 pdfModalTitle.textContent = 'Report ready';
                 pdfStatusLabel.textContent = 'Download handed off successfully';
                 pdfStatusText.textContent = status?.message
-                    || 'The complete Execution Dashboard PDF has been sent to your browser or download manager.';
+                    || 'The complete financial execution analytics PDF has been sent to your browser or download manager.';
                 pdfProgress.setAttribute('aria-valuetext', 'Download started');
 
                 window.setTimeout(() => {

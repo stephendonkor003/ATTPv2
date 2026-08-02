@@ -26,8 +26,6 @@ class FundingToThinkTanksAllocationReconciler
 
     private const SIBLING_TOTAL = 24_800;
 
-    private const CHILDREN_TOTAL = 25_804_800;
-
     private const LEGACY_CHILDREN_SCHEDULE = [
         2024 => 0,
         2025 => 24_524_800,
@@ -52,6 +50,35 @@ class FundingToThinkTanksAllocationReconciler
         2028 => 0,
     ];
 
+    /**
+     * Production fingerprint captured from the 2026-08-02 server backup. The
+     * target was accidentally saved at every displayed annual maximum, which
+     * increased its envelope from USD 24.5M to USD 25.507M.
+     */
+    private const MAX_FILLED_TARGET_SCHEDULE = [
+        2024 => 0,
+        2025 => 0,
+        2026 => 10_258_500,
+        2027 => 10_248_500,
+        2028 => 5_000_000,
+    ];
+
+    private const MAX_FILLED_CHILDREN_SCHEDULE = [
+        2024 => 0,
+        2025 => 24_800,
+        2026 => 10_258_500,
+        2027 => 10_248_500,
+        2028 => 5_000_000,
+    ];
+
+    private const EMPTY_SCHEDULE = [
+        2024 => 0,
+        2025 => 0,
+        2026 => 0,
+        2027 => 0,
+        2028 => 0,
+    ];
+
     private const OTHER_CHILDREN_SCHEDULE = [
         2024 => 0,
         2025 => 0,
@@ -60,20 +87,12 @@ class FundingToThinkTanksAllocationReconciler
         2028 => 130_000,
     ];
 
-    private const RECONCILED_CHILDREN_SCHEDULE = [
-        2024 => 0,
-        2025 => 0,
-        2026 => 10_258_500,
-        2027 => 10_248_500,
-        2028 => 5_297_800,
-    ];
-
     private const RECONCILED_TARGET_SCHEDULE = [
         2024 => 0,
-        2025 => 0,
+        2025 => 24_800,
         2026 => 9_678_500,
         2027 => 9_678_500,
-        2028 => 5_143_000,
+        2028 => 5_118_200,
     ];
 
     private const RECONCILED_SIBLING_SCHEDULE = [
@@ -82,6 +101,27 @@ class FundingToThinkTanksAllocationReconciler
         2026 => 0,
         2027 => 0,
         2028 => 24_800,
+    ];
+
+    /**
+     * A manual server edit placed almost USD 24,800 in 2025 without moving
+     * that amount out of 2028. Recognize the exact audited drift so the
+     * protected repair can restore the USD 24.5M envelope and exact cents.
+     */
+    private const ROUNDING_DRIFT_TARGET_SCHEDULE = [
+        2024 => 0,
+        2025 => 24_799.99,
+        2026 => 9_678_500,
+        2027 => 9_678_500,
+        2028 => 5_143_000,
+    ];
+
+    private const ROUNDING_DRIFT_CHILDREN_SCHEDULE = [
+        2024 => 0,
+        2025 => 24_799.99,
+        2026 => 9_678_500,
+        2027 => 9_678_500,
+        2028 => 5_167_800,
     ];
 
     public function preview(SubActivity $subActivity): array
@@ -106,7 +146,7 @@ class FundingToThinkTanksAllocationReconciler
             'planned_project_remaining_by_year' => $plannedProjectRemaining,
             'planned_project_2028_remaining' => $plannedProjectRemaining[2028] ?? 0,
             'message' => match ($status) {
-                'ready' => 'The audited legacy child allocations are present and the current server envelopes support a safe automatic reconciliation.',
+                'ready' => 'The audited allocation fingerprint is present and the current server envelopes support a safe automatic reconciliation.',
                 'complete' => 'The audited allocation reconciliation has already been completed.',
                 default => 'The current hierarchy cannot be reconciled automatically without exceeding an annual project envelope or changing unaudited child allocations.',
             },
@@ -166,14 +206,14 @@ class FundingToThinkTanksAllocationReconciler
                 );
             }
 
-            foreach (self::RECONCILED_TARGET_SCHEDULE as $year => $amount) {
+            foreach ($plan['target_by_year'] as $year => $amount) {
                 SubActivityAllocation::updateOrCreate(
                     ['sub_activity_id' => self::TARGET_SUB_ACTIVITY_ID, 'year' => $year],
                     ['amount' => $amount]
                 );
             }
 
-            foreach (self::RECONCILED_SIBLING_SCHEDULE as $year => $amount) {
+            foreach ($plan['sibling_by_year'] as $year => $amount) {
                 SubActivityAllocation::updateOrCreate(
                     ['sub_activity_id' => self::SIBLING_SUB_ACTIVITY_ID, 'year' => $year],
                     ['amount' => $amount]
@@ -230,7 +270,7 @@ class FundingToThinkTanksAllocationReconciler
 
     private function reconciliationPlan(array $snapshot): ?array
     {
-        if (! $this->isAuditedLegacyChildSnapshot($snapshot)) {
+        if (! $this->isAuditedRepairableSnapshot($snapshot)) {
             return null;
         }
 
@@ -242,18 +282,29 @@ class FundingToThinkTanksAllocationReconciler
             return null;
         }
 
+        $otherChildren = $this->normalizedSchedule($snapshot['other_children_by_year'] ?? []);
+        $plannedChildren = [];
+        foreach (self::YEARS as $year) {
+            $plannedChildren[$year] = round(
+                self::RECONCILED_TARGET_SCHEDULE[$year]
+                + self::RECONCILED_SIBLING_SCHEDULE[$year]
+                + $otherChildren[$year],
+                2
+            );
+        }
+
         $plannedParent = $currentParent;
-        foreach (self::RECONCILED_CHILDREN_SCHEDULE as $year => $minimumAmount) {
+        foreach ($plannedChildren as $year => $minimumAmount) {
             $plannedParent[$year] = max($plannedParent[$year], $minimumAmount);
         }
 
-        $preservedParentTotal = max(array_sum($currentParent), self::CHILDREN_TOTAL);
+        $preservedParentTotal = max(array_sum($currentParent), array_sum($plannedChildren));
         $reductionRequired = round(array_sum($plannedParent) - $preservedParentTotal, 2);
         $surpluses = [];
 
         foreach (self::YEARS as $year) {
             $surpluses[$year] = max(
-                round($plannedParent[$year] - self::RECONCILED_CHILDREN_SCHEDULE[$year], 2),
+                round($plannedParent[$year] - $plannedChildren[$year], 2),
                 0
             );
         }
@@ -296,31 +347,63 @@ class FundingToThinkTanksAllocationReconciler
             'parent_by_year' => $plannedParent,
             'target_by_year' => self::RECONCILED_TARGET_SCHEDULE,
             'sibling_by_year' => self::RECONCILED_SIBLING_SCHEDULE,
-            'children_by_year' => self::RECONCILED_CHILDREN_SCHEDULE,
+            'children_by_year' => $plannedChildren,
             'project_activity_by_year' => $plannedProjectActivity,
             'project_remaining_by_year' => $plannedProjectRemaining,
             'preserved_parent_total' => $preservedParentTotal,
         ];
     }
 
-    private function isAuditedLegacyChildSnapshot(array $snapshot): bool
+    private function isAuditedRepairableSnapshot(array $snapshot): bool
     {
-        return $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::LEGACY_CHILDREN_SCHEDULE)
+        $legacy = $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::LEGACY_CHILDREN_SCHEDULE)
             && $this->scheduleEquals($snapshot['target_by_year'] ?? [], self::LEGACY_TARGET_SCHEDULE)
             && $this->scheduleEquals($snapshot['sibling_by_year'] ?? [], self::LEGACY_SIBLING_SCHEDULE)
             && $this->scheduleEquals($snapshot['other_children_by_year'] ?? [], self::OTHER_CHILDREN_SCHEDULE)
-            && $this->amountEquals($snapshot['children_total'] ?? null, self::CHILDREN_TOTAL)
+            && $this->amountEquals($snapshot['children_total'] ?? null, array_sum(self::LEGACY_CHILDREN_SCHEDULE))
             && $this->amountEquals($snapshot['target_total'] ?? null, self::TARGET_TOTAL)
             && $this->amountEquals($snapshot['sibling_total'] ?? null, self::SIBLING_TOTAL);
+
+        $maxFilled = $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::MAX_FILLED_CHILDREN_SCHEDULE)
+            && $this->scheduleEquals($snapshot['target_by_year'] ?? [], self::MAX_FILLED_TARGET_SCHEDULE)
+            && $this->scheduleEquals($snapshot['sibling_by_year'] ?? [], self::LEGACY_SIBLING_SCHEDULE)
+            && $this->scheduleEquals($snapshot['other_children_by_year'] ?? [], self::EMPTY_SCHEDULE)
+            && $this->scheduleEquals($snapshot['parent_by_year'] ?? [], self::MAX_FILLED_CHILDREN_SCHEDULE)
+            && $this->amountEquals($snapshot['children_total'] ?? null, array_sum(self::MAX_FILLED_CHILDREN_SCHEDULE))
+            && $this->amountEquals($snapshot['target_total'] ?? null, array_sum(self::MAX_FILLED_TARGET_SCHEDULE))
+            && $this->amountEquals($snapshot['sibling_total'] ?? null, self::SIBLING_TOTAL);
+
+        $roundingDrift = $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::ROUNDING_DRIFT_CHILDREN_SCHEDULE)
+            && $this->scheduleEquals($snapshot['target_by_year'] ?? [], self::ROUNDING_DRIFT_TARGET_SCHEDULE)
+            && $this->scheduleEquals($snapshot['sibling_by_year'] ?? [], self::RECONCILED_SIBLING_SCHEDULE)
+            && $this->scheduleEquals($snapshot['other_children_by_year'] ?? [], self::EMPTY_SCHEDULE)
+            && $this->amountEquals($snapshot['children_total'] ?? null, array_sum(self::ROUNDING_DRIFT_CHILDREN_SCHEDULE))
+            && $this->amountEquals($snapshot['target_total'] ?? null, array_sum(self::ROUNDING_DRIFT_TARGET_SCHEDULE))
+            && $this->amountEquals($snapshot['sibling_total'] ?? null, self::SIBLING_TOTAL);
+
+        return $legacy || $maxFilled || $roundingDrift;
     }
 
     private function isReconciledSnapshot(array $snapshot): bool
     {
-        if (! $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::RECONCILED_CHILDREN_SCHEDULE)
+        $otherChildren = $this->normalizedSchedule($snapshot['other_children_by_year'] ?? []);
+        $recognizedOtherChildren = $this->scheduleEquals($otherChildren, self::OTHER_CHILDREN_SCHEDULE)
+            || $this->scheduleEquals($otherChildren, self::EMPTY_SCHEDULE);
+        $expectedChildren = [];
+        foreach (self::YEARS as $year) {
+            $expectedChildren[$year] = round(
+                self::RECONCILED_TARGET_SCHEDULE[$year]
+                + self::RECONCILED_SIBLING_SCHEDULE[$year]
+                + $otherChildren[$year],
+                2
+            );
+        }
+
+        if (! $recognizedOtherChildren
+            || ! $this->scheduleEquals($snapshot['children_by_year'] ?? [], $expectedChildren)
             || ! $this->scheduleEquals($snapshot['target_by_year'] ?? [], self::RECONCILED_TARGET_SCHEDULE)
             || ! $this->scheduleEquals($snapshot['sibling_by_year'] ?? [], self::RECONCILED_SIBLING_SCHEDULE)
-            || ! $this->scheduleEquals($snapshot['other_children_by_year'] ?? [], self::OTHER_CHILDREN_SCHEDULE)
-            || ! $this->amountEquals($snapshot['children_total'] ?? null, self::CHILDREN_TOTAL)
+            || ! $this->amountEquals($snapshot['children_total'] ?? null, array_sum($expectedChildren))
             || ! $this->amountEquals($snapshot['target_total'] ?? null, self::TARGET_TOTAL)
             || ! $this->amountEquals($snapshot['sibling_total'] ?? null, self::SIBLING_TOTAL)) {
             return false;
@@ -335,7 +418,7 @@ class FundingToThinkTanksAllocationReconciler
         }
 
         foreach (self::YEARS as $year) {
-            if (self::RECONCILED_CHILDREN_SCHEDULE[$year] > $parentByYear[$year] + 0.004
+            if ($expectedChildren[$year] > $parentByYear[$year] + 0.004
                 || $projectActivityByYear[$year] > $projectByYear[$year] + 0.004) {
                 return false;
             }

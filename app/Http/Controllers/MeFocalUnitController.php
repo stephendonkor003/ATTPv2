@@ -22,7 +22,7 @@ class MeFocalUnitController extends Controller
     public function index()
     {
         $contacts = MeFocalUnitContact::query()
-            ->with(['thinkTank:id,name,country,status', 'user:id,name,email,user_type,think_tank_member_id,think_tank_access_level,is_disabled'])
+            ->with(['thinkTank:id,name,country,status', 'user:id,name,email,user_type,think_tank_member_id,think_tank_access_level,is_disabled,is_blacklisted'])
             ->orderBy('consortium_name')->orderBy('think_tank_label')->orderByDesc('is_primary')->orderBy('focal_person_name')->get();
         $emails = $contacts->pluck('email')->map(fn ($email) => strtolower($email))->all();
 

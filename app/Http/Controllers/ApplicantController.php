@@ -148,14 +148,17 @@ class ApplicantController extends Controller
 
     public function create()
     {
-        $thinkTanks = ThinkDataset::distinct()
-            ->whereNotNull('tt_name_en')
-            ->orderBy('tt_name_en')
-            ->pluck('tt_name_en');
+        $submissionsOpen = self::CALL_FOR_PROPOSAL_SUBMISSIONS_OPEN;
+        $thinkTanks = $submissionsOpen
+            ? ThinkDataset::distinct()
+                ->whereNotNull('tt_name_en')
+                ->orderBy('tt_name_en')
+                ->pluck('tt_name_en')
+            : collect();
 
         return view('applicants.create', [
             'thinkTanks' => $thinkTanks,
-            'callForProposalSubmissionsOpen' => self::CALL_FOR_PROPOSAL_SUBMISSIONS_OPEN,
+            'callForProposalSubmissionsOpen' => $submissionsOpen,
         ]);
 
     }

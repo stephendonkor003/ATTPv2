@@ -117,13 +117,6 @@
             </div>
             <div class="col-sm-6 col-xl-4">
                 <div class="stat-card p-3 h-100">
-                    <div class="stat-title">Pending / Other Amount</div>
-                    <div class="stat-value">{{ $cardMoney($disbursementSummary['pending_amount'] ?? 0) }}</div>
-                    <div class="text-muted small">Unpaid planned receipts only</div>
-                </div>
-            </div>
-            <div class="col-sm-6 col-xl-4">
-                <div class="stat-card p-3 h-100">
                     <div class="stat-title">Paid PO Lines</div>
                     <div class="stat-value">{{ number_format((int) ($disbursementSummary['paid_line_items'] ?? 0)) }}</div>
                     <div class="text-muted small">

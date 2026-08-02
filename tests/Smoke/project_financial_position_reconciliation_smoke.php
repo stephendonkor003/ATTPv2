@@ -63,11 +63,11 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertAmount($dashboard['disbursementRate'], $totals['disbursement_rate'], 'Disbursement rate');
             $this->assertTrue(
                 $dashboard['executionChartData']['snapshot_hash'] === $report['position']['execution_dashboard_snapshot'],
-                'The financial position should retain the exact Execution Dashboard snapshot.'
+                'The financial position should retain the exact financial execution snapshot.'
             );
             $this->assertTrue(
                 $dashboard['executionBreakdownTotals'] === $report['position']['execution_dashboard_totals'],
-                'The financial position should consume the Execution Dashboard totals without recalculating them.'
+                'The financial position should consume the financial execution totals without recalculating them.'
             );
 
             $this->assertAmount(70_000, $dashboard['totalDisbursements'], 'Dashboard recognized paid disbursements');
@@ -156,8 +156,8 @@ class ProjectFinancialPositionReconciliationSmoke
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
             $webResponse
                 ->assertOk()
-                ->assertSee('Execution Dashboard source active')
-                ->assertSee('loaded directly from the Execution Dashboard dataset')
+                ->assertSee('Financial execution dataset active')
+                ->assertSee('loaded directly from the reconciled financial execution dataset')
                 ->assertSee('Accounting Integrity')
                 ->assertSee('Funding Utilization Gap')
                 ->assertSee('Purchase Request Total')
@@ -173,6 +173,24 @@ class ProjectFinancialPositionReconciliationSmoke
                 ->assertSee('180,000.00')
                 ->assertSee('14.00%');
 
+            $legacyWebResponse = $this->get(route('finance.execution.dashboard', [
+                'program_id' => $program->id,
+            ]));
+            $this->assertTrue(
+                $legacyWebResponse->isRedirect()
+                    && str_contains((string) $legacyWebResponse->headers->get('Location'), '/budget/reports/project-financial-position'),
+                'The legacy financial execution URL should redirect to Project Financial Position.'
+            );
+
+            $legacyPdfResponse = $this->get(route('finance.execution.dashboard.export.pdf', [
+                'program_id' => $program->id,
+            ]));
+            $this->assertTrue(
+                $legacyPdfResponse->isRedirect()
+                    && str_contains((string) $legacyPdfResponse->headers->get('Location'), '/budget/reports/project-financial-position/export/pdf'),
+                'The legacy financial execution PDF URL should redirect to the combined Project Financial Position PDF.'
+            );
+
             $projectWebResponse = $this->get(route('budget.reports.project-financial-position', $projectQuery));
             $projectWebResponse
                 ->assertOk()
@@ -182,6 +200,11 @@ class ProjectFinancialPositionReconciliationSmoke
             $webHtml = (string) $webResponse->getContent();
             $pdfHtml = view('budgetreport.project-financial-position-pdf', $report)->render();
             $projectPdfHtml = view('budgetreport.project-financial-position-pdf', $projectReport)->render();
+            $this->assertTrue(
+                ! str_contains($pdfHtml, 'Execution Dashboard')
+                    && ! str_contains($pdfHtml, '<h2>Financial Execution Analytics</h2>'),
+                'The combined PDF should not contain a separate execution dashboard heading.'
+            );
             $this->assertTrue(
                 str_contains($projectPdfHtml, 'Selected project budget allocation')
                     && str_contains($projectPdfHtml, '320,000.00'),
@@ -195,7 +218,7 @@ class ProjectFinancialPositionReconciliationSmoke
                 'Funding Utilization Gap',
                 'Purchase Request Total',
                 'Unpaid Commitments',
-                'Execution Dashboard source active',
+                'Financial execution dataset active',
                 'Executive Controls',
                 'Commitment utilization of Approved Funding',
                 'Accounting Integrity',
@@ -212,6 +235,18 @@ class ProjectFinancialPositionReconciliationSmoke
                 'Program Control Split',
                 'Full Program Balance Sheet',
                 'Scheduled total',
+                'Integrated financial execution analytics',
+                'Financial Execution Analytics',
+                'Execution Mix',
+                'Rate Movement',
+                'Cumulative Momentum',
+                'Cumulative Financial Profile',
+                'Variance Control',
+                'Execution Quality Radar',
+                'Exposure Concentration',
+                'Year-by-Year Execution',
+                'Component Execution Breakdown',
+                'Execution Insights',
                 'Generated in your local time',
                 'Official financial control report',
                 '500,000.00',

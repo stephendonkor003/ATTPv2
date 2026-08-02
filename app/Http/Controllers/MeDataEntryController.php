@@ -19,6 +19,7 @@ use App\Models\Project;
 use App\Models\Sector;
 use App\Models\SubActivity;
 use App\Models\User;
+use App\Services\MeReportingReadinessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -127,7 +128,7 @@ class MeDataEntryController extends Controller
         $this->middleware('permission:me.data_entry.manage|me.configuration.manage')->except('index');
     }
 
-    public function index(Request $request): View
+    public function index(Request $request, MeReportingReadinessService $readinessService): View
     {
         $tab = in_array($request->query('tab'), self::TABS, true)
             ? (string) $request->query('tab')
@@ -140,6 +141,7 @@ class MeDataEntryController extends Controller
             $this->applyAssignedPortfolioScopeToSectors($portfolioQuery, $request->user());
         }
         $portfolios = $portfolioQuery->get(['id', 'name', 'status']);
+        $reportingReadiness = $readinessService->assess($portfolios->pluck('id'));
 
         $portfolioId = trim((string) $request->query('portfolio_id', '')) ?: null;
         if ($portfolioId && ! $portfolios->contains(fn (Sector $portfolio): bool => (string) $portfolio->id === $portfolioId)) {
@@ -459,7 +461,8 @@ class MeDataEntryController extends Controller
             'projectComponents',
             'publishedForms',
             'activePeriods',
-            'availableThinkTanks'
+            'availableThinkTanks',
+            'reportingReadiness'
         ));
     }
 
@@ -1380,8 +1383,7 @@ class MeDataEntryController extends Controller
         string $portfolioId,
         string $componentId,
         string $indicatorId
-    ): void
-    {
+    ): void {
         if (! $this->indicatorsForPortfolioQuery($portfolioId)
             ->where('project_component_id', $componentId)
             ->whereKey($indicatorId)

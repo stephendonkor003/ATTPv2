@@ -3,12 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpFoundation\HeaderUtils;
 use Throwable;
 
 use App\Models\Sector;
@@ -31,84 +29,18 @@ class MasterDashboard extends Controller
      */
     public function executionDashboard(Request $request)
     {
-        return view('finance.execution.dashboard', $this->executionDashboardPayload($request));
+        return redirect()->route('budget.reports.project-financial-position', array_filter([
+            'program_id' => $request->query('program_id'),
+            'project_id' => $request->query('project_id'),
+        ]));
     }
 
     public function exportExecutionDashboardPdf(Request $request)
     {
-        $downloadToken = $this->executionDashboardDownloadToken($request);
-        $this->storeExecutionDashboardDownloadStatus($request, $downloadToken, [
-            'status' => 'processing',
-            'message' => 'The complete Execution Dashboard report is being generated.',
-        ]);
-
-        try {
-            $data = $this->executionDashboardPayload($request);
-            $expectedSnapshot = strtolower(trim((string) $request->query('dashboard_snapshot', '')));
-            $currentSnapshot = (string) ($data['executionChartData']['snapshot_hash'] ?? '');
-            if (! $this->executionDashboardSnapshotMatches($expectedSnapshot, $currentSnapshot)) {
-                $message = 'The dashboard figures changed after this page was opened. Refresh the dashboard before downloading so the webpage and PDF figures remain identical.';
-                $this->storeExecutionDashboardDownloadStatus($request, $downloadToken, [
-                    'status' => 'failed',
-                    'code' => 'dashboard_data_changed',
-                    'message' => $message,
-                ]);
-
-                return response($message, 409, [
-                    'Content-Type' => 'text/plain; charset=UTF-8',
-                    'Cache-Control' => 'no-store, no-cache, must-revalidate',
-                    'X-Content-Type-Options' => 'nosniff',
-                ]);
-            }
-
-            $data['executionChartImages'] = app(ExecutionDashboardChartBuilder::class)
-                ->buildFromDataset($data['executionChartData'], $data['currency']);
-            $filename = 'execution-dashboard-' . now()->format('Ymd-His') . '.pdf';
-            $output = Pdf::loadView('finance.execution.dashboard_pdf', $data)
-                ->setPaper('a4', 'landscape')
-                ->output();
-
-            $this->storeExecutionDashboardDownloadStatus($request, $downloadToken, [
-                'status' => 'ready',
-                'message' => 'The report is ready and has been handed to your download manager.',
-                'filename' => $filename,
-                'bytes' => strlen($output),
-                'snapshot_hash' => $data['executionChartData']['snapshot_hash'] ?? null,
-            ]);
-
-            return response($output, 200, [
-                'Content-Type' => 'application/pdf',
-                'Content-Length' => (string) strlen($output),
-                'Content-Disposition' => HeaderUtils::makeDisposition(
-                    HeaderUtils::DISPOSITION_ATTACHMENT,
-                    $filename
-                ),
-                'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
-                'Pragma' => 'no-cache',
-                'Expires' => '0',
-                'X-Content-Type-Options' => 'nosniff',
-                'X-Execution-Dashboard-Snapshot' => (string) ($data['executionChartData']['snapshot_hash'] ?? ''),
-            ]);
-        } catch (Throwable $exception) {
-            report($exception);
-            $reference = $downloadToken ? substr($downloadToken, -8) : null;
-            $message = 'The server could not generate the PDF. Please try again.';
-            if ($reference) {
-                $message .= ' Reference: ' . $reference . '.';
-            }
-
-            $this->storeExecutionDashboardDownloadStatus($request, $downloadToken, [
-                'status' => 'failed',
-                'message' => $message,
-                'reference' => $reference,
-            ]);
-
-            return response($message, 500, [
-                'Content-Type' => 'text/plain; charset=UTF-8',
-                'Cache-Control' => 'no-store, no-cache, must-revalidate',
-                'X-Content-Type-Options' => 'nosniff',
-            ]);
-        }
+        return redirect()->route('budget.reports.project-financial-position.export.pdf', array_filter([
+            'program_id' => $request->query('program_id'),
+            'project_id' => $request->query('project_id'),
+        ]));
     }
 
     public function executionDashboardExportStatus(Request $request)
