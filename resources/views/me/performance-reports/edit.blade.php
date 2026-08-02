@@ -710,6 +710,8 @@
                                     $indicator = $result->indicator;
                                     $unit = $indicator?->unit?->symbol ?: $indicator?->unit?->name;
                                     $actualValue = old('indicator_results.'.$result->id.'.actual_value', $result->actual_value);
+                                    $rollupNumerator = old('indicator_results.'.$result->id.'.rollup_numerator', $result->rollup_numerator);
+                                    $rollupDenominator = old('indicator_results.'.$result->id.'.rollup_denominator', $result->rollup_denominator);
                                 @endphp
                                 <div class="col-xl-6">
                                     <article class="indicator-card" data-indicator-card data-target="{{ $result->target_value }}">
@@ -775,10 +777,21 @@
                                                     {{ $result->progress_percent !== null ? number_format((float) $result->progress_percent, 1).'%' : 'Pending' }}
                                                 </div>
                                             </div>
+                                            @if($indicator?->organization_rollup_method === 'weighted_average')
+                                                <div class="result-cell">
+                                                    <small>Weighted numerator</small>
+                                                    <input type="number" step="any" min="0" name="indicator_results[{{ $result->id }}][rollup_numerator]" class="form-control" value="{{ $rollupNumerator }}" @disabled(!$editable)>
+                                                </div>
+                                                <div class="result-cell">
+                                                    <small>Weighted denominator</small>
+                                                    <input type="number" step="any" min="0.0001" name="indicator_results[{{ $result->id }}][rollup_denominator]" class="form-control" value="{{ $rollupDenominator }}" @disabled(!$editable)>
+                                                </div>
+                                            @endif
                                         </div>
                                         <div class="small text-muted mt-2">
                                             <i class="feather-layers me-1"></i>
-                                            Aggregation: {{ \App\Models\Indicator::AGGREGATION_METHODS[$result->aggregation_method] ?? 'Latest reported value' }}
+                                            Time aggregation: {{ \App\Models\Indicator::AGGREGATION_METHODS[$result->aggregation_method] ?? 'Latest reported value' }}
+                                            &middot; Organization roll-up: {{ \App\Models\Indicator::ORGANIZATION_ROLLUP_METHODS[$indicator?->organization_rollup_method] ?? 'Sum' }}
                                         </div>
                                         @if ($indicator?->meansOfVerification)
                                             <a class="mov-link" href="{{ route('budget.me.rebuild.knowledge-repository', ['q' => $indicator->meansOfVerification->title]) }}" target="_blank" rel="noopener">
@@ -958,6 +971,8 @@
                     </div>
                 @endif
             </form>
+
+            @include('me.performance-reports.partials.achievement-tracker')
 
             @if ($editable)
                 @foreach ($report->documents as $document)

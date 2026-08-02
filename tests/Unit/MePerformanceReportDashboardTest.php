@@ -12,6 +12,7 @@ it('defines every requested reporting dashboard metric and filter', function () 
         "'draft'",
         "'submitted'",
         "'returned'",
+        "'verified'",
         "'approved'",
         "'archived'",
         'returned_for_correction',
@@ -28,7 +29,8 @@ it('defines every requested reporting dashboard metric and filter', function () 
 
     foreach ([
         'reporting_year',
-        'reporting_quarter',
+        'reporting_period_type',
+        'reporting_period_label',
         'component_id',
         'results_level',
         'think_tank_id',

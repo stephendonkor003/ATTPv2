@@ -290,6 +290,8 @@ class MeDataEntryController extends Controller
                         MePerformanceReport::STATUS_DRAFT,
                         MePerformanceReport::STATUS_SUBMITTED,
                         MePerformanceReport::STATUS_REVIEWED,
+                        MePerformanceReport::STATUS_VERIFIED,
+                        MePerformanceReport::STATUS_APPROVED,
                         MePerformanceReport::STATUS_ARCHIVED,
                     ], true),
                     fn ($query) => $query->where('status', $statusFilter)

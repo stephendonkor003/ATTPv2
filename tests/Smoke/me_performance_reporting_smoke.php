@@ -151,6 +151,16 @@ class MePerformanceReportingSmoke
                 ->assertRedirect()
                 ->assertSessionHasNoErrors();
 
+            $this->postWithCsrf(route('budget.me.performance-reports.achievements.store', [$report, $reportResult]), [
+                'title' => 'ATTP policy evidence product completed',
+                'description' => 'A policy-relevant research product was completed and shared with public-sector stakeholders.',
+                'achieved_on' => '2026-01-20',
+                'geographic_scope' => 'national',
+                'country' => 'Ghana',
+                'location' => 'Accra',
+                'priority_themes' => ['regional_trade'],
+            ])->assertRedirect()->assertSessionHasNoErrors();
+
             $report->refresh()->load(['indicatorResults.indicatorResult', 'documents']);
             $reportResult = $report->indicatorResults->first();
             $this->assertSame(100.0, (float) $reportResult->actual_value, 'The actual result was not saved.');
@@ -176,19 +186,24 @@ class MePerformanceReportingSmoke
             $this->get(route('budget.me.performance-reports.edit', $report))
                 ->assertOk()
                 ->assertSee('Return Report')
-                ->assertSee('Approve Report')
+                ->assertSee('Verify Report')
                 ->assertSee('Indicator results and progress against target')
                 ->assertSee('Complete');
 
             $this->postWithCsrf(route('budget.me.performance-reports.review', $report), [
-                'review_action' => MePerformanceReport::STATUS_REVIEWED,
+                'review_action' => MePerformanceReport::STATUS_VERIFIED,
                 'review_notes' => 'The reported result agrees with the attached source evidence.',
             ])->assertRedirect()->assertSessionHasNoErrors();
             $this->assertSame(
-                MePerformanceReport::STATUS_REVIEWED,
+                MePerformanceReport::STATUS_VERIFIED,
                 $report->fresh()->status,
-                'The report was not reviewed and approved.'
+                'The report was not verified.'
             );
+
+            $this->postWithCsrf(route('budget.me.performance-reports.review', $report), [
+                'review_action' => MePerformanceReport::STATUS_APPROVED,
+                'review_notes' => 'Final approval granted after evidence verification.',
+            ])->assertRedirect()->assertSessionHasNoErrors();
 
             $this->get(route('budget.me.performance-reports.edit', $report))
                 ->assertOk()
@@ -262,11 +277,33 @@ class MePerformanceReportingSmoke
                 $memberResult->id => ['actual_value' => 110],
             ];
             $portalPayload['documents'] = [
-                UploadedFile::fake()->create('partner-evidence.pdf', 96, 'application/pdf'),
+                UploadedFile::fake()->image('partner-evidence.png', 32, 32),
             ];
             $this->putWithCsrf(route('think-tank.performance-reports.update', $memberReport), $portalPayload)
                 ->assertRedirect()
                 ->assertSessionHasNoErrors();
+            $memberReport->refresh()->load('documents.repositoryItem.versions');
+            $memberEvidence = $memberReport->documents->first()?->repositoryItem;
+            $secretariatEvidence = $report->fresh()->documents()->with('repositoryItem')->first()?->repositoryItem;
+            $this->assertTrue((bool) $memberEvidence, 'The think-tank attachment was not synchronized to the Evidence Repository.');
+            $this->assertTrue((bool) $secretariatEvidence, 'The Secretariat attachment was not synchronized to the Evidence Repository.');
+            $this->assertTrue($context['portalUser']->isThinkTankUser(), 'The security check actor is not a think-tank user.');
+            $this->assertSame((string) $context['member']->id, (string) $context['portalUser']->resolvedThinkTankMembership()?->id, 'The security check actor has the wrong membership.');
+            $this->assertTrue((string) $memberEvidence->id !== (string) $secretariatEvidence->id, 'The test evidence records unexpectedly resolved to the same repository item.');
+            $this->assertTrue(! $secretariatEvidence->reportDocuments()->whereHas('report', fn ($query) => $query->where('think_tank_member_id', $context['member']->id))->exists(), 'Secretariat evidence unexpectedly belongs to the think tank.');
+            $this->get(route('budget.me.knowledge-evidence.download', $secretariatEvidence))->assertForbidden();
+            $this->get(route('budget.me.knowledge-evidence.download', $memberEvidence))->assertOk();
+            $memberEvidenceVersion = $memberEvidence->versions->first();
+            $this->assertTrue((bool) $memberEvidenceVersion, 'The initial repository document version was not recorded.');
+            $this->get(route('budget.me.knowledge-evidence.versions.download', [$memberEvidence, $memberEvidenceVersion]))->assertOk();
+            $this->postWithCsrf(route('budget.me.performance-reports.achievements.store', [$memberReport, $memberResult]), [
+                'title' => 'Partner research product completed',
+                'description' => 'The assigned think tank completed a policy-relevant research product for the reporting period.',
+                'achieved_on' => '2026-01-25',
+                'geographic_scope' => 'national',
+                'country' => $context['member']->country ?: 'Ghana',
+                'priority_themes' => ['regional_trade'],
+            ])->assertRedirect()->assertSessionHasNoErrors();
             $this->postWithCsrf(route('think-tank.performance-reports.submit', $memberReport))
                 ->assertRedirect()
                 ->assertSessionHasNoErrors();
@@ -276,7 +313,7 @@ class MePerformanceReportingSmoke
                 'The think tank report was not submitted to the Secretariat.'
             );
             $this->postWithCsrf(route('budget.me.performance-reports.review', $memberReport), [
-                'review_action' => MePerformanceReport::STATUS_REVIEWED,
+                'review_action' => MePerformanceReport::STATUS_VERIFIED,
                 'review_notes' => 'A report author must not be able to approve this report.',
             ])->assertForbidden();
 
@@ -288,8 +325,12 @@ class MePerformanceReportingSmoke
 
             $this->authenticate($context['admin']);
             $this->postWithCsrf(route('budget.me.performance-reports.review', $memberReport), [
-                'review_action' => MePerformanceReport::STATUS_REVIEWED,
-                'review_notes' => 'Partner evidence verified and the report approved.',
+                'review_action' => MePerformanceReport::STATUS_VERIFIED,
+                'review_notes' => 'Partner evidence verified.',
+            ])->assertRedirect()->assertSessionHasNoErrors();
+            $this->postWithCsrf(route('budget.me.performance-reports.review', $memberReport), [
+                'review_action' => MePerformanceReport::STATUS_APPROVED,
+                'review_notes' => 'Partner report approved.',
             ])->assertRedirect()->assertSessionHasNoErrors();
             $this->postWithCsrf(route('budget.me.performance-reports.archive', $memberReport), [
                 'archive_notes' => 'Partner report retained as a historical record.',
@@ -307,7 +348,8 @@ class MePerformanceReportingSmoke
 
             $this->get(route('budget.me.rebuild.reporting-dashboard', [
                 'reporting_year' => 2026,
-                'reporting_quarter' => $context['quarter'],
+                'reporting_period_type' => 'quarter',
+                'reporting_period_label' => $context['quarter'],
                 'component_id' => $context['component']->id,
                 'results_level' => 'pdo',
                 'indicator_id' => $context['indicator']->id,
@@ -333,6 +375,23 @@ class MePerformanceReportingSmoke
                 ->assertSee($context['member']->name)
                 ->assertSee($context['form']->title)
                 ->assertSee('Permission-scoped drill-down');
+
+            $this->get(route('budget.me.consolidated-reports.index', [
+                'reporting_year' => 2026,
+                'reporting_period_type' => 'quarter',
+                'reporting_period_label' => $context['quarter'],
+            ]))
+                ->assertOk()
+                ->assertSee('Think Tank Submissions &amp; Consolidated Report', false)
+                ->assertSee($context['member']->name)
+                ->assertSee($context['indicator']->name);
+            $consolidatedFilters = [
+                'reporting_year' => 2026,
+                'reporting_period_type' => 'quarter',
+                'reporting_period_label' => $context['quarter'],
+            ];
+            $this->get(route('budget.me.consolidated-reports.excel', $consolidatedFilters))->assertOk();
+            $this->get(route('budget.me.consolidated-reports.pdf', $consolidatedFilters))->assertOk();
 
             echo "ME_PERFORMANCE_REPORTING_OK\n";
         } finally {

@@ -140,7 +140,7 @@
                         <i class="feather-arrow-left me-1" aria-hidden="true"></i>Performance reports
                     </a>
                     <h3 class="fw-bold mt-3 mb-0">Create a Performance Report</h3>
-                    <p>Choose an approved reporting form and quarter. The report will include only indicators due under their approved reporting frequency.</p>
+                    <p>Choose an approved reporting form, reporting frequency and period. The report includes only indicators due under that approved frequency.</p>
                 </div>
             </header>
 
@@ -213,19 +213,24 @@
                             </div>
                         </div>
 
-                        <div class="col-md-6">
-                            <label for="report-quarter" class="form-label"><span class="report-step">2</span>Reporting period</label>
-                            <select name="reporting_quarter" id="report-quarter" class="form-select @error('reporting_quarter') is-invalid @enderror" required>
-                                <option value="">Choose Q1, Q2, Q3 or Q4</option>
-                                @foreach ($quarters as $value => $label)
-                                    <option value="{{ $value }}" @selected(old('reporting_quarter') === $value)>{{ $label }}</option>
+                        <div class="col-md-4">
+                            <label for="report-period-type" class="form-label"><span class="report-step">2</span>Reporting frequency</label>
+                            <select name="reporting_period_type" id="report-period-type" class="form-select @error('reporting_period_type') is-invalid @enderror" required>
+                                @foreach ($periodTypes as $value => $label)
+                                    <option value="{{ $value }}" @selected(old('reporting_period_type', 'quarter') === $value)>{{ $label }}</option>
                                 @endforeach
                             </select>
-                            @error('reporting_quarter')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            @error('reporting_period_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
 
-                        <div class="col-md-6">
-                            <label for="report-year" class="form-label"><span class="report-step">3</span>Reporting year</label>
+                        <div class="col-md-4">
+                            <label for="report-period-label" class="form-label"><span class="report-step">3</span>Reporting period</label>
+                            <select name="reporting_period_label" id="report-period-label" class="form-select @error('reporting_period_label') is-invalid @enderror" required></select>
+                            @error('reporting_period_label')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="report-year" class="form-label"><span class="report-step">4</span>Reporting year</label>
                             <input type="number" name="reporting_year" id="report-year" min="2000" max="2100" class="form-control @error('reporting_year') is-invalid @enderror" value="{{ old('reporting_year', $defaultYear) }}" required>
                             @error('reporting_year')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
@@ -248,6 +253,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             const formSelect = document.getElementById('report-form');
             const preview = document.getElementById('template-preview');
+            const periodType = document.getElementById('report-period-type');
+            const periodLabel = document.getElementById('report-period-label');
+            const periodLabels = @json($periodLabels);
+            const oldPeriodLabel = @json(old('reporting_period_label', 'Q1'));
             if (!formSelect || !preview) {
                 return;
             }
@@ -280,6 +289,19 @@
 
             formSelect.addEventListener('change', updatePreview);
             updatePreview();
+
+            const updatePeriodLabels = () => {
+                const options = periodLabels[periodType?.value] || {};
+                const selected = periodLabel?.value || oldPeriodLabel;
+                if (!periodLabel) return;
+                periodLabel.innerHTML = '';
+                Object.entries(options).forEach(([value, label]) => {
+                    const option = new Option(label, value, false, selected === value);
+                    periodLabel.add(option);
+                });
+            };
+            periodType?.addEventListener('change', updatePeriodLabels);
+            updatePeriodLabels();
         });
     </script>
 @endpush

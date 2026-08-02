@@ -8,8 +8,12 @@ use App\Models\Indicator;
 use App\Models\IndicatorResult;
 use App\Models\MeDataCollectionAssignment;
 use App\Models\MeDataEntryForm;
+use App\Models\MeDisaggregationDimension;
+use App\Models\MeIndicatorAchievement;
+use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MePerformanceReport;
 use App\Models\MePerformanceReportDocument;
+use App\Models\MeRepositoryDocumentLink;
 use App\Models\MeReportingPeriod;
 use App\Support\IndicatorReportingSchedule;
 use App\Services\IndicatorAggregationService;
@@ -57,18 +61,22 @@ class MePerformanceReportController extends Controller
 
         return view('me.performance-reports.create', [
             'forms' => $forms,
-            'quarters' => MePerformanceReport::QUARTERS,
+            'periodTypes' => MePerformanceReport::REPORTING_PERIOD_TYPES,
+            'periodLabels' => MePerformanceReport::PERIOD_LABELS,
             'defaultYear' => (int) now()->year,
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $this->normalizeLegacyPeriodInput($request);
         $validated = $request->validate([
             'form_id' => ['required', 'uuid', Rule::exists('me_data_entry_forms', 'id')],
-            'reporting_quarter' => ['required', Rule::in(array_keys(MePerformanceReport::QUARTERS))],
+            'reporting_period_type' => ['required', Rule::in(array_keys(MePerformanceReport::REPORTING_PERIOD_TYPES))],
+            'reporting_period_label' => ['required', 'string', 'max:40'],
             'reporting_year' => ['required', 'integer', 'min:2000', 'max:2100'],
         ]);
+        $this->assertValidPeriodSelection($validated['reporting_period_type'], $validated['reporting_period_label']);
 
         $form = $this->scopedForms($request)
             ->with([
@@ -93,13 +101,14 @@ class MePerformanceReportController extends Controller
         $report = $this->createReportFor(
             $form,
             (int) $validated['reporting_year'],
-            (string) $validated['reporting_quarter'],
+            (string) $validated['reporting_period_type'],
+            (string) $validated['reporting_period_label'],
             $request
         );
 
         return redirect()
             ->route('budget.me.performance-reports.edit', $report)
-            ->with('success', 'Quarterly report created. Complete the report sections and attach supporting evidence.');
+            ->with('success', $report->periodLabel().' report created. Complete the indicator achievements, results, narratives and supporting evidence.');
     }
 
     public function edit(Request $request, MePerformanceReport $report): View
@@ -111,13 +120,19 @@ class MePerformanceReportController extends Controller
             'projectComponent:id,project_id,name,governance_node_id',
             'responsibleDirectorate:id,name,code',
             'reportingPeriod:id,label,period_start,period_end',
-            'indicatorResults.indicator:id,indicator_code,name,unit_id,means_of_verification_id,frequency_of_reporting_id,data_collection_method',
+            'indicatorResults.indicator:id,indicator_code,name,unit_id,means_of_verification_id,frequency_of_reporting_id,data_collection_method,organization_rollup_method',
             'indicatorResults.indicator.unit:id,name,symbol',
             'indicatorResults.indicator.meansOfVerification:id,title,file_path,external_url',
+            'indicatorResults.indicator.disaggregationRequirements.dimension:id,code,name,dimension_group,sort_order',
+            'indicatorResults.achievements.breakdowns',
+            'indicatorResults.achievements.leadThinkTank:id,name,country',
+            'indicatorResults.achievements.documentLinks.repositoryItem:id,title,document_type,repository_category,original_filename,file_size,validation_status',
             'documents',
             'thinkTank:id,name,role,country',
             'createdBy:id,name',
             'reviewedBy:id,name',
+            'verifiedBy:id,name',
+            'approvedBy:id,name',
             'archivedBy:id,name',
             'transitions.actor:id,name',
         ]);
@@ -132,6 +147,23 @@ class MePerformanceReportController extends Controller
             'sectionCompletion' => $sectionCompletion,
             'submissionReady' => collect($sectionCompletion)
                 ->every(fn (array $section): bool => $section['status'] === 'complete'),
+            'achievementTaxonomy' => [
+                'geographic_scopes' => MeIndicatorAchievement::GEOGRAPHIC_SCOPES,
+                'recs' => MeIndicatorAchievement::RECS,
+                'institution_types' => MeIndicatorAchievement::INSTITUTION_TYPES,
+                'priority_themes' => MeIndicatorAchievement::PRIORITY_THEMES,
+                'genders' => MeIndicatorAchievement::GENDERS,
+                'age_groups' => MeIndicatorAchievement::AGE_GROUPS,
+                'stakeholder_categories' => MeIndicatorAchievement::STAKEHOLDER_CATEGORIES,
+                'countries' => MeDisaggregationDimension::query()
+                    ->where('code', 'country')
+                    ->with(['options' => fn ($query) => $query->where('is_active', true)])
+                    ->first()?->options?->pluck('name', 'name')->all() ?? [],
+            ],
+            'activeThinkTanks' => ConsortiumThinkTank::query()
+                ->where('status', 'active')
+                ->orderBy('name')
+                ->get(['id', 'name', 'country']),
         ]);
     }
 
@@ -236,7 +268,8 @@ class MePerformanceReportController extends Controller
         $validated = $request->validate([
             'review_action' => ['required', Rule::in([
                 'returned',
-                MePerformanceReport::STATUS_REVIEWED,
+                MePerformanceReport::STATUS_VERIFIED,
+                MePerformanceReport::STATUS_APPROVED,
             ])],
             'review_notes' => ['nullable', 'string', 'max:5000'],
         ]);
@@ -247,35 +280,74 @@ class MePerformanceReportController extends Controller
                 'review_notes' => 'Explain the corrections required before returning this report.',
             ]);
         }
-        if (! $report->isSubmitted()) {
+        $allowed = match ($action) {
+            'returned' => in_array($report->status, [MePerformanceReport::STATUS_SUBMITTED, MePerformanceReport::STATUS_VERIFIED], true),
+            MePerformanceReport::STATUS_VERIFIED => $report->isSubmitted(),
+            MePerformanceReport::STATUS_APPROVED => $report->isVerified(),
+            default => false,
+        };
+        if (! $allowed) {
             throw ValidationException::withMessages([
-                'review_action' => 'Only submitted reports can be reviewed or returned.',
+                'review_action' => 'This decision is not available at the report’s current lifecycle stage.',
+            ]);
+        }
+        if ($action === MePerformanceReport::STATUS_APPROVED
+            && (string) $report->verified_by === (string) $request->user()->id
+            && ! $request->user()->isAdmin()
+            && ! $request->user()->isSuperAdmin()) {
+            throw ValidationException::withMessages([
+                'review_action' => 'The officer who verified this report cannot also give final approval. Ask another authorized reviewer to approve it.',
             ]);
         }
 
         $report->load(['indicatorResults.indicator', 'documents']);
-        if ($action === MePerformanceReport::STATUS_REVIEWED && ! $report->isSubmissionReady()) {
+        if (in_array($action, [MePerformanceReport::STATUS_VERIFIED, MePerformanceReport::STATUS_APPROVED], true)
+            && ! $report->isSubmissionReady()) {
             throw ValidationException::withMessages([
-                'review_action' => 'This report is incomplete and cannot be approved. Return it to the author for correction.',
+                'review_action' => 'This report is incomplete and cannot advance. Return it to the author for correction.',
             ]);
         }
 
         DB::transaction(function () use ($request, $report, $validated, $action): void {
+            $fromStatus = (string) $report->status;
             $targetStatus = $action === 'returned'
                 ? MePerformanceReport::STATUS_DRAFT
-                : MePerformanceReport::STATUS_REVIEWED;
-            $report->update([
+                : $action;
+            $attributes = [
                 'status' => $targetStatus,
                 'reviewed_by' => $request->user()->id,
                 'reviewed_at' => now(),
                 'review_notes' => $validated['review_notes'] ?? null,
                 'updated_by' => $request->user()->id,
-            ]);
+            ];
+            if ($action === 'returned') {
+                $attributes += [
+                    'verified_by' => null,
+                    'verified_at' => null,
+                    'verification_notes' => null,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                    'approval_notes' => null,
+                ];
+            } elseif ($action === MePerformanceReport::STATUS_VERIFIED) {
+                $attributes += [
+                    'verified_by' => $request->user()->id,
+                    'verified_at' => now(),
+                    'verification_notes' => $validated['review_notes'] ?? null,
+                ];
+            } else {
+                $attributes += [
+                    'approved_by' => $request->user()->id,
+                    'approved_at' => now(),
+                    'approval_notes' => $validated['review_notes'] ?? null,
+                ];
+            }
+            $report->update($attributes);
 
             $resultIds = $report->indicatorResults->pluck('indicator_result_id')->filter();
             if ($resultIds->isNotEmpty()) {
                 $attributes = [
-                    'review_status' => $action === 'returned' ? 'returned' : 'approved',
+                    'review_status' => $action === 'returned' ? 'returned' : $action,
                     'review_notes' => $validated['review_notes'] ?? null,
                     'updated_by' => $request->user()->id,
                 ];
@@ -286,10 +358,15 @@ class MePerformanceReportController extends Controller
                         'approved_by' => null,
                         'approved_at' => null,
                     ];
-                } else {
+                } elseif ($action === MePerformanceReport::STATUS_VERIFIED) {
                     $attributes += [
                         'validated_by' => $request->user()->id,
                         'validated_at' => now(),
+                        'approved_by' => null,
+                        'approved_at' => null,
+                    ];
+                } else {
+                    $attributes += [
                         'approved_by' => $request->user()->id,
                         'approved_at' => now(),
                     ];
@@ -297,7 +374,7 @@ class MePerformanceReportController extends Controller
 
                 IndicatorResult::query()->whereIn('id', $resultIds)->update($attributes);
             }
-            if ($action !== 'returned') {
+            if ($action === MePerformanceReport::STATUS_VERIFIED) {
                 $report->documents()->update([
                     'validation_status' => 'validated',
                     'validated_by' => $request->user()->id,
@@ -308,16 +385,16 @@ class MePerformanceReportController extends Controller
 
             $this->recordTransition(
                 $report,
-                MePerformanceReport::STATUS_SUBMITTED,
+                $fromStatus,
                 $targetStatus,
-                $action === 'returned' ? 'returned_for_correction' : 'reviewed_and_approved',
+                $action === 'returned' ? 'returned_for_correction' : $action,
                 $validated['review_notes'] ?? null,
                 (string) $request->user()->id
             );
         });
         app(MeReportingNotificationService::class)->performanceLifecycle(
             $report,
-            $action === 'returned' ? 'returned' : 'approved'
+            $action
         );
 
         return redirect()
@@ -326,24 +403,27 @@ class MePerformanceReportController extends Controller
                 'success',
                 $action === 'returned'
                     ? 'Report returned to the author as a draft for correction.'
-                    : 'Report reviewed and approved.'
+                    : ($action === MePerformanceReport::STATUS_VERIFIED
+                        ? 'Report verified and sent for final approval.'
+                        : 'Report received final approval.')
             );
     }
 
     public function archive(Request $request, MePerformanceReport $report): RedirectResponse
     {
         $this->assertReportInScope($request, $report);
-        if (! $report->isReviewed()) {
+        if (! $report->isApproved()) {
             throw ValidationException::withMessages([
-                'report' => 'Only a reviewed and approved report can be archived.',
+                'report' => 'Only a finally approved report can be archived.',
             ]);
         }
 
         $validated = $request->validate([
             'archive_notes' => ['nullable', 'string', 'max:5000'],
         ]);
+        $fromStatus = (string) $report->status;
 
-        DB::transaction(function () use ($request, $report, $validated): void {
+        DB::transaction(function () use ($request, $report, $validated, $fromStatus): void {
             $report->update([
                 'status' => MePerformanceReport::STATUS_ARCHIVED,
                 'archived_by' => $request->user()->id,
@@ -354,7 +434,7 @@ class MePerformanceReportController extends Controller
 
             $this->recordTransition(
                 $report,
-                MePerformanceReport::STATUS_REVIEWED,
+                $fromStatus,
                 MePerformanceReport::STATUS_ARCHIVED,
                 'archived',
                 $validated['archive_notes'] ?? null,
@@ -395,8 +475,18 @@ class MePerformanceReportController extends Controller
         }
 
         $path = $document->file_path;
+        $repositoryItemId = $document->repository_item_id;
         $document->delete();
-        Storage::disk('local')->delete($path);
+        if ($repositoryItemId && ! $report->documents()->where('repository_item_id', $repositoryItemId)->exists()) {
+            MeRepositoryDocumentLink::query()
+                ->where('repository_item_id', $repositoryItemId)
+                ->where('linkable_type', MePerformanceReport::class)
+                ->where('linkable_id', $report->id)
+                ->where('purpose', 'report_attachment')
+                ->delete();
+        } else {
+            Storage::disk('local')->delete($path);
+        }
 
         return back()->with('success', 'Supporting document removed.');
     }
@@ -404,7 +494,8 @@ class MePerformanceReportController extends Controller
     protected function createReportFor(
         MeDataEntryForm $form,
         int $year,
-        string $quarter,
+        string $periodType,
+        string $periodLabel,
         Request $request,
         ?ConsortiumThinkTank $member = null,
         ?MeDataCollectionAssignment $assignment = null
@@ -424,7 +515,7 @@ class MePerformanceReportController extends Controller
 
         $dueIndicators = $form->indicators
             ->filter(fn (Indicator $indicator): bool => (string) $indicator->project_component_id === (string) $form->project_component_id
-                && IndicatorReportingSchedule::isDueInQuarter($indicator, $quarter))
+                && IndicatorReportingSchedule::isDueInPeriod($indicator, $periodType, $periodLabel))
             ->values();
 
         if ($dueIndicators->isEmpty()) {
@@ -436,7 +527,8 @@ class MePerformanceReportController extends Controller
         $duplicate = MePerformanceReport::query()
             ->where('form_id', $form->id)
             ->where('reporting_year', $year)
-            ->where('reporting_quarter', $quarter)
+            ->where('reporting_period_type', $periodType)
+            ->where('reporting_period_label', $periodLabel)
             ->when(
                 $member,
                 fn ($query) => $query->where('think_tank_member_id', $member->id),
@@ -449,11 +541,12 @@ class MePerformanceReportController extends Controller
             ]);
         }
 
-        [$periodStart, $periodEnd] = $this->quarterDates($year, $quarter);
+        [$periodStart, $periodEnd] = $this->periodDates($year, $periodType, $periodLabel);
         $period = $this->resolveReportingPeriod(
             $form,
             $year,
-            $quarter,
+            $periodType,
+            $periodLabel,
             $periodStart,
             $periodEnd,
             (string) $request->user()->id
@@ -463,7 +556,8 @@ class MePerformanceReportController extends Controller
             $form,
             $period,
             $year,
-            $quarter,
+            $periodType,
+            $periodLabel,
             $periodStart,
             $periodEnd,
             $dueIndicators,
@@ -480,14 +574,16 @@ class MePerformanceReportController extends Controller
                 'think_tank_member_id' => $member?->id,
                 'assignment_id' => $assignment?->id,
                 'reporting_year' => $year,
-                'reporting_quarter' => $quarter,
+                'reporting_quarter' => $this->legacyQuarter($periodType, $periodLabel),
+                'reporting_period_type' => $periodType,
+                'reporting_period_label' => $periodLabel,
                 'status' => MePerformanceReport::STATUS_DRAFT,
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
 
             foreach ($dueIndicators as $indicator) {
-                $target = $this->targetForPeriod($indicator, $periodStart, $periodEnd, "{$year}-{$quarter}");
+                $target = $this->targetForPeriod($indicator, $periodStart, $periodEnd, $periodType, "{$year}-{$periodLabel}");
 
                 $report->indicatorResults()->create([
                     'indicator_id' => $indicator->id,
@@ -564,6 +660,8 @@ class MePerformanceReportController extends Controller
         return [
             'indicator_results' => ['required', 'array', 'min:1'],
             'indicator_results.*.actual_value' => [$required, 'numeric'],
+            'indicator_results.*.rollup_numerator' => ['nullable', 'numeric', 'min:0'],
+            'indicator_results.*.rollup_denominator' => ['nullable', 'numeric', 'gt:0'],
             'key_achievements' => [$required, 'string', 'max:20000'],
             'variance_explanation' => [$required, 'string', 'max:20000'],
             'means_of_verification_notes' => [$required, 'string', 'max:20000'],
@@ -609,6 +707,14 @@ class MePerformanceReportController extends Controller
         foreach ($report->indicatorResults as $reportResult) {
             $actual = data_get($values, $reportResult->id.'.actual_value');
             $actual = $actual === null || $actual === '' ? null : (float) $actual;
+            $numerator = data_get($values, $reportResult->id.'.rollup_numerator');
+            $numerator = $numerator === null || $numerator === '' ? null : (float) $numerator;
+            $denominator = data_get($values, $reportResult->id.'.rollup_denominator');
+            $denominator = $denominator === null || $denominator === '' ? null : (float) $denominator;
+            if ($reportResult->indicator?->organization_rollup_method === 'weighted_average'
+                && $numerator !== null && $denominator !== null && $denominator > 0) {
+                $actual = round(($numerator / $denominator) * 100, 4);
+            }
             $target = $reportResult->target_value === null ? null : (float) $reportResult->target_value;
             $progress = $actual !== null && $target !== null && $target != 0.0
                 ? round(($actual / $target) * 100, 2)
@@ -619,13 +725,17 @@ class MePerformanceReportController extends Controller
                 'indicator_id' => $reportResult->indicator_id,
                 'reporting_period_id' => $report->reporting_period_id,
                 'think_tank_member_id' => $report->think_tank_member_id,
-                'period_type' => 'quarter',
+                'period_type' => match ($report->reporting_period_type) {
+                    'annual' => 'year',
+                    'quarter' => 'quarter',
+                    default => 'custom',
+                },
                 'period_label' => $report->periodLabel(),
                 'period_start' => $report->reportingPeriod->period_start,
                 'period_end' => $report->reportingPeriod->period_end,
                 'actual_value' => $actual,
                 'unit_id' => $reportResult->indicator?->unit_id,
-                'data_source' => 'Quarterly performance report '.$report->form?->code,
+                'data_source' => Str::headline((string) $report->reporting_period_type).' performance report '.$report->form?->code,
                 'method' => $reportResult->indicator?->data_collection_method,
                 'notes' => $report->variance_explanation,
                 'review_status' => 'draft',
@@ -646,6 +756,8 @@ class MePerformanceReportController extends Controller
             $reportResult->update([
                 'indicator_result_id' => $indicatorResult->id,
                 'actual_value' => $actual,
+                'rollup_numerator' => $numerator,
+                'rollup_denominator' => $denominator,
                 'progress_percent' => $progress,
             ]);
         }
@@ -666,17 +778,63 @@ class MePerformanceReportController extends Controller
     ): void {
         $names = $validated['document_names'] ?? [];
         foreach ($request->file('documents', []) as $index => $file) {
-            $path = $file->store('me/performance-reports/'.$report->id, 'local');
-            $storedPaths[] = $path;
+            $title = trim((string) ($names[$index] ?? ''))
+                ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            $checksum = hash_file('sha256', $file->getRealPath());
+            $repositoryItem = MeKnowledgeEvidenceItem::query()
+                ->where('portfolio_id', $report->portfolio_id)
+                ->where('checksum_sha256', $checksum)
+                ->whereNull('retired_at')
+                ->first();
+
+            if ($repositoryItem) {
+                $path = $repositoryItem->file_path;
+            } else {
+                $path = $file->store('me/performance-reports/'.$report->id, 'local');
+                $storedPaths[] = $path;
+                $repositoryItem = MeKnowledgeEvidenceItem::query()->create([
+                    'portfolio_id' => $report->portfolio_id,
+                    'title' => $title,
+                    'document_type' => 'supporting_evidence',
+                    'repository_category' => 'evidence',
+                    'description' => 'Supporting evidence synchronized from performance report '.$report->periodLabel().'.',
+                    'file_path' => $path,
+                    'original_filename' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'checksum_sha256' => $checksum,
+                    'version_number' => 1,
+                    'validation_status' => 'pending',
+                    'created_by' => $request->user()->id,
+                    'updated_by' => $request->user()->id,
+                ]);
+                $repositoryItem->versions()->create([
+                    'version_number' => 1,
+                    'file_path' => $path,
+                    'original_filename' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'checksum_sha256' => $checksum,
+                    'change_notes' => 'Initial upload from a performance report.',
+                    'uploaded_by' => $request->user()->id,
+                ]);
+            }
 
             $report->documents()->create([
-                'document_name' => trim((string) ($names[$index] ?? ''))
-                    ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                'repository_item_id' => $repositoryItem->id,
+                'document_name' => $title,
                 'file_path' => $path,
                 'original_filename' => $file->getClientOriginalName(),
                 'mime_type' => $file->getMimeType(),
                 'file_size' => $file->getSize(),
                 'uploaded_by' => $request->user()->id,
+            ]);
+            $repositoryItem->links()->firstOrCreate([
+                'linkable_type' => MePerformanceReport::class,
+                'linkable_id' => $report->id,
+                'purpose' => 'report_attachment',
+            ], [
+                'linked_by' => $request->user()->id,
             ]);
         }
     }
@@ -699,30 +857,37 @@ class MePerformanceReportController extends Controller
         }
     }
 
-    private function quarterDates(int $year, string $quarter): array
+    private function periodDates(int $year, string $periodType, string $periodLabel): array
     {
-        $startMonth = match ($quarter) {
-            'Q1' => 1,
-            'Q2' => 4,
-            'Q3' => 7,
-            'Q4' => 10,
+        [$startMonth, $months] = match ($periodType.'|'.$periodLabel) {
+            'quarter|Q1' => [1, 3],
+            'quarter|Q2' => [4, 3],
+            'quarter|Q3' => [7, 3],
+            'quarter|Q4' => [10, 3],
+            'semi_annual|H1' => [1, 6],
+            'semi_annual|H2' => [7, 6],
+            'annual|ANNUAL' => [1, 12],
+            default => throw ValidationException::withMessages([
+                'reporting_period_label' => 'Choose a reporting period that belongs to the selected reporting frequency.',
+            ]),
         };
         $start = Carbon::create($year, $startMonth, 1)->startOfDay();
 
-        return [$start->copy(), $start->copy()->addMonths(3)->subDay()->endOfDay()];
+        return [$start->copy(), $start->copy()->addMonths($months)->subDay()->endOfDay()];
     }
 
     private function resolveReportingPeriod(
         MeDataEntryForm $form,
         int $year,
-        string $quarter,
+        string $periodType,
+        string $periodLabel,
         Carbon $start,
         Carbon $end,
         string $userId
     ): MeReportingPeriod {
         $existing = MeReportingPeriod::query()
             ->where('portfolio_id', $form->portfolio_id)
-            ->where('period_type', MeReportingPeriod::TYPE_QUARTER)
+            ->where('period_type', $this->reportingPeriodStorageType($periodType))
             ->whereDate('period_start', $start->toDateString())
             ->whereDate('period_end', $end->toDateString())
             ->first();
@@ -733,9 +898,9 @@ class MePerformanceReportController extends Controller
 
         return MeReportingPeriod::query()->create([
             'portfolio_id' => $form->portfolio_id,
-            'code' => 'ME-'.$year.'-'.$quarter.'-'.Str::upper(substr(str_replace('-', '', (string) $form->portfolio_id), 0, 8)),
-            'label' => $quarter.' '.$year,
-            'period_type' => MeReportingPeriod::TYPE_QUARTER,
+            'code' => 'ME-'.$year.'-'.$periodLabel.'-'.Str::upper(substr(str_replace('-', '', (string) $form->portfolio_id), 0, 8)),
+            'label' => $periodLabel.' '.$year,
+            'period_type' => $this->reportingPeriodStorageType($periodType),
             'period_start' => $start,
             'period_end' => $end,
             'status' => MeReportingPeriod::STATUS_ACTIVE,
@@ -748,6 +913,7 @@ class MePerformanceReportController extends Controller
         Indicator $indicator,
         Carbon $periodStart,
         Carbon $periodEnd,
+        string $periodType,
         string $periodLabel
     ) {
         $quarter = 'Q'.(int) ceil($periodStart->month / 3);
@@ -761,11 +927,16 @@ class MePerformanceReportController extends Controller
         ];
 
         return $indicator->targets
-            ->first(function ($target) use ($periodStart, $periodEnd, $acceptedLabels): bool {
+            ->first(function ($target) use ($periodStart, $periodEnd, $acceptedLabels, $periodType): bool {
                 if ($target->target_context === Indicator::SETUP_TARGET_CONTEXT) {
                     return false;
                 }
-                if ($target->period_type === 'quarter' && in_array($target->period_label, $acceptedLabels, true)) {
+                $targetPeriodType = match ($periodType) {
+                    'quarter' => 'quarter',
+                    'annual' => 'year',
+                    default => 'custom',
+                };
+                if ($target->period_type === $targetPeriodType && in_array($target->period_label, $acceptedLabels, true)) {
                     return true;
                 }
 
@@ -773,5 +944,43 @@ class MePerformanceReportController extends Controller
                     && $target->period_start->betweenIncluded($periodStart, $periodEnd);
             })
             ?? $indicator->setupTarget;
+    }
+
+    protected function normalizeLegacyPeriodInput(Request $request): void
+    {
+        if (! $request->filled('reporting_period_type') && $request->filled('reporting_quarter')) {
+            $request->merge([
+                'reporting_period_type' => 'quarter',
+                'reporting_period_label' => $request->input('reporting_quarter'),
+            ]);
+        }
+    }
+
+    protected function assertValidPeriodSelection(string $periodType, string $periodLabel): void
+    {
+        if (! isset(MePerformanceReport::PERIOD_LABELS[$periodType][$periodLabel])) {
+            throw ValidationException::withMessages([
+                'reporting_period_label' => 'Choose a reporting period that belongs to the selected reporting frequency.',
+            ]);
+        }
+    }
+
+    private function legacyQuarter(string $periodType, string $periodLabel): string
+    {
+        return match ($periodType.'|'.$periodLabel) {
+            'quarter|Q1' => 'Q1',
+            'quarter|Q2', 'semi_annual|H1' => 'Q2',
+            'quarter|Q3' => 'Q3',
+            default => 'Q4',
+        };
+    }
+
+    private function reportingPeriodStorageType(string $periodType): string
+    {
+        return match ($periodType) {
+            'quarter' => MeReportingPeriod::TYPE_QUARTER,
+            'annual' => MeReportingPeriod::TYPE_YEAR,
+            default => MeReportingPeriod::TYPE_CUSTOM,
+        };
     }
 }

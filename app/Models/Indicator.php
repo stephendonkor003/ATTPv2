@@ -23,6 +23,16 @@ class Indicator extends BaseModel
         'non_additive' => 'Other non-additive value (latest)',
     ];
 
+    public const ORGANIZATION_ROLLUP_METHODS = [
+        'sum' => 'Sum organization results',
+        'latest' => 'Latest approved organization value',
+        'average' => 'Simple average across organizations',
+        'weighted_average' => 'Weighted average (requires numerator and denominator)',
+        'minimum' => 'Minimum organization value',
+        'maximum' => 'Maximum organization value',
+        'non_additive' => 'Do not consolidate into one numeric value',
+    ];
+
     protected $table = 'myb_indicators';
 
     protected $fillable = [
@@ -39,6 +49,7 @@ class Indicator extends BaseModel
         'indicator_level_id',
         'results_level',
         'aggregation_method',
+        'organization_rollup_method',
         'methodology',
         'data_collection_method',
         'notes',
@@ -50,6 +61,7 @@ class Indicator extends BaseModel
         'means_of_verification_id',
         'definitions',
         'created_by',
+        'code_updated_by',
     ];
 
     protected $casts = [
@@ -67,11 +79,6 @@ class Indicator extends BaseModel
             }
         });
 
-        static::updating(function (Indicator $indicator): void {
-            if ($indicator->isDirty('indicator_code')) {
-                $indicator->indicator_code = $indicator->getOriginal('indicator_code');
-            }
-        });
     }
 
     public static function generateIndicatorCode(): string
@@ -105,6 +112,24 @@ class Indicator extends BaseModel
             ->orderByRaw("CASE level WHEN 'primary' THEN 1 WHEN 'secondary' THEN 2 WHEN 'tertiary' THEN 3 ELSE 4 END");
     }
 
+    public function disaggregationRequirements(): HasMany
+    {
+        return $this->hasMany(MeIndicatorDisaggregationRequirement::class, 'indicator_id')
+            ->with('dimension')
+            ->orderBy('sort_order');
+    }
+
+    public function codeHistory(): HasMany
+    {
+        return $this->hasMany(IndicatorCodeHistory::class, 'indicator_id')
+            ->latest('changed_at');
+    }
+
+    public function achievements(): HasMany
+    {
+        return $this->hasMany(MeIndicatorAchievement::class, 'indicator_id');
+    }
+
     public function resultsLevelLabel(): string
     {
         return match ($this->results_level) {
@@ -116,6 +141,17 @@ class Indicator extends BaseModel
 
     public function disaggregationChain(): string
     {
+        $requirements = $this->relationLoaded('disaggregationRequirements')
+            ? $this->disaggregationRequirements
+            : $this->disaggregationRequirements()->get();
+        $configured = $requirements
+            ->pluck('dimension.name')
+            ->filter()
+            ->implode(' × ');
+        if ($configured !== '') {
+            return $configured;
+        }
+
         return $this->disaggregations
             ->pluck('dimension')
             ->filter()

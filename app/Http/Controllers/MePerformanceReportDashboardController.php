@@ -38,6 +38,12 @@ class MePerformanceReportDashboardController extends Controller
             'soft_color' => '#fff7e5',
             'icon' => 'feather-corner-up-left',
         ],
+        'verified' => [
+            'label' => 'Verified',
+            'color' => '#0e7490',
+            'soft_color' => '#ecfeff',
+            'icon' => 'feather-shield',
+        ],
         'approved' => [
             'label' => 'Approved',
             'color' => '#15935d',
@@ -183,10 +189,10 @@ class MePerformanceReportDashboardController extends Controller
         );
         $reportsByPeriod = $this->groupReports(
             $reports,
-            fn (MePerformanceReport $report): string => $report->reporting_year.'-'.$report->reporting_quarter,
+            fn (MePerformanceReport $report): string => $report->reporting_year.'|'.$report->reporting_period_type.'|'.$report->reporting_period_label,
             fn (MePerformanceReport $report): array => [
-                $report->reporting_quarter.' '.$report->reporting_year,
-                $report->reporting_quarter.' reporting period',
+                $report->periodLabel(),
+                Str::headline((string) $report->reporting_period_type).' reporting period',
             ],
             $totalReports,
             true
@@ -273,8 +279,10 @@ class MePerformanceReportDashboardController extends Controller
         return $query
             ->when(filled($filters['reporting_year']), fn (Builder $builder): Builder => $builder
                 ->where('reporting_year', $filters['reporting_year']))
-            ->when(filled($filters['reporting_quarter']), fn (Builder $builder): Builder => $builder
-                ->where('reporting_quarter', $filters['reporting_quarter']))
+            ->when(filled($filters['reporting_period_type']), fn (Builder $builder): Builder => $builder
+                ->where('reporting_period_type', $filters['reporting_period_type']))
+            ->when(filled($filters['reporting_period_label']), fn (Builder $builder): Builder => $builder
+                ->where('reporting_period_label', $filters['reporting_period_label']))
             ->when(filled($filters['component_id']), fn (Builder $builder): Builder => $builder
                 ->where('project_component_id', $filters['component_id']))
             ->when(filled($filters['results_level']), fn (Builder $builder): Builder => $builder
@@ -306,7 +314,8 @@ class MePerformanceReportDashboardController extends Controller
                 ->whereHas('transitions', fn (Builder $transitionQuery): Builder => $transitionQuery
                     ->where('action', 'returned_for_correction')),
             'submitted' => $query->where('status', MePerformanceReport::STATUS_SUBMITTED),
-            'approved' => $query->where('status', MePerformanceReport::STATUS_REVIEWED),
+            'verified' => $query->where('status', MePerformanceReport::STATUS_VERIFIED),
+            'approved' => $query->whereIn('status', [MePerformanceReport::STATUS_REVIEWED, MePerformanceReport::STATUS_APPROVED]),
             'archived' => $query->where('status', MePerformanceReport::STATUS_ARCHIVED),
             default => $query,
         };
@@ -315,14 +324,16 @@ class MePerformanceReportDashboardController extends Controller
     private function filters(Request $request): array
     {
         $year = filter_var($request->query('reporting_year'), FILTER_VALIDATE_INT);
-        $quarter = trim((string) $request->query('reporting_quarter'));
+        $periodType = trim((string) $request->query('reporting_period_type'));
+        $periodLabel = trim((string) $request->query('reporting_period_label'));
         $resultsLevel = trim((string) $request->query('results_level'));
         $status = trim((string) $request->query('status'));
         $thinkTank = trim((string) $request->query('think_tank_id'));
 
         return [
             'reporting_year' => $year && $year >= 2000 && $year <= 2100 ? $year : null,
-            'reporting_quarter' => array_key_exists($quarter, MePerformanceReport::QUARTERS) ? $quarter : null,
+            'reporting_period_type' => array_key_exists($periodType, MePerformanceReport::REPORTING_PERIOD_TYPES) ? $periodType : null,
+            'reporting_period_label' => $periodType && isset(MePerformanceReport::PERIOD_LABELS[$periodType][$periodLabel]) ? $periodLabel : null,
             'component_id' => $this->uuidOrNull($request->query('component_id')),
             'results_level' => in_array($resultsLevel, ['pdo', 'intermediate_results'], true)
                 ? $resultsLevel
@@ -361,7 +372,8 @@ class MePerformanceReportDashboardController extends Controller
                 ->distinct()
                 ->orderByDesc('reporting_year')
                 ->pluck('reporting_year'),
-            'quarters' => MePerformanceReport::QUARTERS,
+            'period_types' => MePerformanceReport::REPORTING_PERIOD_TYPES,
+            'period_labels' => MePerformanceReport::PERIOD_LABELS,
             'components' => Project::query()
                 ->whereIn('id', $componentIds)
                 ->orderBy('name')
@@ -425,7 +437,8 @@ class MePerformanceReportDashboardController extends Controller
 
         return match ($report->status) {
             MePerformanceReport::STATUS_SUBMITTED => 'submitted',
-            MePerformanceReport::STATUS_REVIEWED => 'approved',
+            MePerformanceReport::STATUS_VERIFIED => 'verified',
+            MePerformanceReport::STATUS_REVIEWED, MePerformanceReport::STATUS_APPROVED => 'approved',
             MePerformanceReport::STATUS_ARCHIVED => 'archived',
             default => 'draft',
         };

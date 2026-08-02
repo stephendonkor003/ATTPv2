@@ -86,4 +86,9 @@ class IndicatorResult extends BaseModel
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
+
+    public function achievements()
+    {
+        return $this->hasMany(MeIndicatorAchievement::class, 'indicator_result_id');
+    }
 }

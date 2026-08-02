@@ -2,6 +2,7 @@
 
 use App\Models\Indicator;
 use App\Models\MePerformanceReport;
+use App\Models\MeIndicatorAchievement;
 use App\Models\MePerformanceReportDocument;
 use App\Models\MePerformanceReportIndicatorResult;
 use App\Models\ReportingFrequency;
@@ -59,6 +60,7 @@ it('requires every standardized report section before submission', function () {
         'indicator_result_id' => null,
     ]);
     $indicatorResult->setRelation('indicator', $indicator);
+    $indicatorResult->setRelation('achievements', new Collection());
 
     $report = new MePerformanceReport([
         'status' => MePerformanceReport::STATUS_DRAFT,
@@ -73,6 +75,9 @@ it('requires every standardized report section before submission', function () {
 
     $indicatorResult->actual_value = 42;
     $indicatorResult->indicator_result_id = '00000000-0000-0000-0000-000000000001';
+    $indicatorResult->setRelation('achievements', new Collection([
+        new MeIndicatorAchievement(['title' => 'Policy study completed']),
+    ]));
     $report->fill([
         'key_achievements' => 'Achievement narrative.',
         'variance_explanation' => 'Variance narrative.',
@@ -120,7 +125,8 @@ it('renders every requested report section and component linkage control', funct
         ->toContain('Performance Reports');
 
     expect($create)
-        ->toContain('name="reporting_quarter"')
+        ->toContain('name="reporting_period_type"')
+        ->toContain('name="reporting_period_label"')
         ->toContain('name="reporting_year"')
         ->toContain('Create Report')
         ->toContain('Responsible Directorate');
@@ -171,7 +177,7 @@ it('renders every requested report section and component linkage control', funct
         ->toContain("Route::post('{report}/archive', 'archive')");
 });
 
-it('enforces the four-stage lifecycle across author and Secretariat roles', function () {
+it('enforces the verification and approval lifecycle across author and Secretariat roles', function () {
     $portalIndex = file_get_contents(
         dirname(__DIR__, 2).'/resources/views/think-tank/me-performance-reports/index.blade.php'
     );
@@ -192,7 +198,8 @@ it('enforces the four-stage lifecycle across author and Secretariat roles', func
     expect($portalIndex)
         ->toContain('Draft Reports')
         ->toContain('Submitted Reports')
-        ->toContain('Reviewed Reports')
+        ->toContain('Verified Reports')
+        ->toContain('Approved Reports')
         ->toContain('Archived Reports')
         ->toContain('Only forms assigned to this organization are available');
 
@@ -212,9 +219,10 @@ it('enforces the four-stage lifecycle across author and Secretariat roles', func
     expect($internalController)
         ->toContain("permission:me.performance_reports.review")
         ->toContain("permission:me.performance_reports.archive")
-        ->toContain('STATUS_REVIEWED')
+        ->toContain('STATUS_VERIFIED')
+        ->toContain('STATUS_APPROVED')
         ->toContain('STATUS_ARCHIVED')
-        ->toContain('reviewed_and_approved')
+        ->toContain("'returned_for_correction'")
         ->toContain('recordTransition(');
 
     expect($reportModel)

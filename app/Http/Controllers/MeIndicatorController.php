@@ -14,6 +14,8 @@ use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorTarget;
 use App\Models\IndicatorUnit;
 use App\Models\MeKnowledgeEvidenceItem;
+use App\Models\MeDisaggregationDimension;
+use App\Models\IndicatorCodeHistory;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\ReportingFrequency;
@@ -29,6 +31,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 
 class MeIndicatorController extends Controller
@@ -108,6 +111,8 @@ class MeIndicatorController extends Controller
                 'projectComponent:id,project_id,name,program_id',
                 'meansOfVerification:id,title,document_type',
                 'disaggregations:id,indicator_id,level,dimension,parent_id',
+                'disaggregationRequirements:id,indicator_id,dimension_id,is_required,collect_numeric_value,sort_order',
+                'disaggregationRequirements.dimension:id,code,name,dimension_group,sort_order',
             ])
             ->when($search !== '', function ($query) use ($search) {
                 $escaped = addcslashes($search, '%_\\');
@@ -138,7 +143,7 @@ class MeIndicatorController extends Controller
         $editingIndicator = null;
         if ($request->filled('edit')) {
             $editingIndicator = Indicator::query()
-                ->with(['setupTarget', 'targets', 'disaggregations', 'meansOfVerification'])
+                ->with(['setupTarget', 'targets', 'disaggregations', 'disaggregationRequirements.dimension', 'meansOfVerification'])
                 ->findOrFail((string) $request->query('edit'));
             $this->assertIndicatorInCurrentPortfolioScope($editingIndicator);
         }
@@ -261,7 +266,12 @@ class MeIndicatorController extends Controller
         $editingTargetValue = $editingIndicator?->setupTarget?->target_value
             ?? $editingIndicator?->targets->sortByDesc('period_start')->first()?->target_value;
         $aggregationMethods = Indicator::AGGREGATION_METHODS;
-        $disaggregationDimensions = IndicatorDisaggregation::SUGGESTED_DIMENSIONS;
+        $organizationRollupMethods = Indicator::ORGANIZATION_ROLLUP_METHODS;
+        $disaggregationDimensions = MeDisaggregationDimension::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'dimension_group', 'description']);
 
         return view('me.indicators.index', compact(
             'indicators',
@@ -275,6 +285,7 @@ class MeIndicatorController extends Controller
             'editingDataCollectionMethod',
             'editingTargetValue',
             'aggregationMethods',
+            'organizationRollupMethods',
             'users',
             'units',
             'frequencies',
@@ -312,6 +323,15 @@ class MeIndicatorController extends Controller
                 $indicatorableId
             ));
 
+            IndicatorCodeHistory::query()->create([
+                'indicator_id' => $indicator->id,
+                'old_code' => null,
+                'new_code' => $indicator->indicator_code,
+                'change_reason' => 'Indicator created with a user-defined code.',
+                'changed_by' => auth()->id(),
+                'changed_at' => now(),
+            ]);
+
             $this->syncSetupTarget($indicator, $validated['target_value']);
             $this->syncAnnualTarget($indicator, $validated['annual_target']);
             $this->syncSurveyLinkForIndicator($indicator);
@@ -326,7 +346,7 @@ class MeIndicatorController extends Controller
     {
         $this->assertIndicatorInCurrentPortfolioScope($indicator);
 
-        $validated = $this->validateIndicator($request);
+        $validated = $this->validateIndicator($request, $indicator);
         $this->assertPortfolioInCurrentScope((string) $validated['portfolio_id']);
         $this->assertCoreConfigurationInCurrentPortfolioScope($validated);
         [$indicatorableType, $indicatorableId] = $this->resolveOwnerForPortfolio($validated);
@@ -336,12 +356,24 @@ class MeIndicatorController extends Controller
             $lockedIndicator = Indicator::query()->lockForUpdate()->findOrFail($indicator->id);
             $this->assertIndicatorInCurrentPortfolioScope($lockedIndicator);
 
+            $oldCode = (string) $lockedIndicator->indicator_code;
             $lockedIndicator->update($this->indicatorAttributes(
                 $validated,
                 $lockedIndicator,
                 $indicatorableType,
                 $indicatorableId
             ));
+
+            if ($oldCode !== (string) $lockedIndicator->indicator_code) {
+                IndicatorCodeHistory::query()->create([
+                    'indicator_id' => $lockedIndicator->id,
+                    'old_code' => $oldCode,
+                    'new_code' => $lockedIndicator->indicator_code,
+                    'change_reason' => $validated['indicator_code_change_reason'] ?? 'Authorized indicator code update.',
+                    'changed_by' => auth()->id(),
+                    'changed_at' => now(),
+                ]);
+            }
 
             $this->syncSetupTarget($lockedIndicator, $validated['target_value']);
             $this->syncAnnualTarget($lockedIndicator, $validated['annual_target']);
@@ -358,51 +390,35 @@ class MeIndicatorController extends Controller
         $this->assertIndicatorInCurrentPortfolioScope($indicator);
 
         $validated = $request->validate([
-            'primary_disaggregation' => 'nullable|string|max:120',
-            'secondary_disaggregation' => 'nullable|string|max:120',
-            'tertiary_disaggregation' => 'nullable|string|max:120',
+            'dimensions' => ['nullable', 'array'],
+            'dimensions.*' => ['uuid', 'distinct', Rule::exists('me_disaggregation_dimensions', 'id')->where('is_active', true)],
+            'required_dimensions' => ['nullable', 'array'],
+            'required_dimensions.*' => ['uuid', 'distinct'],
+            'numeric_dimensions' => ['nullable', 'array'],
+            'numeric_dimensions.*' => ['uuid', 'distinct'],
         ]);
 
-        $dimensions = collect([
-            'primary' => trim((string) ($validated['primary_disaggregation'] ?? '')),
-            'secondary' => trim((string) ($validated['secondary_disaggregation'] ?? '')),
-            'tertiary' => trim((string) ($validated['tertiary_disaggregation'] ?? '')),
-        ]);
+        $dimensionIds = collect($validated['dimensions'] ?? [])->values();
+        $requiredIds = collect($validated['required_dimensions'] ?? [])->intersect($dimensionIds);
+        $numericIds = collect($validated['numeric_dimensions'] ?? [])->intersect($dimensionIds);
 
-        $errors = [];
-        if ($dimensions['secondary'] !== '' && $dimensions['primary'] === '') {
-            $errors['secondary_disaggregation'] = 'Select a primary disaggregation before adding a secondary level.';
-        }
-        if ($dimensions['tertiary'] !== '' && $dimensions['secondary'] === '') {
-            $errors['tertiary_disaggregation'] = 'Select a secondary disaggregation before adding a tertiary level.';
-        }
-        if ($dimensions->filter()->map(fn ($value) => Str::lower($value))->duplicates()->isNotEmpty()) {
-            $errors['primary_disaggregation'] = 'Each disaggregation level must use a different dimension.';
-        }
-        if ($errors !== []) {
-            throw ValidationException::withMessages($errors);
-        }
+        DB::transaction(function () use ($indicator, $dimensionIds, $requiredIds, $numericIds): void {
+            $indicator->disaggregationRequirements()->delete();
 
-        DB::transaction(function () use ($indicator, $dimensions): void {
-            $indicator->disaggregations()->delete();
-            $parent = null;
-
-            foreach ($dimensions as $level => $dimension) {
-                if ($dimension === '') {
-                    continue;
-                }
-
-                $parent = $indicator->disaggregations()->create([
-                    'level' => $level,
-                    'dimension' => $dimension,
-                    'parent_id' => $parent?->id,
+            foreach ($dimensionIds as $index => $dimensionId) {
+                $indicator->disaggregationRequirements()->create([
+                    'dimension_id' => $dimensionId,
+                    'is_required' => $requiredIds->contains($dimensionId),
+                    'collect_numeric_value' => $numericIds->contains($dimensionId),
+                    'sort_order' => ($index + 1) * 10,
+                    'created_by' => auth()->id(),
                 ]);
             }
         });
 
         return redirect()
             ->route('budget.me.indicators.index')
-            ->with('success', 'Indicator disaggregation levels updated.');
+            ->with('success', 'Indicator disaggregation requirements updated. Multiple combined dimensions are now enabled.');
     }
 
     public function destroy(Indicator $indicator)
@@ -576,11 +592,19 @@ class MeIndicatorController extends Controller
         return $pdf->download('me-management-report-'.now()->format('Ymd_His').'.pdf');
     }
 
-    protected function validateIndicator(Request $request): array
+    protected function validateIndicator(Request $request, ?Indicator $indicator = null): array
     {
         $this->normalizeIndicatorInput($request);
 
-        return $request->validate([
+        $validated = $request->validate([
+            'indicator_code' => [
+                'required',
+                'string',
+                'max:80',
+                'regex:/^[A-Z0-9][A-Z0-9._\/-]*$/',
+                Rule::unique('myb_indicators', 'indicator_code')->ignore($indicator?->id),
+            ],
+            'indicator_code_change_reason' => ['nullable', 'string', 'max:1000'],
             'portfolio_id' => 'required|uuid|exists:myb_sectors,id',
             'project_component_id' => 'required|uuid|exists:myb_projects,id',
             'name' => 'required|string|max:255',
@@ -593,6 +617,10 @@ class MeIndicatorController extends Controller
             'aggregation_method' => [
                 'required',
                 Rule::in(array_keys(Indicator::AGGREGATION_METHODS)),
+            ],
+            'organization_rollup_method' => [
+                'required',
+                Rule::in(array_keys(Indicator::ORGANIZATION_ROLLUP_METHODS)),
             ],
             'frequency_of_reporting_id' => 'required|exists:me_reporting_frequencies,id',
             'data_collection_method' => 'required|string|max:2000',
@@ -668,6 +696,16 @@ class MeIndicatorController extends Controller
             'notes' => 'sometimes|nullable|string|max:10000',
             'primary_source_type' => 'sometimes|nullable|in:file_location,link,external_system_connector',
         ]);
+
+        if ($indicator
+            && (string) $indicator->indicator_code !== (string) $validated['indicator_code']
+            && blank($validated['indicator_code_change_reason'] ?? null)) {
+            throw ValidationException::withMessages([
+                'indicator_code_change_reason' => 'Explain why the indicator code is changing so the audit trail remains complete.',
+            ]);
+        }
+
+        return $validated;
     }
 
     /**
@@ -676,6 +714,12 @@ class MeIndicatorController extends Controller
      */
     protected function normalizeIndicatorInput(Request $request): void
     {
+        if ($request->exists('indicator_code')) {
+            $request->merge([
+                'indicator_code' => Str::upper(trim((string) $request->input('indicator_code'))),
+            ]);
+        }
+
         if (! $request->exists('definition')) {
             $definition = trim((string) $request->input('definition_custom', ''));
 
@@ -967,6 +1011,7 @@ class MeIndicatorController extends Controller
             : $existingSourceType;
 
         $attributes = [
+            'indicator_code' => Str::upper(trim((string) $validated['indicator_code'])),
             'indicatorable_type' => $indicatorableType,
             'indicatorable_id' => $indicatorableId,
             'project_component_id' => $validated['project_component_id'],
@@ -976,6 +1021,7 @@ class MeIndicatorController extends Controller
             'annual_target' => $validated['annual_target'],
             'life_of_programme_target' => $validated['target_value'],
             'aggregation_method' => $validated['aggregation_method'],
+            'organization_rollup_method' => $validated['organization_rollup_method'],
             'responsible_user_id' => $validated['responsible_user_id'],
             'responsible_party' => $this->packResponsibleParty([$validated['responsible_user_id']]),
             'frequency_of_reporting_id' => $validated['frequency_of_reporting_id'],
@@ -989,6 +1035,7 @@ class MeIndicatorController extends Controller
             ),
             'means_of_verification_id' => $validated['means_of_verification_id'],
             'definitions' => trim((string) $validated['definition']),
+            'code_updated_by' => auth()->id(),
         ];
 
         foreach (['baseline_year', 'baseline_type', 'indicator_level_id', 'notes'] as $optionalField) {
@@ -1523,6 +1570,8 @@ class MeIndicatorController extends Controller
             'projectComponent:id,project_id,name,program_id',
             'meansOfVerification:id,title,document_type',
             'disaggregations:id,indicator_id,level,dimension,parent_id',
+            'disaggregationRequirements:id,indicator_id,dimension_id,is_required,collect_numeric_value,sort_order',
+            'disaggregationRequirements.dimension:id,code,name,dimension_group,sort_order',
             'targets:id,indicator_id,target_value,target_context,period_type,period_label,period_start',
             'results:id,indicator_id,actual_value,period_type,period_label,period_start,review_status,validated_at,approved_at',
             'frequency:id,name,code,interval_unit,interval_value,frequency_in_days',

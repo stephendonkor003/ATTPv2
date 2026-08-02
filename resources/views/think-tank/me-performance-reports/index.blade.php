@@ -3,12 +3,16 @@
         \App\Models\MePerformanceReport::STATUS_DRAFT => 'Draft Reports',
         \App\Models\MePerformanceReport::STATUS_SUBMITTED => 'Submitted Reports',
         \App\Models\MePerformanceReport::STATUS_REVIEWED => 'Reviewed Reports',
+        \App\Models\MePerformanceReport::STATUS_VERIFIED => 'Verified Reports',
+        \App\Models\MePerformanceReport::STATUS_APPROVED => 'Approved Reports',
         \App\Models\MePerformanceReport::STATUS_ARCHIVED => 'Archived Reports',
     ];
     $statusIcons = [
         'draft' => 'feather-edit-3',
         'submitted' => 'feather-send',
         'reviewed' => 'feather-check-circle',
+        'verified' => 'feather-shield',
+        'approved' => 'feather-award',
         'archived' => 'feather-archive',
     ];
 @endphp
@@ -44,7 +48,7 @@
         }
         .tt-pr .pr-lifecycle {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: .7rem;
             margin: 1rem 0;
         }
@@ -93,6 +97,8 @@
         }
         .tt-pr .pr-status.submitted { color: #5b4b9a; background: #f0edfb; }
         .tt-pr .pr-status.reviewed { color: #166534; background: #dcfce7; }
+        .tt-pr .pr-status.verified { color: #155e75; background: #cffafe; }
+        .tt-pr .pr-status.approved { color: #166534; background: #dcfce7; }
         .tt-pr .pr-status.archived { color: #475569; background: #e9eef3; }
         .tt-pr .pr-empty { padding: 2rem; color: var(--pr-muted); text-align: center; }
         @media (max-width: 820px) {
@@ -143,7 +149,7 @@
                     @else
                         <form method="POST" action="{{ route('think-tank.performance-reports.store', $portalRouteParams) }}" class="row g-3">
                             @csrf
-                            <div class="col-lg-6">
+                            <div class="col-lg-5">
                                 <label class="form-label" for="report-assignment">Assigned reporting form</label>
                                 <select name="assignment_id" id="report-assignment" class="form-select @error('assignment_id') is-invalid @enderror" required>
                                     <option value="">Choose an assigned reporting form</option>
@@ -155,14 +161,17 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label" for="report-quarter">Reporting period</label>
-                                <select name="reporting_quarter" id="report-quarter" class="form-select" required>
-                                    <option value="">Choose quarter</option>
-                                    @foreach ($quarters as $value => $label)
-                                        <option value="{{ $value }}" @selected(old('reporting_quarter') === $value)>{{ $label }}</option>
+                            <div class="col-md-2">
+                                <label class="form-label" for="report-period-type">Frequency</label>
+                                <select name="reporting_period_type" id="report-period-type" class="form-select" required>
+                                    @foreach ($periodTypes as $value => $label)
+                                        <option value="{{ $value }}" @selected(old('reporting_period_type', 'quarter') === $value)>{{ $label }}</option>
                                     @endforeach
                                 </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label" for="report-period-label">Period</label>
+                                <select name="reporting_period_label" id="report-period-label" class="form-select" required></select>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label" for="report-year">Reporting year</label>
@@ -195,7 +204,7 @@
                         <tbody>
                             @foreach ($reports as $report)
                                 <tr>
-                                    <td><span class="pr-code">{{ $report->reporting_quarter }} {{ $report->reporting_year }} · {{ $report->form?->code }}</span><span class="pr-title">{{ $report->form?->title }}</span></td>
+                                    <td><span class="pr-code">{{ $report->periodLabel() }} · {{ $report->form?->code }}</span><span class="pr-title">{{ $report->form?->title }}</span></td>
                                     <td><span class="pr-title">{{ $report->projectComponent?->name }}</span><div class="text-muted small">{{ $report->responsibleDirectorate?->name ?: 'Directorate not assigned' }}</div></td>
                                     <td>{{ $report->indicator_results_count }} indicators<br><span class="text-muted">{{ $report->documents_count }} evidence files</span></td>
                                     <td><span class="pr-status {{ $report->status }}">{{ $report->lifecycleLabel() }}</span></td>
@@ -214,4 +223,22 @@
             @endif
         </section>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const type = document.getElementById('report-period-type');
+            const label = document.getElementById('report-period-label');
+            const labels = @json($periodLabels);
+            const oldLabel = @json(old('reporting_period_label', 'Q1'));
+            const refresh = () => {
+                if (!label || !type) return;
+                const selected = label.value || oldLabel;
+                label.innerHTML = '';
+                Object.entries(labels[type.value] || {}).forEach(([value, text]) => {
+                    label.add(new Option(text, value, false, value === selected));
+                });
+            };
+            type?.addEventListener('change', refresh);
+            refresh();
+        });
+    </script>
 </x-think-tank.partials.shell>

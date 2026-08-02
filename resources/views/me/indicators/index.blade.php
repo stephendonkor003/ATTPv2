@@ -273,9 +273,6 @@
                 && window.bootstrap?.Modal) {
                 const modal = window.bootstrap.Modal.getOrCreateInstance(disaggregationModalElement);
                 const indicatorName = disaggregationModalElement.querySelector('[data-disaggregation-indicator-name]');
-                const primary = disaggregationForm.querySelector('[data-disaggregation-level="primary"]');
-                const secondary = disaggregationForm.querySelector('[data-disaggregation-level="secondary"]');
-                const tertiary = disaggregationForm.querySelector('[data-disaggregation-level="tertiary"]');
 
                 disaggregationModalElement.addEventListener('show.bs.modal', () => {
                     document.body.classList.add('me-disaggregation-modal-open');
@@ -285,29 +282,23 @@
                     document.body.classList.remove('me-disaggregation-modal-open');
                 });
 
-                const synchronizeDisaggregationLevels = (clearChildren = false) => {
-                    if (!(primary instanceof HTMLInputElement)
-                        || !(secondary instanceof HTMLInputElement)
-                        || !(tertiary instanceof HTMLInputElement)) {
-                        return;
-                    }
-
-                    const hasPrimary = primary.value.trim() !== '';
-                    if (clearChildren && !hasPrimary) {
-                        secondary.value = '';
-                        tertiary.value = '';
-                    }
-                    secondary.disabled = !hasPrimary;
-
-                    const hasSecondary = hasPrimary && secondary.value.trim() !== '';
-                    if (clearChildren && !hasSecondary) {
-                        tertiary.value = '';
-                    }
-                    tertiary.disabled = !hasSecondary;
+                const values = (raw) => new Set((raw || '').split(',').map((value) => value.trim()).filter(Boolean));
+                const synchronizeDimensionRow = (dimensionId) => {
+                    const use = disaggregationForm.querySelector(`[data-dimension-use="${dimensionId}"]`);
+                    const required = disaggregationForm.querySelector(`[data-dimension-required="${dimensionId}"]`);
+                    const numeric = disaggregationForm.querySelector(`[data-dimension-numeric="${dimensionId}"]`);
+                    if (!(use instanceof HTMLInputElement)) return;
+                    [required, numeric].forEach((control) => {
+                        if (control instanceof HTMLInputElement) {
+                            control.disabled = !use.checked;
+                            if (!use.checked) control.checked = false;
+                        }
+                    });
                 };
 
-                primary?.addEventListener('input', () => synchronizeDisaggregationLevels(true));
-                secondary?.addEventListener('input', () => synchronizeDisaggregationLevels(true));
+                disaggregationForm.querySelectorAll('[data-dimension-use]').forEach((control) => {
+                    control.addEventListener('change', () => synchronizeDimensionRow(control.dataset.dimensionUse));
+                });
 
                 document.querySelectorAll('[data-disaggregation-open]').forEach((button) => {
                     button.addEventListener('click', () => {
@@ -315,17 +306,18 @@
                         if (indicatorName) {
                             indicatorName.textContent = button.dataset.indicatorName || '';
                         }
-                        if (primary instanceof HTMLInputElement) {
-                            primary.value = button.dataset.primary || '';
-                        }
-                        if (secondary instanceof HTMLInputElement) {
-                            secondary.value = button.dataset.secondary || '';
-                        }
-                        if (tertiary instanceof HTMLInputElement) {
-                            tertiary.value = button.dataset.tertiary || '';
-                        }
-
-                        synchronizeDisaggregationLevels(false);
+                        const selected = values(button.dataset.dimensions);
+                        const required = values(button.dataset.requiredDimensions);
+                        const numeric = values(button.dataset.numericDimensions);
+                        disaggregationForm.querySelectorAll('[data-dimension-use]').forEach((control) => {
+                            const id = control.dataset.dimensionUse;
+                            control.checked = selected.has(id);
+                            const requiredControl = disaggregationForm.querySelector(`[data-dimension-required="${id}"]`);
+                            const numericControl = disaggregationForm.querySelector(`[data-dimension-numeric="${id}"]`);
+                            if (requiredControl instanceof HTMLInputElement) requiredControl.checked = required.has(id);
+                            if (numericControl instanceof HTMLInputElement) numericControl.checked = numeric.has(id);
+                            synchronizeDimensionRow(id);
+                        });
                         modal.show();
                     });
                 });

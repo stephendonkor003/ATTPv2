@@ -1253,6 +1253,11 @@
                                     </a>
                                 </li>
                                 <li class="nxl-item">
+                                    <a href="{{ route('budget.me.consolidated-reports.index') }}" class="nxl-link">
+                                        <i class="feather-pie-chart me-2"></i> Think Tank &amp; Consolidated Reports
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.management-dashboard') }}" class="nxl-link">
                                         <i class="feather-monitor me-2"></i> Management Dashboard
                                     </a>
@@ -1260,6 +1265,16 @@
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.knowledge-repository') }}" class="nxl-link">
                                         <i class="feather-folder me-2"></i> Knowledge and Evidence Repository (MEAL plans, TOCs and pertinent documents)
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.matrices.index') }}" class="nxl-link">
+                                        <i class="feather-grid me-2"></i> M&amp;E Matrix Manager
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.focal-units.index') }}" class="nxl-link">
+                                        <i class="feather-user-check me-2"></i> M&amp;E Focal Unit Register
                                     </a>
                                 </li>
                                 <li class="nxl-item">

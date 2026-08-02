@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MePerformanceReportIndicatorResult extends BaseModel
 {
@@ -16,6 +17,8 @@ class MePerformanceReportIndicatorResult extends BaseModel
         'annual_target',
         'life_of_programme_target',
         'actual_value',
+        'rollup_numerator',
+        'rollup_denominator',
         'cumulative_year_result',
         'cumulative_programme_result',
         'progress_percent',
@@ -29,6 +32,8 @@ class MePerformanceReportIndicatorResult extends BaseModel
         'annual_target' => 'decimal:4',
         'life_of_programme_target' => 'decimal:4',
         'actual_value' => 'decimal:4',
+        'rollup_numerator' => 'decimal:4',
+        'rollup_denominator' => 'decimal:4',
         'cumulative_year_result' => 'decimal:4',
         'cumulative_programme_result' => 'decimal:4',
         'progress_percent' => 'decimal:2',
@@ -48,5 +53,12 @@ class MePerformanceReportIndicatorResult extends BaseModel
     public function indicatorResult(): BelongsTo
     {
         return $this->belongsTo(IndicatorResult::class, 'indicator_result_id');
+    }
+
+    public function achievements(): HasMany
+    {
+        return $this->hasMany(MeIndicatorAchievement::class, 'report_indicator_result_id')
+            ->orderBy('achieved_on')
+            ->orderBy('created_at');
     }
 }

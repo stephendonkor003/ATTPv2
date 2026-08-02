@@ -113,6 +113,7 @@ use App\Http\Controllers\{
         MeKnowledgeEvidenceController,
         MeDataEntryController,
         MePerformanceReportController,
+        MeIndicatorAchievementController,
         MePerformanceReportDashboardController,
         MeMissionReportController,
         MeReportingNotificationController,
@@ -1307,14 +1308,43 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:me.performance_reports.view|me.performance_reports.review|me.performance_reports.archive|me.data_entry.view|me.data_entry.manage|me.configuration.view|me.configuration.manage')
             ->name('me.rebuild.reporting-dashboard');
 
+        Route::prefix('me/consolidated-reports')->name('me.consolidated-reports.')->controller(\App\Http\Controllers\MeConsolidatedReportController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('export/excel', 'excel')->name('excel');
+            Route::get('export/pdf', 'pdf')->name('pdf');
+        });
+
         Route::post('me/knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'store'])
             ->name('me.knowledge-evidence.store');
+        Route::put('me/knowledge-and-evidence-repository/{evidence}', [MeKnowledgeEvidenceController::class, 'update'])
+            ->name('me.knowledge-evidence.update');
+        Route::post('me/knowledge-and-evidence-repository/{evidence}/replace-file', [MeKnowledgeEvidenceController::class, 'replaceFile'])
+            ->name('me.knowledge-evidence.replace-file');
         Route::get('me/knowledge-and-evidence-repository/{evidence}/download', [MeKnowledgeEvidenceController::class, 'download'])
             ->name('me.knowledge-evidence.download');
+        Route::get('me/knowledge-and-evidence-repository/{evidence}/versions/{version}/download', [MeKnowledgeEvidenceController::class, 'downloadVersion'])
+            ->name('me.knowledge-evidence.versions.download');
         Route::post('me/knowledge-and-evidence-repository/{evidence}/validate', [MeKnowledgeEvidenceController::class, 'validateEvidence'])
             ->name('me.knowledge-evidence.validate');
         Route::delete('me/knowledge-and-evidence-repository/{evidence}', [MeKnowledgeEvidenceController::class, 'destroy'])
             ->name('me.knowledge-evidence.destroy');
+
+        Route::prefix('me/matrices')->name('me.matrices.')->controller(\App\Http\Controllers\MeMatrixController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::post('{matrix}/activate', 'activate')->name('activate');
+            Route::post('{matrix}/retire', 'retire')->name('retire');
+            Route::get('{matrix}/download', 'download')->name('download');
+            Route::delete('{matrix}', 'destroy')->name('destroy');
+        });
+
+        Route::prefix('me/focal-units')->name('me.focal-units.')->controller(\App\Http\Controllers\MeFocalUnitController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('{contact}', 'update')->name('update');
+            Route::post('{contact}/link-account', 'linkAccount')->name('link-account');
+            Route::delete('{contact}', 'destroy')->name('destroy');
+        });
 
         Route::get('me/rebuild/data-entry-and-performance-tracking', [MeDataEntryController::class, 'index'])
             ->middleware('permission:me.data_entry.view|me.data_entry.manage|me.configuration.view|me.configuration.manage')
@@ -1350,6 +1380,19 @@ Route::middleware(['auth', 'not.funding.partner'])
                 Route::post('{report}/archive', 'archive')->name('archive');
                 Route::get('{report}/documents/{document}', 'downloadDocument')->name('documents.download');
                 Route::delete('{report}/documents/{document}', 'destroyDocument')->name('documents.destroy');
+            });
+
+        Route::prefix('me/data-entry/performance-reports/{report}')
+            ->name('me.performance-reports.achievements.')
+            ->controller(MeIndicatorAchievementController::class)
+            ->group(function () {
+                Route::post('indicator-results/{reportResult}/achievements', 'store')->name('store');
+                Route::put('achievements/{achievement}', 'update')->name('update');
+                Route::delete('achievements/{achievement}', 'destroy')->name('destroy');
+                Route::post('achievements/{achievement}/breakdowns', 'storeBreakdown')->name('breakdowns.store');
+                Route::delete('achievements/{achievement}/breakdowns/{breakdown}', 'destroyBreakdown')->name('breakdowns.destroy');
+                Route::post('achievements/{achievement}/documents', 'storeDocument')->name('documents.store');
+                Route::delete('achievements/{achievement}/documents/{link}', 'unlinkDocument')->name('documents.unlink');
             });
 
         Route::prefix('me/mission-reports')

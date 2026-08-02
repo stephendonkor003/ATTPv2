@@ -8,7 +8,7 @@
             <div>
                 <div class="text-muted small fw-semibold text-uppercase mb-1">Monitoring &amp; Evaluation</div>
                 <h3 class="mb-1">Knowledge and Evidence Repository</h3>
-                <p class="text-muted mb-0">Manage MEAL plans, theories of change, evidence and indicator Means of Verification.</p>
+                <p class="text-muted mb-0">Manage synchronized knowledge, evidence and M&amp;E Matrix documents with titles, links and a retained version history.</p>
             </div>
             <a href="{{ route('budget.me.indicators.index') }}" class="btn btn-outline-primary">
                 <i class="feather-target me-1"></i> Indicator register
@@ -138,11 +138,28 @@
                                     <div class="text-muted small mt-1">
                                         Added {{ $item->created_at?->format('Y-m-d') }}
                                         @if ($item->creator) by {{ $item->creator->name }} @endif
+                                        &middot; Version {{ $item->version_number ?: 1 }}
                                     </div>
+                                    @if ($item->versions->isNotEmpty())
+                                        <details class="small mt-2">
+                                            <summary class="text-primary">Version history ({{ $item->versions->count() }})</summary>
+                                            <ul class="mb-0 mt-1 ps-3">
+                                                @foreach ($item->versions as $version)
+                                                    <li>
+                                                        <a href="{{ route('budget.me.knowledge-evidence.versions.download', [$item, $version]) }}" title="Download this retained version">v{{ $version->version_number }} &mdash; {{ $version->original_filename }}</a>
+                                                        ({{ $version->created_at?->format('Y-m-d H:i') }})@if($version->change_notes): {{ $version->change_notes }}@endif
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </details>
+                                    @endif
                                 </td>
                                 <td>{{ $item->portfolio?->name ?: '—' }}</td>
                                 <td><span class="badge bg-primary-subtle text-primary">{{ $item->typeLabel() }}</span></td>
-                                <td>{{ number_format((int) $item->indicators_count) }}</td>
+                                <td>
+                                    {{ number_format((int) $item->indicators_count + (int) $item->links_count + (int) $item->report_documents_count + (int) $item->matrix_versions_count) }}
+                                    <div class="text-muted small">Across indicators, reports, achievements and matrices</div>
+                                </td>
                                 <td>
                                     <span class="badge {{ $item->validation_status === 'validated' ? 'bg-success' : ($item->validation_status === 'rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
                                         {{ \Illuminate\Support\Str::headline($item->validation_status ?: 'pending') }}
@@ -170,10 +187,14 @@
                                                     </button>
                                                 </form>
                                             @endif
+                                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#edit-evidence-{{ $item->id }}" title="Edit details or upload a new version">
+                                                <i class="feather-edit-2"></i>
+                                            </button>
                                             <form method="POST" action="{{ route('budget.me.knowledge-evidence.destroy', $item) }}" onsubmit="return confirm('Remove this evidence item?');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button class="btn btn-sm btn-outline-danger" @disabled((int) $item->indicators_count > 0) title="{{ (int) $item->indicators_count > 0 ? 'Linked evidence cannot be deleted' : 'Delete evidence' }}">
+                                                @php($linkedCount = (int) $item->indicators_count + (int) $item->links_count + (int) $item->report_documents_count + (int) $item->matrix_versions_count)
+                                                <button class="btn btn-sm btn-outline-danger" @disabled($linkedCount > 0) title="{{ $linkedCount > 0 ? 'Linked evidence cannot be deleted' : 'Delete evidence' }}">
                                                     <i class="feather-trash-2"></i>
                                                 </button>
                                             </form>
@@ -194,5 +215,67 @@
                 <div class="card-footer bg-white">{{ $items->links() }}</div>
             @endif
         </div>
+
+        @can('me.configuration.manage')
+            @foreach ($items as $item)
+                <div class="modal fade" id="edit-evidence-{{ $item->id }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <div>
+                                    <h5 class="modal-title">Manage repository document</h5>
+                                    <div class="text-muted small">{{ $item->title }} &middot; current version {{ $item->version_number ?: 1 }}</div>
+                                </div>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <h6>Document details</h6>
+                                <form method="POST" action="{{ route('budget.me.knowledge-evidence.update', $item) }}" class="row g-3 mb-4">
+                                    @csrf
+                                    @method('PUT')
+                                    <div class="col-md-7">
+                                        <label class="form-label">Document title</label>
+                                        <input name="title" class="form-control" value="{{ $item->title }}" required maxlength="255">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label">Document type</label>
+                                        <select name="document_type" class="form-select" required>
+                                            @foreach($documentTypes as $value => $label)
+                                                <option value="{{ $value }}" @selected($item->document_type === $value)>{{ $label }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Description</label>
+                                        <textarea name="description" class="form-control" rows="2" maxlength="5000">{{ $item->description }}</textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">External URL</label>
+                                        <input type="url" name="external_url" class="form-control" value="{{ $item->external_url }}" maxlength="2000">
+                                    </div>
+                                    <div class="col-12 text-end"><button class="btn btn-primary">Save details</button></div>
+                                </form>
+
+                                <hr>
+                                <h6>Upload a new file version</h6>
+                                <p class="text-muted small">The current and earlier files remain in the audit history. Replacing a file resets its validation to pending.</p>
+                                <form method="POST" action="{{ route('budget.me.knowledge-evidence.replace-file', $item) }}" enctype="multipart/form-data" class="row g-3">
+                                    @csrf
+                                    <div class="col-md-6">
+                                        <label class="form-label">Replacement file</label>
+                                        <input type="file" name="replacement_file" class="form-control" required accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.zip">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">What changed?</label>
+                                        <input name="change_notes" class="form-control" required maxlength="5000" placeholder="Example: Corrected Q2 beneficiary annex">
+                                    </div>
+                                    <div class="col-12 text-end"><button class="btn btn-outline-primary">Upload version {{ ((int) $item->version_number) + 1 }}</button></div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        @endcan
     </div>
 @endsection

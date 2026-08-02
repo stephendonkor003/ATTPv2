@@ -13,6 +13,10 @@ class MePerformanceReport extends BaseModel
 
     public const STATUS_REVIEWED = 'reviewed';
 
+    public const STATUS_VERIFIED = 'verified';
+
+    public const STATUS_APPROVED = 'approved';
+
     public const STATUS_ARCHIVED = 'archived';
 
     public const QUARTERS = [
@@ -20,6 +24,28 @@ class MePerformanceReport extends BaseModel
         'Q2' => 'Q2 (April – June)',
         'Q3' => 'Q3 (July – September)',
         'Q4' => 'Q4 (October – December)',
+    ];
+
+    public const REPORTING_PERIOD_TYPES = [
+        'quarter' => 'Quarterly',
+        'semi_annual' => 'Semi-Annual',
+        'annual' => 'Annual',
+    ];
+
+    public const PERIOD_LABELS = [
+        'quarter' => [
+            'Q1' => 'Q1 (January – March)',
+            'Q2' => 'Q2 (April – June)',
+            'Q3' => 'Q3 (July – September)',
+            'Q4' => 'Q4 (October – December)',
+        ],
+        'semi_annual' => [
+            'H1' => 'H1 (January – June)',
+            'H2' => 'H2 (July – December)',
+        ],
+        'annual' => [
+            'ANNUAL' => 'Annual (January – December)',
+        ],
     ];
 
     public const PERFORMANCE_RATINGS = [
@@ -42,6 +68,8 @@ class MePerformanceReport extends BaseModel
         'assignment_id',
         'reporting_year',
         'reporting_quarter',
+        'reporting_period_type',
+        'reporting_period_label',
         'status',
         'key_achievements',
         'variance_explanation',
@@ -61,6 +89,12 @@ class MePerformanceReport extends BaseModel
         'reviewed_by',
         'reviewed_at',
         'review_notes',
+        'verified_by',
+        'verified_at',
+        'verification_notes',
+        'approved_by',
+        'approved_at',
+        'approval_notes',
         'archived_by',
         'archived_at',
         'archive_notes',
@@ -70,6 +104,8 @@ class MePerformanceReport extends BaseModel
         'reporting_year' => 'integer',
         'submitted_at' => 'datetime',
         'reviewed_at' => 'datetime',
+        'verified_at' => 'datetime',
+        'approved_at' => 'datetime',
         'archived_at' => 'datetime',
     ];
 
@@ -153,7 +189,17 @@ class MePerformanceReport extends BaseModel
 
     public function isReviewed(): bool
     {
-        return $this->status === self::STATUS_REVIEWED;
+        return in_array($this->status, [self::STATUS_REVIEWED, self::STATUS_VERIFIED, self::STATUS_APPROVED], true);
+    }
+
+    public function isVerified(): bool
+    {
+        return $this->status === self::STATUS_VERIFIED;
+    }
+
+    public function isApproved(): bool
+    {
+        return in_array($this->status, [self::STATUS_REVIEWED, self::STATUS_APPROVED], true);
     }
 
     public function isArchived(): bool
@@ -167,6 +213,8 @@ class MePerformanceReport extends BaseModel
             self::STATUS_DRAFT => 'Draft Report',
             self::STATUS_SUBMITTED => 'Submitted Report',
             self::STATUS_REVIEWED => 'Reviewed Report',
+            self::STATUS_VERIFIED => 'Verified Report',
+            self::STATUS_APPROVED => 'Approved Report',
             self::STATUS_ARCHIVED => 'Archived Report',
             default => str($this->status)->headline()->toString(),
         };
@@ -190,11 +238,14 @@ class MePerformanceReport extends BaseModel
     public function sectionCompletion(): array
     {
         if (! $this->relationLoaded('indicatorResults')) {
-            $this->load('indicatorResults.indicator');
+            $this->load(['indicatorResults.indicator', 'indicatorResults.achievements']);
         } else {
             $this->indicatorResults->each(function ($result): void {
                 if (! $result->relationLoaded('indicator')) {
                     $result->load('indicator');
+                }
+                if (! $result->relationLoaded('achievements')) {
+                    $result->load('achievements');
                 }
             });
         }
@@ -209,6 +260,12 @@ class MePerformanceReport extends BaseModel
                 ?: 'Linked indicator';
             $indicatorRequirements['Period result for '.$label] = $result->actual_value !== null
                 && filled($result->indicator_result_id);
+            $indicatorRequirements['Achievement detail for '.$label] = $result->achievements->isNotEmpty();
+            if ($result->indicator?->organization_rollup_method === 'weighted_average') {
+                $indicatorRequirements['Weighted roll-up numerator and denominator for '.$label] = $result->rollup_numerator !== null
+                    && $result->rollup_denominator !== null
+                    && (float) $result->rollup_denominator > 0;
+            }
         }
         if ($indicatorRequirements === []) {
             $indicatorRequirements['At least one due indicator result'] = false;
@@ -291,7 +348,17 @@ class MePerformanceReport extends BaseModel
 
     public function periodLabel(): string
     {
-        return $this->reporting_quarter.' '.$this->reporting_year;
+        return ($this->reporting_period_label ?: $this->reporting_quarter).' '.$this->reporting_year;
+    }
+
+    public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     /**

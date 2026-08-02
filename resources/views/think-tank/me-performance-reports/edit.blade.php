@@ -118,7 +118,7 @@
                 <div class="rp-section-head"><span class="rp-number">1</span><div><h2>Indicator results and progress against target</h2><p>Enter results for indicators due under their approved reporting frequency.</p></div>@include('me.performance-reports.partials.section-status', ['section' => $sectionCompletion['indicator_results']])</div>
                 <div class="rp-body"><div class="rp-indicators">
                     @foreach($report->indicatorResults as $result)
-                        @php $indicator=$result->indicator; $actual=old('indicator_results.'.$result->id.'.actual_value',$result->actual_value); @endphp
+                        @php $indicator=$result->indicator; $actual=old('indicator_results.'.$result->id.'.actual_value',$result->actual_value); $rollupNumerator=old('indicator_results.'.$result->id.'.rollup_numerator',$result->rollup_numerator); $rollupDenominator=old('indicator_results.'.$result->id.'.rollup_denominator',$result->rollup_denominator); @endphp
                         <article class="rp-indicator" data-indicator data-target="{{ $result->target_value }}">
                             <span class="rp-code">{{ $indicator?->indicator_code }} · {{ $result->reporting_frequency }}</span>
                             <h3>{{ $indicator?->name }}</h3>
@@ -131,8 +131,12 @@
                                 <div class="rp-cell"><small>Target achieved</small><strong>{{ $result->target_achievement_percent !== null ? number_format((float)$result->target_achievement_percent,1).'%' : 'Pending' }}</strong></div>
                                 <div class="rp-cell"><small>Actual result</small><input type="number" step="any" name="indicator_results[{{ $result->id }}][actual_value]" value="{{ $actual }}" data-actual @disabled(!$editable)></div>
                                 <div class="rp-cell"><small>Period progress</small><strong data-progress>{{ $result->progress_percent !== null ? number_format((float)$result->progress_percent,1).'%' : 'Pending' }}</strong></div>
+                                @if($indicator?->organization_rollup_method === 'weighted_average')
+                                    <div class="rp-cell"><small>Weighted numerator</small><input type="number" step="any" min="0" name="indicator_results[{{ $result->id }}][rollup_numerator]" value="{{ $rollupNumerator }}" @disabled(!$editable)></div>
+                                    <div class="rp-cell"><small>Weighted denominator</small><input type="number" step="any" min="0.0001" name="indicator_results[{{ $result->id }}][rollup_denominator]" value="{{ $rollupDenominator }}" @disabled(!$editable)></div>
+                                @endif
                             </div>
-                            <div class="rp-mov"><i class="feather-layers me-1"></i>Aggregation: {{ \App\Models\Indicator::AGGREGATION_METHODS[$result->aggregation_method] ?? 'Latest reported value' }}</div>
+                            <div class="rp-mov"><i class="feather-layers me-1"></i>Time aggregation: {{ \App\Models\Indicator::AGGREGATION_METHODS[$result->aggregation_method] ?? 'Latest reported value' }} &middot; Organization roll-up: {{ \App\Models\Indicator::ORGANIZATION_ROLLUP_METHODS[$indicator?->organization_rollup_method] ?? 'Sum' }}</div>
                             <div class="rp-mov"><i class="feather-archive me-1"></i>Means of Verification: {{ $indicator?->meansOfVerification?->title ?: 'No repository MOV linked' }}</div>
                         </article>
                     @endforeach
@@ -196,6 +200,8 @@
 
             @if($editable)<div class="rp-actions"><span class="text-muted small"><i class="feather-info me-1"></i>Save changes before submitting.</span><button class="btn btn-success fw-bold" type="submit"><i class="feather-save me-1"></i>Save Draft</button></div>@endif
         </form>
+
+        @include('me.performance-reports.partials.achievement-tracker')
 
         @if($editable)
             @foreach($report->documents as $document)<form id="delete-{{ $document->id }}" method="POST" action="{{ route('think-tank.performance-reports.documents.destroy',array_merge(['report'=>$report,'document'=>$document],$portalRouteParams)) }}" class="d-none">@csrf @method('DELETE')</form>@endforeach

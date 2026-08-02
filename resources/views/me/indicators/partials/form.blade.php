@@ -174,12 +174,17 @@
                         <input
                             type="text"
                             id="indicator-code"
+                            name="indicator_code"
                             class="form-control text-uppercase"
-                            value="{{ $editingIndicator->indicator_code ?? 'Assigned automatically when saved' }}"
+                            value="{{ old('indicator_code', $editingIndicator->indicator_code ?? '') }}"
+                            maxlength="80"
+                            pattern="[A-Za-z0-9][A-Za-z0-9._/-]*"
+                            placeholder="e.g. PDO-2 or IR-3.1"
                             aria-describedby="indicator-code-help"
-                            readonly
+                            required
                         >
-                        <small class="me-field-help" id="indicator-code-help">The system assigns a permanent, unique ID so duplicate codes cannot be created.</small>
+                        <small class="me-field-help" id="indicator-code-help">Authorized users define the unique code. The system keeps an audit history whenever it changes.</small>
+                        @error('indicator_code')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
                     </div>
 
                     <div class="col-lg-3">
@@ -214,6 +219,22 @@
                             <div class="invalid-feedback" id="indicator-name-error">{{ $message }}</div>
                         @enderror
                     </div>
+
+                    @if ($editingIndicator)
+                        <div class="col-12">
+                            <label class="form-label" for="indicator-code-change-reason">Reason for code change</label>
+                            <input
+                                type="text"
+                                id="indicator-code-change-reason"
+                                name="indicator_code_change_reason"
+                                class="form-control @error('indicator_code_change_reason') is-invalid @enderror"
+                                value="{{ old('indicator_code_change_reason') }}"
+                                maxlength="1000"
+                                placeholder="Required operational context when changing the indicator code"
+                            >
+                            @error('indicator_code_change_reason')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                    @endif
 
                     <div class="col-12">
                         <label class="form-label" for="indicator-definition">Definition <span class="text-danger">*</span></label>
@@ -323,7 +344,7 @@
                         @error('target_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-md-8">
+                    <div class="col-md-6">
                         <label class="form-label" for="indicator-aggregation-method">Approved aggregation method <span class="text-danger">*</span></label>
                         <select
                             id="indicator-aggregation-method"
@@ -337,6 +358,22 @@
                         </select>
                         @error('aggregation_method')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         <small class="text-muted">Only “Sum” adds periods. Percentages, ratios, averages and other non-additive values are never summed.</small>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label" for="indicator-organization-rollup">Cross-think-tank consolidation <span class="text-danger">*</span></label>
+                        <select
+                            id="indicator-organization-rollup"
+                            name="organization_rollup_method"
+                            class="form-select @error('organization_rollup_method') is-invalid @enderror"
+                            required
+                        >
+                            @foreach ($organizationRollupMethods as $value => $label)
+                                <option value="{{ $value }}" @selected(old('organization_rollup_method', $editingIndicator->organization_rollup_method ?? 'sum') === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        @error('organization_rollup_method')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <small class="text-muted">Controls how approved values from the 13 think tanks are combined. Rates and percentages should not normally use Sum.</small>
                     </div>
                 </div>
             </div>

@@ -32,6 +32,8 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
             MePerformanceReport::STATUS_DRAFT => (clone $baseQuery)->where('status', MePerformanceReport::STATUS_DRAFT)->count(),
             MePerformanceReport::STATUS_SUBMITTED => (clone $baseQuery)->where('status', MePerformanceReport::STATUS_SUBMITTED)->count(),
             MePerformanceReport::STATUS_REVIEWED => (clone $baseQuery)->where('status', MePerformanceReport::STATUS_REVIEWED)->count(),
+            MePerformanceReport::STATUS_VERIFIED => (clone $baseQuery)->where('status', MePerformanceReport::STATUS_VERIFIED)->count(),
+            MePerformanceReport::STATUS_APPROVED => (clone $baseQuery)->where('status', MePerformanceReport::STATUS_APPROVED)->count(),
             MePerformanceReport::STATUS_ARCHIVED => (clone $baseQuery)->where('status', MePerformanceReport::STATUS_ARCHIVED)->count(),
         ];
 
@@ -70,7 +72,8 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
             'reports' => $reports,
             'summary' => $summary,
             'assignments' => $assignments,
-            'quarters' => MePerformanceReport::QUARTERS,
+            'periodTypes' => MePerformanceReport::REPORTING_PERIOD_TYPES,
+            'periodLabels' => MePerformanceReport::PERIOD_LABELS,
             'statusFilter' => $status,
             'search' => $search,
             'canAuthor' => $this->canAuthor($request),
@@ -82,11 +85,14 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
     {
         $member = $this->member($request);
         $this->assertCanAuthor($request);
+        $this->normalizeLegacyPeriodInput($request);
         $validated = $request->validate([
             'assignment_id' => ['required', 'uuid', Rule::exists('me_data_collection_assignments', 'id')],
-            'reporting_quarter' => ['required', Rule::in(array_keys(MePerformanceReport::QUARTERS))],
+            'reporting_period_type' => ['required', Rule::in(array_keys(MePerformanceReport::REPORTING_PERIOD_TYPES))],
+            'reporting_period_label' => ['required', 'string', 'max:40'],
             'reporting_year' => ['required', 'integer', 'min:2000', 'max:2100'],
         ]);
+        $this->assertValidPeriodSelection($validated['reporting_period_type'], $validated['reporting_period_label']);
 
         $assignment = MeDataCollectionAssignment::query()
             ->whereKey($validated['assignment_id'])
@@ -108,7 +114,8 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
         $report = $this->createReportFor(
             $form,
             (int) $validated['reporting_year'],
-            (string) $validated['reporting_quarter'],
+            (string) $validated['reporting_period_type'],
+            (string) $validated['reporting_period_label'],
             $request,
             $member,
             $assignment

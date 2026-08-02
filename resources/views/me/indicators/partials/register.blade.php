@@ -94,8 +94,10 @@
                             $setupTarget = $indicator->setupTarget;
                             $unitLabel = $indicator->unit?->symbol ?: ($indicator->unit?->name ?: 'Unit not set');
                             $dataCollectionMethod = (string) ($indicator->data_collection_method ?: $indicator->methodology ?: '');
+                            $requirements = $indicator->disaggregationRequirements;
                             $disaggregations = $indicator->disaggregations->keyBy('level');
-                            $disaggregationChain = $indicator->disaggregationChain();
+                            $disaggregationChain = $requirements->pluck('dimension.name')->filter()->join(' × ')
+                                ?: $indicator->disaggregationChain();
                             $responsibleNames = collect([$indicator->responsiblePerson?->name])->filter();
                             if ($responsibleNames->isEmpty()) {
                                 $responsibleNames = collect(json_decode((string) $indicator->responsible_party, true) ?: [])
@@ -168,9 +170,9 @@
                                             data-disaggregation-open
                                             data-indicator-name="{{ $indicator->name }}"
                                             data-action="{{ route('budget.me.indicators.disaggregations.update', $indicator) }}"
-                                            data-primary="{{ $disaggregations->get('primary')?->dimension }}"
-                                            data-secondary="{{ $disaggregations->get('secondary')?->dimension }}"
-                                            data-tertiary="{{ $disaggregations->get('tertiary')?->dimension }}"
+                                             data-dimensions="{{ $requirements->pluck('dimension_id')->implode(',') }}"
+                                             data-required-dimensions="{{ $requirements->where('is_required', true)->pluck('dimension_id')->implode(',') }}"
+                                             data-numeric-dimensions="{{ $requirements->where('collect_numeric_value', true)->pluck('dimension_id')->implode(',') }}"
                                             aria-label="Configure disaggregation for {{ $indicator->name }}"
                                         >
                                             <i class="feather-filter" aria-hidden="true"></i> Disaggregation
@@ -206,8 +208,10 @@
                     $setupTarget = $indicator->setupTarget;
                     $unitLabel = $indicator->unit?->symbol ?: ($indicator->unit?->name ?: 'Unit not set');
                     $dataCollectionMethod = (string) ($indicator->data_collection_method ?: $indicator->methodology ?: '');
+                    $requirements = $indicator->disaggregationRequirements;
                     $disaggregations = $indicator->disaggregations->keyBy('level');
-                    $disaggregationChain = $indicator->disaggregationChain();
+                    $disaggregationChain = $requirements->pluck('dimension.name')->filter()->join(' × ')
+                        ?: $indicator->disaggregationChain();
                     $responsibleNames = collect([$indicator->responsiblePerson?->name])->filter();
                     if ($responsibleNames->isEmpty()) {
                         $responsibleNames = collect(json_decode((string) $indicator->responsible_party, true) ?: [])
@@ -265,9 +269,9 @@
                                 data-disaggregation-open
                                 data-indicator-name="{{ $indicator->name }}"
                                 data-action="{{ route('budget.me.indicators.disaggregations.update', $indicator) }}"
-                                data-primary="{{ $disaggregations->get('primary')?->dimension }}"
-                                data-secondary="{{ $disaggregations->get('secondary')?->dimension }}"
-                                data-tertiary="{{ $disaggregations->get('tertiary')?->dimension }}"
+                                 data-dimensions="{{ $requirements->pluck('dimension_id')->implode(',') }}"
+                                 data-required-dimensions="{{ $requirements->where('is_required', true)->pluck('dimension_id')->implode(',') }}"
+                                 data-numeric-dimensions="{{ $requirements->where('collect_numeric_value', true)->pluck('dimension_id')->implode(',') }}"
                             >
                                 <i class="feather-filter me-1"></i> Disaggregation
                             </button>

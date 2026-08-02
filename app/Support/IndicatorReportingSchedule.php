@@ -18,6 +18,20 @@ final class IndicatorReportingSchedule
         };
     }
 
+    public static function isDueInPeriod(Indicator $indicator, string $periodType, string $periodLabel): bool
+    {
+        $cadence = $indicator->frequency?->indicatorCadenceKey();
+
+        return match ($periodType) {
+            'quarter' => in_array($periodLabel, ['Q1', 'Q2', 'Q3', 'Q4'], true)
+                && in_array($cadence, ['monthly', 'quarterly'], true),
+            'semi_annual' => in_array($periodLabel, ['H1', 'H2'], true)
+                && $cadence === 'semi_annual',
+            'annual' => $periodLabel === 'ANNUAL' && $cadence === 'annual',
+            default => false,
+        };
+    }
+
     public static function cadenceLabel(Indicator $indicator): string
     {
         return $indicator->frequency?->indicatorCadenceLabel() ?: 'Not configured';

@@ -638,13 +638,17 @@
                             </select>
                         </div>
                         <div>
-                            <label for="dashboard-period">Reporting period</label>
-                            <select class="form-select" id="dashboard-period" name="reporting_quarter">
-                                <option value="">All periods</option>
-                                @foreach ($filterOptions['quarters'] as $quarter => $label)
-                                    <option value="{{ $quarter }}" @selected($filters['reporting_quarter'] === $quarter)>{{ $label }}</option>
+                            <label for="dashboard-period-type">Reporting frequency</label>
+                            <select class="form-select" id="dashboard-period-type" name="reporting_period_type">
+                                <option value="">All frequencies</option>
+                                @foreach ($filterOptions['period_types'] as $value => $label)
+                                    <option value="{{ $value }}" @selected($filters['reporting_period_type'] === $value)>{{ $label }}</option>
                                 @endforeach
                             </select>
+                        </div>
+                        <div>
+                            <label for="dashboard-period">Reporting period</label>
+                            <select class="form-select" id="dashboard-period" name="reporting_period_label"><option value="">All periods</option></select>
                         </div>
                         <div>
                             <label for="dashboard-component">Project component</label>
@@ -823,8 +827,8 @@
                     </div>
                     <div class="bar-list mt-3">
                         @forelse ($reportsByPeriod as $group)
-                            @php [$groupYear, $groupQuarter] = array_pad(explode('-', $group['key'], 2), 2, null); @endphp
-                            <a href="{{ route('budget.me.rebuild.reporting-dashboard', array_merge($activeFilters, ['reporting_year' => $groupYear, 'reporting_quarter' => $groupQuarter])).'#report-records' }}" class="bar-row">
+                            @php [$groupYear, $groupPeriodType, $groupPeriodLabel] = array_pad(explode('|', $group['key'], 3), 3, null); @endphp
+                            <a href="{{ route('budget.me.rebuild.reporting-dashboard', array_merge($activeFilters, ['reporting_year' => $groupYear, 'reporting_period_type' => $groupPeriodType, 'reporting_period_label' => $groupPeriodLabel])).'#report-records' }}" class="bar-row">
                                 <div class="bar-line"><span>{{ $group['label'] }}</span><strong>{{ number_format($group['count']) }}</strong></div>
                                 <div class="bar-track"><span style="width:{{ $group['percentage'] }}%;--bar-color:#0b7b78"></span></div>
                                 <div class="bar-meta"><span>{{ $group['subtitle'] }}</span><span>{{ number_format($group['percentage'], 1) }}%</span></div>
@@ -898,7 +902,7 @@
                                     <tr>
                                         <td>
                                             <span class="record-title" title="{{ $report->form?->title }}">{{ $report->form?->title ?: 'Form unavailable' }}</span>
-                                            <span class="record-meta">{{ $report->form?->code }} · {{ $report->reporting_quarter }} {{ $report->reporting_year }}</span>
+                                            <span class="record-meta">{{ $report->form?->code }} · {{ $report->periodLabel() }}</span>
                                         </td>
                                         <td>
                                             <span class="record-title">{{ $report->thinkTank?->name ?: 'Secretariat / Internal' }}</span>
@@ -938,4 +942,26 @@
             </section>
         </main>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const type = document.getElementById('dashboard-period-type');
+            const period = document.getElementById('dashboard-period');
+            const labels = @json($filterOptions['period_labels']);
+            const current = @json($filters['reporting_period_label']);
+            const refresh = () => {
+                if (!period) return;
+                period.innerHTML = '<option value="">All periods</option>';
+                const groups = type?.value ? {[type.value]: labels[type.value] || {}} : labels;
+                Object.entries(groups).forEach(([frequency, options]) => {
+                    Object.entries(options).forEach(([value, label]) => {
+                        const option = new Option(label, value, false, value === current);
+                        option.dataset.frequency = frequency;
+                        period.add(option);
+                    });
+                });
+            };
+            type?.addEventListener('change', refresh);
+            refresh();
+        });
+    </script>
 @endsection

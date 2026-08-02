@@ -10,6 +10,7 @@ class MePerformanceReportDocument extends BaseModel
 
     protected $fillable = [
         'report_id',
+        'repository_item_id',
         'document_name',
         'file_path',
         'original_filename',
@@ -30,6 +31,11 @@ class MePerformanceReportDocument extends BaseModel
     public function report(): BelongsTo
     {
         return $this->belongsTo(MePerformanceReport::class, 'report_id');
+    }
+
+    public function repositoryItem(): BelongsTo
+    {
+        return $this->belongsTo(MeKnowledgeEvidenceItem::class, 'repository_item_id');
     }
 
     public function uploadedBy(): BelongsTo

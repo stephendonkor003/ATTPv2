@@ -14,6 +14,8 @@ class MeKnowledgeEvidenceItem extends BaseModel
         'evaluation' => 'Evaluation',
         'research' => 'Research / Evidence',
         'other' => 'Other',
+        'supporting_evidence' => 'Supporting Evidence',
+        'me_matrix' => 'M&E Matrix',
     ];
 
     protected $table = 'me_knowledge_evidence_items';
@@ -22,22 +24,30 @@ class MeKnowledgeEvidenceItem extends BaseModel
         'portfolio_id',
         'title',
         'document_type',
+        'repository_category',
         'description',
         'file_path',
         'original_filename',
         'mime_type',
         'file_size',
+        'checksum_sha256',
+        'version_number',
         'external_url',
         'validation_status',
         'validated_by',
         'validated_at',
         'validation_notes',
         'created_by',
+        'updated_by',
+        'retired_at',
+        'retired_by',
     ];
 
     protected $casts = [
         'file_size' => 'integer',
         'validated_at' => 'datetime',
+        'version_number' => 'integer',
+        'retired_at' => 'datetime',
     ];
 
     public function portfolio(): BelongsTo
@@ -58,6 +68,27 @@ class MeKnowledgeEvidenceItem extends BaseModel
     public function indicators(): HasMany
     {
         return $this->hasMany(Indicator::class, 'means_of_verification_id');
+    }
+
+    public function versions(): HasMany
+    {
+        return $this->hasMany(MeRepositoryDocumentVersion::class, 'repository_item_id')
+            ->orderByDesc('version_number');
+    }
+
+    public function links(): HasMany
+    {
+        return $this->hasMany(MeRepositoryDocumentLink::class, 'repository_item_id');
+    }
+
+    public function matrixVersions(): HasMany
+    {
+        return $this->hasMany(MeMatrixVersion::class, 'repository_item_id');
+    }
+
+    public function reportDocuments(): HasMany
+    {
+        return $this->hasMany(MePerformanceReportDocument::class, 'repository_item_id');
     }
 
     public function typeLabel(): string

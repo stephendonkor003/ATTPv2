@@ -572,7 +572,7 @@
         $statusChoices = match ($tab) {
             'forms' => ['draft' => 'Draft', 'published' => 'Published', 'archived' => 'Archived'],
             'periods' => ['draft' => 'Draft', 'active' => 'Active', 'closed' => 'Closed'],
-            'reports' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'reviewed' => 'Reviewed', 'archived' => 'Archived'],
+            'reports' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'verified' => 'Verified', 'approved' => 'Approved', 'reviewed' => 'Legacy approved', 'archived' => 'Archived'],
             'submissions' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'returned' => 'Returned', 'validated' => 'Validated', 'approved' => 'Approved'],
             default => ['draft' => 'Draft', 'open' => 'Open', 'closed' => 'Closed'],
         };

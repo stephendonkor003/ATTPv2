@@ -18,11 +18,14 @@ class MeReportingNotificationService
         $labels = [
             'submitted' => ['Performance report submitted', 'A performance report is awaiting Secretariat/M&E review.', 'info'],
             'returned' => ['Performance report returned', 'The report requires revision. Open the review notes and address all outstanding actions.', 'warning'],
+            'verified' => ['Performance report verified', 'The M&E Officer verified the evidence and calculations. The report is awaiting final approval.', 'info'],
             'approved' => ['Performance report approved', 'The Secretariat/M&E Officer approved the performance report.', 'success'],
             'archived' => ['Performance report archived', 'The finalized report is now retained as a historical record.', 'secondary'],
         ];
         [$title, $message, $severity] = $labels[$event];
-        $recipients = $event === 'submitted' ? $this->reviewers('me.performance_reports.review') : $this->authorsFor($report);
+        $recipients = in_array($event, ['submitted', 'verified'], true)
+            ? $this->reviewers('me.performance_reports.review')
+            : $this->authorsFor($report);
 
         $this->notify($recipients, $event, $report, [
             'title' => $title,
