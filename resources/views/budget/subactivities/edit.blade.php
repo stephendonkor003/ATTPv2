@@ -33,6 +33,42 @@
                         </div>
                     @endif
 
+                    @if (($fundingAllocationReconciliation['status'] ?? 'unavailable') === 'ready')
+                        <div class="alert alert-info">
+                            <div class="fw-semibold mb-1">Audited one-time allocation repair</div>
+                            <p class="mb-2">
+                                This server has the exact legacy $24.5M schedule. The repair will rephase it across
+                                2026–2028, move the $24,800 sibling residue out of 2025, and assign $297,800 of unused
+                                2028 project capacity to the parent activity.
+                            </p>
+                            <div class="small mb-2">
+                                Resulting target schedule: 2026 — USD 9,678,500; 2027 — USD 9,678,500;
+                                2028 — USD 5,143,000. Remaining project 2028 capacity: USD 5,145,200.
+                            </div>
+                            <form method="POST"
+                                action="{{ route('budget.subactivities.reconcile-funding-allocation', $subActivity->id) }}"
+                                onsubmit="return confirm('Apply the audited Funding to Think Tanks database reconciliation? This will update the parent and two sub-activity schedules in one transaction.');">
+                                @csrf
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-database-check me-1"></i> Apply Audited Database Reconciliation
+                                </button>
+                            </form>
+                        </div>
+                    @elseif (($fundingAllocationReconciliation['status'] ?? 'unavailable') === 'complete')
+                        <div class="alert alert-success">
+                            <div class="fw-semibold">Allocation reconciliation complete</div>
+                            <div class="small">
+                                The $24.5M schedule, parent envelope, and sibling residue are balanced. Re-running the
+                                repair would make no database changes.
+                            </div>
+                        </div>
+                    @elseif (($fundingAllocationReconciliation['status'] ?? 'unavailable') === 'blocked')
+                        <div class="alert alert-danger">
+                            <div class="fw-semibold">Automatic reconciliation unavailable</div>
+                            <div class="small">{{ $fundingAllocationReconciliation['message'] }}</div>
+                        </div>
+                    @endif
+
                     @php
                         $allocationsByYear = $subActivity->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
                         $activityAllocationsByYear = $subActivity->activity->allocations->keyBy(fn ($allocation) => (int) $allocation->year);
@@ -41,8 +77,51 @@
                             ->flatMap(fn ($otherSubActivity) => $otherSubActivity->allocations)
                             ->groupBy(fn ($allocation) => (int) $allocation->year)
                             ->map(fn ($allocations) => (float) $allocations->sum('amount'));
+                        $activityTotal = (float) $subActivity->activity->allocations->sum('amount');
+                        $currentSubActivityTotal = (float) $subActivity->activity->subActivities
+                            ->sum(fn ($child) => (float) $child->allocations->sum('amount'));
+                        $thisSubActivityTotal = (float) $subActivity->allocations->sum('amount');
+                        $otherSubActivitiesTotal = $currentSubActivityTotal - $thisSubActivityTotal;
+                        $availableEnvelopeForThisSubActivity = max($activityTotal - $otherSubActivitiesTotal, 0);
+                        $currentTotalOverage = max($currentSubActivityTotal - $activityTotal, 0);
+                        $currentYearOverages = collect($subActivity->activity->years())
+                            ->mapWithKeys(function ($year) use ($subActivity, $activityAllocationsByYear) {
+                                $year = (int) $year;
+                                $parentAmount = (float) optional($activityAllocationsByYear->get($year))->amount;
+                                $childAmount = (float) $subActivity->activity->subActivities
+                                    ->sum(fn ($child) => $child->allocations->where('year', $year)->sum('amount'));
+
+                                return [$year => max($childAmount - $parentAmount, 0)];
+                            })
+                            ->filter(fn ($overage) => $overage > 0.004);
                         $currency = $subActivity->activity->project->currency ?? $subActivity->activity->project->program->currency ?? 'USD';
                     @endphp
+
+                    @if ($currentTotalOverage > 0.004 || $currentYearOverages->isNotEmpty())
+                        <div class="alert alert-warning">
+                            <div class="fw-semibold mb-1">Existing allocation exception</div>
+                            <div>
+                                This hierarchy was already inconsistent before this edit.
+                                @if ($currentTotalOverage > 0.004)
+                                    Sub-activities exceed the parent activity envelope by
+                                    {{ number_format($currentTotalOverage, 2) }} {{ $currency }}.
+                                @endif
+                                @if ($currentYearOverages->isNotEmpty())
+                                    Yearly excess:
+                                    {{ $currentYearOverages->map(fn ($overage, $year) => $year . ': ' . number_format($overage, 2) . ' ' . $currency)->implode('; ') }}.
+                                @endif
+                            </div>
+                            <div class="small mt-1">
+                                Corrective changes that reduce or preserve the existing exception can be saved;
+                                new or larger overruns remain blocked.
+                            </div>
+                            <div class="small mt-1">
+                                Current sub-activity envelope: {{ number_format($thisSubActivityTotal, 2) }} {{ $currency }}.
+                                Maximum within the present parent envelope after sibling allocations:
+                                {{ number_format($availableEnvelopeForThisSubActivity, 2) }} {{ $currency }}.
+                            </div>
+                        </div>
+                    @endif
 
                     <form action="{{ route('budget.subactivities.update', $subActivity->id) }}" method="POST">
                         @csrf

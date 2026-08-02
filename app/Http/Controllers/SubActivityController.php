@@ -8,6 +8,7 @@ use App\Models\Activity;
 use App\Models\SubActivityAllocation;
 use App\Models\Program;
 use App\Services\ActivityReallocationTracker;
+use App\Services\FundingToThinkTanksAllocationReconciler;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -177,7 +178,7 @@ public function show($id)
 
 }
 
-public function edit($id)
+public function edit($id, FundingToThinkTanksAllocationReconciler $allocationReconciler)
 {
     $subActivity = SubActivity::with([
         'allocations',
@@ -187,7 +188,34 @@ public function edit($id)
     ])->findOrFail($id);
     $this->assertSubActivityInScope($subActivity);
 
-    return view('budget.subactivities.edit', compact('subActivity'));
+    $fundingAllocationReconciliation = $allocationReconciler->preview($subActivity);
+
+    return view('budget.subactivities.edit', compact('subActivity', 'fundingAllocationReconciliation'));
+}
+
+public function reconcileFundingAllocation($id, FundingToThinkTanksAllocationReconciler $allocationReconciler)
+{
+    $subActivity = SubActivity::with('activity.project')->findOrFail($id);
+    $this->assertSubActivityInScope($subActivity);
+
+    try {
+        $result = $allocationReconciler->reconcile($subActivity, Auth::id());
+    } catch (\DomainException $e) {
+        return back()->with('error', $e->getMessage());
+    } catch (\Throwable $e) {
+        report($e);
+
+        return back()->with('error', 'The allocation reconciliation failed and all database changes were rolled back.');
+    }
+
+    if (! $result['changed']) {
+        return back()->with('success', 'This allocation hierarchy was already reconciled; no database changes were needed.');
+    }
+
+    return back()->with(
+        'success',
+        'Funding to Think Tanks was reconciled successfully. Audit reference: '.$result['audit_log_id'].'.'
+    );
 }
 
 public function update(Request $request, $id)
@@ -422,10 +450,15 @@ public function destroy($id)
         $otherSubActivitiesTotal = round((float) $sub->activity->subActivities
             ->where('id', '!=', $sub->id)
             ->sum(fn ($otherSubActivity) => $otherSubActivity->allocations->sum('amount')), 2);
+        $currentSubActivityTotal = round((float) $sub->allocations->sum('amount'), 2);
+        $currentCombinedTotal = round($otherSubActivitiesTotal + $currentSubActivityTotal, 2);
         $newSubActivityTotal = round(array_sum($allocations), 2);
         $combinedTotal = round($otherSubActivitiesTotal + $newSubActivityTotal, 2);
 
-        if ($combinedTotal > $activityTotal) {
+        // Imported legacy schedules can already exceed their parent envelope.
+        // Permit corrective rephasing that does not increase that exception,
+        // while continuing to reject any new or larger over-allocation.
+        if ($combinedTotal > $activityTotal + 0.004 && $combinedTotal > $currentCombinedTotal + 0.004) {
             return 'Sub-activity allocations were not saved because the combined sub-activity total (' . number_format($combinedTotal, 2) . ') exceeds the parent activity budget (' . number_format($activityTotal, 2) . '). Reduce this sub-activity by at least ' . number_format($combinedTotal - $activityTotal, 2) . '.';
         }
 
@@ -439,9 +472,14 @@ public function destroy($id)
                         ->where('year', $year)
                         ->sum('amount');
                 }), 2);
+            $currentAmount = round((float) $sub->allocations
+                ->where('year', $year)
+                ->sum('amount'), 2);
+            $currentCombinedYearTotal = round($otherSubActivitiesYearTotal + $currentAmount, 2);
             $combinedYearTotal = round($otherSubActivitiesYearTotal + (float) $amount, 2);
 
-            if ($combinedYearTotal > $activityYearBudget) {
+            if ($combinedYearTotal > $activityYearBudget + 0.004
+                && $combinedYearTotal > $currentCombinedYearTotal + 0.004) {
                 return 'Sub-activity allocations were not saved because year ' . $year . ' would exceed the parent activity budget. The parent activity has ' . number_format($activityYearBudget, 2) . ' for that year, while sub-activities would total ' . number_format($combinedYearTotal, 2) . '.';
             }
         }

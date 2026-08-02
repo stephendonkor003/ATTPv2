@@ -14,6 +14,7 @@ use App\Models\PurchaseRequestItem;
 use App\Services\ProcurementDisbursementHandoffNotificationService;
 use App\Services\SignedDisbursementDocumentService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -49,40 +50,7 @@ class ProcurementDisbursementController extends Controller
                     ->whereNotNull('governance_node_id');
             });
 
-        $paidQuery = (clone $baseQuery)
-            ->whereNotNull('paid_at')
-            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
-
-        $summaryCurrencyDisbursements = (clone $baseQuery)
-            ->with([
-                'purchaseOrder.purchaseRequest.programFunding.program',
-                'purchaseOrder.budgetCommitment.programFunding.program',
-                'purchaseOrder.budgetCommitment.purchaseRequest.programFunding.program',
-            ])
-            ->get(['id', 'purchase_order_id', 'currency']);
-
-        $disbursementSummary = [
-            'currency' => $this->summaryCurrencyFor($summaryCurrencyDisbursements),
-            'total_receipts' => (clone $baseQuery)->count(),
-            'total_paid_amount' => (float) (clone $paidQuery)->sum('amount'),
-            'this_month_paid_amount' => (float) (clone $paidQuery)
-                ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
-                ->sum('amount'),
-            'pending_amount' => (float) (clone $baseQuery)
-                ->where(function ($query) {
-                    $query->whereNull('paid_at')
-                        ->orWhereNotIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
-                })
-                ->sum('amount'),
-            'paid_purchase_orders' => (clone $paidQuery)
-                ->whereNotNull('purchase_order_id')
-                ->distinct()
-                ->count('purchase_order_id'),
-            'paid_line_items' => (clone $paidQuery)
-                ->whereNotNull('purchase_request_item_id')
-                ->distinct()
-                ->count('purchase_request_item_id'),
-        ];
+        $disbursementSummary = $this->buildDisbursementSummary($baseQuery);
 
         $latestDisbursement = (clone $baseQuery)
             ->orderByDesc('paid_at')
@@ -101,6 +69,8 @@ class ProcurementDisbursementController extends Controller
             'procurement',
             'thinkTankMember',
             'consortium',
+            'fundAllocation',
+            'consortiumDisbursementRequest',
         ])
             ->orderByDesc('paid_at')
             ->paginate(12);
@@ -115,6 +85,52 @@ class ProcurementDisbursementController extends Controller
             'disbursementSummary',
             'latestDisbursement'
         ));
+    }
+
+    private function buildDisbursementSummary(Builder $baseQuery): array
+    {
+        $recordedPaidQuery = (clone $baseQuery)
+            ->whereNotNull('paid_at')
+            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+
+        $paidQuery = (clone $baseQuery)->recognizedPayment();
+
+        $totalReceiptAmount = (float) (clone $baseQuery)->sum('amount');
+        $recordedPaidAmount = (float) (clone $recordedPaidQuery)->sum('amount');
+        $recognizedPaidAmount = (float) (clone $paidQuery)->sum('amount');
+        $unsupportedPaidAmount = max(round($recordedPaidAmount - $recognizedPaidAmount, 2), 0);
+        $unsupportedPaidReceipts = max(
+            (clone $recordedPaidQuery)->count() - (clone $paidQuery)->count(),
+            0
+        );
+
+        $summaryCurrencyDisbursements = (clone $baseQuery)
+            ->with([
+                'purchaseOrder.purchaseRequest.programFunding.program',
+                'purchaseOrder.budgetCommitment.programFunding.program',
+                'purchaseOrder.budgetCommitment.purchaseRequest.programFunding.program',
+            ])
+            ->get(['id', 'purchase_order_id', 'currency']);
+
+        return [
+            'currency' => $this->summaryCurrencyFor($summaryCurrencyDisbursements),
+            'total_receipts' => (clone $baseQuery)->count(),
+            'total_paid_amount' => $recognizedPaidAmount,
+            'this_month_paid_amount' => (float) (clone $paidQuery)
+                ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
+                ->sum('amount'),
+            'pending_amount' => max(round($totalReceiptAmount - $recognizedPaidAmount, 2), 0),
+            'unsupported_paid_amount' => $unsupportedPaidAmount,
+            'unsupported_paid_receipts' => $unsupportedPaidReceipts,
+            'paid_purchase_orders' => (clone $paidQuery)
+                ->whereNotNull('purchase_order_id')
+                ->distinct()
+                ->count('purchase_order_id'),
+            'paid_line_items' => (clone $paidQuery)
+                ->whereNotNull('purchase_request_item_id')
+                ->distinct()
+                ->count('purchase_request_item_id'),
+        ];
     }
 
     public function create(Request $request)

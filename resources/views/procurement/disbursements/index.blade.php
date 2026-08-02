@@ -91,6 +91,8 @@
             $summaryCurrency = $disbursementSummary['currency'] ?? 'USD';
             $cardMoney = fn ($value) => trim($summaryCurrency . ' ' . number_format((float) $value, 2));
             $currencyNote = $summaryCurrency === 'Mixed' ? 'Multiple program currencies' : 'Program currency';
+            $unsupportedPaidReceipts = (int) ($disbursementSummary['unsupported_paid_receipts'] ?? 0);
+            $unsupportedPaidAmount = (float) ($disbursementSummary['unsupported_paid_amount'] ?? 0);
         @endphp
 
         <div class="row g-3 mb-4">
@@ -105,7 +107,7 @@
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Actual Paid Amount</div>
                     <div class="stat-value">{{ $cardMoney($disbursementSummary['total_paid_amount'] ?? 0) }}</div>
-                    <div class="text-muted small">Completed/paid receipts only | {{ $currencyNote }}</div>
+                    <div class="text-muted small">Completed/paid receipts with a live source | {{ $currencyNote }}</div>
                 </div>
             </div>
             <div class="col-sm-6 col-xl-4">
@@ -119,7 +121,14 @@
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Pending / Other Amount</div>
                     <div class="stat-value">{{ $cardMoney($disbursementSummary['pending_amount'] ?? 0) }}</div>
-                    <div class="text-muted small">Not counted as actual paid</div>
+                    <div class="text-muted small">
+                        Not counted as actual paid
+                        @if ($unsupportedPaidReceipts > 0)
+                            | Includes {{ number_format($unsupportedPaidReceipts) }} unsupported historical
+                            {{ \Illuminate\Support\Str::plural('receipt', $unsupportedPaidReceipts) }}
+                            ({{ $cardMoney($unsupportedPaidAmount) }})
+                        @endif
+                    </div>
                 </div>
             </div>
             <div class="col-sm-6 col-xl-4">
@@ -167,6 +176,13 @@
                         @foreach ($disbursements as $disbursement)
                             @php
                                 $procurementComplete = $disbursement->isProcurementProcessingComplete();
+                                $recordedAsPaid = $disbursement->paid_at
+                                    && in_array(strtolower((string) $disbursement->status), \App\Models\ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES, true);
+                                $hasLiveFinancialSource = $disbursement->purchaseOrder
+                                    || $disbursement->procurement
+                                    || $disbursement->fundAllocation
+                                    || $disbursement->consortiumDisbursementRequest;
+                                $isUnsupportedHistoricalReceipt = $recordedAsPaid && ! $hasLiveFinancialSource;
                             @endphp
                             <tr>
                                 <td class="ps-4 fw-semibold">{{ $disbursement->reference_no ?? 'N/A' }}</td>
@@ -199,6 +215,13 @@
                                     <span class="badge bg-secondary text-capitalize">
                                         {{ $disbursement->status ?? 'completed' }}
                                     </span>
+                                    @if ($isUnsupportedHistoricalReceipt)
+                                        <div class="mt-1">
+                                            <span class="badge bg-danger" title="Excluded from Actual Paid because its source record no longer exists.">
+                                                Unsupported historical receipt
+                                            </span>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="text-center">
                                     <span class="badge {{ $procurementComplete ? 'bg-success' : 'bg-warning text-dark' }}">

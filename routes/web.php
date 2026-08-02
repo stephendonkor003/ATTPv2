@@ -1632,6 +1632,10 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->middleware('permission:subactivities.edit')
             ->name('subactivities.update');
 
+        Route::post('subactivities/{subactivity}/reconcile-funding-allocation', [SubActivityController::class, 'reconcileFundingAllocation'])
+            ->middleware('permission:subactivities.edit')
+            ->name('subactivities.reconcile-funding-allocation');
+
         Route::get('subactivities/{subactivity}/edit-allocations', [SubActivityController::class, 'editAllocations'])
             ->middleware('permission:subactivity.edit')
             ->name('subactivities.allocations.edit');

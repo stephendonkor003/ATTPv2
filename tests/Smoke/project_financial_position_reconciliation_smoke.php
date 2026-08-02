@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BudgetReportController;
 use App\Http\Controllers\MasterDashboard;
+use App\Http\Controllers\Procurement\ProcurementDisbursementController;
 use App\Http\Controllers\Procurement\ProcurementPurchaseOrderController;
 use App\Models\Activity;
 use App\Models\BudgetCommitment;
@@ -79,6 +80,22 @@ class ProjectFinancialPositionReconciliationSmoke
             );
             $this->assertAmount(60_000, $totals['invoiced'], 'Recognized invoices');
             $this->assertAmount(1, $report['position']['counts']['invoices'], 'Recognized invoice count');
+
+            $disbursementSummaryMethod = new ReflectionMethod(
+                ProcurementDisbursementController::class,
+                'buildDisbursementSummary'
+            );
+            $disbursementSummary = $disbursementSummaryMethod->invoke(
+                $this->app->make(ProcurementDisbursementController::class),
+                ProcurementDisbursement::query()->where('created_by', $admin->id)
+            );
+            $this->assertAmount(70_000, $disbursementSummary['total_paid_amount'], 'Disbursement index recognized paid amount');
+            $this->assertAmount(114_400, $disbursementSummary['pending_amount'], 'Disbursement index pending and unsupported amount');
+            $this->assertAmount(109_400, $disbursementSummary['unsupported_paid_amount'], 'Disbursement index unsupported amount');
+            $this->assertTrue(
+                $disbursementSummary['unsupported_paid_receipts'] === 1,
+                'Disbursement index unsupported receipt count'
+            );
 
             foreach ([
                 'sector' => ['sector_id' => $program->sector_id],
