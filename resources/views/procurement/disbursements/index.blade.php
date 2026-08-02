@@ -91,8 +91,6 @@
             $summaryCurrency = $disbursementSummary['currency'] ?? 'USD';
             $cardMoney = fn ($value) => trim($summaryCurrency . ' ' . number_format((float) $value, 2));
             $currencyNote = $summaryCurrency === 'Mixed' ? 'Multiple program currencies' : 'Program currency';
-            $unsupportedPaidReceipts = (int) ($disbursementSummary['unsupported_paid_receipts'] ?? 0);
-            $unsupportedPaidAmount = (float) ($disbursementSummary['unsupported_paid_amount'] ?? 0);
         @endphp
 
         <div class="row g-3 mb-4">
@@ -121,14 +119,7 @@
                 <div class="stat-card p-3 h-100">
                     <div class="stat-title">Pending / Other Amount</div>
                     <div class="stat-value">{{ $cardMoney($disbursementSummary['pending_amount'] ?? 0) }}</div>
-                    <div class="text-muted small">
-                        Not counted as actual paid
-                        @if ($unsupportedPaidReceipts > 0)
-                            | Includes {{ number_format($unsupportedPaidReceipts) }} unsupported historical
-                            {{ \Illuminate\Support\Str::plural('receipt', $unsupportedPaidReceipts) }}
-                            ({{ $cardMoney($unsupportedPaidAmount) }})
-                        @endif
-                    </div>
+                    <div class="text-muted small">Unpaid planned receipts only</div>
                 </div>
             </div>
             <div class="col-sm-6 col-xl-4">

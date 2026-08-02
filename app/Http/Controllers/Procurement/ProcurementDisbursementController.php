@@ -89,20 +89,20 @@ class ProcurementDisbursementController extends Controller
 
     private function buildDisbursementSummary(Builder $baseQuery): array
     {
-        $recordedPaidQuery = (clone $baseQuery)
-            ->whereNotNull('paid_at')
-            ->whereIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
-
         $paidQuery = (clone $baseQuery)->recognizedPayment();
-
-        $totalReceiptAmount = (float) (clone $baseQuery)->sum('amount');
-        $recordedPaidAmount = (float) (clone $recordedPaidQuery)->sum('amount');
         $recognizedPaidAmount = (float) (clone $paidQuery)->sum('amount');
-        $unsupportedPaidAmount = max(round($recordedPaidAmount - $recognizedPaidAmount, 2), 0);
-        $unsupportedPaidReceipts = max(
-            (clone $recordedPaidQuery)->count() - (clone $paidQuery)->count(),
-            0
-        );
+        $pendingQuery = (clone $baseQuery)
+            ->where(function (Builder $query) {
+                $query
+                    ->whereNull('paid_at')
+                    ->orWhereNull('status')
+                    ->orWhereNotIn('status', ProcurementPurchaseOrder::PAID_DISBURSEMENT_STATUSES);
+            })
+            ->where(function (Builder $query) {
+                $query
+                    ->whereNull('status')
+                    ->orWhereNotIn('status', ProcurementPurchaseOrder::NON_PAYING_DISBURSEMENT_STATUSES);
+            });
 
         $summaryCurrencyDisbursements = (clone $baseQuery)
             ->with([
@@ -119,9 +119,7 @@ class ProcurementDisbursementController extends Controller
             'this_month_paid_amount' => (float) (clone $paidQuery)
                 ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
                 ->sum('amount'),
-            'pending_amount' => max(round($totalReceiptAmount - $recognizedPaidAmount, 2), 0),
-            'unsupported_paid_amount' => $unsupportedPaidAmount,
-            'unsupported_paid_receipts' => $unsupportedPaidReceipts,
+            'pending_amount' => (float) (clone $pendingQuery)->sum('amount'),
             'paid_purchase_orders' => (clone $paidQuery)
                 ->whereNotNull('purchase_order_id')
                 ->distinct()

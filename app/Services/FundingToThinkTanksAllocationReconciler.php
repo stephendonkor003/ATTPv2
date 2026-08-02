@@ -22,13 +22,11 @@ class FundingToThinkTanksAllocationReconciler
 
     private const YEARS = [2024, 2025, 2026, 2027, 2028];
 
-    private const LEGACY_PARENT_SCHEDULE = [
-        2024 => 0,
-        2025 => 0,
-        2026 => 10_258_500,
-        2027 => 10_248_500,
-        2028 => 5_000_000,
-    ];
+    private const TARGET_TOTAL = 24_500_000;
+
+    private const SIBLING_TOTAL = 24_800;
+
+    private const CHILDREN_TOTAL = 25_804_800;
 
     private const LEGACY_CHILDREN_SCHEDULE = [
         2024 => 0,
@@ -46,7 +44,23 @@ class FundingToThinkTanksAllocationReconciler
         2028 => 0,
     ];
 
-    private const RECONCILED_PARENT_SCHEDULE = [
+    private const LEGACY_SIBLING_SCHEDULE = [
+        2024 => 0,
+        2025 => 24_800,
+        2026 => 0,
+        2027 => 0,
+        2028 => 0,
+    ];
+
+    private const OTHER_CHILDREN_SCHEDULE = [
+        2024 => 0,
+        2025 => 0,
+        2026 => 580_000,
+        2027 => 570_000,
+        2028 => 130_000,
+    ];
+
+    private const RECONCILED_CHILDREN_SCHEDULE = [
         2024 => 0,
         2025 => 0,
         2026 => 10_258_500,
@@ -60,14 +74,6 @@ class FundingToThinkTanksAllocationReconciler
         2026 => 9_678_500,
         2027 => 9_678_500,
         2028 => 5_143_000,
-    ];
-
-    private const LEGACY_SIBLING_SCHEDULE = [
-        2024 => 0,
-        2025 => 24_800,
-        2026 => 0,
-        2027 => 0,
-        2028 => 0,
     ];
 
     private const RECONCILED_SIBLING_SCHEDULE = [
@@ -86,18 +92,23 @@ class FundingToThinkTanksAllocationReconciler
 
         $snapshot = $this->snapshot();
         $status = $this->classifySnapshot($snapshot);
+        $plan = $status === 'ready' ? $this->reconciliationPlan($snapshot) : null;
+        $plannedParent = $plan['parent_by_year'] ?? $snapshot['parent_by_year'];
+        $plannedProjectRemaining = $plan['project_remaining_by_year'] ?? $snapshot['project_remaining_by_year'];
 
         return [
             'status' => $status,
             'can_reconcile' => $status === 'ready',
             'snapshot' => $snapshot,
             'planned_target_schedule' => self::RECONCILED_TARGET_SCHEDULE,
-            'planned_parent_2028' => self::RECONCILED_PARENT_SCHEDULE[2028],
-            'planned_project_2028_remaining' => 5_145_200,
+            'planned_parent_schedule' => $plannedParent,
+            'planned_parent_2028' => $plannedParent[2028] ?? 0,
+            'planned_project_remaining_by_year' => $plannedProjectRemaining,
+            'planned_project_2028_remaining' => $plannedProjectRemaining[2028] ?? 0,
             'message' => match ($status) {
-                'ready' => 'The exact audited legacy allocation is present and can be reconciled safely.',
+                'ready' => 'The audited legacy child allocations are present and the current server envelopes support a safe automatic reconciliation.',
                 'complete' => 'The audited allocation reconciliation has already been completed.',
-                default => 'The server figures differ from the audited baseline. No automatic database changes are allowed.',
+                default => 'The current hierarchy cannot be reconciled automatically without exceeding an annual project envelope or changing unaudited child allocations.',
             },
         ];
     }
@@ -118,16 +129,12 @@ class FundingToThinkTanksAllocationReconciler
 
             ProjectAllocation::query()
                 ->where('project_id', self::PROJECT_ID)
-                ->where('year', 2028)
-                ->lockForUpdate()
-                ->firstOrFail();
-            ActivityAllocation::query()
-                ->whereIn('activity_id', $projectActivityIds)
-                ->where('year', 2028)
+                ->whereIn('year', self::YEARS)
                 ->lockForUpdate()
                 ->get();
             ActivityAllocation::query()
-                ->where('activity_id', self::ACTIVITY_ID)
+                ->whereIn('activity_id', $projectActivityIds)
+                ->whereIn('year', self::YEARS)
                 ->lockForUpdate()
                 ->get();
             SubActivityAllocation::query()
@@ -147,15 +154,17 @@ class FundingToThinkTanksAllocationReconciler
                 ];
             }
 
-            if ($status !== 'ready') {
-                throw new DomainException('Reconciliation stopped because the current server figures do not match the audited legacy baseline.');
+            $plan = $status === 'ready' ? $this->reconciliationPlan($before) : null;
+            if ($plan === null) {
+                throw new DomainException('Reconciliation stopped because the current server hierarchy cannot be corrected within its annual project envelopes.');
             }
 
-            ActivityAllocation::query()
-                ->where('activity_id', self::ACTIVITY_ID)
-                ->where('year', 2028)
-                ->firstOrFail()
-                ->update(['amount' => self::RECONCILED_PARENT_SCHEDULE[2028]]);
+            foreach ($plan['parent_by_year'] as $year => $amount) {
+                ActivityAllocation::updateOrCreate(
+                    ['activity_id' => self::ACTIVITY_ID, 'year' => $year],
+                    ['amount' => $amount]
+                );
+            }
 
             foreach (self::RECONCILED_TARGET_SCHEDULE as $year => $amount) {
                 SubActivityAllocation::updateOrCreate(
@@ -172,7 +181,8 @@ class FundingToThinkTanksAllocationReconciler
             }
 
             $after = $this->snapshot();
-            if ($this->classifySnapshot($after) !== 'complete') {
+            if (! $this->isReconciledSnapshot($after)
+                || ! $this->scheduleEquals($after['parent_by_year'], $plan['parent_by_year'])) {
                 throw new DomainException('Reconciliation verification failed, so every database change was rolled back.');
             }
 
@@ -180,8 +190,8 @@ class FundingToThinkTanksAllocationReconciler
                 'user_id' => $actorId,
                 'module' => 'budget',
                 'action' => 'financial_hierarchy_reconciled',
-                'action_message' => 'Rephased Funding to Think Tanks and reconciled its parent activity envelope.',
-                'description' => 'One-click correction of the audited legacy 2025 sub-activity allocation exception.',
+                'action_message' => 'Rephased Funding to Think Tanks and safely reconciled its parent activity envelope.',
+                'description' => 'One-click correction of the audited legacy 2025 allocation exception while preserving compatible server-side parent capacity.',
                 'method' => 'POST',
                 'route_name' => 'budget.subactivities.reconcile-funding-allocation',
                 'status_code' => 200,
@@ -190,6 +200,7 @@ class FundingToThinkTanksAllocationReconciler
                     'activity_id' => self::ACTIVITY_ID,
                     'target_sub_activity_id' => self::TARGET_SUB_ACTIVITY_ID,
                     'sibling_sub_activity_id' => self::SIBLING_SUB_ACTIVITY_ID,
+                    'plan' => $plan,
                     'before' => $before,
                     'after' => $after,
                 ],
@@ -210,48 +221,146 @@ class FundingToThinkTanksAllocationReconciler
             return 'complete';
         }
 
-        if ($this->isLegacySnapshot($snapshot)) {
+        if ($this->reconciliationPlan($snapshot) !== null) {
             return 'ready';
         }
 
         return 'blocked';
     }
 
-    private function isLegacySnapshot(array $snapshot): bool
+    private function reconciliationPlan(array $snapshot): ?array
     {
-        return $this->amountEquals($snapshot['project_2028'] ?? null, 11_413_000)
-            && $this->amountEquals($snapshot['project_activity_2028'] ?? null, 5_970_000)
-            && $this->scheduleEquals($snapshot['parent_by_year'] ?? [], self::LEGACY_PARENT_SCHEDULE)
-            && $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::LEGACY_CHILDREN_SCHEDULE)
+        if (! $this->isAuditedLegacyChildSnapshot($snapshot)) {
+            return null;
+        }
+
+        $currentParent = $this->normalizedSchedule($snapshot['parent_by_year'] ?? []);
+        $projectByYear = $this->normalizedSchedule($snapshot['project_by_year'] ?? []);
+        $projectActivityByYear = $this->normalizedSchedule($snapshot['project_activity_by_year'] ?? []);
+
+        if (! $this->amountEquals($snapshot['parent_total'] ?? null, array_sum($currentParent))) {
+            return null;
+        }
+
+        $plannedParent = $currentParent;
+        foreach (self::RECONCILED_CHILDREN_SCHEDULE as $year => $minimumAmount) {
+            $plannedParent[$year] = max($plannedParent[$year], $minimumAmount);
+        }
+
+        $preservedParentTotal = max(array_sum($currentParent), self::CHILDREN_TOTAL);
+        $reductionRequired = round(array_sum($plannedParent) - $preservedParentTotal, 2);
+        $surpluses = [];
+
+        foreach (self::YEARS as $year) {
+            $surpluses[$year] = max(
+                round($plannedParent[$year] - self::RECONCILED_CHILDREN_SCHEDULE[$year], 2),
+                0
+            );
+        }
+
+        arsort($surpluses, SORT_NUMERIC);
+        foreach ($surpluses as $year => $surplus) {
+            if ($reductionRequired <= 0.004) {
+                break;
+            }
+
+            $reduction = min($surplus, $reductionRequired);
+            $plannedParent[$year] = round($plannedParent[$year] - $reduction, 2);
+            $reductionRequired = round($reductionRequired - $reduction, 2);
+        }
+
+        if ($reductionRequired > 0.004) {
+            return null;
+        }
+
+        $plannedProjectActivity = [];
+        $plannedProjectRemaining = [];
+        foreach (self::YEARS as $year) {
+            $plannedProjectActivity[$year] = round(
+                $projectActivityByYear[$year] - $currentParent[$year] + $plannedParent[$year],
+                2
+            );
+
+            if ($plannedProjectActivity[$year] < -0.004
+                || $plannedProjectActivity[$year] > $projectByYear[$year] + 0.004) {
+                return null;
+            }
+
+            $plannedProjectRemaining[$year] = round(
+                $projectByYear[$year] - $plannedProjectActivity[$year],
+                2
+            );
+        }
+
+        return [
+            'parent_by_year' => $plannedParent,
+            'target_by_year' => self::RECONCILED_TARGET_SCHEDULE,
+            'sibling_by_year' => self::RECONCILED_SIBLING_SCHEDULE,
+            'children_by_year' => self::RECONCILED_CHILDREN_SCHEDULE,
+            'project_activity_by_year' => $plannedProjectActivity,
+            'project_remaining_by_year' => $plannedProjectRemaining,
+            'preserved_parent_total' => $preservedParentTotal,
+        ];
+    }
+
+    private function isAuditedLegacyChildSnapshot(array $snapshot): bool
+    {
+        return $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::LEGACY_CHILDREN_SCHEDULE)
             && $this->scheduleEquals($snapshot['target_by_year'] ?? [], self::LEGACY_TARGET_SCHEDULE)
-            && $this->scheduleEquals($snapshot['sibling_by_year'] ?? [], self::LEGACY_SIBLING_SCHEDULE);
+            && $this->scheduleEquals($snapshot['sibling_by_year'] ?? [], self::LEGACY_SIBLING_SCHEDULE)
+            && $this->scheduleEquals($snapshot['other_children_by_year'] ?? [], self::OTHER_CHILDREN_SCHEDULE)
+            && $this->amountEquals($snapshot['children_total'] ?? null, self::CHILDREN_TOTAL)
+            && $this->amountEquals($snapshot['target_total'] ?? null, self::TARGET_TOTAL)
+            && $this->amountEquals($snapshot['sibling_total'] ?? null, self::SIBLING_TOTAL);
     }
 
     private function isReconciledSnapshot(array $snapshot): bool
     {
-        return $this->amountEquals($snapshot['project_2028'] ?? null, 11_413_000)
-            && $this->amountEquals($snapshot['project_activity_2028'] ?? null, 6_267_800)
-            && $this->amountEquals($snapshot['project_2028_remaining'] ?? null, 5_145_200)
-            && $this->scheduleEquals($snapshot['parent_by_year'] ?? [], self::RECONCILED_PARENT_SCHEDULE)
-            && $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::RECONCILED_PARENT_SCHEDULE)
-            && $this->scheduleEquals($snapshot['target_by_year'] ?? [], self::RECONCILED_TARGET_SCHEDULE)
-            && $this->scheduleEquals($snapshot['sibling_by_year'] ?? [], self::RECONCILED_SIBLING_SCHEDULE)
-            && $this->amountEquals($snapshot['parent_total'] ?? null, 25_804_800)
-            && $this->amountEquals($snapshot['children_total'] ?? null, 25_804_800)
-            && $this->amountEquals($snapshot['target_total'] ?? null, 24_500_000);
+        if (! $this->scheduleEquals($snapshot['children_by_year'] ?? [], self::RECONCILED_CHILDREN_SCHEDULE)
+            || ! $this->scheduleEquals($snapshot['target_by_year'] ?? [], self::RECONCILED_TARGET_SCHEDULE)
+            || ! $this->scheduleEquals($snapshot['sibling_by_year'] ?? [], self::RECONCILED_SIBLING_SCHEDULE)
+            || ! $this->scheduleEquals($snapshot['other_children_by_year'] ?? [], self::OTHER_CHILDREN_SCHEDULE)
+            || ! $this->amountEquals($snapshot['children_total'] ?? null, self::CHILDREN_TOTAL)
+            || ! $this->amountEquals($snapshot['target_total'] ?? null, self::TARGET_TOTAL)
+            || ! $this->amountEquals($snapshot['sibling_total'] ?? null, self::SIBLING_TOTAL)) {
+            return false;
+        }
+
+        $parentByYear = $this->normalizedSchedule($snapshot['parent_by_year'] ?? []);
+        $projectByYear = $this->normalizedSchedule($snapshot['project_by_year'] ?? []);
+        $projectActivityByYear = $this->normalizedSchedule($snapshot['project_activity_by_year'] ?? []);
+
+        if (! $this->amountEquals($snapshot['parent_total'] ?? null, array_sum($parentByYear))) {
+            return false;
+        }
+
+        foreach (self::YEARS as $year) {
+            if (self::RECONCILED_CHILDREN_SCHEDULE[$year] > $parentByYear[$year] + 0.004
+                || $projectActivityByYear[$year] > $projectByYear[$year] + 0.004) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function snapshot(): array
     {
-        $project2028 = (float) ProjectAllocation::query()
+        $projectByYear = ProjectAllocation::query()
             ->where('project_id', self::PROJECT_ID)
-            ->where('year', 2028)
-            ->value('amount');
-        $projectActivity2028 = (float) ActivityAllocation::query()
+            ->whereIn('year', self::YEARS)
+            ->groupBy('year')
+            ->selectRaw('year, SUM(amount) AS amount')
+            ->pluck('amount', 'year')
+            ->all();
+        $projectActivityByYear = ActivityAllocation::query()
             ->join('myb_activities', 'myb_activities.id', '=', 'myb_activity_allocations.activity_id')
             ->where('myb_activities.project_id', self::PROJECT_ID)
-            ->where('myb_activity_allocations.year', 2028)
-            ->sum('myb_activity_allocations.amount');
+            ->whereIn('myb_activity_allocations.year', self::YEARS)
+            ->groupBy('myb_activity_allocations.year')
+            ->selectRaw('myb_activity_allocations.year, SUM(myb_activity_allocations.amount) AS amount')
+            ->pluck('amount', 'year')
+            ->all();
         $parentByYear = ActivityAllocation::query()
             ->where('activity_id', self::ACTIVITY_ID)
             ->pluck('amount', 'year')
@@ -272,17 +381,42 @@ class FundingToThinkTanksAllocationReconciler
             ->pluck('amount', 'year')
             ->all();
 
+        $normalizedProject = $this->normalizedSchedule($projectByYear);
+        $normalizedProjectActivities = $this->normalizedSchedule($projectActivityByYear);
+        $normalizedParent = $this->normalizedSchedule($parentByYear);
+        $normalizedChildren = $this->normalizedSchedule($childrenByYear);
+        $normalizedTarget = $this->normalizedSchedule($targetByYear);
+        $normalizedSibling = $this->normalizedSchedule($siblingByYear);
+        $otherChildren = [];
+        $projectRemaining = [];
+
+        foreach (self::YEARS as $year) {
+            $otherChildren[$year] = round(
+                $normalizedChildren[$year] - $normalizedTarget[$year] - $normalizedSibling[$year],
+                2
+            );
+            $projectRemaining[$year] = round(
+                $normalizedProject[$year] - $normalizedProjectActivities[$year],
+                2
+            );
+        }
+
         return [
-            'project_2028' => $project2028,
-            'project_activity_2028' => $projectActivity2028,
-            'project_2028_remaining' => round($project2028 - $projectActivity2028, 2),
-            'parent_by_year' => $this->normalizedSchedule($parentByYear),
-            'children_by_year' => $this->normalizedSchedule($childrenByYear),
-            'target_by_year' => $this->normalizedSchedule($targetByYear),
-            'sibling_by_year' => $this->normalizedSchedule($siblingByYear),
+            'project_by_year' => $normalizedProject,
+            'project_activity_by_year' => $normalizedProjectActivities,
+            'project_remaining_by_year' => $projectRemaining,
+            'project_2028' => $normalizedProject[2028],
+            'project_activity_2028' => $normalizedProjectActivities[2028],
+            'project_2028_remaining' => $projectRemaining[2028],
+            'parent_by_year' => $normalizedParent,
+            'children_by_year' => $normalizedChildren,
+            'target_by_year' => $normalizedTarget,
+            'sibling_by_year' => $normalizedSibling,
+            'other_children_by_year' => $otherChildren,
             'parent_total' => round(array_sum($parentByYear), 2),
             'children_total' => round(array_sum($childrenByYear), 2),
             'target_total' => round(array_sum($targetByYear), 2),
+            'sibling_total' => round(array_sum($siblingByYear), 2),
         ];
     }
 

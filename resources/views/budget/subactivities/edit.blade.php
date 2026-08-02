@@ -35,15 +35,16 @@
 
                     @if (($fundingAllocationReconciliation['status'] ?? 'unavailable') === 'ready')
                         <div class="alert alert-info">
-                            <div class="fw-semibold mb-1">Audited one-time allocation repair</div>
+                            <div class="fw-semibold mb-1">Automatic audited allocation repair available</div>
                             <p class="mb-2">
-                                This server has the exact legacy $24.5M schedule. The repair will rephase it across
-                                2026–2028, move the $24,800 sibling residue out of 2025, and assign $297,800 of unused
-                                2028 project capacity to the parent activity.
+                                This server has the audited USD 24.5M legacy schedule and compatible annual budget
+                                capacity. The repair will rephase it across 2026-2028 and move the USD 24,800 sibling
+                                residue out of 2025.
                             </p>
                             <div class="small mb-2">
-                                Resulting target schedule: 2026 — USD 9,678,500; 2027 — USD 9,678,500;
-                                2028 — USD 5,143,000. Remaining project 2028 capacity: USD 5,145,200.
+                                Resulting target schedule: 2026 - USD 9,678,500; 2027 - USD 9,678,500;
+                                2028 - USD 5,143,000. The parent schedule will be adjusted only where required, while
+                                preserving its valid server-side envelope and staying within every project year.
                             </div>
                             <form method="POST"
                                 action="{{ route('budget.subactivities.reconcile-funding-allocation', $subActivity->id) }}"

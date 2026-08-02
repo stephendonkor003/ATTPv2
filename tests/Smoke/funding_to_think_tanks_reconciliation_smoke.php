@@ -22,7 +22,7 @@ try {
     ActivityAllocation::query()
         ->where('activity_id', $activityId)
         ->where('year', 2028)
-        ->update(['amount' => 5_000_000]);
+        ->update(['amount' => 6_280_000]);
 
     foreach ([2024 => 0, 2025 => 24_500_000, 2026 => 0, 2027 => 0, 2028 => 0] as $year => $amount) {
         SubActivityAllocation::updateOrCreate(
@@ -43,12 +43,16 @@ try {
     $preview = $service->preview($subActivity);
 
     if (($preview['status'] ?? null) !== 'ready') {
-        throw new RuntimeException('The exact legacy fixture was not recognized as ready.');
+        throw new RuntimeException('The compatible server-side parent envelope was not recognized as ready.');
     }
 
     $result = $service->reconcile($subActivity);
     if (($result['changed'] ?? false) !== true || ($result['status'] ?? null) !== 'complete') {
         throw new RuntimeException('The one-click reconciliation did not complete.');
+    }
+    if (abs((float) ($result['snapshot']['parent_by_year'][2028] ?? 0) - 6_280_000) > 0.004
+        || abs((float) ($result['snapshot']['parent_total'] ?? 0) - 26_787_000) > 0.004) {
+        throw new RuntimeException('The valid larger parent envelope was not preserved.');
     }
 
     $repeat = $service->reconcile($subActivity);

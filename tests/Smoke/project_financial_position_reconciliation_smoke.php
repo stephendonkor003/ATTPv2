@@ -90,12 +90,7 @@ class ProjectFinancialPositionReconciliationSmoke
                 ProcurementDisbursement::query()->where('created_by', $admin->id)
             );
             $this->assertAmount(70_000, $disbursementSummary['total_paid_amount'], 'Disbursement index recognized paid amount');
-            $this->assertAmount(114_400, $disbursementSummary['pending_amount'], 'Disbursement index pending and unsupported amount');
-            $this->assertAmount(109_400, $disbursementSummary['unsupported_paid_amount'], 'Disbursement index unsupported amount');
-            $this->assertTrue(
-                $disbursementSummary['unsupported_paid_receipts'] === 1,
-                'Disbursement index unsupported receipt count'
-            );
+            $this->assertAmount(5_000, $disbursementSummary['pending_amount'], 'Disbursement index genuinely pending amount');
 
             foreach ([
                 'sector' => ['sector_id' => $program->sector_id],
