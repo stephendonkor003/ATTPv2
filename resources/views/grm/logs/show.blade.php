@@ -106,6 +106,18 @@
                     <form method="POST" action="{{ route('grm.logs.status', $grievance) }}">
                         @csrf
                         <div class="mb-3">
+                            <label class="form-label fw-semibold">Grievance Level / Category</label>
+                            <select name="level_id" class="form-select" required>
+                                <option value="">Select classification</option>
+                                @foreach ($levels as $level)
+                                    <option value="{{ $level->id }}" @selected((string) old('level_id', $grievance->level_id) === (string) $level->id)>
+                                        {{ $level->name }}{{ $level->program_id ? ' - Program' : ' - Global' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div class="form-text">Assigned by the grievance officer after reviewing the submission.</div>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label fw-semibold">Status</label>
                             <select name="status" class="form-select" required>
                                 @foreach ($statuses as $value => $label)

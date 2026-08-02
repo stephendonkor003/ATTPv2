@@ -601,24 +601,13 @@
                         </div>
                     @endif
                     <div class="row g-3">
-                        <div class="col-md-7">
+                        <div class="col-12">
                             <label class="form-label fw-semibold">Program *</label>
                             <select name="program_id" id="grmProgramSelect" class="form-select" required>
                                 <option value="">Select program</option>
                                 @foreach ($programs as $program)
                                     <option value="{{ $program->id }}" @selected(old('program_id') === $program->id)>
                                         {{ $program->name }}{{ $program->sector ? ' - ' . $program->sector->name : '' }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label fw-semibold">Grievance Level</label>
-                            <select name="level_id" id="grmLevelSelect" class="form-select">
-                                <option value="">General grievance</option>
-                                @foreach ($levels as $level)
-                                    <option value="{{ $level->id }}" data-program-id="{{ $level->program_id }}" @selected(old('level_id') === $level->id)>
-                                        {{ $level->name }}{{ $level->program ? ' - ' . $level->program->name : ' - Global' }}
                                     </option>
                                 @endforeach
                             </select>
@@ -844,7 +833,7 @@
                                 <span class="grm-icon"><i class="feather-clock"></i></span>
                                 <div>
                                     <strong>Response clock</strong>
-                                    <p class="text-muted small mb-0">Deadlines come from escalation settings, selected levels, or the standard Grievance Redress Mechanism response clock.</p>
+                                    <p class="text-muted small mb-0">Deadlines use the standard response clock until a grievance officer reviews and classifies the case.</p>
                                 </div>
                             </div>
                             <div class="grm-step">
@@ -878,35 +867,6 @@
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const programSelect = document.getElementById('grmProgramSelect');
-            const levelSelect = document.getElementById('grmLevelSelect');
-            if (!programSelect || !levelSelect) return;
-
-            const options = Array.from(levelSelect.options).map((option) => ({
-                value: option.value,
-                text: option.text,
-                programId: option.dataset.programId || '',
-                selected: option.selected
-            }));
-
-            function syncLevelOptions() {
-                const programId = programSelect.value;
-                const currentValue = levelSelect.value;
-                levelSelect.innerHTML = '';
-
-                options.forEach((item) => {
-                    if (item.value && item.programId && item.programId !== programId) return;
-
-                    const option = new Option(item.text, item.value);
-                    option.dataset.programId = item.programId;
-                    option.selected = item.value === currentValue || (!currentValue && item.selected);
-                    levelSelect.add(option);
-                });
-            }
-
-            programSelect.addEventListener('change', syncLevelOptions);
-            syncLevelOptions();
-
             const anonymousSwitch = document.getElementById('anonymousSwitch');
             const complainantFields = document.getElementById('complainantFields');
             const anonymousNote = document.getElementById('anonymousNote');

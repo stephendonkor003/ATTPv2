@@ -63,11 +63,6 @@
                                 repair would make no database changes.
                             </div>
                         </div>
-                    @elseif (($fundingAllocationReconciliation['status'] ?? 'unavailable') === 'blocked')
-                        <div class="alert alert-danger">
-                            <div class="fw-semibold">Automatic reconciliation unavailable</div>
-                            <div class="small">{{ $fundingAllocationReconciliation['message'] }}</div>
-                        </div>
                     @endif
 
                     @php
@@ -78,53 +73,10 @@
                             ->flatMap(fn ($otherSubActivity) => $otherSubActivity->allocations)
                             ->groupBy(fn ($allocation) => (int) $allocation->year)
                             ->map(fn ($allocations) => (float) $allocations->sum('amount'));
-                        $activityTotal = (float) $subActivity->activity->allocations->sum('amount');
-                        $currentSubActivityTotal = (float) $subActivity->activity->subActivities
-                            ->sum(fn ($child) => (float) $child->allocations->sum('amount'));
-                        $thisSubActivityTotal = (float) $subActivity->allocations->sum('amount');
-                        $otherSubActivitiesTotal = $currentSubActivityTotal - $thisSubActivityTotal;
-                        $availableEnvelopeForThisSubActivity = max($activityTotal - $otherSubActivitiesTotal, 0);
-                        $currentTotalOverage = max($currentSubActivityTotal - $activityTotal, 0);
-                        $currentYearOverages = collect($subActivity->activity->years())
-                            ->mapWithKeys(function ($year) use ($subActivity, $activityAllocationsByYear) {
-                                $year = (int) $year;
-                                $parentAmount = (float) optional($activityAllocationsByYear->get($year))->amount;
-                                $childAmount = (float) $subActivity->activity->subActivities
-                                    ->sum(fn ($child) => $child->allocations->where('year', $year)->sum('amount'));
-
-                                return [$year => max($childAmount - $parentAmount, 0)];
-                            })
-                            ->filter(fn ($overage) => $overage > 0.004);
                         $currency = $subActivity->activity->project->currency ?? $subActivity->activity->project->program->currency ?? 'USD';
                     @endphp
 
-                    @if ($currentTotalOverage > 0.004 || $currentYearOverages->isNotEmpty())
-                        <div class="alert alert-warning">
-                            <div class="fw-semibold mb-1">Existing allocation exception</div>
-                            <div>
-                                This hierarchy was already inconsistent before this edit.
-                                @if ($currentTotalOverage > 0.004)
-                                    Sub-activities exceed the parent activity envelope by
-                                    {{ number_format($currentTotalOverage, 2) }} {{ $currency }}.
-                                @endif
-                                @if ($currentYearOverages->isNotEmpty())
-                                    Yearly excess:
-                                    {{ $currentYearOverages->map(fn ($overage, $year) => $year . ': ' . number_format($overage, 2) . ' ' . $currency)->implode('; ') }}.
-                                @endif
-                            </div>
-                            <div class="small mt-1">
-                                Corrective changes that reduce or preserve the existing exception can be saved;
-                                new or larger overruns remain blocked.
-                            </div>
-                            <div class="small mt-1">
-                                Current sub-activity envelope: {{ number_format($thisSubActivityTotal, 2) }} {{ $currency }}.
-                                Maximum within the present parent envelope after sibling allocations:
-                                {{ number_format($availableEnvelopeForThisSubActivity, 2) }} {{ $currency }}.
-                            </div>
-                        </div>
-                    @endif
-
-                    <form action="{{ route('budget.subactivities.update', $subActivity->id) }}" method="POST">
+                    <form id="subActivityEditForm" action="{{ route('budget.subactivities.update', $subActivity->id) }}" method="POST">
                         @csrf
                         @method('PUT')
 
@@ -188,16 +140,23 @@
                                                     <tr>
                                                         <td>
                                                             <div class="fw-semibold">{{ $year }}</div>
-                                                            <small class="text-muted">
-                                                                Available: {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}
-                                                            </small>
                                                         </td>
                                                         <td>
-                                                            <input type="number" step="0.01" min="0"
-                                                                name="allocations[{{ $year }}]"
-                                                                value="{{ $currentAmount }}"
-                                                                class="form-control text-end allocation-input"
-                                                                data-available="{{ $availableForThisSubActivity }}">
+                                                            <div class="input-group has-validation">
+                                                                <input type="number" step="0.01" min="0"
+                                                                    max="{{ number_format($availableForThisSubActivity, 2, '.', '') }}"
+                                                                    name="allocations[{{ $year }}]"
+                                                                    value="{{ $currentAmount }}"
+                                                                    class="form-control text-end allocation-input"
+                                                                    aria-label="{{ $year }} allocation amount"
+                                                                    data-year="{{ $year }}"
+                                                                    data-currency="{{ $currency }}"
+                                                                    data-available="{{ number_format($availableForThisSubActivity, 2, '.', '') }}">
+                                                                <span class="input-group-text">
+                                                                    Max {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}
+                                                                </span>
+                                                                <div class="invalid-feedback allocation-feedback"></div>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 @endforeach
@@ -208,6 +167,10 @@
                                         <span class="text-muted">This sub-activity total:</span>
                                         <strong id="allocationTotal">0.00</strong> {{ $currency }}
                                     </div>
+                                    <div id="allocationValidationMessage" class="alert alert-danger py-2 mt-3 mb-0 d-none"
+                                        role="alert">
+                                        Reduce the highlighted yearly amount to its displayed maximum before saving.
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -215,7 +178,7 @@
                         <div class="mt-4 d-flex justify-content-end gap-2">
                             <a href="{{ route('budget.activities.show', $subActivity->activity_id) }}"
                                 class="btn btn-light border">Cancel</a>
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" id="updateSubActivityButton" class="btn btn-primary">
                                 <i class="bi bi-save2 me-1"></i> Update Sub-Activity
                             </button>
                         </div>
@@ -231,8 +194,11 @@
             const expectedOutcomeType = document.getElementById('expectedOutcomeType');
             const expectedOutcomePercentage = document.getElementById('expectedOutcomePercentage');
             const expectedOutcomeText = document.getElementById('expectedOutcomeText');
+            const form = document.getElementById('subActivityEditForm');
             const inputs = Array.from(document.querySelectorAll('.allocation-input'));
             const total = document.getElementById('allocationTotal');
+            const validationMessage = document.getElementById('allocationValidationMessage');
+            const submitButton = document.getElementById('updateSubActivityButton');
 
             function toggleExpectedOutcome() {
                 const type = expectedOutcomeType.value;
@@ -243,16 +209,35 @@
             function updateTotal() {
                 const sum = inputs.reduce((carry, input) => carry + (parseFloat(input.value) || 0), 0);
                 total.textContent = sum.toFixed(2);
+                let hasExceededAmount = false;
 
                 inputs.forEach(input => {
                     const available = parseFloat(input.dataset.available) || 0;
                     const amount = parseFloat(input.value) || 0;
-                    input.classList.toggle('is-invalid', amount > available);
+                    const hasExceeded = amount > available + 0.004;
+                    const feedback = input.closest('.input-group').querySelector('.allocation-feedback');
+
+                    input.classList.toggle('is-invalid', hasExceeded);
+                    input.setCustomValidity(hasExceeded
+                        ? `Year ${input.dataset.year} cannot exceed ${available.toFixed(2)} ${input.dataset.currency}.`
+                        : '');
+                    feedback.textContent = input.validationMessage;
+                    hasExceededAmount ||= hasExceeded;
                 });
+
+                validationMessage.classList.toggle('d-none', !hasExceededAmount);
+                submitButton.disabled = hasExceededAmount;
             }
 
             expectedOutcomeType.addEventListener('change', toggleExpectedOutcome);
             inputs.forEach(input => input.addEventListener('input', updateTotal));
+            form.addEventListener('submit', event => {
+                updateTotal();
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    form.reportValidity();
+                }
+            });
             toggleExpectedOutcome();
             updateTotal();
         });

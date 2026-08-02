@@ -29,11 +29,9 @@ class GrmController extends Controller
     public function createSubmission(Request $request)
     {
         $programs = $this->submissionProgramsQuery()->get();
-        $levels = $this->submissionLevelsQuery()->where('is_active', true)->get();
 
         $viewData = [
             'programs' => $programs,
-            'levels' => $levels,
             'channels' => $this->channels(),
             'selectableChannels' => $this->officerSelectableChannels(),
             'canSelectChannel' => $this->canSelectSubmissionChannel($request),
@@ -56,7 +54,6 @@ class GrmController extends Controller
     {
         return view('grm.submissions.public', [
             'programs' => $this->submissionProgramsQuery()->get(),
-            'levels' => $this->submissionLevelsQuery()->where('is_active', true)->get(),
             'channels' => $this->channels(),
             'selectableChannels' => [],
             'canSelectChannel' => false,
@@ -81,7 +78,7 @@ class GrmController extends Controller
 
         $data = $request->validate([
             'program_id' => ['required', 'uuid', 'exists:myb_programs,id'],
-            'level_id' => ['nullable', 'uuid', 'exists:grm_levels,id'],
+            'level_id' => ['prohibited'],
             'submitter_name' => ['nullable', 'string', 'max:255'],
             'submitter_email' => ['nullable', 'email', 'max:255'],
             'submitter_phone' => ['nullable', 'string', 'max:60'],
@@ -122,14 +119,7 @@ class GrmController extends Controller
         $program = Program::with('sector')->findOrFail($data['program_id']);
         abort_unless($this->programIsAvailableForSubmission($program), 403);
 
-        $level = filled($data['level_id'] ?? null)
-            ? GrmLevel::query()->findOrFail($data['level_id'])
-            : null;
-
-        if ($level) {
-            abort_unless($this->levelIsAvailableForSubmission($level, $program), 403);
-        }
-
+        $level = null;
         $rule = $this->resolveEscalationRule($program, $level);
         $responseHours = (int) ($rule?->response_due_hours ?: $level?->response_due_hours ?: 48);
         $resolutionHours = (int) ($rule?->resolution_due_hours ?: $level?->resolution_due_hours ?: 168);
@@ -415,6 +405,15 @@ class GrmController extends Controller
             'grievance' => $grievance,
             'statuses' => GrmGrievance::STATUSES,
             'assignees' => $this->caseAssignees(),
+            'levels' => $this->visibleLevelsQuery()
+                ->where('is_active', true)
+                ->where(function (Builder $query) use ($grievance) {
+                    $query->whereNull('program_id')
+                        ->orWhere('program_id', $grievance->program_id);
+                })
+                ->orderBy('priority')
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
@@ -462,14 +461,29 @@ class GrmController extends Controller
         abort_unless($this->grievanceIsVisible($grievance), 403);
 
         $data = $request->validate([
+            'level_id' => ['required', 'uuid', 'exists:grm_levels,id'],
             'status' => ['required', Rule::in(array_keys(GrmGrievance::STATUSES))],
             'assigned_to' => ['nullable', 'uuid', 'exists:users,id'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
+        $grievance->loadMissing('program.sector');
+        $level = GrmLevel::query()->where('is_active', true)->findOrFail($data['level_id']);
+        abort_unless($grievance->program && $this->levelIsVisibleForProgram($level, $grievance->program), 403);
+
+        $rule = $this->resolveEscalationRule($grievance->program, $level);
+        $responseHours = (int) ($rule?->response_due_hours ?: $level->response_due_hours ?: 48);
+        $resolutionHours = (int) ($rule?->resolution_due_hours ?: $level->resolution_due_hours ?: 168);
+        $deadlineStart = ($grievance->submitted_at ?: $grievance->created_at ?: now())->copy();
+        $previousLevelId = $grievance->level_id;
+
         $updates = [
+            'level_id' => $level->id,
+            'escalation_rule_id' => $rule?->id,
             'status' => $data['status'],
             'assigned_to' => $data['assigned_to'] ?? null,
+            'due_response_at' => $deadlineStart->copy()->addHours($responseHours),
+            'due_resolution_at' => $deadlineStart->copy()->addHours($resolutionHours),
         ];
 
         if ($data['status'] === 'acknowledged' && ! $grievance->acknowledged_at) {
@@ -489,7 +503,20 @@ class GrmController extends Controller
         }
 
         $grievance->update($updates);
+
+        if ((string) $previousLevelId !== (string) $level->id) {
+            $this->recordEvent($grievance, 'classified', 'Case classified as '.$level->name.' by the grievance officer.', [
+                'previous_level_id' => $previousLevelId,
+                'level_id' => $level->id,
+                'level_name' => $level->name,
+                'escalation_rule_id' => $rule?->id,
+                'due_response_at' => $updates['due_response_at']->toIso8601String(),
+                'due_resolution_at' => $updates['due_resolution_at']->toIso8601String(),
+            ]);
+        }
+
         $this->recordEvent($grievance, 'status_updated', $data['notes'] ?: 'Case status updated to '.GrmGrievance::STATUSES[$data['status']].'.', [
+            'level_id' => $level->id,
             'status' => $data['status'],
             'assigned_to' => $data['assigned_to'] ?? null,
         ]);
@@ -790,39 +817,11 @@ class GrmController extends Controller
         return $query;
     }
 
-    private function submissionLevelsQuery(?User $user = null): Builder
-    {
-        $user ??= Auth::user();
-        $query = GrmLevel::query();
-        $programIds = $this->submissionProgramsQuery($user)->pluck('id')->all();
-        $nodeId = $user?->governance_node_id;
-
-        return $query->where(function (Builder $scope) use ($programIds, $nodeId) {
-            $scope->whereNull('program_id');
-
-            if (! empty($programIds)) {
-                $scope->orWhereIn('program_id', $programIds);
-            }
-
-            if ($nodeId) {
-                $scope->orWhere('governance_node_id', $nodeId);
-            }
-        });
-    }
-
     private function programIsAvailableForSubmission(Program $program, ?User $user = null): bool
     {
         return $this->submissionProgramsQuery($user)
             ->whereKey($program->id)
             ->exists();
-    }
-
-    private function levelIsAvailableForSubmission(GrmLevel $level, Program $program, ?User $user = null): bool
-    {
-        return (! $level->program_id || (string) $level->program_id === (string) $program->id)
-            && $this->submissionLevelsQuery($user)
-                ->whereKey($level->id)
-                ->exists();
     }
 
     private function visibleProgramsQuery(?User $user = null): Builder

@@ -14,20 +14,20 @@ function subActivityAllocationFixture(array $activityBudgets, array $targetAlloc
         'end_year' => max(array_keys($activityBudgets)),
     ]);
 
-    $activity = new Activity();
+    $activity = new Activity;
     $activity->setRelation('project', $project);
     $activity->setRelation('allocations', collect($activityBudgets)
         ->map(fn ($amount, $year) => new ActivityAllocation(['year' => $year, 'amount' => $amount]))
         ->values());
 
-    $target = new SubActivity();
+    $target = new SubActivity;
     $target->forceFill(['id' => 'target']);
     $target->setRelation('activity', $activity);
     $target->setRelation('allocations', collect($targetAllocations)
         ->map(fn ($amount, $year) => new SubActivityAllocation(['year' => $year, 'amount' => $amount]))
         ->values());
 
-    $sibling = new SubActivity();
+    $sibling = new SubActivity;
     $sibling->forceFill(['id' => 'sibling']);
     $sibling->setRelation('activity', $activity);
     $sibling->setRelation('allocations', collect($siblingAllocations)
@@ -43,7 +43,7 @@ function validateSubActivityAllocationFixture(SubActivity $target, array &$propo
 {
     $method = new ReflectionMethod(SubActivityController::class, 'validateSubActivityAllocations');
 
-    return $method->invokeArgs(new SubActivityController(), [$target, &$proposed]);
+    return $method->invokeArgs(new SubActivityController, [$target, &$proposed]);
 }
 
 it('allows a corrective rephasing when an unrelated legacy year overage is reduced', function () {
@@ -79,4 +79,16 @@ it('still rejects an increase to an existing total-envelope exception', function
 
     expect(validateSubActivityAllocationFixture($target, $proposed))
         ->toContain('combined sub-activity total');
+});
+
+it('shows yearly limits inline and blocks an excessive amount before save', function () {
+    $view = file_get_contents(dirname(__DIR__, 2).'/resources/views/budget/subactivities/edit.blade.php');
+
+    expect($view)
+        ->not->toContain('Automatic reconciliation unavailable')
+        ->not->toContain('Existing allocation exception')
+        ->toContain('Max {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}')
+        ->toContain('id="updateSubActivityButton"')
+        ->toContain('input.setCustomValidity')
+        ->toContain('submitButton.disabled = hasExceededAmount');
 });

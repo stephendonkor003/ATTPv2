@@ -4,6 +4,8 @@ use App\Mail\GrmAutoResponseMail;
 use App\Mail\GrmReminderMail;
 use App\Mail\GrmResponsibleOfficerMail;
 use App\Models\GrmGrievance;
+use App\Models\GrmLevel;
+use App\Models\Permission;
 use App\Models\Program;
 use App\Models\User;
 use Database\Seeders\MasterAdminSeeder;
@@ -50,8 +52,12 @@ class GrmPublicAnonymousSmoke
         DB::beginTransaction();
 
         try {
-            $this->get(route('public.grievances.create'))
-                ->assertOk()
+            $publicFormResponse = $this->get(route('public.grievances.create'));
+            $this->assertTrue(
+                $publicFormResponse->getStatusCode() === 200,
+                'The public grievance form did not load. Redirect: '.($publicFormResponse->headers->get('Location') ?: 'none')
+            );
+            $publicFormResponse
                 ->assertSee('Speak up. We are listening.')
                 ->assertSee('Tell us what happened')
                 ->assertSee('Your privacy matters')
@@ -63,7 +69,21 @@ class GrmPublicAnonymousSmoke
                 ->assertSee('form="grmSubmissionForm"', false)
                 ->assertSee('document.body.appendChild(privacyModalElement);', false)
                 ->assertDontSee('<select name="channel"', false)
+                ->assertDontSee('name="level_id"', false)
                 ->assertSee(route('public.grievances.store'));
+
+            $craftedLevelSubject = 'Submitter level injection '.Str::uuid();
+            $this->postWithCsrf(route('public.grievances.store'), [
+                'program_id' => $program->id,
+                'level_id' => (string) Str::uuid(),
+                'subject' => $craftedLevelSubject,
+                'description' => 'A complainant must not be able to classify a grievance through a crafted request.',
+                'is_anonymous' => '0',
+            ])->assertSessionHasErrors('level_id');
+            $this->assertTrue(
+                ! GrmGrievance::query()->where('subject', $craftedLevelSubject)->exists(),
+                'A submitter assigned a grievance level through a crafted request.'
+            );
 
             $this->postWithCsrf(route('public.grievances.store'), [
                 'program_id' => $program->id,
@@ -94,6 +114,7 @@ class GrmPublicAnonymousSmoke
             $this->assertTrue($grievance->submitted_by === null, 'An anonymous grievance retained the signed-in user identity.');
             $this->assertTrue($grievance->submitter_name === null, 'An anonymous grievance retained the complainant name.');
             $this->assertTrue($grievance->submitter_email === null, 'An anonymous grievance retained the complainant email field.');
+            $this->assertTrue($grievance->level_id === null, 'A new grievance was classified before officer review.');
             $this->assertTrue($grievance->replyEmail() === $privateEmail, 'The encrypted private reply email did not round-trip.');
             $this->assertTrue($grievance->channel === 'public_portal', 'The public grievance channel was not enforced.');
 
@@ -138,13 +159,38 @@ class GrmPublicAnonymousSmoke
     private function assertOfficerCanRecordOriginalChannel(Program $program): void
     {
         $officer = User::query()->where('email', MasterAdminSeeder::EMAIL)->firstOrFail();
+        $officer->forceFill(['email_verified_at' => $officer->email_verified_at ?: now()])->save();
+        $grmViewPermission = Permission::query()->where('name', 'grm.view')->firstOrFail();
+        $officer->permissions()->syncWithoutDetaching([$grmViewPermission->id]);
+        $officer->unsetRelation('permissions');
+        $levelSuffix = Str::lower(Str::random(10));
+        $level = GrmLevel::create([
+            'name' => 'Officer classified '.$levelSuffix,
+            'slug' => 'officer-classified-'.$levelSuffix,
+            'color' => '#0f766e',
+            'priority' => 1,
+            'response_due_hours' => 24,
+            'resolution_due_hours' => 72,
+            'is_active' => true,
+            'created_by' => $officer->id,
+        ]);
 
-        $this->actingAs($officer)
-            ->get(route('grm.submissions.create'))
-            ->assertOk()
+        $this->actingAs($officer);
+        $this->withSession([
+            'otp_verified' => true,
+            'otp_verified_user_id' => (string) $officer->id,
+            'otp_verified_at' => now()->toIso8601String(),
+        ]);
+        $officerFormResponse = $this->get(route('grm.submissions.create'));
+        $this->assertTrue(
+            $officerFormResponse->getStatusCode() === 200,
+            'The grievance officer intake form did not load. Redirect: '.($officerFormResponse->headers->get('Location') ?: 'none')
+        );
+        $officerFormResponse
             ->assertSee('GRM intake officer access')
             ->assertSee('Channel / Received Through')
-            ->assertSee('<select name="channel"', false);
+            ->assertSee('<select name="channel"', false)
+            ->assertDontSee('name="level_id"', false);
 
         $subject = 'Officer on-behalf grievance '.Str::uuid();
         $this->postWithCsrf(route('grm.submissions.store'), [
@@ -159,8 +205,32 @@ class GrmPublicAnonymousSmoke
 
         $grievance = GrmGrievance::query()->where('subject', $subject)->first();
         $this->assertTrue((bool) $grievance, 'The officer on-behalf grievance was not stored.');
+        $this->assertTrue($grievance->level_id === null, 'The intake workflow classified the grievance before case review.');
         $this->assertTrue($grievance->channel === 'phone', 'The authorized GRM officer could not retain the original phone channel.');
         $this->assertTrue((string) $grievance->submitted_by === (string) $officer->id, 'The officer audit identity was not retained.');
+
+        $caseResponse = $this->get(route('grm.logs.show', $grievance));
+        $this->assertTrue(
+            $caseResponse->getStatusCode() === 200,
+            'The grievance officer could not open the secured case log. Redirect: '.($caseResponse->headers->get('Location') ?: 'none')
+        );
+        $caseResponse
+            ->assertSee('Grievance Level / Category')
+            ->assertSee($level->name);
+
+        $this->postWithCsrf(route('grm.logs.status', $grievance), [
+            'level_id' => $level->id,
+            'status' => 'under_review',
+            'assigned_to' => $officer->id,
+            'notes' => 'Officer reviewed and classified the grievance.',
+        ])->assertRedirect(route('grm.logs.show', $grievance));
+
+        $grievance->refresh();
+        $this->assertTrue((string) $grievance->level_id === (string) $level->id, 'The grievance officer could not classify the case.');
+        $this->assertTrue(
+            $grievance->events()->where('event_type', 'classified')->exists(),
+            'The officer classification was not recorded in the case timeline.'
+        );
     }
 
     private function postWithCsrf(string $uri, array $data = [])
