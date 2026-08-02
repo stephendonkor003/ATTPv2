@@ -48,10 +48,10 @@
                             </div>
                             <form method="POST"
                                 action="{{ route('budget.subactivities.reconcile-funding-allocation', $subActivity->id) }}"
-                                onsubmit="return confirm('Apply the audited Funding to Think Tanks database reconciliation? This will update the parent and two sub-activity schedules in one transaction.');">
+                                onsubmit="return confirm('Automatically spread USD 24,500,000 across 2026, 2027, and 2028? The parent and sibling schedules will be reconciled in the same transaction.');">
                                 @csrf
                                 <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-database-check me-1"></i> Apply Audited Database Reconciliation
+                                    <i class="bi bi-calendar2-range me-1"></i> Automatically Spread USD 24,500,000
                                 </button>
                             </form>
                         </div>

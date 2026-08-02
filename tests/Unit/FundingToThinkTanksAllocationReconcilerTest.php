@@ -84,5 +84,5 @@ it('renders a protected one-click reconciliation control', function () {
         ->toContain('->name(\'subactivities.reconcile-funding-allocation\')');
     expect($view)
         ->toContain('@csrf')
-        ->toContain('Apply Audited Database Reconciliation');
+        ->toContain('Automatically Spread USD 24,500,000');
 });
