@@ -81,13 +81,28 @@ it('still rejects an increase to an existing total-envelope exception', function
         ->toContain('combined sub-activity total');
 });
 
+it('preserves a zero yearly allocation when the parent has unused capacity', function () {
+    $target = subActivityAllocationFixture(
+        [2027 => 209_400],
+        [2027 => 0],
+        [2027 => 209_300],
+    );
+    $proposed = [2027 => 0];
+
+    expect(validateSubActivityAllocationFixture($target, $proposed))->toBeNull()
+        ->and($proposed[2027])->toBe(0);
+});
+
 it('shows yearly limits inline and blocks an excessive amount before save', function () {
     $view = file_get_contents(dirname(__DIR__, 2).'/resources/views/budget/subactivities/edit.blade.php');
 
     expect($view)
         ->not->toContain('Automatic reconciliation unavailable')
         ->not->toContain('Existing allocation exception')
-        ->toContain('Max {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}')
+        ->toContain('Saved {{ number_format($savedAmount, 2) }} {{ $currency }}')
+        ->toContain('is parent capacity only and is not added to this allocation')
+        ->toContain('Entered allocation total (unused parent capacity excluded)')
+        ->toContain('data-saved-amount=')
         ->toContain('id="updateSubActivityButton"')
         ->toContain('input.setCustomValidity')
         ->toContain('submitButton.disabled = hasExceededAmount');

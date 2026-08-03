@@ -125,6 +125,7 @@ class ProjectFinancialPositionReconciliationSmoke
                 'project_id' => $selectedProject->id,
             ];
             $projectReport = $this->financialPositionPayload($projectQuery, $admin);
+            $projectDashboard = $this->executionDashboardPayload($projectQuery, $admin);
             $this->assertAmount(
                 $selectedProject->total_budget,
                 $projectReport['position']['totals']['approved_funding'],
@@ -138,6 +139,33 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertTrue(
                 $projectReport['position']['dashboard_aligned'] === false,
                 'A project-filtered report should use the project drill-down calculations.'
+            );
+            $this->assertTrue(
+                ($projectReport['executionDashboard']['scopeType'] ?? null) === 'project',
+                'The integrated execution graphs did not switch to the selected component scope.'
+            );
+            $this->assertTrue(
+                ($projectReport['executionDashboard']['executionFilters']['project'] ?? null) === $selectedProject->name,
+                'The integrated execution graph scope does not identify the selected component.'
+            );
+            $this->assertTrue(
+                ($projectReport['executionDashboard']['executionChartData']['snapshot_hash'] ?? null)
+                    === ($projectDashboard['executionChartData']['snapshot_hash'] ?? null),
+                'The integrated graphs do not use the same audited snapshot as the component-scoped execution dataset.'
+            );
+            $this->assertTrue(
+                ($projectReport['executionDashboard']['executionChartData']['snapshot_hash'] ?? null)
+                    !== ($report['executionDashboard']['executionChartData']['snapshot_hash'] ?? null),
+                'The component filter left the integrated graphs on the programme-wide snapshot.'
+            );
+            $this->assertTrue(
+                count(array_filter($projectReport['executionDashboard']['executionChartImages'] ?? [])) === 7,
+                'The component-scoped financial position did not render all seven execution graphs.'
+            );
+            $this->assertTrue(
+                ($projectReport['executionDashboard']['componentBreakdownLevel'] ?? null) === 'sub_component'
+                    && $projectReport['executionDashboard']['componentBreakdownRows']->isNotEmpty(),
+                'The selected component graphs did not expose their sub-component breakdown.'
             );
 
             $reserveProject = $program->projects()
@@ -195,6 +223,7 @@ class ProjectFinancialPositionReconciliationSmoke
             $projectWebResponse
                 ->assertOk()
                 ->assertSee('Selected project budget allocation')
+                ->assertSee('Sub-Component Execution Breakdown')
                 ->assertSee('320,000.00');
 
             $webHtml = (string) $webResponse->getContent();
@@ -207,8 +236,9 @@ class ProjectFinancialPositionReconciliationSmoke
             );
             $this->assertTrue(
                 str_contains($projectPdfHtml, 'Selected project budget allocation')
+                    && str_contains($projectPdfHtml, 'Sub-Component Execution Breakdown')
                     && str_contains($projectPdfHtml, '320,000.00'),
-                'The project-filtered PDF should display the selected project budget as Approved Funding.'
+                'The project-filtered PDF should display the selected project budget and component-scoped execution breakdown.'
             );
             $sharedReportInformation = [
                 'Report Context',

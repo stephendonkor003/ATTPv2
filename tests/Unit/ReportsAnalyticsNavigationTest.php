@@ -20,10 +20,13 @@ it('integrates financial execution analytics into project financial position', f
         ->and($webExecution)->toContain('Financial Execution Analytics')
         ->and($webExecution)->toContain('Year-by-Year Execution')
         ->and($webExecution)->toContain('Component Execution Breakdown')
+        ->and($webExecution)->toContain('Sub-Component Execution Breakdown')
+        ->and($pdfExecution)->toContain('Sub-Component Execution Breakdown')
         ->and($webExecution)->toContain('Execution Insights')
         ->and(substr_count($webExecution, "'key' =>"))->toBe(7)
         ->and(substr_count($pdfExecution, "'key' =>"))->toBe(7)
         ->and($reportController)->toContain("'executionDashboard' => \$executionDashboard")
+        ->and($reportController)->toContain("'project_id' => \$dashboardProjectId")
         ->and($reportController)->toContain("buildFromDataset(")
         ->and($legacyController)->toContain("redirect()->route('budget.reports.project-financial-position'")
         ->and($legacyController)->toContain("redirect()->route('budget.reports.project-financial-position.export.pdf'");

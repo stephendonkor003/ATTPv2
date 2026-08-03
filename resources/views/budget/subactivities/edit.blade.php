@@ -98,7 +98,7 @@
                         $currency = $subActivity->activity->project->currency ?? $subActivity->activity->project->program->currency ?? 'USD';
                     @endphp
 
-                    <form id="subActivityEditForm" action="{{ route('budget.subactivities.update', $subActivity->id) }}" method="POST">
+                    <form id="subActivityEditForm" action="{{ route('budget.subactivities.update', $subActivity->id) }}" method="POST" autocomplete="off">
                         @csrf
                         @method('PUT')
 
@@ -157,7 +157,9 @@
                                                         $activityYearBudget = (float) optional($activityAllocationsByYear->get($year))->amount;
                                                         $otherSubActivityYearTotal = (float) ($otherSubActivityTotalsByYear[$year] ?? 0);
                                                         $availableForThisSubActivity = max($activityYearBudget - $otherSubActivityYearTotal, 0);
-                                                        $currentAmount = old('allocations.' . $year, optional($allocation)->amount ?? 0);
+                                                        $savedAmount = round((float) optional($allocation)->amount, 2);
+                                                        $currentAmount = old('allocations.' . $year, number_format($savedAmount, 2, '.', ''));
+                                                        $unusedParentCapacity = max($availableForThisSubActivity - $savedAmount, 0);
                                                     @endphp
                                                     <tr>
                                                         <td>
@@ -169,15 +171,25 @@
                                                                     max="{{ number_format($availableForThisSubActivity, 2, '.', '') }}"
                                                                     name="allocations[{{ $year }}]"
                                                                     value="{{ $currentAmount }}"
+                                                                    autocomplete="off"
                                                                     class="form-control text-end allocation-input"
                                                                     aria-label="{{ $year }} allocation amount"
                                                                     data-year="{{ $year }}"
                                                                     data-currency="{{ $currency }}"
+                                                                    data-saved-amount="{{ number_format($savedAmount, 2, '.', '') }}"
                                                                     data-available="{{ number_format($availableForThisSubActivity, 2, '.', '') }}">
                                                                 <span class="input-group-text">
-                                                                    Max {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}
+                                                                    Saved {{ number_format($savedAmount, 2) }} {{ $currency }}
                                                                 </span>
                                                                 <div class="invalid-feedback allocation-feedback"></div>
+                                                            </div>
+                                                            <div class="form-text">
+                                                                Allowed ceiling: {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}.
+                                                                @if ($unusedParentCapacity > 0.004)
+                                                                    The unused {{ number_format($unusedParentCapacity, 2) }} {{ $currency }} is parent capacity only and is not added to this allocation.
+                                                                @else
+                                                                    No unused parent capacity is being added to this allocation.
+                                                                @endif
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -186,7 +198,7 @@
                                         </table>
                                     </div>
                                     <div class="text-end">
-                                        <span class="text-muted">This sub-activity total:</span>
+                                        <span class="text-muted">Entered allocation total (unused parent capacity excluded):</span>
                                         <strong id="allocationTotal">0.00</strong> {{ $currency }}
                                     </div>
                                     <div id="allocationValidationMessage" class="alert alert-danger py-2 mt-3 mb-0 d-none"

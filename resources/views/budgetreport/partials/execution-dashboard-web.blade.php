@@ -7,10 +7,11 @@
     $executionCharts = $execution['executionChartImages'] ?? [];
     $executionInsights = collect($execution['aiInsights'] ?? []);
     $executionCurrency = $execution['currency'] ?? ($currency ?? 'USD');
+    $isComponentExecutionScope = ($execution['scopeType'] ?? null) === 'project';
     $executionMoney = fn ($value) => $executionCurrency.' '.number_format((float) $value, 2);
     $executionPercent = fn ($value) => number_format((float) $value, 1).'%';
     $executionChartCards = [
-        ['key' => 'execution_mix', 'title' => 'Execution Mix', 'note' => 'Disbursed, unpaid commitments, and remaining global commitments.'],
+        ['key' => 'execution_mix', 'title' => 'Execution Mix', 'note' => $isComponentExecutionScope ? 'Disbursed, unpaid commitments, and remaining budget for the selected component.' : 'Disbursed, unpaid commitments, and remaining global commitments.'],
         ['key' => 'rate_movement', 'title' => 'Rate Movement', 'note' => 'Cumulative commitment and disbursement rates.'],
         ['key' => 'cumulative_momentum', 'title' => 'Cumulative Momentum', 'note' => 'Running allocation, commitment, and payment movement.'],
         ['key' => 'financial_profile', 'title' => 'Cumulative Financial Profile', 'note' => 'Running financial totals across implementation years.'],
@@ -18,6 +19,16 @@
         ['key' => 'quality_radar', 'title' => 'Execution Quality Radar', 'note' => 'Utilization, timeliness, consistency, coverage, and risk control.'],
         ['key' => 'exposure_concentration', 'title' => 'Exposure Concentration', 'note' => 'Commitment scale and variance pressure over time.'],
     ];
+    $executionBreakdownTitle = $isComponentExecutionScope
+        ? 'Sub-Component Execution Breakdown'
+        : 'Component Execution Breakdown';
+    $executionBreakdownNote = $isComponentExecutionScope
+        ? 'Reconciled allocation, commitment, disbursement, remaining balance, and rates within the selected component.'
+        : 'Reconciled allocation, commitment, disbursement, remaining balance, and rates by component.';
+    $executionBreakdownColumn = $isComponentExecutionScope ? 'Sub-Component' : 'Component';
+    $executionBreakdownEmpty = $isComponentExecutionScope
+        ? 'No sub-component execution records are available.'
+        : 'No component execution records are available.';
     $executionKpis = [
         ['label' => 'Budget Envelope', 'value' => $executionMoney($executionSummary['budget_envelope'] ?? 0), 'tone' => 'blue'],
         ['label' => 'Scheduled Allocation', 'value' => $executionMoney($executionSummary['scheduled_allocation'] ?? 0), 'tone' => 'violet'],
@@ -132,17 +143,17 @@
 
     <div class="pfp-execution-panel">
         <div class="pfp-execution-panel-head">
-            <h5>Component Execution Breakdown</h5>
-            <p>Reconciled allocation, commitment, disbursement, remaining balance, and rates by component.</p>
+            <h5>{{ $executionBreakdownTitle }}</h5>
+            <p>{{ $executionBreakdownNote }}</p>
         </div>
         <div class="table-responsive">
             <table class="table table-bordered pfp-execution-table">
-                <thead><tr><th>Component</th><th class="text-end">Allocation</th><th class="text-end">Committed</th><th class="text-end">Disbursed</th><th class="text-end">Remaining</th><th class="text-center">Commitment %</th><th class="text-center">Disbursement %</th></tr></thead>
+                <thead><tr><th>{{ $executionBreakdownColumn }}</th><th class="text-end">Allocation</th><th class="text-end">Committed</th><th class="text-end">Disbursed</th><th class="text-end">Remaining</th><th class="text-center">Commitment %</th><th class="text-center">Disbursement %</th></tr></thead>
                 <tbody>
                     @forelse ($executionComponents as $component)
                         <tr><td class="pfp-execution-component"><strong>{{ $component['label'] ?? 'Unassigned' }}</strong>@if (! empty($component['description']))<small>{{ $component['description'] }}</small>@endif</td><td class="text-end">{{ number_format($component['allocation'] ?? 0, 2) }}</td><td class="text-end">{{ number_format($component['commitment'] ?? 0, 2) }}</td><td class="text-end">{{ number_format($component['disbursement'] ?? 0, 2) }}</td><td class="text-end">{{ number_format($component['remaining'] ?? 0, 2) }}</td><td class="text-center">{{ $executionPercent($component['execution_rate'] ?? 0) }}</td><td class="text-center">{{ $executionPercent($component['disbursement_rate'] ?? 0) }}</td></tr>
                     @empty
-                        <tr><td colspan="7" class="text-center text-muted py-4">No component execution records are available.</td></tr>
+                        <tr><td colspan="7" class="text-center text-muted py-4">{{ $executionBreakdownEmpty }}</td></tr>
                     @endforelse
                 </tbody>
             </table>

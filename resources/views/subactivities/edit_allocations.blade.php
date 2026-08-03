@@ -46,7 +46,7 @@
                     allocation for each year.
                 </div>
 
-                <form action="{{ route('budget.subactivities.allocations.update', $sub->id) }}" method="POST">
+                <form action="{{ route('budget.subactivities.allocations.update', $sub->id) }}" method="POST" autocomplete="off">
                     @csrf
 
                     <table class="table table-bordered align-middle">
@@ -65,21 +65,31 @@
                                     $activityYearBudget = (float) optional($activityAllocationsByYear->get($year))->amount;
                                     $otherSubActivityYearTotal = (float) ($otherSubActivityTotalsByYear[$year] ?? 0);
                                     $availableForThisSubActivity = max($activityYearBudget - $otherSubActivityYearTotal, 0);
-                                    $currentAmount = old('allocations.' . $year, optional($allocation)->amount ?? 0);
+                                    $savedAmount = round((float) optional($allocation)->amount, 2);
+                                    $currentAmount = old('allocations.' . $year, number_format($savedAmount, 2, '.', ''));
+                                    $unusedParentCapacity = max($availableForThisSubActivity - $savedAmount, 0);
                                 @endphp
                                 <tr>
                                     <td>
                                         <div class="fw-semibold">{{ $year }}</div>
-                                        <small class="text-muted">
-                                            Available: {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}
-                                        </small>
+                                        <small class="text-muted">Saved: {{ number_format($savedAmount, 2) }} {{ $currency }}</small>
                                     </td>
                                     <td>
-                                        <input type="number" step="0.01" min="0"
+                                        <input type="number" step="0.01" min="0" max="{{ number_format($availableForThisSubActivity, 2, '.', '') }}"
                                             name="allocations[{{ $year }}]"
                                             value="{{ $currentAmount }}"
+                                            autocomplete="off"
                                             class="form-control text-end allocation-input"
+                                            data-saved-amount="{{ number_format($savedAmount, 2, '.', '') }}"
                                             data-available="{{ $availableForThisSubActivity }}">
+                                        <div class="form-text">
+                                            Allowed ceiling: {{ number_format($availableForThisSubActivity, 2) }} {{ $currency }}.
+                                            @if ($unusedParentCapacity > 0.004)
+                                                Unused capacity: {{ number_format($unusedParentCapacity, 2) }} {{ $currency }}; not allocated automatically.
+                                            @else
+                                                No unused capacity is allocated automatically.
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @endforeach
@@ -87,7 +97,7 @@
                     </table>
 
                     <div class="text-end">
-                        <span class="text-muted">This sub-activity total:</span>
+                        <span class="text-muted">Entered allocation total (unused parent capacity excluded):</span>
                         <strong id="allocationTotal">0.00</strong> {{ $currency }}
                     </div>
 

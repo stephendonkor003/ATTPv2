@@ -929,10 +929,19 @@ class BudgetReportController extends Controller
             }
 
             $funders = $fundings->pluck('funder')->filter()->unique('id')->values();
+            $dashboardProjectId = filled($filters['project_id'] ?? null)
+                && $program->projects->contains(
+                    fn (Project $project): bool => (string) $project->id === (string) $filters['project_id']
+                )
+                    ? (string) $filters['project_id']
+                    : null;
             $dashboardRequest = Request::create(
                 '/finance/execution/dashboard',
                 'GET',
-                ['program_id' => $program->id]
+                array_filter([
+                    'program_id' => $program->id,
+                    'project_id' => $dashboardProjectId,
+                ], fn ($value): bool => filled($value))
             );
             $dashboardRequest->setUserResolver(fn () => $request->user());
             $executionDashboard = app(MasterDashboard::class)

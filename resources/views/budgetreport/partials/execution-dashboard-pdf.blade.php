@@ -7,10 +7,11 @@
     $execCharts = $exec['executionChartImages'] ?? [];
     $execInsights = collect($exec['aiInsights'] ?? []);
     $execCurrency = $exec['currency'] ?? ($currency ?? 'USD');
+    $isComponentExecutionScope = ($exec['scopeType'] ?? null) === 'project';
     $execMoney = fn ($value) => $execCurrency.' '.number_format((float) $value, 2);
     $execPercent = fn ($value) => number_format((float) $value, 1).'%';
     $execChartCards = [
-        ['key' => 'execution_mix', 'title' => 'Execution Mix', 'note' => 'Disbursed, unpaid commitments, and remaining global commitments'],
+        ['key' => 'execution_mix', 'title' => 'Execution Mix', 'note' => $isComponentExecutionScope ? 'Disbursed, unpaid commitments, and remaining budget for the selected component' : 'Disbursed, unpaid commitments, and remaining global commitments'],
         ['key' => 'rate_movement', 'title' => 'Rate Movement', 'note' => 'Cumulative commitment and disbursement rates'],
         ['key' => 'cumulative_momentum', 'title' => 'Cumulative Momentum', 'note' => 'Running allocation, commitment, and payment movement'],
         ['key' => 'financial_profile', 'title' => 'Cumulative Financial Profile', 'note' => 'Running financial totals across implementation years'],
@@ -18,6 +19,16 @@
         ['key' => 'quality_radar', 'title' => 'Execution Quality Radar', 'note' => 'Utilization, timeliness, consistency, coverage, and risk control'],
         ['key' => 'exposure_concentration', 'title' => 'Exposure Concentration', 'note' => 'Commitment scale and variance pressure over time'],
     ];
+    $execBreakdownTitle = $isComponentExecutionScope
+        ? 'Sub-Component Execution Breakdown'
+        : 'Component Execution Breakdown';
+    $execBreakdownNote = $isComponentExecutionScope
+        ? 'Reconciled financial execution within the selected component.'
+        : 'Reconciled financial execution by programme component.';
+    $execBreakdownColumn = $isComponentExecutionScope ? 'Sub-Component' : 'Component';
+    $execBreakdownEmpty = $isComponentExecutionScope
+        ? 'No sub-component execution records are available.'
+        : 'No component execution records are available.';
 @endphp
 
 <style>
@@ -115,11 +126,11 @@
     </div>
 
     <div class="exec-section">
-        <div class="exec-section-head"><h3>Component Execution Breakdown</h3><p>Reconciled financial execution by programme component.</p></div>
-        <table class="exec-table"><thead><tr><th>Component</th><th class="num">Allocation</th><th class="num">Committed</th><th class="num">Disbursed</th><th class="num">Remaining</th><th class="center">Commitment %</th><th class="center">Disbursement %</th></tr></thead><tbody>
+        <div class="exec-section-head"><h3>{{ $execBreakdownTitle }}</h3><p>{{ $execBreakdownNote }}</p></div>
+        <table class="exec-table"><thead><tr><th>{{ $execBreakdownColumn }}</th><th class="num">Allocation</th><th class="num">Committed</th><th class="num">Disbursed</th><th class="num">Remaining</th><th class="center">Commitment %</th><th class="center">Disbursement %</th></tr></thead><tbody>
             @forelse ($execComponents as $component)
                 <tr><td><strong>{{ $component['label'] ?? 'Unassigned' }}</strong>@if (! empty($component['description']))<span class="exec-component-note">{{ $component['description'] }}</span>@endif</td><td class="num">{{ number_format($component['allocation'] ?? 0, 2) }}</td><td class="num">{{ number_format($component['commitment'] ?? 0, 2) }}</td><td class="num">{{ number_format($component['disbursement'] ?? 0, 2) }}</td><td class="num">{{ number_format($component['remaining'] ?? 0, 2) }}</td><td class="center">{{ $execPercent($component['execution_rate'] ?? 0) }}</td><td class="center">{{ $execPercent($component['disbursement_rate'] ?? 0) }}</td></tr>
-            @empty<tr><td colspan="7" class="center">No component execution records are available.</td></tr>@endforelse
+            @empty<tr><td colspan="7" class="center">{{ $execBreakdownEmpty }}</td></tr>@endforelse
         </tbody></table>
     </div>
 
