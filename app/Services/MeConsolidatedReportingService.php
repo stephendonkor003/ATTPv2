@@ -7,7 +7,7 @@ use Illuminate\Support\Collection;
 
 class MeConsolidatedReportingService
 {
-    public function build(Collection $reports): Collection
+    public function build(Collection $reports, array $filters = []): Collection
     {
         return $reports
             ->flatMap(function ($report) {
@@ -16,7 +16,7 @@ class MeConsolidatedReportingService
                 );
             })
             ->groupBy('indicator_id')
-            ->map(function (Collection $sourceResults) {
+            ->map(function (Collection $sourceResults) use ($filters) {
                 // One organization contributes at most one approved value for an
                 // indicator and period. If legacy/misconfigured forms overlap,
                 // the most recently approved record is authoritative and the
@@ -27,7 +27,7 @@ class MeConsolidatedReportingService
                 $actuals = $results->whereNotNull('actual_value')->map(fn ($result) => (float) $result->actual_value);
                 $value = $this->rollup($results, $method);
                 $achievements = $results->flatMap->achievements;
-                $breakdowns = $achievements->flatMap->breakdowns;
+                $breakdowns = $this->filterBreakdowns($achievements->flatMap->breakdowns, $filters);
 
                 return [
                     'indicator' => $indicator,
@@ -56,6 +56,26 @@ class MeConsolidatedReportingService
             })
             ->sortBy(fn (array $row) => $row['indicator']?->indicator_code)
             ->values();
+    }
+
+    private function filterBreakdowns(Collection $breakdowns, array $filters): Collection
+    {
+        $keys = [
+            'geographic_scope', 'country', 'rec', 'implementing_institution_type',
+            'implementing_institution', 'priority_theme', 'gender', 'age_group',
+            'stakeholder_category',
+        ];
+
+        return $breakdowns->filter(function ($breakdown) use ($filters, $keys): bool {
+            foreach ($keys as $key) {
+                if (filled($filters[$key] ?? null)
+                    && (string) $breakdown->{$key} !== (string) $filters[$key]) {
+                    return false;
+                }
+            }
+
+            return true;
+        })->values();
     }
 
     private function oneResultPerOrganization(Collection $results): Collection

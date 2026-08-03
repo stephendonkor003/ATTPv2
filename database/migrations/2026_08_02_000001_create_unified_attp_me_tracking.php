@@ -340,6 +340,7 @@ return new class extends Migration
             'rec' => ['Regional Economic Community (REC)', 'classification', 'Recognized African Regional Economic Community.', 30],
             'implementing_institution_type' => ['Implementing institution type', 'classification', 'Think tank, consortium, or partner institution.', 40],
             'priority_theme' => ['ATTP priority thematic area', 'classification', 'Approved ATTP priority thematic area.', 50],
+            'reporting_period' => ['Reporting period', 'classification', 'Quarterly, semi-annual, or annual reporting cadence; captured automatically by each report.', 55],
             'gender' => ['Gender', 'beneficiary', 'Beneficiary gender category.', 60],
             'age_group' => ['Age group', 'beneficiary', 'Youth below 35 or adult aged 35 and above.', 70],
             'stakeholder_category' => ['Stakeholder category', 'beneficiary', 'ATTP stakeholder classification.', 80],
@@ -392,15 +393,18 @@ return new class extends Migration
                 'human_capital' => 'Human Capital',
                 'digitalization' => 'Digitalization',
             ],
+            'reporting_period' => [
+                'quarterly' => 'Quarterly',
+                'semi_annual' => 'Semi-Annual',
+                'annual' => 'Annual',
+            ],
             'gender' => [
                 'female' => 'Female',
                 'male' => 'Male',
-                'other_not_reported' => 'Other / not reported',
             ],
             'age_group' => [
                 'youth_below_35' => 'Youth below 35 years',
                 'adult_35_plus' => 'Adults aged 35 years and above',
-                'not_reported' => 'Not reported',
             ],
             'stakeholder_category' => [
                 'government' => 'Government',

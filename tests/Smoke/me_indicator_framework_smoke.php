@@ -4,12 +4,12 @@ use App\Http\Controllers\MeConfigurationController;
 use App\Http\Controllers\MeIndicatorController;
 use App\Http\Controllers\MeKnowledgeEvidenceController;
 use App\Models\Indicator;
-use App\Models\IndicatorDisaggregation;
 use App\Models\IndicatorLevel;
 use App\Models\IndicatorResult;
 use App\Models\IndicatorTarget;
 use App\Models\IndicatorUnit;
 use App\Models\MeKnowledgeEvidenceItem;
+use App\Models\MeDisaggregationDimension;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\ReportingFrequency;
@@ -363,11 +363,8 @@ try {
         ->with('setupTarget')
         ->firstOrFail();
 
-    if (! preg_match('/^IND-\d{4}-[A-Z0-9]{8}$/', (string) $indicator->indicator_code)) {
-        throw new RuntimeException('The server did not persist a readable generated Indicator ID.');
-    }
-    if ($indicator->indicator_code === $basePayload['indicator_code']) {
-        throw new RuntimeException('The client was able to control the immutable Indicator ID.');
+    if ($indicator->indicator_code !== $basePayload['indicator_code']) {
+        throw new RuntimeException('The authorized user-defined indicator code was not persisted.');
     }
     if ((string) $indicator->responsible_user_id !== (string) $responsiblePerson->id
         || json_decode((string) $indicator->responsible_party, true) !== [(string) $responsiblePerson->id]) {
@@ -404,23 +401,25 @@ try {
         }
     }
 
+    $dimensions = MeDisaggregationDimension::query()
+        ->whereIn('code', ['gender', 'age_group', 'geographic_scope'])
+        ->pluck('id', 'code');
+    $dimensionIds = [
+        $dimensions['gender'],
+        $dimensions['age_group'],
+        $dimensions['geographic_scope'],
+    ];
     $controller->updateDisaggregations(
         $requestFor('PUT', "/budget/me/indicators/{$indicator->id}/disaggregations", [
-            'primary_disaggregation' => 'Gender',
-            'secondary_disaggregation' => 'Age Group',
-            'tertiary_disaggregation' => 'Geographic Location',
+            'dimensions' => $dimensionIds,
+            'required_dimensions' => $dimensionIds,
         ]),
         $indicator
     );
-    $indicator->load('disaggregations');
-    $primaryDisaggregation = $indicator->disaggregations->firstWhere('level', 'primary');
-    $secondaryDisaggregation = $indicator->disaggregations->firstWhere('level', 'secondary');
-    $tertiaryDisaggregation = $indicator->disaggregations->firstWhere('level', 'tertiary');
-    if (! $primaryDisaggregation
-        || (string) $secondaryDisaggregation?->parent_id !== (string) $primaryDisaggregation->id
-        || (string) $tertiaryDisaggregation?->parent_id !== (string) $secondaryDisaggregation?->id
-        || IndicatorDisaggregation::query()->where('indicator_id', $indicator->id)->count() !== 3) {
-        throw new RuntimeException('Primary, secondary and tertiary disaggregations were not persisted as a linked hierarchy.');
+    $indicator->load('disaggregationRequirements.dimension');
+    if ($indicator->disaggregationRequirements->count() !== 3
+        || $indicator->disaggregationRequirements->contains(fn ($requirement) => ! $requirement->is_required)) {
+        throw new RuntimeException('The selected combined disaggregation requirements were not persisted.');
     }
 
     $collectIndicators = new ReflectionMethod($controller, 'collectIndicatorsWithRelations');
@@ -440,8 +439,8 @@ try {
     $reportRow = $reportRows->firstWhere('indicator_name', $indicator->name);
     if (($reportRow['project_component'] ?? null) !== $component->project_id.' - '.$component->name
         || ($reportRow['indicator_level'] ?? null) !== 'PDO'
-        || ($reportRow['disaggregation'] ?? null) !== 'Gender → Age Group → Geographic Location'
-        || ($reportRow['means_of_verification'] ?? null) !== $evidence->title
+        || ($reportRow['disaggregation'] ?? null) !== 'Gender × Age group × Geographic scope'
+        || ($reportRow['means_of_verification'] ?? null) !== $evidence->folder->name
         || ($reportRow['data_collection_method'] ?? null) !== $basePayload['data_collection_method']) {
         throw new RuntimeException('Component, classification, disaggregation, collection method or MOV is missing from management reporting.');
     }
@@ -458,6 +457,7 @@ try {
 
     $firstCode = $indicator->indicator_code;
     $secondPayload = $basePayload;
+    $secondPayload['indicator_code'] = 'IND-SECOND-'.Str::upper(substr($suffix, 0, 8));
     $secondPayload['name'] = "Second framework smoke indicator {$suffix}";
     $secondPayload['owner_reference'] = 'program:'.$hierarchyProgram->id;
     $controller->store($requestFor('POST', '/budget/me/indicators', $secondPayload));
@@ -481,7 +481,8 @@ try {
     $originalTargetId = $setupTarget->id;
     $updatePayload = [
         'portfolio_id' => $portfolio->id,
-        'indicator_code' => 'IND-TAMPERED',
+        'indicator_code' => 'IND-UPDATED-'.Str::upper(substr($suffix, 0, 8)),
+        'indicator_code_change_reason' => 'Smoke test of the authorized indicator-code audit trail.',
         'name' => "Updated framework smoke indicator {$suffix}",
         'definition' => 'Updated plain-language measurement definition.',
         'unit_id' => $unit->id,
@@ -500,8 +501,8 @@ try {
     );
 
     $indicator->refresh()->load('setupTarget');
-    if ($indicator->indicator_code !== $firstCode) {
-        throw new RuntimeException('Updating an indicator changed its immutable Indicator ID.');
+    if ($indicator->indicator_code !== $updatePayload['indicator_code']) {
+        throw new RuntimeException('The authorized indicator-code change was not persisted.');
     }
     if ($indicator->methodology !== $updatePayload['data_collection_method']
         || $indicator->data_collection_method !== $updatePayload['data_collection_method']
@@ -573,7 +574,7 @@ try {
             'target_value',
             'frequency_of_reporting_id',
             'data_collection_method',
-            'means_of_verification_id',
+            'means_of_verification_folder_id',
             'responsible_user_id',
         ], array_keys($exception->errors()));
 
@@ -611,7 +612,7 @@ try {
         'projects',
         'activities',
         'subActivities',
-        'repositoryItems',
+        'repositoryFolders',
         'componentOptions',
         'componentCounts',
         'componentFilter',
@@ -657,7 +658,7 @@ try {
         || $editData['users']->isEmpty()
         || ! $editData['units']->contains('id', $inlineUnit->id)
         || ! $editData['frequencies']->contains('id', $inlineFrequency->id)
-        || ! $editData['repositoryItems']->contains('id', $evidence->id)
+        || ! $editData['repositoryFolders']->contains('id', $evidence->folder_id)
         || ($editData['frequencyIntervalOptions']['month'] ?? null) !== 'Month') {
         throw new RuntimeException('The create/edit form contract was not loaded on demand.');
     }

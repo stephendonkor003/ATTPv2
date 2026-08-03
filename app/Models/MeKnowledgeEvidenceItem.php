@@ -22,6 +22,7 @@ class MeKnowledgeEvidenceItem extends BaseModel
 
     protected $fillable = [
         'portfolio_id',
+        'folder_id',
         'title',
         'document_type',
         'repository_category',
@@ -53,6 +54,11 @@ class MeKnowledgeEvidenceItem extends BaseModel
     public function portfolio(): BelongsTo
     {
         return $this->belongsTo(Sector::class, 'portfolio_id');
+    }
+
+    public function folder(): BelongsTo
+    {
+        return $this->belongsTo(MeRepositoryFolder::class, 'folder_id');
     }
 
     public function creator(): BelongsTo

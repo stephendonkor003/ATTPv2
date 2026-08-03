@@ -145,9 +145,9 @@
                                 </div>
                                 <div class="me-muted text-break mt-1">
                                     <i class="feather-check-square me-1"></i>
-                                    @if ($indicator->meansOfVerification)
-                                        <a href="{{ route('budget.me.rebuild.knowledge-repository', ['q' => $indicator->meansOfVerification->title]) }}">
-                                            {{ $indicator->meansOfVerification->title }}
+                                    @if ($indicator->meansOfVerificationFolder)
+                                        <a href="{{ route('budget.me.rebuild.knowledge-repository', ['folder_id' => $indicator->meansOfVerificationFolder->id]) }}">
+                                            {{ $indicator->meansOfVerificationFolder->name }}
                                         </a>
                                     @else
                                         Means of Verification not linked
@@ -252,9 +252,9 @@
                     <div class="me-muted text-break"><i class="feather-database me-1"></i>{{ $dataCollectionMethod !== '' ? $dataCollectionMethod : 'Collection method not set' }}</div>
                     <div class="me-muted text-break mb-3">
                         <i class="feather-check-square me-1"></i>
-                        @if ($indicator->meansOfVerification)
-                            <a href="{{ route('budget.me.rebuild.knowledge-repository', ['q' => $indicator->meansOfVerification->title]) }}">
-                                {{ $indicator->meansOfVerification->title }}
+                        @if ($indicator->meansOfVerificationFolder)
+                            <a href="{{ route('budget.me.rebuild.knowledge-repository', ['folder_id' => $indicator->meansOfVerificationFolder->id]) }}">
+                                {{ $indicator->meansOfVerificationFolder->name }}
                             </a>
                         @else
                             Means of Verification not linked

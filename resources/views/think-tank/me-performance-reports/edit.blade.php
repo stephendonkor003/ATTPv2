@@ -205,7 +205,25 @@
 
         @if($editable)
             @foreach($report->documents as $document)<form id="delete-{{ $document->id }}" method="POST" action="{{ route('think-tank.performance-reports.documents.destroy',array_merge(['report'=>$report,'document'=>$document],$portalRouteParams)) }}" class="d-none">@csrf @method('DELETE')</form>@endforeach
-            @if($report->documents->isNotEmpty())<section class="rp-section"><div class="rp-body d-flex flex-wrap justify-content-between gap-2"><span class="text-muted small">Remove an incorrect attachment before replacing it.</span><div class="d-flex flex-wrap gap-1">@foreach($report->documents as $document)<button type="submit" form="delete-{{ $document->id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this attachment?')"><i class="feather-trash-2 me-1"></i>{{ \Illuminate\Support\Str::limit($document->document_name,20) }}</button>@endforeach</div></div></section>@endif
+            @if($report->documents->isNotEmpty())
+                <section class="rp-section">
+                    <div class="rp-section-head"><span class="rp-number"><i class="feather-layers"></i></span><div><h2>Document revisions</h2><p>Upload a corrected version while retaining every earlier file.</p></div></div>
+                    <div class="rp-body d-grid gap-3">
+                        @foreach($report->documents as $document)
+                            <div class="border rounded-3 p-3">
+                                <strong>{{ $document->document_name }} - current version {{ $document->repositoryItem?->version_number ?: 1 }}</strong>
+                                @if($document->repositoryItem?->versions?->isNotEmpty())<details class="small mt-1"><summary class="text-primary">Version history ({{ $document->repositoryItem->versions->count() }})</summary><ol class="mb-2 ps-3">@foreach($document->repositoryItem->versions->sortByDesc('version_number') as $version)<li><a href="{{ route('budget.me.knowledge-evidence.versions.download',[$document->repositoryItem,$version]) }}">v{{ $version->version_number }} - {{ $version->original_filename }}</a>@if($version->change_notes) - {{ $version->change_notes }}@endif</li>@endforeach</ol></details>@endif
+                                <form method="POST" action="{{ route('think-tank.performance-reports.documents.replace',array_merge(['report'=>$report,'document'=>$document],$portalRouteParams)) }}" enctype="multipart/form-data" class="row g-2 align-items-end mt-1">@csrf<div class="col-md-5"><label class="small">Corrected file</label><input type="file" name="replacement_file" class="form-control" required></div><div class="col-md-5"><label class="small">What changed? *</label><input name="change_notes" class="form-control" required maxlength="5000" placeholder="Explain corrections made"></div><div class="col-md-2"><button class="btn btn-outline-primary w-100">Upload v{{ ((int)($document->repositoryItem?->version_number ?: 1))+1 }}</button></div></form>
+                                <div class="text-end mt-2"><button type="submit" form="delete-{{ $document->id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Unlink this attachment? Version history remains in the repository.')"><i class="feather-trash-2 me-1"></i>Unlink</button></div>
+                            </div>
+                        @endforeach
+                    </div>
+                </section>
+            @endif
+        @endif
+
+        @if(!$editable && $report->documents->isNotEmpty())
+            <section class="rp-section"><div class="rp-section-head"><span class="rp-number"><i class="feather-layers"></i></span><div><h2>Document version history</h2><p>Every submitted and corrected evidence file remains available.</p></div></div><div class="rp-body d-grid gap-3">@foreach($report->documents as $document)<div><strong>{{ $document->document_name }}</strong> · current version {{ $document->repositoryItem?->version_number ?: 1 }}@if($document->repositoryItem?->versions?->isNotEmpty())<ol class="small mb-0 mt-1">@foreach($document->repositoryItem->versions->sortByDesc('version_number') as $version)<li><a href="{{ route('budget.me.knowledge-evidence.versions.download',[$document->repositoryItem,$version]) }}">v{{ $version->version_number }} - {{ $version->original_filename }}</a>@if($version->change_notes) - {{ $version->change_notes }}@endif</li>@endforeach</ol>@endif</div>@endforeach</div></section>
         @endif
 
         @include('me.performance-reports.partials.lifecycle-actions', ['isPortal' => true])

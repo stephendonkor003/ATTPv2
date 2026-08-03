@@ -185,7 +185,7 @@ class MePerformanceReportingSmoke
 
             $this->get(route('budget.me.performance-reports.edit', $report))
                 ->assertOk()
-                ->assertSee('Return Report')
+                ->assertSee('Reject &amp; Return', false)
                 ->assertSee('Verify Report')
                 ->assertSee('Indicator results and progress against target')
                 ->assertSee('Complete');

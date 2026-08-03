@@ -14,6 +14,7 @@ use App\Models\IndicatorSurveyLink;
 use App\Models\IndicatorTarget;
 use App\Models\IndicatorUnit;
 use App\Models\MeKnowledgeEvidenceItem;
+use App\Models\MeRepositoryFolder;
 use App\Models\MeDisaggregationDimension;
 use App\Models\IndicatorCodeHistory;
 use App\Models\Program;
@@ -89,7 +90,7 @@ class MeIndicatorController extends Controller
             ->whereIn('results_level', ['pdo', 'intermediate_results'])
             ->whereNotNull('data_collection_method')
             ->where('data_collection_method', '<>', '')
-            ->whereNotNull('means_of_verification_id')
+            ->whereNotNull('means_of_verification_folder_id')
             ->whereNotNull('responsible_user_id')
             ->whereHas('setupTarget');
 
@@ -109,7 +110,7 @@ class MeIndicatorController extends Controller
                 'responsiblePerson:id,name,email',
                 'setupTarget:id,indicator_id,target_value,unit_id,target_context',
                 'projectComponent:id,project_id,name,program_id',
-                'meansOfVerification:id,title,document_type',
+                'meansOfVerificationFolder:id,portfolio_id,name',
                 'disaggregations:id,indicator_id,level,dimension,parent_id',
                 'disaggregationRequirements:id,indicator_id,dimension_id,is_required,collect_numeric_value,sort_order',
                 'disaggregationRequirements.dimension:id,code,name,dimension_group,sort_order',
@@ -128,7 +129,7 @@ class MeIndicatorController extends Controller
                             $componentQuery->whereLike('name', $term)
                                 ->orWhereLike('project_id', $term);
                         })
-                        ->orWhereHas('meansOfVerification', fn ($evidenceQuery) => $evidenceQuery->whereLike('title', $term))
+                        ->orWhereHas('meansOfVerificationFolder', fn ($folderQuery) => $folderQuery->whereLike('name', $term))
                         ->orWhereHas('disaggregations', fn ($disaggregationQuery) => $disaggregationQuery->whereLike('dimension', $term))
                         ->orWhereHas('responsiblePerson', function ($personQuery) use ($term) {
                             $personQuery->whereLike('name', $term)
@@ -143,7 +144,7 @@ class MeIndicatorController extends Controller
         $editingIndicator = null;
         if ($request->filled('edit')) {
             $editingIndicator = Indicator::query()
-                ->with(['setupTarget', 'targets', 'disaggregations', 'disaggregationRequirements.dimension', 'meansOfVerification'])
+                ->with(['setupTarget', 'targets', 'disaggregations', 'disaggregationRequirements.dimension', 'meansOfVerificationFolder'])
                 ->findOrFail((string) $request->query('edit'));
             $this->assertIndicatorInCurrentPortfolioScope($editingIndicator);
         }
@@ -156,7 +157,7 @@ class MeIndicatorController extends Controller
         $projects = collect();
         $activities = collect();
         $subActivities = collect();
-        $repositoryItems = collect();
+        $repositoryFolders = collect();
         $frequencyIntervalOptions = [];
 
         $componentOptionsQuery = Project::with('program:id,sector_id')->orderBy('name');
@@ -228,19 +229,18 @@ class MeIndicatorController extends Controller
             $activities = $activityQuery->get(['id', 'name', 'project_id']);
             $subActivities = $subActivityQuery->get(['id', 'name', 'activity_id']);
 
-            $repositoryQuery = MeKnowledgeEvidenceItem::query()
+            $repositoryQuery = MeRepositoryFolder::query()
                 ->with('portfolio:id,name')
-                ->orderBy('title');
+                ->withCount('documents')
+                ->orderBy('name');
             if ($this->userHasAssignedPortfolioScope()) {
                 $this->applyAssignedPortfolioScopeToPortfolioOwnedRecords($repositoryQuery);
             }
-            $repositoryItems = $repositoryQuery->get([
+            $repositoryFolders = $repositoryQuery->get([
                 'id',
                 'portfolio_id',
-                'title',
-                'document_type',
-                'file_path',
-                'external_url',
+                'name',
+                'description',
             ]);
         }
 
@@ -294,7 +294,7 @@ class MeIndicatorController extends Controller
             'projects',
             'activities',
             'subActivities',
-            'repositoryItems',
+            'repositoryFolders',
             'componentOptions',
             'componentCounts',
             'componentFilter',
@@ -334,6 +334,9 @@ class MeIndicatorController extends Controller
 
             $this->syncSetupTarget($indicator, $validated['target_value']);
             $this->syncAnnualTarget($indicator, $validated['annual_target']);
+            $indicator->repositoryFolders()->syncWithoutDetaching([
+                $validated['means_of_verification_folder_id'] => ['linked_by' => auth()->id()],
+            ]);
             $this->syncSurveyLinkForIndicator($indicator);
         });
 
@@ -377,6 +380,9 @@ class MeIndicatorController extends Controller
 
             $this->syncSetupTarget($lockedIndicator, $validated['target_value']);
             $this->syncAnnualTarget($lockedIndicator, $validated['annual_target']);
+            $lockedIndicator->repositoryFolders()->syncWithoutDetaching([
+                $validated['means_of_verification_folder_id'] => ['linked_by' => auth()->id()],
+            ]);
             $this->syncSurveyLinkForIndicator($lockedIndicator);
         });
 
@@ -624,7 +630,8 @@ class MeIndicatorController extends Controller
             ],
             'frequency_of_reporting_id' => 'required|exists:me_reporting_frequencies,id',
             'data_collection_method' => 'required|string|max:2000',
-            'means_of_verification_id' => 'required|uuid|exists:me_knowledge_evidence_items,id',
+            'means_of_verification_folder_id' => 'required|uuid|exists:me_repository_folders,id',
+            'means_of_verification_id' => 'nullable|uuid|exists:me_knowledge_evidence_items,id',
             'responsible_user_id' => [
                 'required',
                 'exists:users,id',
@@ -714,6 +721,18 @@ class MeIndicatorController extends Controller
      */
     protected function normalizeIndicatorInput(Request $request): void
     {
+        if (! $request->exists('annual_target') && $request->exists('target_value')) {
+            $request->merge(['annual_target' => $request->input('target_value')]);
+        }
+
+        if (! $request->exists('aggregation_method')) {
+            $request->merge(['aggregation_method' => 'sum']);
+        }
+
+        if (! $request->exists('organization_rollup_method')) {
+            $request->merge(['organization_rollup_method' => 'sum']);
+        }
+
         if ($request->exists('indicator_code')) {
             $request->merge([
                 'indicator_code' => Str::upper(trim((string) $request->input('indicator_code'))),
@@ -753,6 +772,15 @@ class MeIndicatorController extends Controller
                 'responsible_user_id' => $legacyResponsibleIds->first(),
             ]);
         }
+
+        if (! $request->filled('means_of_verification_folder_id') && $request->filled('means_of_verification_id')) {
+            $folderId = MeKnowledgeEvidenceItem::query()
+                ->whereKey($request->input('means_of_verification_id'))
+                ->value('folder_id');
+            if ($folderId) {
+                $request->merge(['means_of_verification_folder_id' => $folderId]);
+            }
+        }
     }
 
     protected function indicatorResponsibleUsersQuery()
@@ -778,8 +806,8 @@ class MeIndicatorController extends Controller
         $componentQuery = Project::query()
             ->whereKey($validated['project_component_id'])
             ->whereHas('program', fn ($query) => $query->where('sector_id', $portfolioId));
-        $evidenceQuery = MeKnowledgeEvidenceItem::query()
-            ->whereKey($validated['means_of_verification_id'])
+        $evidenceQuery = MeRepositoryFolder::query()
+            ->whereKey($validated['means_of_verification_folder_id'])
             ->where('portfolio_id', $portfolioId);
         $this->scopeIndicatorConfigurationQuery($unitQuery);
         $this->scopeIndicatorConfigurationQuery($frequencyQuery);
@@ -799,7 +827,7 @@ class MeIndicatorController extends Controller
             $errors['project_component_id'] = 'Please select a project component from the selected portfolio.';
         }
         if (! $evidenceQuery->exists()) {
-            $errors['means_of_verification_id'] = 'Please select a Means of Verification from the selected portfolio repository.';
+            $errors['means_of_verification_folder_id'] = 'Please select an indicator-linked repository folder from the selected portfolio.';
         }
 
         if ($errors !== []) {
@@ -1033,7 +1061,8 @@ class MeIndicatorController extends Controller
                 255,
                 ''
             ),
-            'means_of_verification_id' => $validated['means_of_verification_id'],
+            'means_of_verification_id' => $validated['means_of_verification_id'] ?? null,
+            'means_of_verification_folder_id' => $validated['means_of_verification_folder_id'],
             'definitions' => trim((string) $validated['definition']),
             'code_updated_by' => auth()->id(),
         ];
@@ -1568,7 +1597,7 @@ class MeIndicatorController extends Controller
             'indicatorable',
             'level:id,name',
             'projectComponent:id,project_id,name,program_id',
-            'meansOfVerification:id,title,document_type',
+            'meansOfVerificationFolder:id,portfolio_id,name',
             'disaggregations:id,indicator_id,level,dimension,parent_id',
             'disaggregationRequirements:id,indicator_id,dimension_id,is_required,collect_numeric_value,sort_order',
             'disaggregationRequirements.dimension:id,code,name,dimension_group,sort_order',
@@ -1644,7 +1673,7 @@ class MeIndicatorController extends Controller
                     'data_collection_method' => $indicator->data_collection_method
                         ?: $indicator->methodology
                         ?: '—',
-                    'means_of_verification' => $indicator->meansOfVerification?->title ?: '—',
+                    'means_of_verification' => $indicator->meansOfVerificationFolder?->name ?: '—',
                     'definition' => $indicator->definitions ?: '—',
                     'target' => $this->formatMetric($status['target'] ?? null),
                     'actual' => $this->formatMetric($status['actual'] ?? null),

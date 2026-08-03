@@ -20,7 +20,7 @@
                 <div class="modal-body">
                     <div class="me-disaggregation-note mb-3">
                         <i class="feather-info" aria-hidden="true"></i>
-                        <span>“Required” blocks submission when the dimension is missing. “Count” identifies beneficiary dimensions used in the calculated beneficiary total.</span>
+                        <span>“Required” blocks submission when the dimension is missing. “Count” identifies beneficiary dimensions used in the calculated beneficiary total. Reporting period is captured automatically from the report as quarterly, semi-annual, or annual.</span>
                     </div>
 
                     <div class="table-responsive border rounded-3">

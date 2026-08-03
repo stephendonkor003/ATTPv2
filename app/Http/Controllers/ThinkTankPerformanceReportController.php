@@ -195,6 +195,18 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
         return parent::destroyDocument($request, $report, $document);
     }
 
+    public function replaceDocument(
+        Request $request,
+        MePerformanceReport $report,
+        MePerformanceReportDocument $document
+    ): RedirectResponse {
+        $member = $this->member($request);
+        $this->assertOwnedReport($report, $member);
+        $this->assertCanAuthor($request);
+
+        return parent::replaceDocument($request, $report, $document);
+    }
+
     private function availableAssignments(ConsortiumThinkTank $member)
     {
         return MeDataCollectionAssignment::query()

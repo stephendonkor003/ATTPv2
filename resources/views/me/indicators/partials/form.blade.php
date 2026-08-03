@@ -27,9 +27,9 @@
         'results_level',
         $editingIndicator->results_level ?? ''
     );
-    $selectedMeansOfVerificationId = (string) old(
-        'means_of_verification_id',
-        $editingIndicator->means_of_verification_id ?? ''
+    $selectedMeansOfVerificationFolderId = (string) old(
+        'means_of_verification_folder_id',
+        $editingIndicator->means_of_verification_folder_id ?? ''
     );
     $targetValue = old('target_value', $editingTargetValue ?? '');
     $dataCollectionMethod = old(
@@ -425,7 +425,7 @@
 
                     <div class="col-lg-6">
                         <div class="me-field-label-row">
-                            <label class="form-label" for="indicator-means-of-verification">Means of Verification <span class="text-danger">*</span></label>
+                            <label class="form-label" for="indicator-means-of-verification">Means of Verification folder <span class="text-danger">*</span></label>
                             <a
                                 href="{{ route('budget.me.rebuild.knowledge-repository') }}"
                                 class="me-inline-create-link"
@@ -437,21 +437,21 @@
                         </div>
                         <select
                             id="indicator-means-of-verification"
-                            name="means_of_verification_id"
-                            class="form-select @error('means_of_verification_id') is-invalid @enderror"
+                            name="means_of_verification_folder_id"
+                            class="form-select @error('means_of_verification_folder_id') is-invalid @enderror"
                             data-indicator-portfolio-dependent
                             data-dependent-kind="evidence"
                             required
                         >
-                            <option value="">Select repository evidence</option>
-                            @foreach ($repositoryItems as $evidence)
-                                <option value="{{ $evidence->id }}" data-portfolio-id="{{ $evidence->portfolio_id }}" @selected($selectedMeansOfVerificationId === (string) $evidence->id)>
-                                    {{ $evidence->title }}@if($showConfigurationPortfolio && $evidence->portfolio?->name) &mdash; {{ $evidence->portfolio->name }}@endif
+                            <option value="">Select indicator-linked folder</option>
+                            @foreach ($repositoryFolders as $folder)
+                                <option value="{{ $folder->id }}" data-portfolio-id="{{ $folder->portfolio_id }}" @selected($selectedMeansOfVerificationFolderId === (string) $folder->id)>
+                                    {{ $folder->name }} ({{ $folder->documents_count }} documents)@if($showConfigurationPortfolio && $folder->portfolio?->name) &mdash; {{ $folder->portfolio->name }}@endif
                                 </option>
                             @endforeach
                         </select>
-                        <small class="me-field-help">The selected document remains linked to this indicator in the Knowledge and Evidence Repository.</small>
-                        @error('means_of_verification_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <small class="me-field-help">The folder—not one individual file—is linked to this indicator. All current and future documents in it remain available as evidence.</small>
+                        @error('means_of_verification_folder_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
                     <div class="col-lg-6">

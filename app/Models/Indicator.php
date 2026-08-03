@@ -59,6 +59,7 @@ class Indicator extends BaseModel
         'unit_id',
         'primary_source',
         'means_of_verification_id',
+        'means_of_verification_folder_id',
         'definitions',
         'created_by',
         'code_updated_by',
@@ -106,6 +107,11 @@ class Indicator extends BaseModel
         return $this->belongsTo(MeKnowledgeEvidenceItem::class, 'means_of_verification_id');
     }
 
+    public function meansOfVerificationFolder(): BelongsTo
+    {
+        return $this->belongsTo(MeRepositoryFolder::class, 'means_of_verification_folder_id');
+    }
+
     public function disaggregations(): HasMany
     {
         return $this->hasMany(IndicatorDisaggregation::class)
@@ -128,6 +134,16 @@ class Indicator extends BaseModel
     public function achievements(): HasMany
     {
         return $this->hasMany(MeIndicatorAchievement::class, 'indicator_id');
+    }
+
+    public function repositoryFolders(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            MeRepositoryFolder::class,
+            'me_repository_folder_indicators',
+            'indicator_id',
+            'folder_id'
+        )->withPivot('linked_by')->withTimestamps();
     }
 
     public function resultsLevelLabel(): string

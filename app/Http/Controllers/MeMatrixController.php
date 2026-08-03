@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MeMatrixVersion;
 use App\Models\Sector;
+use App\Services\MeRepositoryFolderService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -84,9 +85,17 @@ class MeMatrixController extends Controller
         $path = $file->store('me/matrices/'.$code, 'local');
         try {
             $summary = $this->inspectMatrix($path, $file->getClientOriginalExtension());
-            DB::transaction(function () use ($validated, $request, $file, $path, $checksum, $summary, $code, $version): void {
+            $folder = app(MeRepositoryFolderService::class)->resolve(
+                (string) $validated['portfolio_id'],
+                'M&E Matrices',
+                (string) $request->user()->id,
+                [],
+                'Uploaded and controlled M&E Matrix versions.'
+            );
+            DB::transaction(function () use ($validated, $request, $file, $path, $checksum, $summary, $code, $version, $folder): void {
                 $repository = MeKnowledgeEvidenceItem::query()->create([
                     'portfolio_id' => $validated['portfolio_id'],
+                    'folder_id' => $folder->id,
                     'title' => trim($validated['title']),
                     'document_type' => 'me_matrix',
                     'repository_category' => 'matrix',

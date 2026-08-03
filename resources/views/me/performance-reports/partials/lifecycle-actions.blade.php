@@ -44,11 +44,11 @@
     @elseif ($report->isSubmitted() && $canReview)
         <form method="POST" action="{{ route('budget.me.performance-reports.review', $report) }}" class="stage-review-form">
             @csrf
-            <label class="form-label" for="review-notes">Verification notes</label>
-            <textarea name="review_notes" id="review-notes" rows="3" class="form-control" placeholder="Record the verification performed or explain corrections required.">{{ old('review_notes', $report->review_notes) }}</textarea>
+            <label class="form-label" for="review-notes">Verification or rejection note <span class="text-danger">*</span></label>
+            <textarea name="review_notes" id="review-notes" rows="3" class="form-control" required placeholder="Explain why the report is verified or why it is being returned.">{{ old('review_notes', $report->review_notes) }}</textarea>
             <div class="stage-action-buttons">
                 <button type="submit" name="review_action" value="returned" class="btn btn-warning lifecycle-action lifecycle-action--return">
-                    <i class="feather-corner-up-left" aria-hidden="true"></i>Return Report
+                    <i class="feather-corner-up-left" aria-hidden="true"></i>Reject &amp; Return
                 </button>
                 <button type="submit" name="review_action" value="verified" class="btn btn-success lifecycle-action lifecycle-action--approve" onclick="return confirm('Verify the calculations, disaggregation and evidence in this report?');">
                     <i class="feather-check-circle" aria-hidden="true"></i>Verify Report
@@ -58,10 +58,10 @@
     @elseif ($report->isVerified() && $canReview)
         <form method="POST" action="{{ route('budget.me.performance-reports.review', $report) }}" class="stage-review-form">
             @csrf
-            <label class="form-label" for="approval-notes">Final approval notes</label>
-            <textarea name="review_notes" id="approval-notes" rows="3" class="form-control" placeholder="Record the approval decision and any management direction.">{{ old('review_notes') }}</textarea>
+            <label class="form-label" for="approval-notes">Final approval or rejection note <span class="text-danger">*</span></label>
+            <textarea name="review_notes" id="approval-notes" rows="3" class="form-control" required placeholder="Explain the final approval decision or why the report is being returned.">{{ old('review_notes') }}</textarea>
             <div class="stage-action-buttons">
-                <button type="submit" name="review_action" value="returned" class="btn btn-warning lifecycle-action lifecycle-action--return"><i class="feather-corner-up-left"></i>Return Report</button>
+                <button type="submit" name="review_action" value="returned" class="btn btn-warning lifecycle-action lifecycle-action--return"><i class="feather-corner-up-left"></i>Reject &amp; Return</button>
                 <button type="submit" name="review_action" value="approved" class="btn btn-success lifecycle-action lifecycle-action--approve" onclick="return confirm('Give this report final approval?');"><i class="feather-award"></i>Approve Report</button>
             </div>
         </form>

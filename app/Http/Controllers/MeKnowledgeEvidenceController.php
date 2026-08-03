@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
+use App\Models\Indicator;
 use App\Models\MeIndicatorAchievement;
 use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MePerformanceReport;
+use App\Models\MeRepositoryFolder;
 use App\Models\MeRepositoryDocumentVersion;
 use App\Models\Sector;
+use App\Services\MeRepositoryFolderService;
 use App\Services\MeReportingNotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -28,6 +32,9 @@ class MeKnowledgeEvidenceController extends Controller
             ->only(['download', 'downloadVersion']);
         $this->middleware('permission:me.configuration.manage')->only([
             'store',
+            'storeFolder',
+            'updateFolder',
+            'destroyFolder',
             'update',
             'replaceFile',
             'destroy',
@@ -40,14 +47,16 @@ class MeKnowledgeEvidenceController extends Controller
     {
         $search = trim((string) $request->query('q', ''));
         $selectedPortfolioId = trim((string) $request->query('portfolio_id', ''));
+        $selectedFolderId = trim((string) $request->query('folder_id', ''));
 
         $itemsQuery = MeKnowledgeEvidenceItem::query()
-            ->with(['portfolio:id,name', 'creator:id,name', 'versions'])
+            ->with(['portfolio:id,name', 'folder:id,portfolio_id,name', 'creator:id,name', 'versions'])
             ->withCount(['indicators', 'links', 'reportDocuments', 'matrixVersions']);
         $this->scopeRepositoryQuery($itemsQuery);
 
         $items = $itemsQuery
             ->when($selectedPortfolioId !== '', fn ($query) => $query->where('portfolio_id', $selectedPortfolioId))
+            ->when($selectedFolderId !== '', fn ($query) => $query->where('folder_id', $selectedFolderId))
             ->when($search !== '', function ($query) use ($search) {
                 $escaped = addcslashes($search, '%_\\');
                 $term = '%'.$escaped.'%';
@@ -56,12 +65,34 @@ class MeKnowledgeEvidenceController extends Controller
                     $searchQuery->whereLike('title', $term)
                         ->orWhereLike('description', $term)
                         ->orWhereLike('original_filename', $term)
-                        ->orWhereLike('external_url', $term);
+                        ->orWhereLike('external_url', $term)
+                        ->orWhereHas('folder', fn ($folderQuery) => $folderQuery
+                            ->whereLike('name', $term));
                 });
             })
+            ->orderBy('folder_id')
             ->latest()
-            ->paginate(15)
+            ->paginate(50)
             ->withQueryString();
+
+        $folderQuery = MeRepositoryFolder::query()
+            ->with(['portfolio:id,name', 'indicators:id,indicator_code,name'])
+            ->withCount('documents')
+            ->orderBy('name');
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToPortfolioOwnedRecords($folderQuery);
+        }
+        $folders = $folderQuery
+            ->when($selectedPortfolioId !== '', fn ($query) => $query->where('portfolio_id', $selectedPortfolioId))
+            ->get();
+
+        $indicatorQuery = Indicator::query()
+            ->with('projectComponent.program:id,sector_id')
+            ->orderBy('indicator_code');
+        if ($this->userHasAssignedPortfolioScope()) {
+            $this->applyAssignedPortfolioScopeToIndicators($indicatorQuery);
+        }
+        $indicators = $indicatorQuery->get(['id', 'indicator_code', 'name', 'project_component_id']);
 
         $portfolioQuery = Sector::query()->orderBy('name');
         if ($this->userHasAssignedPortfolioScope()) {
@@ -73,15 +104,21 @@ class MeKnowledgeEvidenceController extends Controller
             'items' => $items,
             'portfolios' => $portfolios,
             'documentTypes' => MeKnowledgeEvidenceItem::DOCUMENT_TYPES,
+            'folders' => $folders,
+            'indicators' => $indicators,
             'search' => $search,
             'selectedPortfolioId' => $selectedPortfolioId,
+            'selectedFolderId' => $selectedFolderId,
         ]);
     }
 
     public function store(Request $request)
     {
+        $folders = app(MeRepositoryFolderService::class);
+
         $validated = $request->validate([
-            'portfolio_id' => 'required|uuid|exists:myb_sectors,id',
+            'folder_id' => 'nullable|uuid|exists:me_repository_folders,id',
+            'portfolio_id' => 'nullable|required_without:folder_id|uuid|exists:myb_sectors,id',
             'title' => 'required|string|max:255',
             'document_type' => [
                 'required',
@@ -98,24 +135,30 @@ class MeKnowledgeEvidenceController extends Controller
             'external_url' => 'nullable|required_without:evidence_file|url|max:2000',
         ]);
 
-        $this->assertPortfolioInCurrentScope((string) $validated['portfolio_id']);
+        $folder = filled($validated['folder_id'] ?? null)
+            ? MeRepositoryFolder::query()->findOrFail($validated['folder_id'])
+            : $folders->general((string) $validated['portfolio_id'], (string) $request->user()->id);
+        $this->assertFolderInCurrentScope($folder);
+        $portfolioId = (string) $folder->portfolio_id;
+        $this->assertPortfolioInCurrentScope($portfolioId);
 
         $file = $request->file('evidence_file');
         $checksum = $file ? hash_file('sha256', $file->getRealPath()) : null;
         if ($checksum && MeKnowledgeEvidenceItem::query()
-            ->where('portfolio_id', $validated['portfolio_id'])
+            ->where('folder_id', $folder->id)
             ->where('checksum_sha256', $checksum)
             ->whereNull('retired_at')
             ->exists()) {
             throw ValidationException::withMessages([
-                'evidence_file' => 'This exact file is already in the selected portfolio repository. Link the existing document instead of uploading a duplicate.',
+                'evidence_file' => 'This exact file is already in the selected repository folder. Link the existing document instead of uploading a duplicate.',
             ]);
         }
         $storedPath = $file?->store('me/knowledge-evidence', 'local');
 
         try {
             $evidence = MeKnowledgeEvidenceItem::create([
-                'portfolio_id' => $validated['portfolio_id'],
+                'portfolio_id' => $portfolioId,
+                'folder_id' => $folder->id,
                 'title' => trim((string) $validated['title']),
                 'document_type' => $validated['document_type'],
                 'repository_category' => $this->repositoryCategory($validated['document_type']),
@@ -156,15 +199,99 @@ class MeKnowledgeEvidenceController extends Controller
             ->with('success', 'Evidence item added to the repository.');
     }
 
+    public function storeFolder(Request $request)
+    {
+        $validated = $request->validate([
+            'portfolio_id' => ['required', 'uuid', Rule::exists('myb_sectors', 'id')],
+            'name' => [
+                'required', 'string', 'max:180',
+                Rule::unique('me_repository_folders', 'name')
+                    ->where(fn ($query) => $query->where('portfolio_id', $request->input('portfolio_id'))),
+            ],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'indicator_ids' => ['required', 'array', 'min:1'],
+            'indicator_ids.*' => ['required', 'uuid', 'distinct', Rule::exists('myb_indicators', 'id')],
+        ]);
+        $this->assertPortfolioInCurrentScope((string) $validated['portfolio_id']);
+        $this->assertIndicatorsBelongToPortfolio($validated['indicator_ids'], (string) $validated['portfolio_id']);
+
+        DB::transaction(function () use ($validated, $request): void {
+            $folder = MeRepositoryFolder::query()->create([
+                'portfolio_id' => $validated['portfolio_id'],
+                'name' => trim((string) $validated['name']),
+                'description' => $validated['description'] ?? null,
+                'created_by' => $request->user()->id,
+                'updated_by' => $request->user()->id,
+            ]);
+            $folder->indicators()->sync(collect($validated['indicator_ids'])->mapWithKeys(
+                fn (string $id): array => [$id => ['linked_by' => $request->user()->id]]
+            )->all());
+        });
+
+        return back()->with('success', 'Repository folder created and linked to the selected indicator(s).');
+    }
+
+    public function updateFolder(Request $request, MeRepositoryFolder $folder)
+    {
+        $this->assertFolderInCurrentScope($folder);
+        $validated = $request->validate([
+            'name' => [
+                'required', 'string', 'max:180',
+                Rule::unique('me_repository_folders', 'name')
+                    ->where(fn ($query) => $query->where('portfolio_id', $folder->portfolio_id))
+                    ->ignore($folder->id),
+            ],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'indicator_ids' => ['required', 'array', 'min:1'],
+            'indicator_ids.*' => ['required', 'uuid', 'distinct', Rule::exists('myb_indicators', 'id')],
+        ]);
+        $this->assertIndicatorsBelongToPortfolio($validated['indicator_ids'], (string) $folder->portfolio_id);
+
+        DB::transaction(function () use ($validated, $request, $folder): void {
+            $folder->update([
+                'name' => trim((string) $validated['name']),
+                'description' => $validated['description'] ?? null,
+                'updated_by' => $request->user()->id,
+            ]);
+            $folder->indicators()->sync(collect($validated['indicator_ids'])->mapWithKeys(
+                fn (string $id): array => [$id => ['linked_by' => $request->user()->id]]
+            )->all());
+        });
+
+        return back()->with('success', 'Folder name, description and indicator links updated.');
+    }
+
+    public function destroyFolder(MeRepositoryFolder $folder)
+    {
+        $this->assertFolderInCurrentScope($folder);
+        if ($folder->documents()->exists() || $folder->indicators()->exists()) {
+            throw ValidationException::withMessages([
+                'folder' => 'Move or delete the documents and indicator links before deleting this folder.',
+            ]);
+        }
+        $folder->delete();
+
+        return back()->with('success', 'Empty repository folder deleted.');
+    }
+
     public function update(Request $request, MeKnowledgeEvidenceItem $evidence)
     {
         $this->assertRepositoryItemInCurrentScope($evidence);
         $validated = $request->validate([
+            'folder_id' => ['required', 'uuid', Rule::exists('me_repository_folders', 'id')],
             'title' => 'required|string|max:255',
             'document_type' => ['required', Rule::in(array_keys(MeKnowledgeEvidenceItem::DOCUMENT_TYPES))],
             'description' => 'nullable|string|max:5000',
             'external_url' => 'nullable|url|max:2000',
         ]);
+
+        $folder = MeRepositoryFolder::query()->findOrFail($validated['folder_id']);
+        $this->assertFolderInCurrentScope($folder);
+        if ((string) $folder->portfolio_id !== (string) $evidence->portfolio_id) {
+            throw ValidationException::withMessages([
+                'folder_id' => 'A document can only be moved to a folder in the same portfolio.',
+            ]);
+        }
 
         $evidence->update([
             ...$validated,
@@ -289,13 +416,8 @@ class MeKnowledgeEvidenceController extends Controller
         $this->assertRepositoryItemInCurrentScope($evidence);
         $validated = $request->validate([
             'validation_status' => ['required', Rule::in(['validated', 'rejected'])],
-            'validation_notes' => ['nullable', 'string', 'max:5000'],
+            'validation_notes' => ['required', 'string', 'max:5000'],
         ]);
-        if ($validated['validation_status'] === 'rejected' && blank($validated['validation_notes'] ?? null)) {
-            throw ValidationException::withMessages([
-                'validation_notes' => 'Explain why this Means of Verification was rejected.',
-            ]);
-        }
         $evidence->update([
             'validation_status' => $validated['validation_status'],
             'validated_by' => $request->user()->id,
@@ -318,6 +440,28 @@ class MeKnowledgeEvidenceController extends Controller
         if ($this->userHasAssignedPortfolioScope()
             && ! $this->portfolioOwnedRecordIsInAssignedPortfolio($evidence)) {
             abort(403, 'You do not have access to this repository item.');
+        }
+    }
+
+    protected function assertFolderInCurrentScope(MeRepositoryFolder $folder): void
+    {
+        if ($this->userHasAssignedPortfolioScope()
+            && ! $this->portfolioOwnedRecordIsInAssignedPortfolio($folder)) {
+            abort(403, 'You do not have access to this repository folder.');
+        }
+    }
+
+    /** @param array<int, string> $indicatorIds */
+    private function assertIndicatorsBelongToPortfolio(array $indicatorIds, string $portfolioId): void
+    {
+        $validCount = Indicator::query()
+            ->whereIn('id', $indicatorIds)
+            ->whereHas('projectComponent.program', fn ($query) => $query->where('sector_id', $portfolioId))
+            ->count();
+        if ($validCount !== count(array_unique($indicatorIds))) {
+            throw ValidationException::withMessages([
+                'indicator_ids' => 'Every linked indicator must belong to the selected folder portfolio.',
+            ]);
         }
     }
 

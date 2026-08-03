@@ -712,6 +712,20 @@
                             </select>
                         </div>
                     </div>
+                    <details class="mt-3" @if(collect($filters)->only(['geographic_scope','country','rec','implementing_institution_type','implementing_institution','priority_theme','gender','age_group','stakeholder_category'])->filter()->isNotEmpty()) open @endif>
+                        <summary class="fw-semibold text-success">Beneficiary and achievement disaggregation filters</summary>
+                        <div class="filter-grid mt-3">
+                            <div><label>Geographic scope</label><select class="form-select" name="geographic_scope"><option value="">All scopes</option>@foreach($filterOptions['geographic_scopes'] as $value=>$label)<option value="{{ $value }}" @selected($filters['geographic_scope']===$value)>{{ $label }}</option>@endforeach</select></div>
+                            <div><label>Country</label><select class="form-select" name="country"><option value="">All countries</option>@foreach($filterOptions['countries'] as $value=>$label)<option value="{{ $value }}" @selected($filters['country']===$value)>{{ $label }}</option>@endforeach</select></div>
+                            <div><label>Regional Economic Community</label><select class="form-select" name="rec"><option value="">All RECs</option>@foreach($filterOptions['recs'] as $value=>$label)<option value="{{ $value }}" @selected($filters['rec']===$value)>{{ $label }}</option>@endforeach</select></div>
+                            <div><label>Institution type</label><select class="form-select" name="implementing_institution_type"><option value="">All types</option>@foreach($filterOptions['institution_types'] as $value=>$label)<option value="{{ $value }}" @selected($filters['implementing_institution_type']===$value)>{{ $label }}</option>@endforeach</select></div>
+                            <div><label>Implementing institution</label><select class="form-select" name="implementing_institution"><option value="">All institutions</option>@foreach($filterOptions['institutions'] as $value=>$label)<option value="{{ $value }}" @selected($filters['implementing_institution']===$value)>{{ $label }}</option>@endforeach</select></div>
+                            <div><label>ATTP priority thematic area</label><select class="form-select" name="priority_theme"><option value="">All priority areas</option>@foreach($filterOptions['priority_themes'] as $value=>$label)<option value="{{ $value }}" @selected($filters['priority_theme']===$value)>{{ $label }}</option>@endforeach</select></div>
+                            <div><label>Gender</label><select class="form-select" name="gender"><option value="">Female and male</option>@foreach($filterOptions['genders'] as $value=>$label)<option value="{{ $value }}" @selected($filters['gender']===$value)>{{ $label }}</option>@endforeach</select></div>
+                            <div><label>Age group</label><select class="form-select" name="age_group"><option value="">All age groups</option>@foreach($filterOptions['age_groups'] as $value=>$label)<option value="{{ $value }}" @selected($filters['age_group']===$value)>{{ $label }}</option>@endforeach</select></div>
+                            <div><label>Stakeholder category</label><select class="form-select" name="stakeholder_category"><option value="">All stakeholders</option>@foreach($filterOptions['stakeholder_categories'] as $value=>$label)<option value="{{ $value }}" @selected($filters['stakeholder_category']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        </div>
+                    </details>
                     <div class="filter-actions">
                         <a href="{{ route('budget.me.rebuild.reporting-dashboard') }}" class="btn btn-light border">
                             <i class="feather-rotate-ccw me-1" aria-hidden="true"></i>Reset

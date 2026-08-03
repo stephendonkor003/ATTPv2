@@ -1316,6 +1316,12 @@ Route::middleware(['auth', 'not.funding.partner'])
 
         Route::post('me/knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'store'])
             ->name('me.knowledge-evidence.store');
+        Route::post('me/knowledge-and-evidence-repository/folders', [MeKnowledgeEvidenceController::class, 'storeFolder'])
+            ->name('me.knowledge-evidence.folders.store');
+        Route::put('me/knowledge-and-evidence-repository/folders/{folder}', [MeKnowledgeEvidenceController::class, 'updateFolder'])
+            ->name('me.knowledge-evidence.folders.update');
+        Route::delete('me/knowledge-and-evidence-repository/folders/{folder}', [MeKnowledgeEvidenceController::class, 'destroyFolder'])
+            ->name('me.knowledge-evidence.folders.destroy');
         Route::put('me/knowledge-and-evidence-repository/{evidence}', [MeKnowledgeEvidenceController::class, 'update'])
             ->name('me.knowledge-evidence.update');
         Route::post('me/knowledge-and-evidence-repository/{evidence}/replace-file', [MeKnowledgeEvidenceController::class, 'replaceFile'])
@@ -1379,6 +1385,7 @@ Route::middleware(['auth', 'not.funding.partner'])
                 Route::post('{report}/review', 'review')->name('review');
                 Route::post('{report}/archive', 'archive')->name('archive');
                 Route::get('{report}/documents/{document}', 'downloadDocument')->name('documents.download');
+                Route::post('{report}/documents/{document}/replace', 'replaceDocument')->name('documents.replace');
                 Route::delete('{report}/documents/{document}', 'destroyDocument')->name('documents.destroy');
             });
 
@@ -3869,6 +3876,9 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
         Route::get('/me-data/performance-reports/{report}/documents/{document}', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'downloadDocument'])
             ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.view|think_tank.me.reports.manage'])
             ->name('performance-reports.documents.download');
+        Route::post('/me-data/performance-reports/{report}/documents/{document}/replace', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'replaceDocument'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.manage|think_tank.me.reports.submit'])
+            ->name('performance-reports.documents.replace');
         Route::delete('/me-data/performance-reports/{report}/documents/{document}', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'destroyDocument'])
             ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.manage'])
             ->name('performance-reports.documents.destroy');

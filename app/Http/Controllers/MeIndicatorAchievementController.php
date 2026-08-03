@@ -9,6 +9,7 @@ use App\Models\MePerformanceReport;
 use App\Models\MePerformanceReportIndicatorResult;
 use App\Models\MeRepositoryDocumentLink;
 use App\Models\MeRepositoryDocumentVersion;
+use App\Services\MeRepositoryFolderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -163,8 +164,10 @@ class MeIndicatorAchievementController extends Controller
 
         $file = $request->file('evidence_file');
         $checksum = hash_file('sha256', $file->getRealPath());
+        $folder = app(MeRepositoryFolderService::class)->forReport($report, (string) $request->user()->id);
         $existing = MeKnowledgeEvidenceItem::query()
             ->where('portfolio_id', $report->portfolio_id)
+            ->where('folder_id', $folder->id)
             ->where('checksum_sha256', $checksum)
             ->whereNull('retired_at')
             ->first();
@@ -177,9 +180,10 @@ class MeIndicatorAchievementController extends Controller
 
         $path = $file->store('me/knowledge-evidence/achievements/'.$achievement->id, 'local');
         try {
-            DB::transaction(function () use ($request, $report, $achievement, $validated, $file, $path, $checksum): void {
+            DB::transaction(function () use ($request, $report, $achievement, $validated, $file, $path, $checksum, $folder): void {
                 $item = MeKnowledgeEvidenceItem::query()->create([
                     'portfolio_id' => $report->portfolio_id,
+                    'folder_id' => $folder->id,
                     'title' => trim((string) $validated['document_title']),
                     'document_type' => 'supporting_evidence',
                     'repository_category' => 'evidence',

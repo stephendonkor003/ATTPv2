@@ -161,7 +161,7 @@ it('renders every requested report section and component linkage control', funct
 
     expect($lifecycleActions)
         ->toContain('Submit Report')
-        ->toContain('Return Report')
+        ->toContain('Reject &amp; Return')
         ->toContain('Approve Report')
         ->toContain('Archive Report')
         ->toContain('lifecycle-action--submit')

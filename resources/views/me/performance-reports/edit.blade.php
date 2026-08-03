@@ -793,10 +793,10 @@
                                             Time aggregation: {{ \App\Models\Indicator::AGGREGATION_METHODS[$result->aggregation_method] ?? 'Latest reported value' }}
                                             &middot; Organization roll-up: {{ \App\Models\Indicator::ORGANIZATION_ROLLUP_METHODS[$indicator?->organization_rollup_method] ?? 'Sum' }}
                                         </div>
-                                        @if ($indicator?->meansOfVerification)
-                                            <a class="mov-link" href="{{ route('budget.me.rebuild.knowledge-repository', ['q' => $indicator->meansOfVerification->title]) }}" target="_blank" rel="noopener">
+                                        @if ($indicator?->meansOfVerificationFolder)
+                                            <a class="mov-link" href="{{ route('budget.me.rebuild.knowledge-repository', ['folder_id' => $indicator->meansOfVerificationFolder->id]) }}" target="_blank" rel="noopener">
                                                 <i class="feather-archive" aria-hidden="true"></i>
-                                                MOV repository: {{ $indicator->meansOfVerification->title }}
+                                                MOV folder: {{ $indicator->meansOfVerificationFolder->name }} ({{ $indicator->meansOfVerificationFolder->documents->count() }} documents)
                                                 <i class="feather-external-link ms-auto" aria-hidden="true"></i>
                                             </a>
                                         @else
@@ -849,6 +849,10 @@
                                         <div class="existing-document">
                                             <div class="document-file">
                                                 <strong>{{ $document->document_name }}</strong>
+                                                <small class="text-muted">Repository version {{ $document->repositoryItem?->version_number ?: 1 }}</small>
+                                                @if($document->repositoryItem?->versions?->isNotEmpty())
+                                                    <details class="small mt-1"><summary class="text-primary">Version history ({{ $document->repositoryItem->versions->count() }})</summary><ol class="mb-0 ps-3">@foreach($document->repositoryItem->versions->sortByDesc('version_number') as $version)<li><a href="{{ route('budget.me.knowledge-evidence.versions.download',[$document->repositoryItem,$version]) }}">v{{ $version->version_number }} - {{ $version->original_filename }}</a>@if($version->change_notes) - {{ $version->change_notes }}@endif</li>@endforeach</ol></details>
+                                                @endif
                                                 <small class="text-muted">{{ $document->original_filename }} · {{ $document->formattedSize() }}</small>
                                             </div>
                                             <a href="{{ route('budget.me.performance-reports.documents.download', [$report, $document]) }}" class="btn btn-sm btn-light border">
@@ -983,15 +987,15 @@
                 @endforeach
                 @if ($report->documents->isNotEmpty())
                     <section class="report-section">
-                        <div class="section-body d-flex flex-wrap align-items-center justify-content-between gap-2">
-                            <span class="text-muted small">Need to replace an attachment? Remove it here, then save the replacement above.</span>
-                            <div class="d-flex flex-wrap gap-2">
-                                @foreach ($report->documents as $document)
-                                    <button type="submit" form="delete-document-{{ $document->id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove {{ addslashes($document->document_name) }}?')">
-                                        <i class="feather-trash-2 me-1" aria-hidden="true"></i>{{ \Illuminate\Support\Str::limit($document->document_name, 24) }}
-                                    </button>
-                                @endforeach
-                            </div>
+                        <div class="section-head"><span class="section-icon"><i class="feather-layers"></i></span><div><h5>Document revisions</h5><p>Upload a corrected version without deleting the earlier audit record.</p></div></div>
+                        <div class="section-body d-grid gap-3">
+                            @foreach ($report->documents as $document)
+                                <div class="border rounded-3 p-3">
+                                    <div class="fw-semibold mb-2">{{ $document->document_name }} - current version {{ $document->repositoryItem?->version_number ?: 1 }}</div>
+                                    <form method="POST" action="{{ route('budget.me.performance-reports.documents.replace',[$report,$document]) }}" enctype="multipart/form-data" class="row g-2 align-items-end">@csrf<div class="col-lg-5"><label class="form-label small">Corrected file</label><input type="file" name="replacement_file" class="form-control" required></div><div class="col-lg-5"><label class="form-label small">What changed? *</label><input name="change_notes" class="form-control" required maxlength="5000" placeholder="Describe corrections made after review"></div><div class="col-lg-2"><button class="btn btn-outline-primary w-100">Upload v{{ ((int)($document->repositoryItem?->version_number ?: 1))+1 }}</button></div></form>
+                                    <div class="text-end mt-2"><button type="submit" form="delete-document-{{ $document->id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Unlink {{ addslashes($document->document_name) }}? The repository version history will be retained.')"><i class="feather-trash-2 me-1"></i>Unlink document</button></div>
+                                </div>
+                            @endforeach
                         </div>
                     </section>
                 @endif

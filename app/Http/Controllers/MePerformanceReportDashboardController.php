@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\ConsortiumThinkTank;
 use App\Models\Indicator;
+use App\Models\MeDisaggregationDimension;
+use App\Models\MeIndicatorAchievement;
+use App\Models\MeIndicatorAchievementDisaggregation;
 use App\Models\MePerformanceReport;
 use App\Models\MePerformanceReportIndicatorResult;
 use App\Models\Project;
@@ -276,6 +279,21 @@ class MePerformanceReportDashboardController extends Controller
 
     private function applyFilters(Builder $query, array $filters): Builder
     {
+        $disaggregationKeys = [
+            'geographic_scope', 'country', 'rec', 'implementing_institution_type',
+            'implementing_institution', 'priority_theme', 'gender', 'age_group',
+            'stakeholder_category',
+        ];
+        if (collect($disaggregationKeys)->contains(fn (string $key): bool => filled($filters[$key] ?? null))) {
+            $query->whereHas('indicatorResults.achievements.breakdowns', function (Builder $breakdownQuery) use ($filters, $disaggregationKeys): void {
+                foreach ($disaggregationKeys as $key) {
+                    if (filled($filters[$key] ?? null)) {
+                        $breakdownQuery->where($key, $filters[$key]);
+                    }
+                }
+            });
+        }
+
         return $query
             ->when(filled($filters['reporting_year']), fn (Builder $builder): Builder => $builder
                 ->where('reporting_year', $filters['reporting_year']))
@@ -344,6 +362,15 @@ class MePerformanceReportDashboardController extends Controller
             'indicator_id' => $this->uuidOrNull($request->query('indicator_id')),
             'thematic_area_id' => $this->uuidOrNull($request->query('thematic_area_id')),
             'status' => array_key_exists($status, self::STAGES) ? $status : null,
+            'geographic_scope' => $this->allowedFilter($request, 'geographic_scope', MeIndicatorAchievement::GEOGRAPHIC_SCOPES),
+            'country' => $request->filled('country') ? trim((string) $request->query('country')) : null,
+            'rec' => $this->allowedFilter($request, 'rec', MeIndicatorAchievement::RECS),
+            'implementing_institution_type' => $this->allowedFilter($request, 'implementing_institution_type', MeIndicatorAchievement::INSTITUTION_TYPES),
+            'implementing_institution' => $request->filled('implementing_institution') ? trim((string) $request->query('implementing_institution')) : null,
+            'priority_theme' => $this->allowedFilter($request, 'priority_theme', MeIndicatorAchievement::PRIORITY_THEMES),
+            'gender' => $this->allowedFilter($request, 'gender', MeIndicatorAchievement::GENDERS),
+            'age_group' => $this->allowedFilter($request, 'age_group', MeIndicatorAchievement::AGE_GROUPS),
+            'stakeholder_category' => $this->allowedFilter($request, 'stakeholder_category', MeIndicatorAchievement::STAKEHOLDER_CATEGORIES),
         ];
     }
 
@@ -397,7 +424,32 @@ class MePerformanceReportDashboardController extends Controller
             'statuses' => collect(self::STAGES)->mapWithKeys(
                 fn (array $configuration, string $key): array => [$key => $configuration['label']]
             ),
+            'geographic_scopes' => MeIndicatorAchievement::GEOGRAPHIC_SCOPES,
+            'countries' => MeDisaggregationDimension::query()
+                ->where('code', 'country')
+                ->with(['options' => fn ($query) => $query->where('is_active', true)->orderBy('name')])
+                ->first()?->options?->pluck('name', 'name')->all() ?? [],
+            'recs' => MeIndicatorAchievement::RECS,
+            'institution_types' => MeIndicatorAchievement::INSTITUTION_TYPES,
+            'institutions' => MeIndicatorAchievementDisaggregation::query()
+                ->whereNotNull('implementing_institution')
+                ->where('implementing_institution', '!=', '')
+                ->distinct()
+                ->orderBy('implementing_institution')
+                ->pluck('implementing_institution', 'implementing_institution')
+                ->all(),
+            'priority_themes' => MeIndicatorAchievement::PRIORITY_THEMES,
+            'genders' => MeIndicatorAchievement::GENDERS,
+            'age_groups' => MeIndicatorAchievement::AGE_GROUPS,
+            'stakeholder_categories' => MeIndicatorAchievement::STAKEHOLDER_CATEGORIES,
         ];
+    }
+
+    private function allowedFilter(Request $request, string $key, array $options): ?string
+    {
+        $value = trim((string) $request->query($key));
+
+        return array_key_exists($value, $options) ? $value : null;
     }
 
     private function groupReports(

@@ -51,13 +51,11 @@ class MeIndicatorAchievement extends BaseModel
     public const GENDERS = [
         'female' => 'Female',
         'male' => 'Male',
-        'other_not_reported' => 'Other / not reported',
     ];
 
     public const AGE_GROUPS = [
         'youth_below_35' => 'Youth below 35 years',
         'adult_35_plus' => 'Adults aged 35 years and above',
-        'not_reported' => 'Not reported',
     ];
 
     public const STAKEHOLDER_CATEGORIES = [

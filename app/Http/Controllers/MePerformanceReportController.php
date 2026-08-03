@@ -14,10 +14,12 @@ use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MePerformanceReport;
 use App\Models\MePerformanceReportDocument;
 use App\Models\MeRepositoryDocumentLink;
+use App\Models\MeRepositoryDocumentVersion;
 use App\Models\MeReportingPeriod;
 use App\Support\IndicatorReportingSchedule;
 use App\Services\IndicatorAggregationService;
 use App\Services\MeReportingNotificationService;
+use App\Services\MeRepositoryFolderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -38,7 +40,7 @@ class MePerformanceReportController extends Controller
         $this->middleware('permission:me.performance_reports.view|me.performance_reports.review|me.performance_reports.archive|me.data_entry.view|me.data_entry.manage|me.configuration.view|me.configuration.manage')
             ->only(['create', 'edit', 'downloadDocument']);
         $this->middleware('permission:me.data_entry.manage|me.configuration.manage')
-            ->only(['store', 'update', 'submit', 'destroyDocument']);
+            ->only(['store', 'update', 'submit', 'replaceDocument', 'destroyDocument']);
         $this->middleware('permission:me.performance_reports.review')->only('review');
         $this->middleware('permission:me.performance_reports.archive')->only('archive');
     }
@@ -120,14 +122,16 @@ class MePerformanceReportController extends Controller
             'projectComponent:id,project_id,name,governance_node_id',
             'responsibleDirectorate:id,name,code',
             'reportingPeriod:id,label,period_start,period_end',
-            'indicatorResults.indicator:id,indicator_code,name,unit_id,means_of_verification_id,frequency_of_reporting_id,data_collection_method,organization_rollup_method',
+            'indicatorResults.indicator:id,indicator_code,name,unit_id,means_of_verification_id,means_of_verification_folder_id,frequency_of_reporting_id,data_collection_method,organization_rollup_method',
             'indicatorResults.indicator.unit:id,name,symbol',
             'indicatorResults.indicator.meansOfVerification:id,title,file_path,external_url',
+            'indicatorResults.indicator.meansOfVerificationFolder:id,portfolio_id,name',
+            'indicatorResults.indicator.meansOfVerificationFolder.documents:id,folder_id,title,document_type,validation_status,version_number',
             'indicatorResults.indicator.disaggregationRequirements.dimension:id,code,name,dimension_group,sort_order',
             'indicatorResults.achievements.breakdowns',
             'indicatorResults.achievements.leadThinkTank:id,name,country',
             'indicatorResults.achievements.documentLinks.repositoryItem:id,title,document_type,repository_category,original_filename,file_size,validation_status',
-            'documents',
+            'documents.repositoryItem.versions',
             'thinkTank:id,name,role,country',
             'createdBy:id,name',
             'reviewedBy:id,name',
@@ -271,15 +275,10 @@ class MePerformanceReportController extends Controller
                 MePerformanceReport::STATUS_VERIFIED,
                 MePerformanceReport::STATUS_APPROVED,
             ])],
-            'review_notes' => ['nullable', 'string', 'max:5000'],
+            'review_notes' => ['required', 'string', 'max:5000'],
         ]);
 
         $action = (string) $validated['review_action'];
-        if ($action === 'returned' && blank($validated['review_notes'] ?? null)) {
-            throw ValidationException::withMessages([
-                'review_notes' => 'Explain the corrections required before returning this report.',
-            ]);
-        }
         $allowed = match ($action) {
             'returned' => in_array($report->status, [MePerformanceReport::STATUS_SUBMITTED, MePerformanceReport::STATUS_VERIFIED], true),
             MePerformanceReport::STATUS_VERIFIED => $report->isSubmitted(),
@@ -489,6 +488,126 @@ class MePerformanceReportController extends Controller
         }
 
         return back()->with('success', 'Supporting document removed.');
+    }
+
+    public function replaceDocument(
+        Request $request,
+        MePerformanceReport $report,
+        MePerformanceReportDocument $document
+    ): RedirectResponse {
+        $this->assertReportInScope($request, $report);
+        abort_unless((string) $document->report_id === (string) $report->id, 404);
+        abort_unless($this->userMayAuthorReport($request, $report), 403, 'Only the assigned report author can upload a new evidence version.');
+        if (! $report->isEditable()) {
+            throw ValidationException::withMessages([
+                'replacement_file' => 'A new document version can only be uploaded while the report is a draft or returned for correction.',
+            ]);
+        }
+        $validated = $request->validate([
+            'replacement_file' => [
+                'required', 'file', 'max:20480',
+                'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip',
+            ],
+            'change_notes' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $file = $request->file('replacement_file');
+        $checksum = hash_file('sha256', $file->getRealPath());
+        $document->load('repositoryItem.versions');
+        $repositoryItem = $document->repositoryItem;
+        if ($repositoryItem?->checksum_sha256 && hash_equals((string) $repositoryItem->checksum_sha256, $checksum)) {
+            throw ValidationException::withMessages([
+                'replacement_file' => 'This file is identical to the current version.',
+            ]);
+        }
+
+        $folder = app(MeRepositoryFolderService::class)->forReport($report, (string) $request->user()->id);
+        $path = $file->store('me/performance-reports/'.$report->id, 'local');
+        try {
+            DB::transaction(function () use ($request, $report, $document, $repositoryItem, $folder, $file, $path, $checksum, $validated): void {
+                if (! $repositoryItem) {
+                    $repositoryItem = MeKnowledgeEvidenceItem::query()->create([
+                        'portfolio_id' => $report->portfolio_id,
+                        'folder_id' => $folder->id,
+                        'title' => $document->document_name,
+                        'document_type' => 'supporting_evidence',
+                        'repository_category' => 'evidence',
+                        'description' => 'Supporting evidence synchronized from performance report '.$report->periodLabel().'.',
+                        'file_path' => $document->file_path,
+                        'original_filename' => $document->original_filename,
+                        'mime_type' => $document->mime_type,
+                        'file_size' => $document->file_size,
+                        'version_number' => 1,
+                        'created_by' => $document->uploaded_by,
+                        'updated_by' => $request->user()->id,
+                    ]);
+                    if ($document->file_path) {
+                        MeRepositoryDocumentVersion::query()->create([
+                            'repository_item_id' => $repositoryItem->id,
+                            'version_number' => 1,
+                            'file_path' => $document->file_path,
+                            'original_filename' => $document->original_filename,
+                            'mime_type' => $document->mime_type,
+                            'file_size' => $document->file_size,
+                            'change_notes' => 'Original report attachment registered before replacement.',
+                            'uploaded_by' => $document->uploaded_by,
+                        ]);
+                    }
+                    $document->update(['repository_item_id' => $repositoryItem->id]);
+                }
+
+                $nextVersion = max(
+                    (int) $repositoryItem->version_number,
+                    (int) $repositoryItem->versions()->max('version_number')
+                ) + 1;
+                MeRepositoryDocumentVersion::query()->create([
+                    'repository_item_id' => $repositoryItem->id,
+                    'version_number' => $nextVersion,
+                    'file_path' => $path,
+                    'original_filename' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'checksum_sha256' => $checksum,
+                    'change_notes' => trim((string) $validated['change_notes']),
+                    'uploaded_by' => $request->user()->id,
+                ]);
+                $repositoryItem->update([
+                    'folder_id' => $folder->id,
+                    'file_path' => $path,
+                    'original_filename' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'checksum_sha256' => $checksum,
+                    'version_number' => $nextVersion,
+                    'validation_status' => 'pending',
+                    'validated_by' => null,
+                    'validated_at' => null,
+                    'validation_notes' => null,
+                    'updated_by' => $request->user()->id,
+                ]);
+                $document->update([
+                    'file_path' => $path,
+                    'original_filename' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'validation_status' => 'pending',
+                    'validated_by' => null,
+                    'validated_at' => null,
+                    'validation_notes' => null,
+                    'uploaded_by' => $request->user()->id,
+                ]);
+                $repositoryItem->links()->firstOrCreate([
+                    'linkable_type' => MePerformanceReport::class,
+                    'linkable_id' => $report->id,
+                    'purpose' => 'report_attachment',
+                ], ['linked_by' => $request->user()->id]);
+            });
+        } catch (\Throwable $exception) {
+            Storage::disk('local')->delete($path);
+            throw $exception;
+        }
+
+        return back()->with('success', 'New document version uploaded. All earlier versions remain available in the audit history.');
     }
 
     protected function createReportFor(
@@ -777,12 +896,14 @@ class MePerformanceReportController extends Controller
         array &$storedPaths
     ): void {
         $names = $validated['document_names'] ?? [];
+        $folder = app(MeRepositoryFolderService::class)->forReport($report, (string) $request->user()->id);
         foreach ($request->file('documents', []) as $index => $file) {
             $title = trim((string) ($names[$index] ?? ''))
                 ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
             $checksum = hash_file('sha256', $file->getRealPath());
             $repositoryItem = MeKnowledgeEvidenceItem::query()
                 ->where('portfolio_id', $report->portfolio_id)
+                ->where('folder_id', $folder->id)
                 ->where('checksum_sha256', $checksum)
                 ->whereNull('retired_at')
                 ->first();
@@ -794,6 +915,7 @@ class MePerformanceReportController extends Controller
                 $storedPaths[] = $path;
                 $repositoryItem = MeKnowledgeEvidenceItem::query()->create([
                     'portfolio_id' => $report->portfolio_id,
+                    'folder_id' => $folder->id,
                     'title' => $title,
                     'document_type' => 'supporting_evidence',
                     'repository_category' => 'evidence',
