@@ -47,18 +47,19 @@
 
 @section('content')
     @php
-        $isThinkTankTransfer = $invoice->purchaseOrder?->po_type === 'think_tank_transfer';
+        $linkedPurchaseOrder = $linkedPurchaseOrder ?? ($invoice->purchaseOrder ?: $invoice->evidence?->purchaseOrder);
+        $isThinkTankTransfer = $linkedPurchaseOrder?->po_type === 'think_tank_transfer';
         $procurementTitle = $isThinkTankTransfer
             ? 'Funding to Think Tanks'
-            : ($invoice->procurement?->title ?? 'N/A');
+            : ($invoice->procurement?->title ?? $linkedPurchaseOrder?->po_title ?? 'Purchase order invoice');
         $procurementReference = $isThinkTankTransfer
-            ? ($invoice->purchaseOrder?->reference_no ?? 'Think tank transfer')
-            : ($invoice->procurement?->reference_no ?? 'N/A');
+            ? ($linkedPurchaseOrder?->reference_no ?? 'Think tank transfer')
+            : ($invoice->procurement?->reference_no ?? $linkedPurchaseOrder?->reference_no ?? 'N/A');
         $vendorName = $isThinkTankTransfer
-            ? ($invoice->purchaseOrder?->thinkTankMember?->name ?? $invoice->vendor?->name ?? 'Think Tank')
+            ? ($linkedPurchaseOrder?->thinkTankMember?->name ?? $invoice->vendor?->name ?? 'Think Tank')
             : ($invoice->vendor?->name ?? 'Vendor');
         $vendorEmail = $isThinkTankTransfer
-            ? ($invoice->purchaseOrder?->thinkTankMember?->email ?? $invoice->vendor?->email ?? 'N/A')
+            ? ($linkedPurchaseOrder?->thinkTankMember?->email ?? $invoice->vendor?->email ?? 'N/A')
             : ($invoice->vendor?->email ?? 'N/A');
     @endphp
     <div class="nxl-container invoice-show">
@@ -142,7 +143,7 @@
                         <div class="col-md-4">
                             <div class="text-muted small">Think Tank Receipt</div>
                             <div class="fw-semibold text-capitalize">
-                                {{ str_replace('_', ' ', $invoice->purchaseOrder?->status ?? 'pending') }}
+                                {{ str_replace('_', ' ', $linkedPurchaseOrder?->status ?? 'pending') }}
                             </div>
                         </div>
                     @endif
@@ -196,6 +197,38 @@
             </div>
         @endif
 
+        @if ($invoice->evidence)
+            @php($invoiceDocuments = collect($invoice->evidence->documents ?? [])->filter(fn ($document) => is_array($document)))
+            <div class="card detail-card mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                        <div>
+                            <h6 class="fw-semibold mb-1">Invoice & Evidence Documents</h6>
+                            <div class="small text-muted">
+                                {{ $invoice->evidence->purchaseRequestItem?->milestone ?? 'Monthly deliverable' }}
+                                @if ($invoice->evidence->deliverable_date) · {{ $invoice->evidence->deliverable_date->format('d M Y') }} @endif
+                            </div>
+                        </div>
+                        <span class="badge bg-success-subtle text-success">{{ $invoiceDocuments->count() }} file(s)</span>
+                    </div>
+                    @forelse ($invoiceDocuments as $documentIndex => $document)
+                        <div class="d-flex align-items-center gap-3 py-2 border-bottom">
+                            <span class="badge bg-light text-dark text-capitalize">{{ $document['document_type'] ?? 'evidence' }}</span>
+                            <div class="min-w-0 flex-grow-1">
+                                <div class="fw-semibold text-truncate">{{ $document['display_name'] ?? $document['name'] ?? 'Document' }}</div>
+                                <div class="small text-muted">Uploaded by {{ $document['uploaded_by_name'] ?? $document['source_label'] ?? 'ATTP' }}</div>
+                            </div>
+                            <a href="{{ route('procurement.purchase-orders.line-item-evidence.document', [$linkedPurchaseOrder, $invoice->evidence, $documentIndex, 'download' => 1]) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="feather-download me-1"></i> Download
+                            </a>
+                        </div>
+                    @empty
+                        <div class="text-muted">No uploaded files are attached.</div>
+                    @endforelse
+                </div>
+            </div>
+        @endif
+
         <div class="card detail-card">
             <div class="card-body">
                 <h6 class="fw-semibold mb-3">Actions</h6>
@@ -207,16 +240,18 @@
                                 <i class="feather-check-circle me-1"></i> Approve
                             </button>
                         </form>
-                        <form method="POST" action="{{ route('procurement.invoices.reject', $invoice) }}" class="d-flex gap-2">
-                            @csrf
-                            <input type="text" name="reason" class="form-control" placeholder="Rejection reason" required>
-                            <button class="btn btn-outline-danger">
-                                <i class="feather-x-circle me-1"></i> Reject
-                            </button>
-                        </form>
+                        @if (! $linkedPurchaseOrder)
+                            <form method="POST" action="{{ route('procurement.invoices.reject', $invoice) }}" class="d-flex gap-2">
+                                @csrf
+                                <input type="text" name="reason" class="form-control" placeholder="Rejection reason" required>
+                                <button class="btn btn-outline-danger">
+                                    <i class="feather-x-circle me-1"></i> Reject
+                                </button>
+                            </form>
+                        @endif
                     @endif
 
-                    @if ($invoice->status === 'approved' && !$invoice->purchaseOrder)
+                    @if ($invoice->status === 'approved' && ! $linkedPurchaseOrder)
                         <form method="POST" action="{{ route('procurement.invoices.purchase-order', $invoice) }}">
                             @csrf
                             <button class="btn btn-primary">
@@ -225,8 +260,8 @@
                         </form>
                     @endif
 
-                    @if ($invoice->purchaseOrder)
-                        <a href="{{ route('procurement.purchase-orders.show', $invoice->purchaseOrder) }}"
+                    @if ($linkedPurchaseOrder)
+                        <a href="{{ route('procurement.purchase-orders.show', $linkedPurchaseOrder) }}"
                             class="btn btn-outline-primary">
                             <i class="feather-eye me-1"></i> View Purchase Order
                         </a>

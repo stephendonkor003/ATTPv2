@@ -16,6 +16,7 @@ class ProcurementPurchaseOrderItemEvidence extends BaseModel
         'purchase_order_id',
         'purchase_request_item_id',
         'deliverable_id',
+        'invoice_id',
         'is_met',
         'deliverable_date',
         'delivered_unit_price',
@@ -57,11 +58,20 @@ class ProcurementPurchaseOrderItemEvidence extends BaseModel
         return $this->belongsTo(ProcurementDeliverable::class, 'deliverable_id');
     }
 
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(ProcurementInvoice::class, 'invoice_id');
+    }
+
     public function hasVendorDocuments(): bool
     {
         return collect($this->documents ?? [])
             ->filter(fn ($document) => is_array($document))
-            ->contains(fn ($document) => ($document['source'] ?? null) === 'vendor');
+            ->contains(fn ($document) => in_array(
+                $document['source'] ?? null,
+                ['vendor', 'administrative_assistant'],
+                true
+            ));
     }
 
     public function vendorEvidenceStatus(): ?string

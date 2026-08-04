@@ -2009,6 +2009,12 @@ class BudgetReportController extends Controller
 
         $projectRows = collect();
         $totals = $this->emptyProjectPositionTotals();
+        $unallocatedFunds = [
+            'line_count' => 0,
+            'scheduled_allocation' => 0.0,
+            'committed' => 0.0,
+            'available_balance' => 0.0,
+        ];
 
         foreach ($program->projects->sortBy('name') as $project) {
             if (! $this->projectMatchesProjectPositionStructureFilters($project, $filters)) {
@@ -2034,6 +2040,13 @@ class BudgetReportController extends Controller
                     $budget = $this->projectPositionAllocationAmount($subActivity->allocations, $filters);
                     $direct = $this->directProjectPositionMetrics('sub_activity', (string) $subActivity->id, $commitments, $purchaseOrders, $invoices, $disbursements);
                     $subRow = $this->projectPositionNode($subActivity->name, 'sub_activity', $budget, $direct, $this->emptyProjectPositionTotals());
+
+                    if ($this->isUnallocatedFundsBalanceSheetLine((string) $subActivity->name)) {
+                        $unallocatedFunds['line_count']++;
+                        $unallocatedFunds['scheduled_allocation'] += (float) $subRow['budget'];
+                        $unallocatedFunds['committed'] += (float) $subRow['committed'];
+                        $unallocatedFunds['available_balance'] += (float) $subRow['uncommitted_budget'];
+                    }
 
                     $subRows->push($subRow);
                     $activityChildren = $this->addProjectPositionTotals($activityChildren, $subRow);
@@ -2144,6 +2157,9 @@ class BudgetReportController extends Controller
         $totals['invoice_balance'] = round($totals['invoiced'] - $totals['disbursed'], 2);
         $totals['commitment_rate'] = $approvedFunding > 0 ? round(($totals['committed'] / $approvedFunding) * 100, 2) : 0;
         $totals['disbursement_rate'] = $approvedFunding > 0 ? round(($totals['disbursed'] / $approvedFunding) * 100, 2) : 0;
+        $totals['unallocated_funds_scheduled'] = round($unallocatedFunds['scheduled_allocation'], 2);
+        $totals['unallocated_funds_committed'] = round($unallocatedFunds['committed'], 2);
+        $totals['unallocated_funds'] = round($unallocatedFunds['available_balance'], 2);
 
         return [
             'currency' => $program->sector?->currency ?? $fundings->first()?->currency ?? $program->currency ?? 'USD',
@@ -2192,6 +2208,7 @@ class BudgetReportController extends Controller
                 'purchase_orders' => $purchaseOrders->count(),
                 'invoices' => $invoices->count(),
                 'disbursements' => $disbursements->count(),
+                'unallocated_funds_lines' => $unallocatedFunds['line_count'],
             ],
             'chart' => [
                 'labels' => $displayRows->pluck('label')->values(),
@@ -2386,6 +2403,13 @@ class BudgetReportController extends Controller
             'references' => $direct['references'] ?? [],
             'children' => collect(),
         ];
+    }
+
+    private function isUnallocatedFundsBalanceSheetLine(string $name): bool
+    {
+        $normalizedName = strtolower(trim((string) preg_replace('/\s+/', ' ', $name)));
+
+        return in_array($normalizedName, ['unallocated fund', 'unallocated funds'], true);
     }
 
     private function emptyProjectPositionTotals(): array

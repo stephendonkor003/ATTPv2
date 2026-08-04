@@ -55,7 +55,7 @@ class VendorInvoiceController extends Controller
             ->orderByRaw('COALESCE(timeline_end, timeline_start, created_at)')
             ->get();
 
-        $invoices = ProcurementInvoice::with(['procurement', 'purchaseOrder'])
+        $invoices = ProcurementInvoice::with(['procurement', 'purchaseOrder', 'evidence.purchaseOrder'])
             ->where('vendor_id', $user->id)
             ->orderByDesc('created_at')
             ->get();
@@ -202,7 +202,14 @@ class VendorInvoiceController extends Controller
             abort(403, 'You do not have access to this invoice.');
         }
 
-        $invoice->load(['procurement', 'purchaseOrder', 'subActivity', 'deliverables']);
+        $invoice->load([
+            'procurement',
+            'purchaseOrder',
+            'subActivity',
+            'deliverables',
+            'evidence.purchaseOrder',
+            'evidence.purchaseRequestItem.purchaseRequest',
+        ]);
 
         return view('vendor.invoices.show', [
             'invoice' => $invoice,
@@ -218,7 +225,7 @@ class VendorInvoiceController extends Controller
             abort(403, 'You do not have access to this invoice.');
         }
 
-        $invoice->load(['procurement', 'purchaseOrder', 'subActivity', 'vendor']);
+        $invoice->load(['procurement', 'purchaseOrder', 'subActivity', 'vendor', 'evidence.purchaseOrder', 'evidence.purchaseRequestItem']);
 
         $pdf = Pdf::loadView('vendor.invoices.pdf', [
             'invoice' => $invoice,
@@ -236,7 +243,7 @@ class VendorInvoiceController extends Controller
             abort(403, 'You do not have access to this invoice.');
         }
 
-        $invoice->load(['procurement', 'purchaseOrder', 'subActivity', 'vendor']);
+        $invoice->load(['procurement', 'purchaseOrder', 'subActivity', 'vendor', 'evidence.purchaseOrder', 'evidence.purchaseRequestItem']);
 
         $pdf = Pdf::loadView('vendor.invoices.pdf', [
             'invoice' => $invoice,

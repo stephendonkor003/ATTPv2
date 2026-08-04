@@ -55,6 +55,12 @@ class ProcurementInvoice extends BaseModel
                         ->selectRaw('1')
                         ->from('procurements as report_invoice_procurement')
                         ->whereColumn('report_invoice_procurement.id', "{$table}.procurement_id");
+                })
+                ->orWhereExists(function ($exists) use ($table) {
+                    $exists
+                        ->selectRaw('1')
+                        ->from('procurement_purchase_order_item_evidence as report_invoice_evidence')
+                        ->whereColumn('report_invoice_evidence.invoice_id', "{$table}.id");
                 });
         });
     }
@@ -82,6 +88,18 @@ class ProcurementInvoice extends BaseModel
     public function purchaseOrder(): HasOne
     {
         return $this->hasOne(ProcurementPurchaseOrder::class, 'invoice_id');
+    }
+
+    public function evidence(): HasOne
+    {
+        return $this->hasOne(ProcurementPurchaseOrderItemEvidence::class, 'invoice_id');
+    }
+
+    public function resolvedPurchaseOrder(): ?ProcurementPurchaseOrder
+    {
+        $this->loadMissing('purchaseOrder', 'evidence.purchaseOrder');
+
+        return $this->purchaseOrder ?: $this->evidence?->purchaseOrder;
     }
 
     public function deliverables(): BelongsToMany

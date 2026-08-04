@@ -30,7 +30,13 @@ class ProcurementInvoiceController extends Controller
             abort(403, 'You do not have access to invoices.');
         }
 
-        $invoices = ProcurementInvoice::with(['procurement', 'vendor', 'subActivity', 'purchaseOrder.thinkTankMember'])
+        $invoices = ProcurementInvoice::with([
+            'procurement',
+            'vendor',
+            'subActivity',
+            'purchaseOrder.thinkTankMember',
+            'evidence.purchaseOrder',
+        ])
             ->when($isPortfolioLeader, function ($query) use ($currentUser) {
                 $this->applyAssignedPortfolioScopeToInvoices($query, $currentUser);
             })
@@ -48,22 +54,34 @@ class ProcurementInvoiceController extends Controller
     {
         $this->assertInvoiceInScope($invoice);
 
-        $invoice->load(['procurement', 'vendor', 'subActivity', 'purchaseOrder.thinkTankMember', 'purchaseOrder.budgetCommitment', 'purchaseOrder.disbursements', 'deliverables']);
+        $invoice->load([
+            'procurement',
+            'vendor',
+            'subActivity',
+            'purchaseOrder.thinkTankMember',
+            'purchaseOrder.budgetCommitment',
+            'purchaseOrder.disbursements',
+            'evidence.purchaseOrder.budgetCommitment',
+            'evidence.purchaseOrder.disbursements',
+            'evidence.purchaseRequestItem.purchaseRequest',
+            'deliverables',
+        ]);
+        $linkedPurchaseOrder = $invoice->resolvedPurchaseOrder();
 
         $budget = null;
         $currency = null;
         if ($invoice->procurement) {
             [$budget, $currency] = $this->resolveBudget($invoice->procurement);
-        } elseif ($invoice->purchaseOrder) {
-            $budget = (float) ($invoice->purchaseOrder->budgetCommitment?->commitment_amount ?? $invoice->purchaseOrder->amount ?? $invoice->amount);
-            $currency = $invoice->purchaseOrder->currency ?? $invoice->currency;
+        } elseif ($linkedPurchaseOrder) {
+            $budget = (float) ($linkedPurchaseOrder->budgetCommitment?->commitment_amount ?? $linkedPurchaseOrder->amount ?? $invoice->amount);
+            $currency = $linkedPurchaseOrder->resolved_currency ?? $invoice->currency;
         }
 
         $totalInvoiced = $invoice->procurement_id
             ? ProcurementInvoice::where('procurement_id', $invoice->procurement_id)
                 ->where('status', '!=', 'rejected')
                 ->sum('amount')
-            : ($invoice->purchaseOrder?->paidAmount() ?? (float) $invoice->amount);
+            : ($linkedPurchaseOrder?->paidAmount() ?? (float) $invoice->amount);
 
         $remaining = $budget !== null ? max($budget - $totalInvoiced, 0) : null;
 
@@ -72,6 +90,7 @@ class ProcurementInvoiceController extends Controller
             'budget' => $budget,
             'currency' => $currency,
             'remaining' => $remaining,
+            'linkedPurchaseOrder' => $linkedPurchaseOrder,
         ]);
     }
 
@@ -111,7 +130,7 @@ class ProcurementInvoiceController extends Controller
     {
         $this->assertInvoiceInScope($invoice);
 
-        if ($invoice->purchaseOrder) {
+        if ($invoice->resolvedPurchaseOrder()) {
             return back()->with('error', 'This invoice already has a purchase order and cannot be rejected.');
         }
 
@@ -146,7 +165,7 @@ class ProcurementInvoiceController extends Controller
     {
         $this->assertInvoiceInScope($invoice);
 
-        if ($invoice->purchaseOrder) {
+        if ($invoice->resolvedPurchaseOrder()) {
             return back()->with('error', 'A purchase order already exists for this invoice.');
         }
 

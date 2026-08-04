@@ -11,6 +11,7 @@ use App\Models\Sector;
 use App\Http\Controllers\VideoStreamController;
 use App\Http\Controllers\{
     DashboardController,
+    AdministrativeAssistantEvidenceController,
     LandingPageController,
     PublicDiscussionController,
     LanguageController,
@@ -2995,6 +2996,21 @@ Route::middleware(['auth', 'not.funding.partner'])
 
 
 
+
+Route::middleware(['auth', 'administrative.assistant'])
+    ->prefix('administrative-assistant')
+    ->name('administrative-assistant.')
+    ->group(function (): void {
+        Route::get('/', [AdministrativeAssistantEvidenceController::class, 'index'])
+            ->name('dashboard');
+        Route::get('/purchase-orders/{purchaseOrder}/items/{item}', [AdministrativeAssistantEvidenceController::class, 'show'])
+            ->name('evidence.show');
+        Route::post('/purchase-orders/{purchaseOrder}/items/{item}', [AdministrativeAssistantEvidenceController::class, 'store'])
+            ->name('evidence.store');
+        Route::get('/purchase-orders/{purchaseOrder}/items/{item}/evidence/{evidence}/documents/{document}', [AdministrativeAssistantEvidenceController::class, 'download'])
+            ->whereNumber('document')
+            ->name('evidence.documents.download');
+    });
 
 Route::get('/', [LandingPageController::class, 'index'])->name('landing.index');
 Route::get('/gallery', [LandingPageController::class, 'gallery'])->name('gallery');

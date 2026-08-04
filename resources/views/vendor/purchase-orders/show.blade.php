@@ -241,6 +241,8 @@
                                                 {{ $document['display_name'] ?? $document['name'] ?? 'Document' }}
                                                 @if (($document['source'] ?? null) === 'vendor')
                                                     <span class="text-muted">Vendor</span>
+                                                @elseif (($document['source'] ?? null) === 'administrative_assistant')
+                                                    <span class="text-muted">ATTP</span>
                                                 @endif
                                             </a>
                                         @endforeach

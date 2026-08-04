@@ -470,6 +470,25 @@
         </tr>
     </table>
 
+    <div class="summary-label" style="margin-top: 12px;">Unallocated Funds</div>
+    <div class="section-note">
+        Audited once from leaf-level Full Program Balance Sheet lines explicitly named Unallocated Fund or Unallocated Funds
+    </div>
+    <table class="balance-table">
+        <tr>
+            <td>Available Unallocated Funds</td>
+            <td class="{{ ($totals['unallocated_funds'] ?? 0) < 0 ? 'negative' : 'positive' }}">{{ $money($totals['unallocated_funds'] ?? 0) }}</td>
+            <td>Designated Allocation</td>
+            <td>{{ $money($totals['unallocated_funds_scheduled'] ?? 0) }}</td>
+        </tr>
+        <tr>
+            <td>Commitments Charged</td>
+            <td>{{ $money($totals['unallocated_funds_committed'] ?? 0) }}</td>
+            <td>Balance-Sheet Lines</td>
+            <td>{{ number_format($counts['unallocated_funds_lines'] ?? 0) }}</td>
+        </tr>
+    </table>
+
     <div class="source-note {{ ($position['dashboard_aligned'] ?? false) ? '' : 'filtered' }}">
         <strong>{{ ($position['dashboard_aligned'] ?? false) ? 'Financial execution dataset active' : 'Filtered financial-position view' }}</strong>
         {{ ($position['dashboard_aligned'] ?? false)
@@ -609,6 +628,8 @@
     </table>
 </div>
 
+@include('budgetreport.partials.execution-dashboard-pdf')
+
 <div class="section page-break">
     <div class="section-title">Full Program Balance Sheet</div>
     <div class="section-note">Scheduled allocation and execution by project, activity, and sub-activity in {{ $currency }}</div>
@@ -666,8 +687,6 @@
         </tfoot>
     </table>
 </div>
-
-@include('budgetreport.partials.execution-dashboard-pdf')
 
 <div class="footer">
     <table class="footer-table">

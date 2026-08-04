@@ -70,18 +70,19 @@
                     <tbody>
                         @foreach ($invoices as $invoice)
                             @php
-                                $isThinkTankTransfer = $invoice->purchaseOrder?->po_type === 'think_tank_transfer';
+                                $linkedPurchaseOrder = $invoice->purchaseOrder ?: $invoice->evidence?->purchaseOrder;
+                                $isThinkTankTransfer = $linkedPurchaseOrder?->po_type === 'think_tank_transfer';
                                 $procurementTitle = $isThinkTankTransfer
                                     ? 'Funding to Think Tanks'
-                                    : ($invoice->procurement?->title ?? 'N/A');
+                                    : ($invoice->procurement?->title ?? $linkedPurchaseOrder?->po_title ?? 'Purchase order invoice');
                                 $procurementReference = $isThinkTankTransfer
-                                    ? ($invoice->purchaseOrder?->reference_no ?? 'Think tank transfer')
-                                    : ($invoice->procurement?->reference_no ?? 'N/A');
+                                    ? ($linkedPurchaseOrder?->reference_no ?? 'Think tank transfer')
+                                    : ($invoice->procurement?->reference_no ?? $linkedPurchaseOrder?->reference_no ?? 'N/A');
                                 $vendorName = $isThinkTankTransfer
-                                    ? ($invoice->purchaseOrder?->thinkTankMember?->name ?? $invoice->vendor?->name ?? 'Think Tank')
+                                    ? ($linkedPurchaseOrder?->thinkTankMember?->name ?? $invoice->vendor?->name ?? 'Think Tank')
                                     : ($invoice->vendor?->name ?? 'Vendor');
                                 $vendorEmail = $isThinkTankTransfer
-                                    ? ($invoice->purchaseOrder?->thinkTankMember?->email ?? $invoice->vendor?->email ?? 'N/A')
+                                    ? ($linkedPurchaseOrder?->thinkTankMember?->email ?? $invoice->vendor?->email ?? 'N/A')
                                     : ($invoice->vendor?->email ?? 'N/A');
                                 $badgeClass = match ($invoice->status) {
                                     'paid' => 'bg-success',

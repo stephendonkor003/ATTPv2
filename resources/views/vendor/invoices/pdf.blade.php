@@ -144,6 +144,14 @@
                 ? \Illuminate\Support\Carbon::parse($invoice->invoice_month)->endOfMonth()->format('d M Y')
                 : now()->endOfMonth()->format('d M Y');
             $amount = (float) ($invoice->amount ?? 0);
+            $linkedPurchaseOrder = $invoice->purchaseOrder ?: $invoice->evidence?->purchaseOrder;
+            $itemDescription = $invoice->evidence?->purchaseRequestItem?->milestone
+                ?: $invoice->procurement?->title
+                ?: $linkedPurchaseOrder?->po_title
+                ?: 'Procurement Service';
+            $itemReference = $invoice->procurement?->reference_no
+                ?: $linkedPurchaseOrder?->reference_no
+                ?: 'N/A';
         @endphp
 
         <div class="header">
@@ -200,10 +208,10 @@
                 <tbody>
                     <tr>
                         <td>
-                            {{ $invoice->procurement?->title ?? 'Procurement Service' }}<br>
+                            {{ $itemDescription }}<br>
                             <span class="small-muted">Sub-Activity: {{ $invoice->subActivity?->name ?? 'N/A' }}</span>
                         </td>
-                        <td>{{ $invoice->procurement?->reference_no ?? 'N/A' }}</td>
+                        <td>{{ $itemReference }}</td>
                         <td>{{ $invoiceMonth }}</td>
                         <td style="text-align:right;">
                             {{ number_format($amount, 2) }} {{ $currency }}
@@ -233,7 +241,7 @@
             <div class="value">{{ $invoice->notes ?? 'Payment due within 30 days of invoice date.' }}</div>
             <div class="divider"></div>
             <div class="small-muted">
-                This invoice is generated through the vendor portal and will be reviewed by the procurement team.
+                This invoice is recorded in the ATTP finance system and will be reviewed by the procurement team.
             </div>
         </div>
 

@@ -70,7 +70,7 @@
 
 <div class="exec-page">
     <div class="exec-header">
-        <div class="eyebrow">Section 2 · Integrated financial execution analytics</div>
+        <div class="eyebrow">Section 2 &middot; Integrated financial execution analytics</div>
         <p>This complete execution analysis forms part of the Project Financial Position report.</p>
         <div class="exec-scope">
             Sector: {{ data_get($exec, 'executionFilters.sector', 'All Sectors') }} &nbsp; | &nbsp;

@@ -9,7 +9,9 @@ use App\Http\Middleware\EnsureOtpVerified;
 use App\Http\Middleware\EnsurePasswordNotExpired;
 use App\Http\Middleware\EnsureThinkTankAreaAccess;
 use App\Http\Middleware\EnsureThinkTankUser;
+use App\Http\Middleware\EnsureAdministrativeAssistant;
 use App\Http\Middleware\InjectWebsiteVisitTracker;
+use App\Http\Middleware\RedirectAdministrativeAssistantToPortal;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use App\Jobs\IndicatorReminderJob;
@@ -58,6 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'member.state' => EnsureMemberState::class,
             'think.tank' => EnsureThinkTankUser::class,
             'think.tank.area' => EnsureThinkTankAreaAccess::class,
+            'administrative.assistant' => EnsureAdministrativeAssistant::class,
             'password.not.expired' => EnsurePasswordNotExpired::class,
             'otp.verified' => EnsureOtpVerified::class,
         ]);
@@ -68,6 +71,7 @@ return Application::configure(basePath: dirname(__DIR__))
             SetLocale::class,
             EnsurePasswordNotExpired::class,
             EnsureOtpVerified::class,
+            RedirectAdministrativeAssistantToPortal::class,
             InjectWebsiteVisitTracker::class,
         ]);
 

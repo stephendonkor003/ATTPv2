@@ -26,6 +26,12 @@ class User extends Authenticatable
 
     public const THINK_TANK_ACCESS_FINANCE = 'finance_officer';
 
+    public const ADMINISTRATIVE_ASSISTANT_ROLES = [
+        'Administrative Assistant',
+        // Keep the spelling already used by the live role record compatible.
+        'Administrative Assistatant',
+    ];
+
     public const THINK_TANK_ACCESS_LEVELS = [
         self::THINK_TANK_ACCESS_ADMIN => 'Think Tank Admin',
         self::THINK_TANK_ACCESS_PROCUREMENT => 'Procurement Officer',
@@ -402,6 +408,12 @@ class User extends Authenticatable
     public function hasRole(string $roleName): bool
     {
         return $this->role && $this->role->name === $roleName;
+    }
+
+    public function isAdministrativeAssistant(): bool
+    {
+        return $this->role
+            && in_array($this->role->name, self::ADMINISTRATIVE_ASSISTANT_ROLES, true);
     }
 
     public function isFundingPartner(): bool

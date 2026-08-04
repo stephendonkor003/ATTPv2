@@ -124,6 +124,7 @@
                         </thead>
                         <tbody>
                             @foreach ($invoices as $invoice)
+                                @php($linkedPurchaseOrder = $invoice->purchaseOrder ?: $invoice->evidence?->purchaseOrder)
                                 <tr>
                                     <td>
                                         <span class="badge-soft">{{ $invoice->reference_no ?? 'N/A' }}</span>
@@ -141,9 +142,9 @@
                                         <span class="status-pill text-capitalize">{{ $invoice->status ?? 'submitted' }}</span>
                                     </td>
                                     <td>
-                                        @if ($invoice->purchaseOrder)
+                                        @if ($linkedPurchaseOrder)
                                             <span class="badge bg-success-subtle text-success">
-                                                {{ $invoice->purchaseOrder->reference_no ?? 'PO' }}
+                                                {{ $linkedPurchaseOrder->reference_no ?? 'PO' }}
                                             </span>
                                         @else
                                             <span class="text-muted small">Pending</span>

@@ -19,6 +19,10 @@ class DashboardController extends Controller
 
     public function index()
     {
+        if (Auth::check() && Auth::user()->isAdministrativeAssistant()) {
+            return redirect()->route('administrative-assistant.dashboard');
+        }
+
         if (Auth::check() && Auth::user()->user_type === 'member_state') {
             return redirect()->route('member-state.dashboard');
         }

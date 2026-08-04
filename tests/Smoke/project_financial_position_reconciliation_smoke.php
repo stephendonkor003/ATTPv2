@@ -5,6 +5,7 @@ use App\Http\Controllers\MasterDashboard;
 use App\Http\Controllers\Procurement\ProcurementDisbursementController;
 use App\Http\Controllers\Procurement\ProcurementPurchaseOrderController;
 use App\Models\Activity;
+use App\Models\ActivityAllocation;
 use App\Models\BudgetCommitment;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementInvoice;
@@ -16,6 +17,7 @@ use App\Models\ProjectAllocation;
 use App\Models\Role;
 use App\Models\Sector;
 use App\Models\SubActivity;
+use App\Models\SubActivityAllocation;
 use App\Models\User;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithAuthentication;
@@ -111,6 +113,10 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertAmount(0, $totals['unprocessed_purchase_requests'], 'Unprocessed purchase requests');
             $this->assertAmount(180_000, $totals['unpaid_commitments'], 'Purchase orders less disbursements');
             $this->assertAmount(180_000, $totals['commitment_pipeline_balance'], 'Unpaid commitments plus unprocessed purchase requests');
+            $this->assertAmount(100_000, $totals['unallocated_funds_scheduled'], 'Designated unallocated-funds allocation');
+            $this->assertAmount(0, $totals['unallocated_funds_committed'], 'Commitments charged to unallocated-funds lines');
+            $this->assertAmount(100_000, $totals['unallocated_funds'], 'Available unallocated funds');
+            $this->assertAmount(2, $report['position']['counts']['unallocated_funds_lines'], 'Unallocated-funds balance-sheet line count');
             $this->assertAmount(0, $controls['commitment_processing_rate'], 'Unprocessed purchase requests ratio');
             $this->assertAmount(100, $controls['commitment_realization_rate'], 'PO coverage of commitments');
             $this->assertAmount(72, $controls['disbursement_backlog_rate'], 'Unpaid commitments ratio');
@@ -135,6 +141,11 @@ class ProjectFinancialPositionReconciliationSmoke
                 70_000,
                 $projectReport['position']['totals']['funding_utilization_gap'],
                 'Project approved funding less commitments'
+            );
+            $this->assertAmount(
+                0,
+                $projectReport['position']['totals']['unallocated_funds'],
+                'Unallocated funds outside the selected project scope'
             );
             $this->assertTrue(
                 $projectReport['position']['dashboard_aligned'] === false,
@@ -179,6 +190,16 @@ class ProjectFinancialPositionReconciliationSmoke
                 $reserveProject->total_budget,
                 $reserveReport['position']['totals']['approved_funding'],
                 'Reserve project approved funding'
+            );
+            $this->assertAmount(
+                100_000,
+                $reserveReport['position']['totals']['unallocated_funds'],
+                'Reserve project available unallocated funds'
+            );
+            $this->assertAmount(
+                2,
+                $reserveReport['position']['counts']['unallocated_funds_lines'],
+                'Reserve project unallocated-funds line count'
             );
 
             $webResponse = $this->get(route('budget.reports.project-financial-position', $query));
@@ -229,6 +250,24 @@ class ProjectFinancialPositionReconciliationSmoke
             $webHtml = (string) $webResponse->getContent();
             $pdfHtml = view('budgetreport.project-financial-position-pdf', $report)->render();
             $projectPdfHtml = view('budgetreport.project-financial-position-pdf', $projectReport)->render();
+            $globalExecutionHeading = 'Section 2 &middot; Integrated financial execution analytics';
+            $this->assertTrue(
+                str_contains($pdfHtml, $globalExecutionHeading)
+                    && str_contains($pdfHtml, 'Project: All Projects')
+                    && substr_count($pdfHtml, 'data:image/svg+xml;base64,') === 7,
+                'The programme-wide PDF must include Section 2 with all seven global execution graphs.'
+            );
+            $this->assertTrue(
+                strpos($pdfHtml, $globalExecutionHeading)
+                    < strpos($pdfHtml, '<div class="section-title">Full Program Balance Sheet</div>'),
+                'Section 2 must appear before the long programme balance sheet in the global PDF.'
+            );
+            foreach ($report['executionDashboard']['executionChartImages'] as $chartImage) {
+                $this->assertTrue(
+                    filled($chartImage) && str_contains($pdfHtml, $chartImage),
+                    'The programme-wide PDF is missing an integrated execution graph.'
+                );
+            }
             $this->assertTrue(
                 ! str_contains($pdfHtml, 'Execution Dashboard')
                     && ! str_contains($pdfHtml, '<h2>Financial Execution Analytics</h2>'),
@@ -237,8 +276,11 @@ class ProjectFinancialPositionReconciliationSmoke
             $this->assertTrue(
                 str_contains($projectPdfHtml, 'Selected project budget allocation')
                     && str_contains($projectPdfHtml, 'Sub-Component Execution Breakdown')
+                    && str_contains($projectPdfHtml, $globalExecutionHeading)
+                    && str_contains($projectPdfHtml, 'Project: '.$selectedProject->name)
+                    && substr_count($projectPdfHtml, 'data:image/svg+xml;base64,') === 7
                     && str_contains($projectPdfHtml, '320,000.00'),
-                'The project-filtered PDF should display the selected project budget and component-scoped execution breakdown.'
+                'The project-filtered PDF should display Section 2, seven graphs, the selected project budget, and its execution breakdown.'
             );
             $sharedReportInformation = [
                 'Report Context',
@@ -248,6 +290,10 @@ class ProjectFinancialPositionReconciliationSmoke
                 'Funding Utilization Gap',
                 'Purchase Request Total',
                 'Unpaid Commitments',
+                'Available Unallocated Funds',
+                'Designated Allocation',
+                'Commitments Charged',
+                'Balance-Sheet Lines',
                 'Financial execution dataset active',
                 'Executive Controls',
                 'Commitment utilization of Approved Funding',
@@ -283,6 +329,7 @@ class ProjectFinancialPositionReconciliationSmoke
                 '250,000.00',
                 '70,000.00',
                 '180,000.00',
+                '100,000.00',
                 '14.00%',
             ];
 
@@ -450,6 +497,33 @@ class ProjectFinancialPositionReconciliationSmoke
             'year_number' => 1,
             'actual_year' => 2025,
             'amount' => 180_000,
+        ]);
+        $reserveActivity = Activity::create([
+            'project_id' => $reserveProject->id,
+            'name' => 'Financial Position Test Reserve Activity '.Str::upper($suffix),
+        ]);
+        $unallocatedFunds = SubActivity::create([
+            'activity_id' => $reserveActivity->id,
+            'name' => 'Unallocated Funds',
+        ]);
+        $unallocatedFund = SubActivity::create([
+            'activity_id' => $reserveActivity->id,
+            'name' => 'Unallocated Fund',
+        ]);
+        ActivityAllocation::create([
+            'activity_id' => $reserveActivity->id,
+            'year' => 2025,
+            'amount' => 100_000,
+        ]);
+        SubActivityAllocation::create([
+            'sub_activity_id' => $unallocatedFunds->id,
+            'year' => 2025,
+            'amount' => 60_000,
+        ]);
+        SubActivityAllocation::create([
+            'sub_activity_id' => $unallocatedFund->id,
+            'year' => 2025,
+            'amount' => 40_000,
         ]);
         $funding = ProgramFunding::create([
             'program_id' => $program->id,

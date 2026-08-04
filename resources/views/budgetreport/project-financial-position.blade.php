@@ -1035,6 +1035,39 @@
                     @endforeach
                 </div>
 
+                <div class="pfp-panel mt-3" data-financial-control="unallocated-funds">
+                    <div class="pfp-panel-header">
+                        <h5 class="fw-bold mb-1">Unallocated Funds</h5>
+                        <div class="small text-muted">
+                            Audited once from leaf-level Full Program Balance Sheet lines explicitly named Unallocated Fund or Unallocated Funds
+                        </div>
+                    </div>
+                    <div class="row g-0">
+                        <div class="col-md-3 border-end p-3 pfp-mini-metric">
+                            <div class="metric-label">Available Unallocated Funds</div>
+                            <div class="fw-bold fs-5 {{ ($totals['unallocated_funds'] ?? 0) < 0 ? 'text-danger' : 'text-success' }}">
+                                {{ $money($totals['unallocated_funds'] ?? 0) }}
+                            </div>
+                            <div class="small text-muted mt-1">Designated allocation less commitments charged</div>
+                        </div>
+                        <div class="col-md-3 border-end p-3 pfp-mini-metric">
+                            <div class="metric-label">Designated Allocation</div>
+                            <div class="fw-bold fs-5">{{ $money($totals['unallocated_funds_scheduled'] ?? 0) }}</div>
+                            <div class="small text-muted mt-1">Sum of the named balance-sheet lines</div>
+                        </div>
+                        <div class="col-md-3 border-end p-3 pfp-mini-metric">
+                            <div class="metric-label">Commitments Charged</div>
+                            <div class="fw-bold fs-5">{{ $money($totals['unallocated_funds_committed'] ?? 0) }}</div>
+                            <div class="small text-muted mt-1">Commitments assigned to those lines</div>
+                        </div>
+                        <div class="col-md-3 p-3 pfp-mini-metric">
+                            <div class="metric-label">Balance-Sheet Lines</div>
+                            <div class="fw-bold fs-5">{{ number_format($position['counts']['unallocated_funds_lines'] ?? 0) }}</div>
+                            <div class="small text-muted mt-1">Matching leaf-level records in the selected scope</div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="pfp-reconciliation {{ ($position['dashboard_aligned'] ?? false) ? '' : 'is-filtered' }}">
                     <div class="d-flex align-items-start gap-2">
                         <i class="{{ ($position['dashboard_aligned'] ?? false) ? 'feather-check-circle' : 'feather-filter' }} mt-1"></i>
