@@ -84,7 +84,7 @@ class MeReportingReadinessService
             ->whereNotNull('frequency_of_reporting_id')
             ->whereNotNull('unit_id')
             ->whereNotNull('responsible_user_id')
-            ->whereNotNull('means_of_verification_id')
+            ->whereNotNull('means_of_verification_folder_id')
             ->count();
 
         $publishedFormCount = MeDataEntryForm::query()

@@ -9,9 +9,11 @@ use App\Models\MeFramework;
 use App\Models\MeIndicatorCalculationRule;
 use App\Models\MeIndicatorReferenceSheet;
 use App\Models\MePerformanceThreshold;
+use App\Models\MeRepositoryFolder;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\ReportingFrequency;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -29,14 +31,47 @@ class AttpMelFrameworkInstaller
 
     public const PROJECT_DEVELOPMENT_OBJECTIVE = 'To establish a sustainable platform to strengthen the capacity for effective policy research and policy making on cross-boundary priorities in Africa.';
 
+    public const INDICATOR_CODES = [
+        'PDO 1',
+        'PDO 2',
+        'PDO 3',
+        'PDO 3-CE',
+        'PDO 4',
+        'INTC1',
+        'INTC2.1',
+        'INTC2.2',
+        'INTC2.3',
+        'INTC2.4',
+        'INTC2.5',
+        'INTC2.7',
+        'INTC2.8',
+        'INTC2.9',
+        'INTC2.10',
+        'INTC2.11',
+        'INTC3.1',
+        'INTC3.2',
+    ];
+
+    public const EVIDENCE_FOLDER_PREFIX = 'ATTP MEL';
+
     /** @return array{framework: MeFramework, indicators: int, targets: int} */
     public function install(?string $userId = null): array
     {
         return DB::transaction(function () use ($userId): array {
-            $program = Program::query()->where('program_id', 'PROG00001')->first();
+            $program = Program::query()
+                ->with('sector:id,me_manager_user_id')
+                ->where('program_id', 'PROG00001')
+                ->first();
             if (! $program) {
                 throw new RuntimeException('ATTP program PROG00001 was not found. Run the ATTP programme seeders first.');
             }
+            if (! $program->sector_id) {
+                throw new RuntimeException('ATTP program PROG00001 is not linked to a portfolio. Repair the programme structure before installing MEL data.');
+            }
+
+            $portfolioId = (string) $program->sector_id;
+            $responsibleUserId = $this->responsibleUserId($program, $userId);
+            $auditUserId = $userId ?: $responsibleUserId;
 
             $components = Project::query()
                 ->where('program_id', $program->id)
@@ -59,7 +94,10 @@ class AttpMelFrameworkInstaller
                     'effective_to' => '2028-08-30',
                     'is_current' => true,
                     'notes' => 'Official results framework aligned to the World Bank Africa Think Tank Platform Project (P179804), Project Appraisal Document PAD5316. Official project targets and Indicator Reference Sheet metadata are preserved. INTC2.6 is intentionally absent because it is not present in the approved PAD results framework. Sources: '.self::PROJECT_PAGE_URL.' and '.self::PAD_URL,
-                    'updated_by' => $userId,
+                    'approved_by' => $auditUserId,
+                    'approved_at' => '2023-11-02 00:00:00',
+                    'created_by' => $auditUserId,
+                    'updated_by' => $auditUserId,
                 ]
             );
             MeFramework::query()
@@ -67,8 +105,8 @@ class AttpMelFrameworkInstaller
                 ->where('code', self::FRAMEWORK_CODE)
                 ->update(['is_current' => false]);
 
-            $units = $this->units($userId);
-            $frequencies = $this->frequencies($userId);
+            $units = $this->units($portfolioId, $auditUserId);
+            $frequencies = $this->frequencies($portfolioId, $auditUserId);
             $indicatorCount = 0;
             $targetCount = 0;
 
@@ -76,6 +114,17 @@ class AttpMelFrameworkInstaller
                 $component = $definition['component_code']
                     ? $components->get($definition['component_code'])
                     : null;
+                $evidenceFolder = MeRepositoryFolder::query()->updateOrCreate(
+                    [
+                        'portfolio_id' => $portfolioId,
+                        'name' => $this->evidenceFolderName($definition['code']),
+                    ],
+                    [
+                        'description' => "Controlled means-of-verification folder for {$definition['code']} — {$definition['name']}",
+                        'created_by' => $auditUserId,
+                        'updated_by' => $auditUserId,
+                    ]
+                );
                 $indicator = Indicator::query()->updateOrCreate(
                     ['indicator_code' => $definition['code']],
                     [
@@ -106,9 +155,21 @@ class AttpMelFrameworkInstaller
                         'methodology' => $definition['calculation_method'],
                         'data_collection_method' => $definition['data_collection_method'],
                         'definitions' => $definition['definition'],
+                        'responsible_user_id' => $responsibleUserId,
+                        'responsible_party' => $responsibleUserId
+                            ? json_encode([$responsibleUserId], JSON_THROW_ON_ERROR)
+                            : null,
+                        'means_of_verification_folder_id' => $evidenceFolder->id,
+                        'effective_from' => '2023-11-02',
+                        'effective_to' => '2028-08-30',
                     ]
                 );
                 $indicatorCount++;
+
+                DB::table('me_repository_folder_indicators')->updateOrInsert(
+                    ['folder_id' => $evidenceFolder->id, 'indicator_id' => $indicator->id],
+                    ['linked_by' => $auditUserId, 'created_at' => now(), 'updated_at' => now()]
+                );
 
                 MeIndicatorReferenceSheet::query()->updateOrCreate(
                     ['indicator_id' => $indicator->id, 'version' => 1],
@@ -131,10 +192,42 @@ class AttpMelFrameworkInstaller
                         'additional_guidance' => $definition['guidance'],
                         'approval_status' => 'approved',
                         'effective_from' => '2023-11-02',
-                        'created_by' => $userId,
-                        'updated_by' => $userId,
+                        'approved_by' => $auditUserId,
+                        'approved_at' => '2023-11-02 00:00:00',
+                        'created_by' => $auditUserId,
+                        'updated_by' => $auditUserId,
                     ]
                 );
+
+                $endTarget = $definition['targets']['END'];
+                $endTargetNumeric = is_numeric($endTarget) ? (float) $endTarget : null;
+                IndicatorTarget::query()->updateOrCreate(
+                    [
+                        'indicator_id' => $indicator->id,
+                        'framework_id' => $framework->id,
+                        'target_context' => Indicator::SETUP_TARGET_CONTEXT,
+                        'target_scope' => 'project',
+                        'revision' => 1,
+                    ],
+                    [
+                        'period_type' => 'custom',
+                        'period_label' => 'Framework target',
+                        'reporting_year' => $program->end_year,
+                        'target_value' => $endTargetNumeric,
+                        'target_text' => $endTargetNumeric === null ? (string) $endTarget : null,
+                        'baseline_value' => (string) $definition['baseline'],
+                        'unit_id' => $units[$definition['unit']]->id,
+                        'approval_status' => 'approved',
+                        'effective_from' => '2023-11-02',
+                        'revision_reason' => 'Initial approved end-of-project target from World Bank PAD5316.',
+                        'notes' => 'Indicator-management target synchronized with the official END target.',
+                        'approved_by' => $auditUserId,
+                        'approved_at' => '2023-11-02 00:00:00',
+                        'created_by' => $auditUserId,
+                        'updated_by' => $auditUserId,
+                    ]
+                );
+                $targetCount++;
 
                 foreach ($definition['targets'] as $period => $target) {
                     $numeric = is_numeric($target) ? (float) $target : null;
@@ -163,9 +256,13 @@ class AttpMelFrameworkInstaller
                             'baseline_value' => (string) $definition['baseline'],
                             'unit_id' => $units[$definition['unit']]->id,
                             'approval_status' => 'approved',
+                            'effective_from' => '2023-11-02',
+                            'revision_reason' => 'Initial approved project target from World Bank PAD5316.',
                             'notes' => 'Official '.$period.' target from World Bank PAD5316 for project '.self::WORLD_BANK_PROJECT_ID.'.',
-                            'created_by' => $userId,
-                            'updated_by' => $userId,
+                            'approved_by' => $auditUserId,
+                            'approved_at' => '2023-11-02 00:00:00',
+                            'created_by' => $auditUserId,
+                            'updated_by' => $auditUserId,
                         ]
                     );
                     $targetCount++;
@@ -182,8 +279,8 @@ class AttpMelFrameworkInstaller
                             'deduplication_key' => 'deduplication_key',
                             'is_active' => true,
                             'effective_from' => '2023-11-02',
-                            'created_by' => $userId,
-                            'updated_by' => $userId,
+                            'created_by' => $auditUserId,
+                            'updated_by' => $auditUserId,
                         ]
                     );
                 }
@@ -210,26 +307,29 @@ class AttpMelFrameworkInstaller
     }
 
     /** @return array<string, IndicatorUnit> */
-    private function units(?string $userId): array
+    private function units(string $portfolioId, ?string $userId): array
     {
         return collect([
             'Number' => ['symbol' => '#', 'description' => 'A whole-number count'],
             'Percentage' => ['symbol' => '%', 'description' => 'A percentage calculated from a numerator and denominator'],
             'Yes/No' => ['symbol' => null, 'description' => 'Boolean achievement status'],
             'Milestone' => ['symbol' => null, 'description' => 'Qualitative milestone or status'],
-        ])->mapWithKeys(function (array $attributes, string $name) use ($userId): array {
-            $unit = IndicatorUnit::query()->firstOrCreate(['name' => $name], $attributes + [
-                'sort_order' => 10,
-                'is_active' => true,
-                'created_by' => $userId,
-            ]);
+        ])->mapWithKeys(function (array $attributes, string $name) use ($portfolioId, $userId): array {
+            $unit = IndicatorUnit::query()->updateOrCreate(
+                ['portfolio_id' => $portfolioId, 'name' => $name],
+                $attributes + [
+                    'sort_order' => 10,
+                    'is_active' => true,
+                    'created_by' => $userId,
+                ]
+            );
 
             return [$name => $unit];
         })->all();
     }
 
     /** @return array<string, ReportingFrequency> */
-    private function frequencies(?string $userId): array
+    private function frequencies(string $portfolioId, ?string $userId): array
     {
         $definitions = [
             'SEMI_ANNUAL' => ['Semi-Annual', 'month', 6, 182, 'Twice per calendar year', 30],
@@ -237,24 +337,90 @@ class AttpMelFrameworkInstaller
             'ONCE' => ['Once', 'once', null, null, 'A one-time project milestone', 90],
         ];
 
-        return collect($definitions)->mapWithKeys(function (array $row, string $code) use ($userId): array {
+        return collect($definitions)->mapWithKeys(function (array $row, string $code) use ($portfolioId, $userId): array {
             [$name, $unit, $value, $days, $description, $sortOrder] = $row;
-            $frequency = ReportingFrequency::query()->firstOrCreate(
-                ['portfolio_id' => null, 'code' => $code],
-                [
-                    'name' => $name,
-                    'interval_unit' => $unit,
-                    'interval_value' => $value,
-                    'frequency_in_days' => $days,
-                    'description' => $description,
-                    'sort_order' => $sortOrder,
-                    'is_active' => true,
-                    'created_by' => $userId,
-                ]
-            );
+            $matches = ReportingFrequency::query()
+                ->where('portfolio_id', $portfolioId)
+                ->where(fn ($query) => $query->where('code', $code)->orWhere('name', $name))
+                ->get();
+            $frequency = $matches->firstWhere('name', $name) ?: $matches->first() ?: new ReportingFrequency;
+            $matches->where('id', '<>', $frequency->id)->each(function (ReportingFrequency $duplicate) use ($frequency): void {
+                Indicator::query()
+                    ->where('frequency_of_reporting_id', $duplicate->id)
+                    ->update(['frequency_of_reporting_id' => $frequency->id]);
+                $duplicate->delete();
+            });
+            $frequency->fill([
+                'portfolio_id' => $portfolioId,
+                'code' => $code,
+                'name' => $name,
+                'interval_unit' => $unit,
+                'interval_value' => $value,
+                'frequency_in_days' => $days,
+                'description' => $description,
+                'sort_order' => $sortOrder,
+                'is_active' => true,
+                'created_by' => $frequency->created_by ?: $userId,
+            ])->save();
 
             return [$code => $frequency];
         })->all();
+    }
+
+    private function responsibleUserId(Program $program, ?string $userId): ?string
+    {
+        $preferredId = $program->sector?->me_manager_user_id ?: $userId;
+        $candidateIds = collect([$preferredId, $userId])
+            ->filter()
+            ->map(fn ($id): string => (string) $id)
+            ->unique()
+            ->values();
+
+        if ($candidateIds->isNotEmpty()) {
+            $configured = User::query()
+                ->whereIn('id', $candidateIds->all())
+                ->where(function ($query): void {
+                    $query->whereNull('is_disabled')->orWhere('is_disabled', false);
+                })
+                ->when($preferredId, fn ($query) => $query->orderByRaw(
+                    'CASE WHEN id = ? THEN 0 ELSE 1 END',
+                    [(string) $preferredId]
+                ))
+                ->value('id');
+            if ($configured) {
+                return (string) $configured;
+            }
+        }
+
+        $melManager = User::query()
+            ->whereHas('role', fn ($query) => $query->whereIn('name', [
+                'Monitoring and Evaluation Manager',
+                'M&E Manager',
+                'M&E Officer',
+                'M&e',
+            ]))
+            ->where(function ($query): void {
+                $query->whereNull('is_disabled')->orWhere('is_disabled', false);
+            })
+            ->orderBy('name')
+            ->value('id');
+        if ($melManager) {
+            return (string) $melManager;
+        }
+
+        $programmeCreator = User::query()
+            ->whereKey($program->created_by)
+            ->where(function ($query): void {
+                $query->whereNull('is_disabled')->orWhere('is_disabled', false);
+            })
+            ->value('id');
+
+        return $programmeCreator ? (string) $programmeCreator : null;
+    }
+
+    private function evidenceFolderName(string $indicatorCode): string
+    {
+        return self::EVIDENCE_FOLDER_PREFIX.' - '.$indicatorCode.' Means of Verification';
     }
 
     /** @return array<int, array<string, mixed>> */

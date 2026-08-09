@@ -14,7 +14,9 @@ use App\Models\MeDisaggregationDimension;
 use App\Models\MeDisaggregationOption;
 use App\Models\MeIndicatorDisaggregationRequirement;
 use App\Models\MeReportingPeriod;
+use App\Models\Program;
 use App\Models\Project;
+use App\Services\AttpMelFrameworkInstaller;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +26,35 @@ use RuntimeException;
 class AttpMelThinkTankReportingSeeder extends Seeder
 {
     private const PROJECT_CLOSE_DATE = '2028-08-30';
+
+    public const FORM_CODES = [
+        'ATTP-TT-INTC2-3',
+        'ATTP-TT-INTC2-4',
+        'ATTP-TT-INTC2-5',
+        'ATTP-TT-INTC2-7',
+        'ATTP-TT-INTC2-8',
+        'ATTP-TT-INTC2-9',
+        'ATTP-TT-INTC2-10',
+    ];
+
+    public const DIMENSION_CODES = [
+        'country',
+        'priority_theme',
+        'gender',
+        'researcher_gender',
+        'stakeholder_category',
+        'citizen_participation',
+        'institution_type',
+        'government_body_type',
+        'research_output_type',
+        'fellowship_status',
+        'support_type',
+        'capacity_plan_status',
+    ];
+
+    private string $portfolioId;
+
+    private ?string $responsibleUserId = null;
 
     /** @var array<string, string> */
     private array $indicatorIds = [];
@@ -37,6 +68,7 @@ class AttpMelThinkTankReportingSeeder extends Seeder
     public function run(): void
     {
         DB::transaction(function (): void {
+            $this->loadReportingContext();
             $this->loadRequiredIndicators();
             $this->seedDimensions();
             $this->seedIndicatorRequirements();
@@ -51,6 +83,25 @@ class AttpMelThinkTankReportingSeeder extends Seeder
                 $assignments
             ));
         });
+    }
+
+    private function loadReportingContext(): void
+    {
+        $program = Program::query()
+            ->with('sector:id,me_manager_user_id')
+            ->where('program_id', 'PROG00001')
+            ->first();
+        if (! $program?->sector_id) {
+            throw new RuntimeException('ATTP program PROG00001 is not linked to a portfolio.');
+        }
+
+        $this->portfolioId = (string) $program->sector_id;
+        $this->responsibleUserId = $program->sector?->me_manager_user_id
+            ?: Indicator::query()
+                ->whereIn('indicator_code', AttpMelFrameworkInstaller::INDICATOR_CODES)
+                ->whereNotNull('responsible_user_id')
+                ->value('responsible_user_id')
+            ?: $program->created_by;
     }
 
     private function loadRequiredIndicators(): void
@@ -77,8 +128,11 @@ class AttpMelThinkTankReportingSeeder extends Seeder
             'stakeholder_category' => ['Stakeholder category', 'beneficiary', 'Policy stakeholder participating in or benefiting from the result.', 50],
             'citizen_participation' => ['Citizen participation', 'beneficiary', 'Whether citizens or civil-society organizations participated.', 60],
             'institution_type' => ['Institution type', 'classification', 'Institution represented by the participant or beneficiary.', 70],
-            'fellowship_status' => ['Fellowship status', 'classification', 'Current status of a government-official fellowship.', 80],
-            'capacity_plan_status' => ['Capacity-plan status', 'classification', 'Implementation status of an annual institutional capacity plan.', 90],
+            'government_body_type' => ['Government body type', 'classification', 'Type of formal government body on which Think Tank research staff serve.', 80],
+            'research_output_type' => ['Research output type', 'classification', 'Type of eligible peer-reviewed policy research output.', 90],
+            'fellowship_status' => ['Fellowship status', 'classification', 'Current status of a government-official fellowship.', 100],
+            'support_type' => ['Mentoring or peer-learning support type', 'classification', 'Type of professional support received by eligible female staff.', 110],
+            'capacity_plan_status' => ['Capacity-plan status', 'classification', 'Implementation status of an annual institutional capacity plan.', 120],
         ];
 
         foreach ($definitions as $code => [$name, $group, $description, $sortOrder]) {
@@ -149,11 +203,32 @@ class AttpMelThinkTankReportingSeeder extends Seeder
                 'think_tank' => 'Think Tank',
                 'other' => 'Other',
             ],
+            'government_body_type' => [
+                'task_force' => 'Task force',
+                'advisory_panel' => 'Advisory panel',
+                'technical_working_group' => 'Technical working group',
+                'committee' => 'Committee',
+                'other_formal_body' => 'Other formal government body',
+            ],
+            'research_output_type' => [
+                'policy_brief' => 'Policy brief',
+                'working_paper' => 'Working paper',
+                'just_in_time_analysis' => 'Just-in-time analysis',
+                'literature_review' => 'Literature review',
+                'journal_article' => 'Journal article',
+                'research_report' => 'Research report',
+                'other_approved_output' => 'Other approved output',
+            ],
             'fellowship_status' => [
                 'planned' => 'Planned',
                 'active' => 'Active',
                 'completed' => 'Completed',
                 'withdrawn' => 'Withdrawn / discontinued',
+            ],
+            'support_type' => [
+                'mentoring' => 'Mentoring',
+                'peer_learning' => 'Peer learning',
+                'mentoring_and_peer_learning' => 'Both mentoring and peer learning',
             ],
             'capacity_plan_status' => [
                 'implemented_in_full' => 'Implemented in full',
@@ -187,10 +262,10 @@ class AttpMelThinkTankReportingSeeder extends Seeder
     {
         $requirements = [
             'INTC2.3' => ['country' => true, 'priority_theme' => true, 'stakeholder_category' => true, 'citizen_participation' => false, 'gender' => false],
-            'INTC2.4' => ['country' => true, 'gender' => false],
-            'INTC2.5' => ['country' => true, 'priority_theme' => true, 'researcher_gender' => true],
+            'INTC2.4' => ['country' => true, 'gender' => false, 'government_body_type' => true],
+            'INTC2.5' => ['country' => true, 'priority_theme' => true, 'researcher_gender' => true, 'research_output_type' => true],
             'INTC2.7' => ['country' => true, 'gender' => true, 'fellowship_status' => true],
-            'INTC2.8' => ['country' => true, 'gender' => true],
+            'INTC2.8' => ['country' => true, 'gender' => true, 'support_type' => true],
             'INTC2.9' => ['country' => true, 'capacity_plan_status' => true],
             'INTC2.10' => ['country' => true, 'gender' => false, 'stakeholder_category' => true, 'institution_type' => true],
         ];
@@ -228,23 +303,32 @@ class AttpMelThinkTankReportingSeeder extends Seeder
             $form = MeDataEntryForm::query()->where('code', $blueprint['code'])->first();
             if (! $form) {
                 $form = MeDataEntryForm::query()->create([
+                    'portfolio_id' => $this->portfolioId,
                     'project_component_id' => $component->id,
                     'indicator_id' => $indicatorId,
                     'title' => $blueprint['title'],
                     'description' => $blueprint['description'],
                     'instructions' => $blueprint['instructions'],
+                    'responsible_user_id' => $this->responsibleUserId,
                     'version' => 1,
                     'status' => MeDataEntryForm::STATUS_PUBLISHED,
+                    'created_by' => $this->responsibleUserId,
+                    'updated_by' => $this->responsibleUserId,
                 ]);
                 DB::table('me_data_entry_forms')->where('id', $form->id)->update(['code' => $blueprint['code']]);
                 $form->code = $blueprint['code'];
             } else {
                 $form->update([
+                    'portfolio_id' => $this->portfolioId,
                     'project_component_id' => $component->id,
                     'indicator_id' => $indicatorId,
                     'title' => $blueprint['title'],
                     'description' => $blueprint['description'],
                     'instructions' => $blueprint['instructions'],
+                    'responsible_user_id' => $this->responsibleUserId,
+                    'version' => 1,
+                    'status' => MeDataEntryForm::STATUS_PUBLISHED,
+                    'updated_by' => $this->responsibleUserId,
                 ]);
             }
 
@@ -352,6 +436,7 @@ class AttpMelThinkTankReportingSeeder extends Seeder
                 && $period->lifecycle_status === MeReportingPeriod::LIFECYCLE_PLANNED
             )) {
                 $period->fill([
+                    'portfolio_id' => $this->portfolioId,
                     'label' => "ATTP {$cursor->year} {$half}",
                     'period_type' => MeReportingPeriod::TYPE_SEMI_ANNUAL,
                     'period_start' => $cursor->toDateString(),
@@ -363,6 +448,8 @@ class AttpMelThinkTankReportingSeeder extends Seeder
                     'review_deadline' => $reviewDeadline,
                     'lifecycle_status' => MeReportingPeriod::LIFECYCLE_PLANNED,
                     'instructions' => 'Planned ATTP semi-annual M&E cycle. The Secretariat must review dates and open the period before Think Tanks can submit.',
+                    'created_by' => $this->responsibleUserId,
+                    'updated_by' => $this->responsibleUserId,
                 ])->save();
             }
             $periodCount++;
@@ -379,14 +466,16 @@ class AttpMelThinkTankReportingSeeder extends Seeder
                         'due_at' => $deadline,
                         'closes_at' => $reviewDeadline,
                         'status' => MeDataCollection::STATUS_DRAFT,
+                        'created_by' => $this->responsibleUserId,
+                        'updated_by' => $this->responsibleUserId,
                     ])->save();
                 }
                 $collectionCount++;
 
                 foreach ($members as $member) {
-                    MeDataCollectionAssignment::query()->firstOrCreate(
+                    MeDataCollectionAssignment::query()->updateOrCreate(
                         ['collection_id' => $collection->id, 'think_tank_member_id' => $member->id],
-                        ['assigned_at' => now()]
+                        ['assigned_by' => $this->responsibleUserId, 'assigned_at' => now()]
                     );
                     $assignmentCount++;
                 }
@@ -464,7 +553,7 @@ class AttpMelThinkTankReportingSeeder extends Seeder
                     $field('result', 'appointment_start_date', 'Earliest appointment start date', 'date', true),
                     $field('result', 'appointment_end_date', 'Latest appointment end date, if applicable', 'date', false),
                     $field('classification', 'government_body_countries', 'Countries of the government bodies', 'multiselect', true, ['options' => $countries]),
-                    $field('classification', 'government_body_types', 'Types of government body', 'multiselect', true, ['options' => ['Task force', 'Advisory panel', 'Technical working group', 'Committee', 'Other formal government body']]),
+                    $field('classification', 'government_body_types', 'Types of government body', 'multiselect', true, ['options' => $this->options['government_body_type']]),
                     $field('classification', 'appointed_staff_gender', 'Gender of appointed research staff', 'multiselect', false, ['options' => $genders]),
                     $field('classification', 'government_institutions', 'Government institutions represented', 'textarea', true),
                     $field('evidence', 'appointment_contribution', 'Research staff contribution and policy relevance', 'textarea', true, ['validation' => ['max_length' => 10000]]),
@@ -483,7 +572,7 @@ class AttpMelThinkTankReportingSeeder extends Seeder
                     $field('result', 'research_output_count', 'Number of eligible peer-reviewed research outputs', 'integer', true, ['result' => true, 'unit' => 'outputs', 'validation' => $countValidation]),
                     $field('result', 'research_output_register', 'Output register (title, output type, author(s), publication date and unique identifier)', 'textarea', true, ['validation' => ['max_length' => 18000]]),
                     $field('result', 'latest_publication_date', 'Latest publication or completion date', 'date', true),
-                    $field('classification', 'research_output_types', 'Research output types', 'multiselect', true, ['options' => ['Policy brief', 'Working paper', 'Just-in-time analysis', 'Literature review', 'Journal article', 'Research report', 'Other approved output']]),
+                    $field('classification', 'research_output_types', 'Research output types', 'multiselect', true, ['options' => $this->options['research_output_type']]),
                     $field('classification', 'priority_themes', 'ATTP priority themes addressed', 'multiselect', true, ['options' => $themes]),
                     $field('classification', 'research_countries', 'Countries covered by the research', 'multiselect', true, ['options' => $countries]),
                     $field('classification', 'cross_border_research', 'Does the research address a cross-border issue?', 'yes_no', true, ['options' => ['yes' => 'Yes', 'no' => 'No']]),
@@ -529,7 +618,7 @@ class AttpMelThinkTankReportingSeeder extends Seeder
                     $field('result', 'supported_staff_register', 'Supported staff register (name or coded ID, support type, dates and completion status)', 'textarea', true, ['validation' => ['max_length' => 15000]]),
                     $field('classification', 'staff_countries', 'Countries of participating staff', 'multiselect', true, ['options' => $countries]),
                     $field('classification', 'staff_gender', 'Gender classification used for this indicator', 'select', true, ['options' => ['Female']]),
-                    $field('classification', 'support_types', 'Types of support provided', 'multiselect', true, ['options' => ['Mentoring', 'Peer learning', 'Both mentoring and peer learning']]),
+                    $field('classification', 'support_types', 'Types of support provided', 'multiselect', true, ['options' => $this->options['support_type']]),
                     $field('classification', 'support_start_date', 'Support start date', 'date', true),
                     $field('classification', 'support_end_date', 'Support end date', 'date', false),
                     $field('evidence', 'support_outcomes', 'Skills, professional development or institutional outcomes', 'textarea', true, ['validation' => ['max_length' => 10000]]),

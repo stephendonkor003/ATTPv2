@@ -18,7 +18,7 @@ class MeFrameworkController extends Controller
     public function __construct()
     {
         $this->middleware(['auth', 'not.funding.partner']);
-        $this->middleware('permission:me.framework.manage|me.targets.manage|me.configuration.manage')
+        $this->middleware('permission:me.framework.manage|me.targets.manage|me.configuration.manage|me.configuration.view')
             ->only('index');
         $this->middleware('permission:me.framework.manage|me.configuration.manage')
             ->only(['updateFramework', 'updateIndicator', 'storeReferenceSheet', 'storeCalculationRule']);
@@ -28,7 +28,11 @@ class MeFrameworkController extends Controller
 
     public function index(Request $request)
     {
-        $framework = MeFramework::query()->current()->firstOrFail();
+        $framework = MeFramework::query()->current()->first();
+        if (! $framework) {
+            return response()->view('me.framework.missing');
+        }
+
         $indicators = Indicator::query()->where('framework_id', $framework->id)
             ->with(['projectComponent:id,project_id,name', 'unit:id,name,symbol', 'approvedReferenceSheet', 'targets.thinkTank:id,name', 'calculationRules'])
             ->orderBy('display_order')->get();
