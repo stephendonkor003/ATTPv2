@@ -55,3 +55,29 @@ it('shows the repository navigation to every role allowed to open the workspace'
         ->toContain('me.performance_reports.review')
         ->toContain('me.data_entry.view');
 });
+
+it('creates and selects an indicator evidence folder without leaving the indicator form', function () {
+    $root = dirname(__DIR__, 2);
+    $form = file_get_contents($root.'/resources/views/me/indicators/partials/form.blade.php');
+    $modals = file_get_contents($root.'/resources/views/me/indicators/partials/inline-config-modals.blade.php');
+    $script = file_get_contents($root.'/resources/views/me/indicators/partials/inline-config-script.blade.php');
+    $controller = file_get_contents($root.'/app/Http/Controllers/MeKnowledgeEvidenceController.php');
+
+    expect($form)
+        ->toContain('data-inline-config-open="evidence"')
+        ->toContain('aria-controls="indicatorEvidenceFolderCreateModal"')
+        ->toContain('data-inline-selection-status="evidence"')
+        ->not->toContain('> Open repository')
+        ->and($modals)
+        ->toContain('id="indicatorEvidenceFolderCreateModal"')
+        ->toContain('data-inline-config-form="evidence"')
+        ->toContain('data-inline-target-select="indicator-means-of-verification"')
+        ->toContain('name="indicator_creation" value="1"')
+        ->and($script)
+        ->toContain("fetch(form.action")
+        ->toContain('selectCreatedItem(kind, form, payload.data)')
+        ->and($controller)
+        ->toContain('$inlineIndicatorCreation = ($request->expectsJson() || $request->ajax())')
+        ->toContain("'message' => 'Repository folder created and selected.'")
+        ->toContain("'documents_count' => 0");
+});

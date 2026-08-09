@@ -10,6 +10,7 @@ use App\Models\IndicatorTarget;
 use App\Models\IndicatorUnit;
 use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MeDisaggregationDimension;
+use App\Models\MeRepositoryFolder;
 use App\Models\Program;
 use App\Models\Project;
 use App\Models\ReportingFrequency;
@@ -117,6 +118,14 @@ $basePayload = [
     'notes' => 'Legacy optional notes retained during focused edits',
     'primary_source_type' => 'link',
 ];
+$creationDimensionIds = MeDisaggregationDimension::query()
+    ->whereIn('code', ['country', 'priority_theme'])
+    ->orderBy('sort_order')
+    ->pluck('id')
+    ->all();
+$basePayload['disaggregation_configuration_present'] = 1;
+$basePayload['dimensions'] = $creationDimensionIds;
+$basePayload['required_dimensions'] = $creationDimensionIds;
 
 DB::beginTransaction();
 
@@ -134,12 +143,31 @@ try {
         'description' => 'Temporary project component for indicator classification.',
         'created_by' => $admin->id,
     ]);
+    $inlineFolderName = "Inline indicator evidence {$suffix}";
+    $inlineFolderResponse = $repositoryController->storeFolder($jsonRequestFor(
+        'POST',
+        '/budget/me/knowledge-and-evidence-repository/folders',
+        [
+            'indicator_creation' => 1,
+            'portfolio_id' => $portfolio->id,
+            'name' => $inlineFolderName,
+            'description' => 'Created inside the indicator editor without navigating away.',
+        ]
+    ));
+    $inlineFolderData = $inlineFolderResponse->getData(true)['data'] ?? [];
+    $inlineFolder = MeRepositoryFolder::query()->findOrFail($inlineFolderData['id'] ?? null);
+    if ($inlineFolderResponse->getStatusCode() !== 201
+        || (string) $inlineFolder->portfolio_id !== (string) $portfolio->id
+        || $inlineFolder->indicators()->exists()
+        || ($inlineFolderData['label'] ?? null) !== $inlineFolderName.' (0 documents)') {
+        throw new RuntimeException('Inline evidence-folder creation did not return an unlinked selectable folder.');
+    }
     $evidenceTitle = "Indicator MOV {$suffix}";
     $repositoryResponse = $repositoryController->store($requestFor(
         'POST',
         '/budget/me/knowledge-and-evidence-repository',
         [
-            'portfolio_id' => $portfolio->id,
+            'folder_id' => $inlineFolder->id,
             'title' => $evidenceTitle,
             'document_type' => 'means_of_verification',
             'external_url' => 'https://example.test/me/mov',
@@ -152,6 +180,7 @@ try {
     }
     $basePayload['project_component_id'] = $component->id;
     $basePayload['means_of_verification_id'] = $evidence->id;
+    $basePayload['means_of_verification_folder_id'] = $inlineFolder->id;
     $foreignPortfolio = Sector::query()->whereKeyNot($portfolio->id)->firstOrFail();
     $foreignProgram = Program::query()->create([
         'sector_id' => $foreignPortfolio->id,
@@ -360,7 +389,7 @@ try {
 
     $indicator = Indicator::query()
         ->where('name', $basePayload['name'])
-        ->with('setupTarget')
+        ->with(['setupTarget', 'disaggregationRequirements.dimension'])
         ->firstOrFail();
 
     if ($indicator->indicator_code !== $basePayload['indicator_code']) {
@@ -380,6 +409,14 @@ try {
     if ($indicator->indicatorable_type !== Sector::class
         || (string) $indicator->indicatorable_id !== (string) $portfolio->id) {
         throw new RuntimeException('Blank hierarchy owner did not default to the mandatory selected portfolio.');
+    }
+    if (! $indicator->repositoryFolders()->whereKey($inlineFolder->id)->exists()) {
+        throw new RuntimeException('Saving the indicator did not link its inline-created evidence folder.');
+    }
+    if ($indicator->disaggregationRequirements->count() !== 2
+        || $indicator->disaggregationRequirements->contains(fn ($requirement) => ! $requirement->is_required)
+        || $indicator->disaggregationRequirements->pluck('dimension.code')->sort()->values()->all() !== ['country', 'priority_theme']) {
+        throw new RuntimeException('Indicator creation did not persist its required disaggregation categories.');
     }
 
     $repositoryView = $repositoryController->index($requestFor(
@@ -632,7 +669,7 @@ try {
             throw new RuntimeException("The indicator registry still eagerly loads {$removedVariable}.");
         }
     }
-    if ($viewData['indicators']->total() !== 1
+    if ($viewData['indicators']->count() !== 1
         || (string) $viewData['indicators']->first()->id !== (string) $indicator->id
         || $viewData['search'] !== $registrySearch
         || (string) $viewData['componentFilter'] !== (string) $component->id
@@ -673,6 +710,9 @@ try {
         'Results level',
         'Definition',
         'Unit of measurement',
+        'Aggregation across reporting periods',
+        'Required disaggregation',
+        'ATTP priority theme',
         'Baseline',
         'Target',
         'Reporting frequency',
@@ -686,9 +726,12 @@ try {
     }
     foreach ([
         'New unit',
+        'New folder',
         'indicatorUnitCreateModal',
+        'indicatorEvidenceFolderCreateModal',
         'indicatorFrequencyCreateModal',
         route('budget.me-configuration.units.store'),
+        route('budget.me.knowledge-evidence.folders.store'),
         route('budget.me-configuration.frequencies.store'),
         'data-inline-config-form',
         'data-inline-selection-status',
@@ -725,6 +768,24 @@ try {
         if (str_contains($frequencySelectHtml, '>'.$forbiddenCadence.'<')) {
             throw new RuntimeException("The indicator frequency selector still exposes {$forbiddenCadence}.");
         }
+    }
+    $unitSelectStart = strpos($indicatorFormHtml, 'id="indicator-unit"');
+    $unitSelectEnd = strpos($indicatorFormHtml, '</select>', $unitSelectStart ?: 0);
+    $unitSelectHtml = $unitSelectStart !== false && $unitSelectEnd !== false
+        ? substr($indicatorFormHtml, $unitSelectStart, $unitSelectEnd - $unitSelectStart)
+        : '';
+    if (! str_contains($unitSelectHtml, $inlineUnit->name)
+        || str_contains($unitSelectHtml, $inlineUnit->name.' ('.$inlineUnit->symbol.')')
+        || str_contains($unitSelectHtml, $inlineUnit->name.' — '.$portfolio->name)) {
+        throw new RuntimeException('The indicator unit selector is not displaying the exact configured unit name.');
+    }
+    foreach (['name="dimensions[]"', 'name="required_dimensions[]"', 'disaggregation_configuration_present'] as $marker) {
+        if (! str_contains($indicatorFormHtml, $marker)) {
+            throw new RuntimeException("The indicator form is missing disaggregation marker {$marker}.");
+        }
+    }
+    if (str_contains($indicatorFormHtml, 'Approved aggregation method')) {
+        throw new RuntimeException('The indicator form still confuses period aggregation with disaggregation.');
     }
     if (str_contains($indicatorFormHtml, '>Methodology<')
         || str_contains($indicatorFormHtml, '>Primary Source Type<')) {

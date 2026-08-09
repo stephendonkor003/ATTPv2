@@ -396,6 +396,68 @@
         padding-left: 2.35rem;
     }
 
+    .me-results-framework .me-register-export-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: .5rem;
+    }
+
+    .me-results-framework .me-register-toolbar {
+        display: grid;
+        grid-template-columns: minmax(240px, 1.7fr) repeat(4, minmax(150px, 1fr)) 90px auto;
+        align-items: end;
+        gap: .75rem;
+        padding: 1rem;
+        border-top: 1px solid var(--me-border);
+        border-bottom: 1px solid var(--me-border);
+        background: linear-gradient(180deg, #fbfdfc 0%, #f6faf8 100%);
+    }
+
+    .me-results-framework .me-register-filter {
+        min-width: 0;
+    }
+
+    .me-results-framework .me-register-filter > label {
+        display: block;
+        margin-bottom: .32rem;
+        color: #53665d;
+        font-size: .67rem;
+        font-weight: 800;
+        letter-spacing: .025em;
+    }
+
+    .me-results-framework .me-register-filter .form-control,
+    .me-results-framework .me-register-filter .form-select {
+        min-height: 38px;
+        border-color: #cfded6;
+        border-radius: .55rem;
+        background-color: #fff;
+        font-size: .73rem;
+    }
+
+    .me-results-framework .me-register-filter .form-control:focus,
+    .me-results-framework .me-register-filter .form-select:focus {
+        border-color: var(--me-green-700);
+        box-shadow: 0 0 0 .2rem rgba(17, 122, 89, .12);
+    }
+
+    .me-results-framework .me-register-filter-search .me-search-wrap {
+        max-width: none;
+    }
+
+    .me-results-framework .me-register-clear {
+        min-height: 38px;
+        white-space: nowrap;
+    }
+
+    .me-results-framework .me-register-match-count {
+        grid-column: 1 / -1;
+        color: var(--me-green-800);
+        font-size: .71rem;
+        font-weight: 800;
+    }
+
     .me-results-framework .me-table-statusbar {
         display: flex;
         align-items: center;
@@ -426,8 +488,9 @@
 
     .me-results-framework .me-register-scroll {
         width: 100%;
-        max-height: min(70vh, 720px);
-        overflow: auto;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: visible;
         overscroll-behavior: contain;
         scrollbar-color: #8faea0 #edf3f0;
         scrollbar-gutter: stable;
@@ -458,39 +521,37 @@
     }
 
     .me-results-framework .me-register-table {
-        width: 1340px;
-        min-width: 1340px;
+        width: 1240px !important;
+        min-width: 1240px;
+        max-width: none !important;
         margin: 0;
-        table-layout: fixed;
+        table-layout: fixed !important;
     }
 
     .me-results-framework .me-register-table .me-col-indicator {
-        width: 355px;
+        width: 340px;
     }
 
     .me-results-framework .me-register-table .me-col-measurement {
-        width: 175px;
+        width: 165px;
     }
 
     .me-results-framework .me-register-table .me-col-reporting {
-        width: 330px;
+        width: 345px;
     }
 
     .me-results-framework .me-register-table .me-col-responsible {
-        width: 190px;
+        width: 175px;
     }
 
     .me-results-framework .me-register-table .me-col-actions {
-        width: 290px;
+        width: 215px;
     }
 
     .me-results-framework .me-register-table th {
-        position: sticky;
-        top: 0;
-        z-index: 3;
         padding: .72rem .8rem;
         border-bottom-color: var(--me-border);
-        background: var(--me-surface);
+        background: #f4f8f6;
         color: #52635b;
         font-size: .67rem;
         font-weight: 800;
@@ -506,6 +567,15 @@
         font-size: .76rem;
         vertical-align: top;
         overflow-wrap: anywhere;
+        word-break: normal;
+    }
+
+    .me-results-framework .me-register-table td > * {
+        max-width: 100%;
+    }
+
+    .me-results-framework .me-register-table td a {
+        overflow-wrap: anywhere;
     }
 
     .me-results-framework .me-register-table tbody tr:hover td {
@@ -513,16 +583,11 @@
     }
 
     .me-results-framework .me-register-table .me-actions-cell {
-        position: sticky;
-        right: 0;
-        z-index: 2;
         background: #fff;
-        box-shadow: -8px 0 14px -13px rgba(7, 56, 43, .65);
     }
 
     .me-results-framework .me-register-table th.me-actions-cell {
-        z-index: 5;
-        background: var(--me-surface);
+        background: #f4f8f6;
     }
 
     .me-results-framework .me-code {
@@ -558,6 +623,7 @@
     .me-results-framework .me-metric-line {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         flex-wrap: wrap;
         gap: .35rem;
         margin-bottom: .4rem;
@@ -568,6 +634,54 @@
         font-weight: 800;
     }
 
+    .me-results-framework .me-reporting-chips {
+        display: flex;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: .35rem;
+        margin-bottom: .65rem;
+    }
+
+    .me-results-framework .me-person {
+        display: flex;
+        align-items: flex-start;
+        min-width: 0;
+        gap: .55rem;
+    }
+
+    .me-results-framework .me-person-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 30px;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: var(--me-green-100);
+        color: var(--me-green-800);
+    }
+
+    .me-results-framework .me-person > span:last-child {
+        min-width: 0;
+    }
+
+    .me-results-framework .me-person strong,
+    .me-results-framework .me-person small {
+        display: block;
+        overflow-wrap: anywhere;
+    }
+
+    .me-results-framework .me-person strong {
+        color: var(--me-green-950);
+        font-size: .74rem;
+    }
+
+    .me-results-framework .me-person small {
+        margin-top: .16rem;
+        color: var(--me-muted);
+        font-size: .64rem;
+    }
+
     .me-results-framework .me-muted {
         color: var(--me-muted);
     }
@@ -575,6 +689,7 @@
     .me-results-framework .me-chip {
         display: inline-flex;
         align-items: center;
+        min-width: 0;
         max-width: 100%;
         gap: .25rem;
         padding: .25rem .42rem;
@@ -592,8 +707,8 @@
     .me-results-framework .me-row-actions {
         display: flex;
         justify-content: flex-end;
-        align-items: center;
-        flex-wrap: nowrap;
+        align-items: flex-start;
+        flex-wrap: wrap;
         gap: .35rem;
     }
 
@@ -604,6 +719,59 @@
 
     .me-results-framework .me-row-actions .btn {
         white-space: nowrap;
+    }
+
+    .me-results-framework .dataTables_wrapper {
+        width: 100%;
+        color: var(--me-muted);
+    }
+
+    .me-results-framework .dataTables_wrapper .me-dt-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: .8rem;
+        padding: .85rem 1rem;
+        border-top: 1px solid var(--me-border);
+        background: #fbfdfc;
+    }
+
+    .me-results-framework .dataTables_wrapper .dataTables_info {
+        padding: 0 !important;
+        color: var(--me-muted);
+        font-size: .72rem;
+    }
+
+    .me-results-framework .dataTables_wrapper .dataTables_paginate {
+        padding: 0 !important;
+    }
+
+    .me-results-framework .dataTables_wrapper .pagination {
+        margin: 0;
+    }
+
+    .me-results-framework .dataTables_wrapper .page-link {
+        min-width: 34px;
+        border-color: #d8e4de;
+        color: var(--me-green-800);
+        text-align: center;
+    }
+
+    .me-results-framework .dataTables_wrapper .page-item.active .page-link {
+        border-color: var(--me-green-700);
+        background: var(--me-green-700);
+        color: #fff;
+    }
+
+    .me-results-framework .dataTables_wrapper table.dataTable {
+        border-collapse: collapse !important;
+    }
+
+    .me-results-framework .dataTables_wrapper table.dataTable thead th.sorting,
+    .me-results-framework .dataTables_wrapper table.dataTable thead th.sorting_asc,
+    .me-results-framework .dataTables_wrapper table.dataTable thead th.sorting_desc {
+        padding-right: 1.9rem;
     }
 
     .me-results-framework .me-empty-state {
@@ -1162,6 +1330,14 @@
         .me-results-framework .me-summary-grid {
             grid-template-columns: 1fr;
         }
+
+        .me-results-framework .me-register-toolbar {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .me-results-framework .me-register-filter-search {
+            grid-column: 1 / -1;
+        }
     }
 
     @media (max-width: 767.98px) {
@@ -1195,6 +1371,31 @@
             width: 100%;
             min-width: 0;
             max-width: none;
+        }
+
+        .me-results-framework .me-register-export-actions {
+            width: 100%;
+        }
+
+        .me-results-framework .me-register-export-actions .btn {
+            flex: 1 1 0;
+        }
+
+        .me-results-framework .me-register-toolbar {
+            grid-template-columns: 1fr;
+        }
+
+        .me-results-framework .me-register-filter-search,
+        .me-results-framework .me-register-match-count {
+            grid-column: auto;
+        }
+
+        .me-results-framework .me-register-clear {
+            width: 100%;
+        }
+
+        .me-results-framework .me-register-page-size {
+            display: none;
         }
 
         .me-results-framework .me-indicator-form-panel .me-panel-body {

@@ -36,6 +36,18 @@
         'data_collection_method',
         $editingDataCollectionMethod ?? $editingPrimarySourceValue ?? ''
     );
+    $hasSubmittedDisaggregation = old('disaggregation_configuration_present') !== null;
+    $savedRequirements = $editingIndicator?->disaggregationRequirements ?? collect();
+    $selectedDimensionIds = collect(
+        $hasSubmittedDisaggregation
+            ? old('dimensions', [])
+            : $savedRequirements->pluck('dimension_id')->all()
+    )->map(fn ($id) => (string) $id)->all();
+    $requiredDimensionIds = collect(
+        $hasSubmittedDisaggregation
+            ? old('required_dimensions', [])
+            : $savedRequirements->where('is_required', true)->pluck('dimension_id')->all()
+    )->map(fn ($id) => (string) $id)->all();
     $showConfigurationPortfolio = ($portfolios ?? collect())->count() > 1;
 @endphp
 
@@ -102,7 +114,7 @@
                                 @if ($programs->isNotEmpty())
                                     <optgroup label="Programmes">
                                         @foreach ($programs as $program)
-                                            @php($ownerValue = 'program:'.$program->id)
+                                            @php $ownerValue = 'program:'.$program->id; @endphp
                                             <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $program->name }}</option>
                                         @endforeach
                                     </optgroup>
@@ -110,7 +122,7 @@
                                 @if ($projects->isNotEmpty())
                                     <optgroup label="Projects">
                                         @foreach ($projects as $project)
-                                            @php($ownerValue = 'project:'.$project->id)
+                                            @php $ownerValue = 'project:'.$project->id; @endphp
                                             <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" data-component-id="{{ $ownerComponentMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $project->name }}</option>
                                         @endforeach
                                     </optgroup>
@@ -118,7 +130,7 @@
                                 @if ($activities->isNotEmpty())
                                     <optgroup label="Activities">
                                         @foreach ($activities as $activity)
-                                            @php($ownerValue = 'activity:'.$activity->id)
+                                            @php $ownerValue = 'activity:'.$activity->id; @endphp
                                             <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" data-component-id="{{ $ownerComponentMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $activity->name }}</option>
                                         @endforeach
                                     </optgroup>
@@ -126,7 +138,7 @@
                                 @if ($subActivities->isNotEmpty())
                                     <optgroup label="Sub-activities">
                                         @foreach ($subActivities as $subActivity)
-                                            @php($ownerValue = 'sub_activity:'.$subActivity->id)
+                                            @php $ownerValue = 'sub_activity:'.$subActivity->id; @endphp
                                             <option value="{{ $ownerValue }}" data-portfolio-id="{{ $ownerPortfolioMap[$ownerValue] ?? '' }}" data-component-id="{{ $ownerComponentMap[$ownerValue] ?? '' }}" @selected($selectedOwner === $ownerValue)>{{ $subActivity->name }}</option>
                                         @endforeach
                                     </optgroup>
@@ -277,7 +289,7 @@
                             id="indicator-unit"
                             name="unit_id"
                             class="form-select @error('unit_id') is-invalid @enderror"
-                            aria-describedby="indicator-unit-selection-status @error('unit_id') indicator-unit-error @enderror"
+                            aria-describedby="indicator-unit-help indicator-unit-selection-status @error('unit_id') indicator-unit-error @enderror"
                             data-indicator-portfolio-dependent
                             data-dependent-kind="units"
                             required
@@ -285,11 +297,12 @@
                             <option value="">Select unit</option>
                             @foreach ($units as $unit)
                                 <option value="{{ $unit->id }}" data-portfolio-id="{{ $unit->portfolio_id }}" @selected((string) old('unit_id', $editingIndicator->unit_id ?? '') === (string) $unit->id)>
-                                    {{ $unit->name }}{{ $unit->symbol ? ' ('.$unit->symbol.')' : '' }}@if($showConfigurationPortfolio && $unit->portfolio?->name) &mdash; {{ $unit->portfolio->name }}@endif
+                                    {{ $unit->name }}
                                 </option>
                             @endforeach
                         </select>
                         @error('unit_id')<div class="invalid-feedback" id="indicator-unit-error">{{ $message }}</div>@enderror
+                        <small class="me-field-help" id="indicator-unit-help">The exact configured value is used, for example Number, Percentage, Yes/No or Milestone.</small>
                         <small
                             class="me-inline-selection-status"
                             id="indicator-unit-selection-status"
@@ -345,7 +358,7 @@
                     </div>
 
                     <div class="col-lg-6">
-                        <label class="form-label" for="indicator-aggregation-method">Approved aggregation method <span class="text-danger">*</span></label>
+                        <label class="form-label" for="indicator-aggregation-method">Aggregation across reporting periods <span class="text-danger">*</span></label>
                         <select
                             id="indicator-aggregation-method"
                             name="aggregation_method"
@@ -357,7 +370,7 @@
                             @endforeach
                         </select>
                         @error('aggregation_method')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        <small class="text-muted">Only “Sum” adds periods. Percentages, ratios, averages and other non-additive values are never summed.</small>
+                        <small class="text-muted">This is a calculation rule. Only “Sum” adds period values; percentages, ratios and other non-additive values must not be summed.</small>
                     </div>
 
                     <div class="col-lg-6">
@@ -379,7 +392,71 @@
             </div>
 
             <div class="me-form-section">
-                <h3 class="me-form-section-title">4. Reporting and accountability</h3>
+                <h3 class="me-form-section-title">4. Required disaggregation</h3>
+                <p class="text-muted mb-3">
+                    Select the meaningful categories used to break down this indicator, such as Country or ATTP priority theme.
+                    These categories describe the result; they do not calculate or add it.
+                </p>
+                <input type="hidden" name="disaggregation_configuration_present" value="1">
+                @error('dimensions')<div class="alert alert-danger py-2">{{ $message }}</div>@enderror
+                @error('dimensions.*')<div class="alert alert-danger py-2">{{ $message }}</div>@enderror
+
+                @if (($disaggregationDimensions ?? collect())->isEmpty())
+                    <div class="alert alert-warning mb-0">
+                        No approved disaggregation categories are configured. Add them in M&amp;E Configuration before creating the indicator.
+                    </div>
+                @else
+                    <div class="row g-3">
+                        @foreach ($disaggregationDimensions as $dimension)
+                            @php
+                                $dimensionId = (string) $dimension->id;
+                                $isSelected = in_array($dimensionId, $selectedDimensionIds, true);
+                                $isRequired = in_array($dimensionId, $requiredDimensionIds, true);
+                            @endphp
+                            <div class="col-xl-4 col-md-6">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="form-check">
+                                        <input
+                                            class="form-check-input"
+                                            type="checkbox"
+                                            name="dimensions[]"
+                                            value="{{ $dimension->id }}"
+                                            id="indicator-dimension-{{ $dimension->id }}"
+                                            data-indicator-dimension-use
+                                            @checked($isSelected)
+                                        >
+                                        <label class="form-check-label fw-semibold" for="indicator-dimension-{{ $dimension->id }}">
+                                            {{ $dimension->name }}
+                                        </label>
+                                    </div>
+                                    @if ($dimension->description)
+                                        <div class="small text-muted mt-1">{{ $dimension->description }}</div>
+                                    @endif
+                                    <div class="form-check mt-2">
+                                        <input
+                                            class="form-check-input"
+                                            type="checkbox"
+                                            name="required_dimensions[]"
+                                            value="{{ $dimension->id }}"
+                                            id="indicator-dimension-required-{{ $dimension->id }}"
+                                            data-indicator-dimension-required
+                                            @checked($isRequired)
+                                            @disabled(! $isSelected)
+                                        >
+                                        <label class="form-check-label small" for="indicator-dimension-required-{{ $dimension->id }}">
+                                            Required in every applicable report
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+                <small class="me-field-help d-block mt-3">Select only categories required by the indicator definition and approved Indicator Reference Sheet.</small>
+            </div>
+
+            <div class="me-form-section">
+                <h3 class="me-form-section-title">5. Reporting and accountability</h3>
                 <div class="row g-3">
                     <div class="col-lg-6">
                         <label class="form-label" for="indicator-frequency">Reporting frequency <span class="text-danger">*</span></label>
@@ -426,19 +503,22 @@
                     <div class="col-lg-6">
                         <div class="me-field-label-row">
                             <label class="form-label" for="indicator-means-of-verification">Means of Verification folder <span class="text-danger">*</span></label>
-                            <a
-                                href="{{ route('budget.me.rebuild.knowledge-repository') }}"
+                            <button
+                                type="button"
                                 class="me-inline-create-link"
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                data-inline-config-open="evidence"
+                                aria-controls="indicatorEvidenceFolderCreateModal"
+                                aria-haspopup="dialog"
+                                aria-label="Create a Means of Verification folder without leaving this indicator"
                             >
-                                <i class="feather-folder" aria-hidden="true"></i> Open repository
-                            </a>
+                                <i class="feather-folder-plus" aria-hidden="true"></i> New folder
+                            </button>
                         </div>
                         <select
                             id="indicator-means-of-verification"
                             name="means_of_verification_folder_id"
                             class="form-select @error('means_of_verification_folder_id') is-invalid @enderror"
+                            aria-describedby="indicator-evidence-help indicator-evidence-selection-status @error('means_of_verification_folder_id') indicator-evidence-error @enderror"
                             data-indicator-portfolio-dependent
                             data-dependent-kind="evidence"
                             required
@@ -450,8 +530,15 @@
                                 </option>
                             @endforeach
                         </select>
-                        <small class="me-field-help">The folder—not one individual file—is linked to this indicator. All current and future documents in it remain available as evidence.</small>
-                        @error('means_of_verification_folder_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <small class="me-field-help" id="indicator-evidence-help">The folder—not one individual file—is linked to this indicator. All current and future documents in it remain available as evidence.</small>
+                        @error('means_of_verification_folder_id')<div class="invalid-feedback" id="indicator-evidence-error">{{ $message }}</div>@enderror
+                        <small
+                            class="me-inline-selection-status"
+                            id="indicator-evidence-selection-status"
+                            data-inline-selection-status="evidence"
+                            role="status"
+                            aria-live="polite"
+                        ></small>
                     </div>
 
                     <div class="col-lg-6">

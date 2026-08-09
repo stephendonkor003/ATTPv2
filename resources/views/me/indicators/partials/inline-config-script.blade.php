@@ -160,10 +160,12 @@
             const suppliedLabel = String(data?.label || '').trim();
             const name = String(data?.name || '').trim();
             const symbol = String(data?.symbol || '').trim();
-            let label = suppliedLabel || (kind === 'unit' && symbol ? `${name} (${symbol})` : name);
+            let label = kind === 'unit'
+                ? name
+                : suppliedLabel || (symbol ? `${name} (${symbol})` : name);
             const portfolio = form.elements.namedItem('portfolio_id');
 
-            if (portfolio instanceof HTMLSelectElement && portfolio.value) {
+            if (kind !== 'unit' && portfolio instanceof HTMLSelectElement && portfolio.value) {
                 const portfolioName = String(
                     data?.portfolio_name
                     || portfolio.options[portfolio.selectedIndex]?.textContent

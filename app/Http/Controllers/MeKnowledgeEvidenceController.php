@@ -270,7 +270,10 @@ class MeKnowledgeEvidenceController extends Controller
 
     public function storeFolder(Request $request)
     {
+        $inlineIndicatorCreation = ($request->expectsJson() || $request->ajax())
+            && $request->boolean('indicator_creation');
         $validated = $request->validate([
+            'indicator_creation' => ['nullable', 'boolean'],
             'portfolio_id' => ['required', 'uuid', Rule::exists('myb_sectors', 'id')],
             'name' => [
                 'required', 'string', 'max:180',
@@ -278,13 +281,16 @@ class MeKnowledgeEvidenceController extends Controller
                     ->where(fn ($query) => $query->where('portfolio_id', $request->input('portfolio_id'))),
             ],
             'description' => ['nullable', 'string', 'max:5000'],
-            'indicator_ids' => ['required', 'array', 'min:1'],
+            'indicator_ids' => [$inlineIndicatorCreation ? 'nullable' : 'required', 'array', 'min:1'],
             'indicator_ids.*' => ['required', 'uuid', 'distinct', Rule::exists('myb_indicators', 'id')],
         ]);
         $this->assertPortfolioInCurrentScope((string) $validated['portfolio_id']);
-        $this->assertIndicatorsBelongToPortfolio($validated['indicator_ids'], (string) $validated['portfolio_id']);
+        $indicatorIds = $validated['indicator_ids'] ?? [];
+        if ($indicatorIds !== []) {
+            $this->assertIndicatorsBelongToPortfolio($indicatorIds, (string) $validated['portfolio_id']);
+        }
 
-        $folder = DB::transaction(function () use ($validated, $request): MeRepositoryFolder {
+        $folder = DB::transaction(function () use ($validated, $indicatorIds, $request): MeRepositoryFolder {
             $folder = MeRepositoryFolder::query()->create([
                 'portfolio_id' => $validated['portfolio_id'],
                 'name' => trim((string) $validated['name']),
@@ -292,12 +298,30 @@ class MeKnowledgeEvidenceController extends Controller
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
-            $folder->indicators()->sync(collect($validated['indicator_ids'])->mapWithKeys(
-                fn (string $id): array => [$id => ['linked_by' => $request->user()->id]]
-            )->all());
+            if ($indicatorIds !== []) {
+                $folder->indicators()->sync(collect($indicatorIds)->mapWithKeys(
+                    fn (string $id): array => [$id => ['linked_by' => $request->user()->id]]
+                )->all());
+            }
 
             return $folder;
         });
+
+        if ($request->expectsJson() || $request->ajax()) {
+            $folder->load('portfolio:id,name');
+
+            return response()->json([
+                'message' => 'Repository folder created and selected.',
+                'data' => [
+                    'id' => $folder->id,
+                    'name' => $folder->name,
+                    'label' => $folder->name.' (0 documents)',
+                    'portfolio_id' => $folder->portfolio_id,
+                    'portfolio_name' => $folder->portfolio?->name,
+                    'documents_count' => 0,
+                ],
+            ], 201);
+        }
 
         return redirect()->route('budget.me.rebuild.knowledge-repository', [
             'portfolio_id' => $folder->portfolio_id,

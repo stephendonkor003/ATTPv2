@@ -14,9 +14,9 @@
             || (bool) $editingIndicator
             || $errors->any();
         $summary = $summary ?? [
-            'total' => $indicators->total(),
+            'total' => $indicators->count(),
             'complete' => 0,
-            'needs_attention' => $indicators->total(),
+            'needs_attention' => $indicators->count(),
         ];
         $completeIndicators = (int) ($summary['complete'] ?? $summary['with_target'] ?? 0);
         $indicatorsNeedingAttention = (int) ($summary['needs_attention'] ?? $summary['without_target'] ?? 0);
@@ -116,6 +116,137 @@
 @endcan
 
 @push('scripts')
+    <script src="{{ asset('admin/assets/vendors/js/dataTables.min.js') }}"></script>
+    <script src="{{ asset('admin/assets/vendors/js/dataTables.bs5.min.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const table = document.querySelector('[data-indicator-register-table]');
+            const toolbar = document.querySelector('[data-indicator-table-toolbar]');
+            if (!(table instanceof HTMLTableElement) || !(toolbar instanceof HTMLElement)) {
+                return;
+            }
+
+            const search = toolbar.querySelector('[data-indicator-table-search]');
+            const filters = Array.from(toolbar.querySelectorAll('[data-indicator-table-filter]'));
+            const length = toolbar.querySelector('[data-indicator-table-length]');
+            const clear = toolbar.querySelector('[data-indicator-table-clear]');
+            const count = toolbar.querySelector('[data-indicator-table-count]');
+            const mobileCards = Array.from(document.querySelectorAll('[data-indicator-mobile-card]'));
+            const normalize = (value) => String(value || '').trim().toLowerCase();
+            const selectedFilters = () => Object.fromEntries(
+                filters.map((control) => [control.dataset.indicatorTableFilter, String(control.value || '')])
+            );
+            const rowMatchesFilters = (row, selected) => Object.entries(selected)
+                .every(([key, value]) => value === '' || String(row?.dataset?.[key] || '') === value);
+
+            const filterMobileCards = () => {
+                const query = normalize(search?.value);
+                const selected = selectedFilters();
+                let visible = 0;
+
+                mobileCards.forEach((card) => {
+                    const matches = rowMatchesFilters(card, selected)
+                        && (query === '' || normalize(card.dataset.search).includes(query));
+                    card.hidden = !matches;
+                    if (matches) visible += 1;
+                });
+
+                if (!window.jQuery?.fn?.DataTable && count) {
+                    count.textContent = `${visible} ${visible === 1 ? 'indicator' : 'indicators'}`;
+                }
+            };
+
+            const dataTables = window.jQuery?.fn?.DataTable;
+            if (!dataTables) {
+                const fallbackRows = Array.from(table.tBodies[0]?.rows || []);
+                const applyFallback = () => {
+                    const query = normalize(search?.value);
+                    const selected = selectedFilters();
+                    let visible = 0;
+                    fallbackRows.forEach((row) => {
+                        const matches = rowMatchesFilters(row, selected)
+                            && (query === '' || normalize(row.textContent).includes(query));
+                        row.hidden = !matches;
+                        if (matches) visible += 1;
+                    });
+                    if (count) count.textContent = `${visible} ${visible === 1 ? 'indicator' : 'indicators'}`;
+                    filterMobileCards();
+                };
+                search?.addEventListener('input', applyFallback);
+                filters.forEach((control) => control.addEventListener('change', applyFallback));
+                clear?.addEventListener('click', () => {
+                    if (search) search.value = '';
+                    filters.forEach((control) => { control.value = ''; });
+                    applyFallback();
+                });
+                applyFallback();
+                return;
+            }
+
+            const $ = window.jQuery;
+            const customFilter = (settings, _data, dataIndex) => {
+                if (settings.nTable !== table) return true;
+                const row = settings.aoData[dataIndex]?.nTr;
+                return rowMatchesFilters(row, selectedFilters());
+            };
+            $.fn.dataTable.ext.search.push(customFilter);
+
+            const dataTable = $(table).DataTable({
+                autoWidth: false,
+                pageLength: 10,
+                lengthChange: false,
+                order: [[0, 'asc']],
+                dom: 't<"me-dt-footer"ip>',
+                columnDefs: [
+                    { targets: 4, orderable: false, searchable: false },
+                ],
+                language: {
+                    emptyTable: 'No indicators are available.',
+                    info: 'Showing _START_ to _END_ of _TOTAL_ indicators',
+                    infoEmpty: 'Showing 0 indicators',
+                    infoFiltered: '(filtered from _MAX_)',
+                    paginate: { previous: 'Previous', next: 'Next' },
+                    zeroRecords: 'No indicators match the selected filters.',
+                },
+            });
+
+            const updateCount = () => {
+                const visible = dataTable.page.info().recordsDisplay;
+                if (count) {
+                    count.textContent = `${visible} ${visible === 1 ? 'indicator' : 'indicators'} matched`;
+                }
+                filterMobileCards();
+            };
+            const applyFilters = () => {
+                dataTable.search(String(search?.value || '')).draw();
+            };
+
+            let searchTimer = null;
+            search?.addEventListener('input', () => {
+                window.clearTimeout(searchTimer);
+                searchTimer = window.setTimeout(applyFilters, 120);
+            });
+            filters.forEach((control) => control.addEventListener('change', applyFilters));
+            length?.addEventListener('change', () => {
+                dataTable.page.len(Number(length.value)).draw();
+            });
+            clear?.addEventListener('click', () => {
+                if (search) search.value = '';
+                filters.forEach((control) => { control.value = ''; });
+                if (length) length.value = '10';
+                dataTable.page.len(10).search('').draw();
+                search?.focus();
+            });
+            dataTable.on('draw', updateCount);
+            dataTable.on('destroy', () => {
+                const index = $.fn.dataTable.ext.search.indexOf(customFilter);
+                if (index >= 0) $.fn.dataTable.ext.search.splice(index, 1);
+            });
+            window.addEventListener('resize', () => dataTable.columns.adjust());
+
+            applyFilters();
+        });
+    </script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const indicatorForm = document.querySelector('[data-indicator-form]');
@@ -227,6 +358,20 @@
                 portfolioSelect.addEventListener('change', () => filterIndicatorPortfolioFields(true));
                 ownerSelect?.addEventListener('change', synchronizeComponentWithOwner);
 
+                indicatorForm.querySelectorAll('[data-indicator-dimension-use]').forEach((useControl) => {
+                    const requiredControl = useControl.closest('.border')
+                        ?.querySelector('[data-indicator-dimension-required]');
+                    if (!(useControl instanceof HTMLInputElement)
+                        || !(requiredControl instanceof HTMLInputElement)) {
+                        return;
+                    }
+
+                    useControl.addEventListener('change', () => {
+                        requiredControl.disabled = !useControl.checked;
+                        requiredControl.checked = useControl.checked;
+                    });
+                });
+
                 inlineCreateLinks.forEach((link) => {
                     link.addEventListener('click', (event) => {
                         if (!portfolioSelect.value) {
@@ -258,12 +403,13 @@
                 filterIndicatorPortfolioFields(false);
             }
 
-            document.querySelectorAll('[data-delete-indicator-form]').forEach((form) => {
-                form.addEventListener('submit', (event) => {
+            document.addEventListener('submit', (event) => {
+                if (event.target instanceof HTMLFormElement
+                    && event.target.matches('[data-delete-indicator-form]')) {
                     if (!window.confirm('Delete this indicator? Existing targets and reported results linked to it will also be removed.')) {
                         event.preventDefault();
                     }
-                });
+                }
             });
 
             const disaggregationModalElement = document.getElementById('indicatorDisaggregationModal');
@@ -300,26 +446,29 @@
                     control.addEventListener('change', () => synchronizeDimensionRow(control.dataset.dimensionUse));
                 });
 
-                document.querySelectorAll('[data-disaggregation-open]').forEach((button) => {
-                    button.addEventListener('click', () => {
-                        disaggregationForm.action = button.dataset.action || '#';
-                        if (indicatorName) {
-                            indicatorName.textContent = button.dataset.indicatorName || '';
-                        }
-                        const selected = values(button.dataset.dimensions);
-                        const required = values(button.dataset.requiredDimensions);
-                        const numeric = values(button.dataset.numericDimensions);
-                        disaggregationForm.querySelectorAll('[data-dimension-use]').forEach((control) => {
-                            const id = control.dataset.dimensionUse;
-                            control.checked = selected.has(id);
-                            const requiredControl = disaggregationForm.querySelector(`[data-dimension-required="${id}"]`);
-                            const numericControl = disaggregationForm.querySelector(`[data-dimension-numeric="${id}"]`);
-                            if (requiredControl instanceof HTMLInputElement) requiredControl.checked = required.has(id);
-                            if (numericControl instanceof HTMLInputElement) numericControl.checked = numeric.has(id);
-                            synchronizeDimensionRow(id);
-                        });
-                        modal.show();
+                document.addEventListener('click', (event) => {
+                    const button = event.target instanceof Element
+                        ? event.target.closest('[data-disaggregation-open]')
+                        : null;
+                    if (!(button instanceof HTMLElement)) return;
+
+                    disaggregationForm.action = button.dataset.action || '#';
+                    if (indicatorName) {
+                        indicatorName.textContent = button.dataset.indicatorName || '';
+                    }
+                    const selected = values(button.dataset.dimensions);
+                    const required = values(button.dataset.requiredDimensions);
+                    const numeric = values(button.dataset.numericDimensions);
+                    disaggregationForm.querySelectorAll('[data-dimension-use]').forEach((control) => {
+                        const id = control.dataset.dimensionUse;
+                        control.checked = selected.has(id);
+                        const requiredControl = disaggregationForm.querySelector(`[data-dimension-required="${id}"]`);
+                        const numericControl = disaggregationForm.querySelector(`[data-dimension-numeric="${id}"]`);
+                        if (requiredControl instanceof HTMLInputElement) requiredControl.checked = required.has(id);
+                        if (numericControl instanceof HTMLInputElement) numericControl.checked = numeric.has(id);
+                        synchronizeDimensionRow(id);
                     });
+                    modal.show();
                 });
             }
 

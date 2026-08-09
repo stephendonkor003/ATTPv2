@@ -138,8 +138,7 @@ class MeIndicatorController extends Controller
                 });
             })
             ->latest()
-            ->paginate(15)
-            ->withQueryString();
+            ->get();
 
         $editingIndicator = null;
         if ($request->filled('edit')) {
@@ -334,6 +333,9 @@ class MeIndicatorController extends Controller
 
             $this->syncSetupTarget($indicator, $validated['target_value']);
             $this->syncAnnualTarget($indicator, $validated['annual_target']);
+            if (array_key_exists('disaggregation_configuration_present', $validated)) {
+                $this->syncDisaggregationRequirements($indicator, $validated);
+            }
             $indicator->repositoryFolders()->syncWithoutDetaching([
                 $validated['means_of_verification_folder_id'] => ['linked_by' => auth()->id()],
             ]);
@@ -380,6 +382,9 @@ class MeIndicatorController extends Controller
 
             $this->syncSetupTarget($lockedIndicator, $validated['target_value']);
             $this->syncAnnualTarget($lockedIndicator, $validated['annual_target']);
+            if (array_key_exists('disaggregation_configuration_present', $validated)) {
+                $this->syncDisaggregationRequirements($lockedIndicator, $validated);
+            }
             $lockedIndicator->repositoryFolders()->syncWithoutDetaching([
                 $validated['means_of_verification_folder_id'] => ['linked_by' => auth()->id()],
             ]);
@@ -404,22 +409,8 @@ class MeIndicatorController extends Controller
             'numeric_dimensions.*' => ['uuid', 'distinct'],
         ]);
 
-        $dimensionIds = collect($validated['dimensions'] ?? [])->values();
-        $requiredIds = collect($validated['required_dimensions'] ?? [])->intersect($dimensionIds);
-        $numericIds = collect($validated['numeric_dimensions'] ?? [])->intersect($dimensionIds);
-
-        DB::transaction(function () use ($indicator, $dimensionIds, $requiredIds, $numericIds): void {
-            $indicator->disaggregationRequirements()->delete();
-
-            foreach ($dimensionIds as $index => $dimensionId) {
-                $indicator->disaggregationRequirements()->create([
-                    'dimension_id' => $dimensionId,
-                    'is_required' => $requiredIds->contains($dimensionId),
-                    'collect_numeric_value' => $numericIds->contains($dimensionId),
-                    'sort_order' => ($index + 1) * 10,
-                    'created_by' => auth()->id(),
-                ]);
-            }
+        DB::transaction(function () use ($indicator, $validated): void {
+            $this->syncDisaggregationRequirements($indicator, $validated, true);
         });
 
         return redirect()
@@ -628,6 +619,15 @@ class MeIndicatorController extends Controller
                 'required',
                 Rule::in(array_keys(Indicator::ORGANIZATION_ROLLUP_METHODS)),
             ],
+            'disaggregation_configuration_present' => ['sometimes', 'accepted'],
+            'dimensions' => ['nullable', 'array'],
+            'dimensions.*' => [
+                'uuid',
+                'distinct',
+                Rule::exists('me_disaggregation_dimensions', 'id')->where('is_active', true),
+            ],
+            'required_dimensions' => ['nullable', 'array'],
+            'required_dimensions.*' => ['uuid', 'distinct'],
             'frequency_of_reporting_id' => 'required|exists:me_reporting_frequencies,id',
             'data_collection_method' => 'required|string|max:2000',
             'means_of_verification_folder_id' => 'required|uuid|exists:me_repository_folders,id',
@@ -1079,6 +1079,46 @@ class MeIndicatorController extends Controller
         }
 
         return $attributes;
+    }
+
+    /**
+     * Store the categories used to break an indicator result down. These are
+     * deliberately separate from the mathematical period aggregation rule.
+     */
+    protected function syncDisaggregationRequirements(
+        Indicator $indicator,
+        array $validated,
+        bool $numericSelectionProvided = false
+    ): void {
+        $dimensionIds = collect($validated['dimensions'] ?? [])->unique()->values();
+        $requiredIds = collect($validated['required_dimensions'] ?? [])->intersect($dimensionIds);
+        $numericIds = collect($validated['numeric_dimensions'] ?? [])->intersect($dimensionIds);
+        $existingNumeric = $indicator->disaggregationRequirements()
+            ->where('collect_numeric_value', true)
+            ->pluck('dimension_id')
+            ->map(fn ($id) => (string) $id);
+        $beneficiaryDimensions = MeDisaggregationDimension::query()
+            ->whereIn('id', $dimensionIds->all())
+            ->where('dimension_group', 'beneficiary')
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id);
+
+        $indicator->disaggregationRequirements()->delete();
+
+        foreach ($dimensionIds as $index => $dimensionId) {
+            $dimensionId = (string) $dimensionId;
+            $collectNumericValue = $numericSelectionProvided
+                ? $numericIds->contains($dimensionId)
+                : $existingNumeric->contains($dimensionId) || $beneficiaryDimensions->contains($dimensionId);
+
+            $indicator->disaggregationRequirements()->create([
+                'dimension_id' => $dimensionId,
+                'is_required' => $requiredIds->contains($dimensionId),
+                'collect_numeric_value' => $collectNumericValue,
+                'sort_order' => ($index + 1) * 10,
+                'created_by' => auth()->id(),
+            ]);
+        }
     }
 
     protected function syncSetupTarget(Indicator $indicator, mixed $targetValue): IndicatorTarget
