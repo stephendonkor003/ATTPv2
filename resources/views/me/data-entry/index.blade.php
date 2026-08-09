@@ -1,8 +1,9 @@
-@extends('layouts.app')
+@extends(($isDataEntryFragment ?? false) ? 'layouts.fragment' : 'layouts.app')
 
 @section('title', 'M&E Data Entry and Performance Tracking')
 @section('lean_admin_scripts', '1')
 
+@unless ($isDataEntryFragment ?? false)
 @push('styles')
     @include('me.indicators.partials.styles')
 
@@ -193,7 +194,8 @@
             color: #0b6a4c;
         }
 
-        .me-data-entry .me-status.draft {
+        .me-data-entry .me-status.draft,
+        .me-data-entry .me-status.not_started {
             background: #eef2f7;
             color: #556477;
         }
@@ -897,6 +899,95 @@
             border-right: 0;
         }
 
+        .me-data-entry .me-page-guide {
+            margin: .85rem 0 1rem;
+            padding: 1rem;
+            border: 1px solid #cfe1e7;
+            border-left: 5px solid var(--me-green-800);
+            border-radius: .8rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-page-guide-intro {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: .85rem;
+            align-items: start;
+        }
+
+        .me-data-entry .me-page-guide-icon {
+            display: inline-grid;
+            width: 42px;
+            height: 42px;
+            place-items: center;
+            border-radius: .7rem;
+            background: var(--me-green-100);
+            color: var(--me-green-800);
+            font-size: 1.05rem;
+        }
+
+        .me-data-entry .me-page-guide h2 {
+            margin: .1rem 0 .3rem;
+            color: var(--me-green-950);
+            font-size: 1rem;
+            font-weight: 800;
+        }
+
+        .me-data-entry .me-page-guide p {
+            max-width: 920px;
+            margin: 0;
+            color: var(--me-muted);
+            font-size: .78rem;
+            line-height: 1.55;
+        }
+
+        .me-data-entry .me-page-guide .me-workflow-guide {
+            margin-bottom: 0;
+        }
+
+        .me-data-entry .me-schedule-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: .7rem;
+        }
+
+        .me-data-entry .me-schedule-card {
+            min-width: 0;
+            padding: .85rem;
+            border: 1px solid var(--me-border);
+            border-radius: .7rem;
+            background: #fbfdfc;
+        }
+
+        .me-data-entry .me-progress-breakdown {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+            margin-top: .55rem;
+        }
+
+        .me-data-entry .me-progress-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            padding: .24rem .48rem;
+            border-radius: 999px;
+            background: #edf2ef;
+            color: #4e635a;
+            font-size: .65rem;
+            font-weight: 800;
+        }
+
+        .me-data-entry .me-progress-chip.is-complete {
+            background: #dff3e9;
+            color: #0b6a4c;
+        }
+
+        .me-data-entry .me-progress-chip.is-pending {
+            background: #fff2dc;
+            color: #8d5807;
+        }
+
         .me-data-entry .me-workflow-number {
             width: 1.85rem;
             height: 1.85rem;
@@ -1057,11 +1148,77 @@
             table-layout: auto;
         }
 
+        .me-data-entry .me-data-table-region .me-form-template-table {
+            width: 1500px !important;
+            min-width: 1500px;
+            table-layout: fixed !important;
+        }
+
+        .me-data-entry .me-data-table-region .me-performance-report-table,
         .me-data-entry .me-data-table-region .me-submission-table {
-            min-width: 1340px;
+            width: 1540px !important;
+            min-width: 1540px;
+            table-layout: fixed !important;
+        }
+
+        .me-data-entry .me-data-table-region .me-collection-table {
+            width: 1500px !important;
+            min-width: 1500px;
+            table-layout: fixed !important;
+        }
+
+        .me-data-entry .me-form-template-table .me-form-col-template {
+            width: 285px;
+        }
+
+        .me-data-entry .me-form-template-table .me-form-col-indicator {
+            width: 310px;
+        }
+
+        .me-data-entry .me-form-template-table .me-form-col-portfolio {
+            width: 230px;
+        }
+
+        .me-data-entry .me-form-template-table .me-form-col-ownership {
+            width: 210px;
+        }
+
+        .me-data-entry .me-form-template-table .me-form-col-usage {
+            width: 175px;
+        }
+
+        .me-data-entry .me-form-template-table .me-form-col-actions {
+            width: 290px;
+        }
+
+        .me-data-entry .me-linked-indicator {
+            min-width: 0;
+            padding: .7rem .75rem;
+            border: 1px solid #d6e5de;
+            border-radius: .65rem;
+            background: #f7fbf9;
+        }
+
+        .me-data-entry .me-linked-indicator .me-code {
+            margin-bottom: .4rem;
+        }
+
+        .me-data-entry .me-linked-indicator-name {
+            color: var(--me-ink);
+            font-size: .76rem;
+            font-weight: 750;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
+        }
+
+        .me-data-entry .me-linked-indicator.is-missing {
+            border-color: #efd4d4;
+            background: #fff8f8;
+            color: #8c4141;
         }
 
         .me-data-entry .me-data-table-region .me-register-table th {
+            min-width: 0;
             top: 0;
             z-index: 3;
             padding: .7rem .8rem;
@@ -1070,9 +1227,33 @@
         }
 
         .me-data-entry .me-data-table-region .me-register-table td {
+            min-width: 0;
             padding: .8rem;
             background: #fff;
             overflow-wrap: anywhere;
+            word-break: normal;
+            vertical-align: top;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table td > * {
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table th,
+        .me-data-entry .me-data-table-region .me-register-table th *,
+        .me-data-entry .me-data-table-region .me-register-table td,
+        .me-data-entry .me-data-table-region .me-register-table td * {
+            max-width: 100%;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            word-break: break-word !important;
+            hyphens: auto;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table .me-code {
+            display: inline-block;
+            white-space: normal !important;
         }
 
         .me-data-entry .me-data-table-region .me-register-table tbody tr:hover td {
@@ -1081,24 +1262,67 @@
 
         .me-data-entry .me-data-table-region .me-register-table th:last-child,
         .me-data-entry .me-data-table-region .me-register-table td:last-child {
-            position: sticky;
-            right: 0;
-            z-index: 2;
+            position: static;
+            right: auto;
+            z-index: auto;
             background: #fff;
-            box-shadow: -9px 0 14px -14px rgba(20, 55, 70, .8);
+            box-shadow: none;
         }
 
         .me-data-entry .me-data-table-region .me-register-table th:last-child {
-            z-index: 5;
             background: #f4f7f8;
         }
 
         .me-data-entry .me-data-table-region .me-row-actions {
-            flex-wrap: nowrap;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .me-data-entry .me-data-table-region .me-row-actions > * {
+            flex: 1 1 110px;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .me-data-entry .me-data-table-region .me-row-actions .btn {
-            white-space: nowrap;
+            width: 100%;
+            max-width: 100%;
+            line-height: 1.25;
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table .me-status {
+            max-width: 100%;
+            text-align: center;
+            white-space: normal;
+        }
+
+        .me-data-entry [data-me-data-entry-fragment] {
+            transition: opacity .16s ease, transform .16s ease;
+        }
+
+        .me-data-entry [data-me-data-entry-fragment].is-loading {
+            opacity: .52;
+            pointer-events: none;
+            transform: translateY(2px);
+        }
+
+        body.me-data-entry-ajax-loading::before {
+            position: fixed;
+            top: 0;
+            right: 0;
+            z-index: 20000;
+            width: 35%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #0a7b99, #42b883, transparent);
+            content: '';
+            animation: me-data-entry-progress 1s ease-in-out infinite;
+        }
+
+        @keyframes me-data-entry-progress {
+            from { transform: translateX(-285%); }
+            to { transform: translateX(285%); }
         }
 
         .me-data-entry .me-status.open,
@@ -1233,22 +1457,61 @@
         }
     </style>
 @endpush
+@endunless
 
 @section('content')
     @php
         $canManage = auth()->user()->can('me.data_entry.manage') || auth()->user()->can('me.configuration.manage');
         $tabLabels = [
-            'collections' => ['label' => 'Active Collections', 'icon' => 'feather-inbox'],
-            'forms' => ['label' => 'Form Templates', 'icon' => 'feather-file-text'],
-            'periods' => ['label' => 'Reporting Periods', 'icon' => 'feather-calendar'],
+            'collections' => ['label' => 'Think Tanks Data Collections', 'icon' => 'feather-users'],
+            'forms' => ['label' => 'Forms Generator', 'icon' => 'feather-file-plus'],
             'reports' => ['label' => 'Performance Reports', 'icon' => 'feather-bar-chart-2'],
             'submissions' => ['label' => 'Submissions', 'icon' => 'feather-send'],
         ];
+        $pageGuides = [
+            'collections' => [
+                'title' => 'Plan and monitor what every think tank must submit',
+                'summary' => 'Each row joins one indicator, its collection form, reporting deadline and assigned think tanks. Use it to see who is expected to report, who has submitted and who still needs follow-up.',
+                'tips' => [
+                    ['title' => 'Set the schedule', 'text' => 'Create a reporting period before opening a collection.'],
+                    ['title' => 'Assign and publish', 'text' => 'Choose every think tank expected to supply data, then use Publish / Send to Think Tanks.'],
+                    ['title' => 'Follow progress', 'text' => 'Compare submitted, draft and not-started counts before the due date.'],
+                ],
+            ],
+            'forms' => [
+                'title' => 'Generate the form used to collect indicator evidence',
+                'summary' => 'A form defines the questions a think tank answers. Every form must have one primary performance indicator and may map numeric questions to additional indicators.',
+                'tips' => [
+                    ['title' => 'Choose the indicator', 'text' => 'Select the project component and the exact indicator the form will collect.'],
+                    ['title' => 'Build clear questions', 'text' => 'Group questions into sections and explain what evidence respondents should provide.'],
+                    ['title' => 'Publish when ready', 'text' => 'Draft forms can be edited; published forms can be used in a data collection.'],
+                ],
+            ],
+            'reports' => [
+                'title' => 'Turn approved indicator data into a performance report',
+                'summary' => 'Use this page to prepare, review and approve periodic performance reports after the underlying indicator submissions and evidence are ready.',
+                'tips' => [
+                    ['title' => 'Prepare', 'text' => 'Select the reporting period and complete every required result section.'],
+                    ['title' => 'Review', 'text' => 'Check indicator coverage, explanations and supporting documents.'],
+                    ['title' => 'Approve', 'text' => 'Only approved results should be treated as official performance evidence.'],
+                ],
+            ],
+            'submissions' => [
+                'title' => 'Review every think tank assignment by indicator',
+                'summary' => 'This register includes all assigned think tanks, even when they have not started. Use the indicator, period and status columns to identify missing, draft, submitted and approved returns.',
+                'tips' => [
+                    ['title' => 'Find the think tank', 'text' => 'Search by organization, country, indicator, form or reporting period.'],
+                    ['title' => 'Check completeness', 'text' => 'Review the answer count, submission date and current workflow status.'],
+                    ['title' => 'Take action', 'text' => 'Open submitted work for review and follow up on assignments that have not started.'],
+                ],
+            ],
+        ];
+        $pageGuide = $pageGuides[$tab];
         $statusChoices = match ($tab) {
             'forms' => ['draft' => 'Draft', 'published' => 'Published', 'archived' => 'Archived'],
-            'periods' => ['planned' => 'Planned', 'open' => 'Open', 'under_review' => 'Under review', 'closed' => 'Closed', 'completed' => 'Completed'],
             'reports' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'verified' => 'Verified', 'approved' => 'Approved', 'reviewed' => 'Legacy approved', 'archived' => 'Archived'],
             'submissions' => [
+                'not_started' => 'Not started',
                 'draft' => 'Draft',
                 'submitted' => 'Submitted',
                 'resubmitted' => 'Resubmitted',
@@ -1262,8 +1525,7 @@
             default => ['draft' => 'Draft', 'open' => 'Open', 'closed' => 'Closed'],
         };
         $createTarget = match ($tab) {
-            'forms' => ['query' => ['tab' => 'forms', 'create' => 'form'], 'label' => 'Create form template'],
-            'periods' => ['query' => ['tab' => 'periods', 'create' => 'period'], 'label' => 'Create reporting period'],
+            'forms' => ['query' => ['tab' => 'forms', 'create' => 'form'], 'label' => 'Generate a form'],
             'collections' => ['query' => ['tab' => 'collections', 'create' => 'collection'], 'label' => 'Create collection'],
             'reports' => ['href' => route('budget.me.performance-reports.create'), 'label' => 'Create report'],
             default => null,
@@ -1273,6 +1535,7 @@
             : null;
     @endphp
 
+    @unless ($isDataEntryFragment ?? false)
     <main class="me-results-framework me-data-entry nxl-container">
         <header class="me-hero">
             <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-4">
@@ -1280,23 +1543,13 @@
                     <div class="me-eyebrow"><i class="feather-edit-3" aria-hidden="true"></i> Monitoring &amp; Evaluation</div>
                     <h1>Data Entry and Performance Tracking</h1>
                     <p>
-                        Build reusable collection forms, link project components and indicators, track results against targets, manage evidence, and review performance reports from one controlled workspace.
+                        Use four clear work areas to generate indicator forms, collect think-tank data, monitor submissions, and prepare performance reports.
                     </p>
                 </div>
 
-                @if ($canManage && $tab === 'submissions')
-                    <div class="me-hero-actions">
-                        <a href="{{ route('budget.me.submission-reviews.index') }}" class="me-primary-action">
-                            <i class="feather-check-square" aria-hidden="true"></i> Open review queue
-                        </a>
-                    </div>
-                @elseif ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
-                    <div class="me-hero-actions">
-                        <a href="{{ $createHref }}" class="me-primary-action">
-                            <i class="feather-plus" aria-hidden="true"></i> {{ $createTarget['label'] }}
-                        </a>
-                    </div>
-                @endif
+                <div data-me-data-entry-hero-action>
+                    @include('me.data-entry.partials.hero-actions')
+                </div>
             </div>
         </header>
 
@@ -1377,6 +1630,15 @@
             </details>
         @endif
 
+    @endunless
+
+        <div
+            data-me-data-entry-fragment
+            data-page-title="{{ $tabLabels[$tab]['label'] }} | M&amp;E Data Entry and Performance Tracking"
+        >
+        <template data-me-data-entry-hero-action-template>
+            @include('me.data-entry.partials.hero-actions')
+        </template>
         @if ($tab === 'reports')
             <div class="me-report-dashboard-callout">
                 <div>
@@ -1387,28 +1649,26 @@
                     <i class="feather-bar-chart-2 me-1" aria-hidden="true"></i>Open dashboard
                 </a>
             </div>
-            <section class="me-workflow-guide me-report-lifecycle" aria-label="Four-stage report lifecycle">
-                <article class="me-workflow-step"><span class="me-workflow-number">1</span><div><strong>Draft</strong><small>Think tanks or implementing partners prepare assigned reports.</small></div></article>
-                <article class="me-workflow-step"><span class="me-workflow-number">2</span><div><strong>Submitted</strong><small>Completed reports are locked and sent to the Secretariat/M&amp;E Officer.</small></div></article>
-                <article class="me-workflow-step"><span class="me-workflow-number">3</span><div><strong>Reviewed</strong><small>Authorized officers review, return, or approve the report and evidence.</small></div></article>
-                <article class="me-workflow-step"><span class="me-workflow-number">4</span><div><strong>Archived</strong><small>Final reports become read-only historical records with a lifecycle audit trail.</small></div></article>
-            </section>
-        @else
-            <section class="me-workflow-guide" aria-label="Three-step data collection guide">
-                <article class="me-workflow-step">
-                    <span class="me-workflow-number">1</span>
-                    <div><strong>Build a form</strong><small>Define the questions and map numeric fields to portfolio indicators.</small></div>
-                </article>
-                <article class="me-workflow-step">
-                    <span class="me-workflow-number">2</span>
-                    <div><strong>Set a period</strong><small>Create the reporting year, quarter, month or custom measurement window.</small></div>
-                </article>
-                <article class="me-workflow-step">
-                    <span class="me-workflow-number">3</span>
-                    <div><strong>Open a collection</strong><small>Join a published form to an active period and assign participating think tanks.</small></div>
-                </article>
-            </section>
         @endif
+
+        <section class="me-page-guide" aria-labelledby="me-page-guide-title">
+            <div class="me-page-guide-intro">
+                <span class="me-page-guide-icon"><i class="feather-help-circle" aria-hidden="true"></i></span>
+                <div>
+                    <div class="me-eyebrow">How to use this page</div>
+                    <h2 id="me-page-guide-title">{{ $pageGuide['title'] }}</h2>
+                    <p>{{ $pageGuide['summary'] }}</p>
+                </div>
+            </div>
+            <div class="me-workflow-guide" aria-label="Page guidance">
+                @foreach ($pageGuide['tips'] as $tipIndex => $tip)
+                    <article class="me-workflow-step">
+                        <span class="me-workflow-number">{{ $tipIndex + 1 }}</span>
+                        <div><strong>{{ $tip['title'] }}</strong><small>{{ $tip['text'] }}</small></div>
+                    </article>
+                @endforeach
+            </div>
+        </section>
 
         @if (session('success'))
             <div class="alert alert-success border-0 shadow-sm" role="status">
@@ -1594,6 +1854,7 @@
                             method="POST"
                             action="{{ $editingForm ? route('budget.me.data-entry.forms.update', $editingForm) : route('budget.me.data-entry.forms.store') }}"
                             data-form-builder
+                            data-section-palette='@json($sectionPalette)'
                         >
                             @csrf
                             @if ($editingForm)
@@ -2135,7 +2396,7 @@
                             </div>
 
                             <div class="me-form-footer">
-                                <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods']) }}" class="btn btn-light border">Cancel</a>
+                                <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections']) }}" class="btn btn-light border">Cancel</a>
                                 <button type="submit" class="me-primary-action border-0"><i class="feather-save" aria-hidden="true"></i>{{ $editingPeriod ? 'Save period' : 'Create period' }}</button>
                             </div>
                         </form>
@@ -2268,26 +2529,70 @@
                 </section>
             @endif
 
+            @if ($tab === 'collections' && ! $showPeriodForm && ! $showCollectionForm)
+                <section class="me-panel mb-3" aria-labelledby="reporting-schedule-title">
+                    <div class="me-panel-header">
+                        <div>
+                            <h2 class="me-panel-title" id="reporting-schedule-title">Reporting schedule</h2>
+                            <p class="me-panel-subtitle">A collection needs an open reporting period. Manage the schedule here before assigning a form to think tanks.</p>
+                        </div>
+                        @if ($canManage)
+                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'create' => 'period']) }}#data-entry-workspace" class="btn btn-sm btn-outline-success">
+                                <i class="feather-calendar me-1" aria-hidden="true"></i>Add reporting period
+                            </a>
+                        @endif
+                    </div>
+                    <div class="me-panel-body">
+                        <div class="me-schedule-grid">
+                            @forelse ($periods as $period)
+                                <article class="me-schedule-card">
+                                    <div class="d-flex align-items-start justify-content-between gap-2">
+                                        <div>
+                                            <span class="me-code">{{ $period->code }}</span>
+                                            <div class="me-record-title">{{ $period->label }}</div>
+                                        </div>
+                                        <span class="me-status {{ $period->lifecycle_status }}">{{ str($period->lifecycle_status)->replace('_', ' ')->title() }}</span>
+                                    </div>
+                                    <div class="me-record-meta">{{ $period->portfolio?->name ?: 'Portfolio unavailable' }}</div>
+                                    <div class="me-record-meta">{{ $period->period_start?->format('d M Y') }} &mdash; {{ $period->period_end?->format('d M Y') }}</div>
+                                    <div class="me-record-meta">{{ number_format((int) $period->collections_count) }} {{ \Illuminate\Support\Str::plural('collection', (int) $period->collections_count) }}</div>
+                                    @if ($canManage)
+                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border mt-2">
+                                            <i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit schedule
+                                        </a>
+                                    @endif
+                                </article>
+                            @empty
+                                <div class="me-empty-state py-4">
+                                    <h3 class="h6 fw-bold mb-1">No reporting period yet</h3>
+                                    <p class="me-muted small mb-0">Create the first reporting period before opening a think-tank data collection.</p>
+                                </div>
+                            @endforelse
+                        </div>
+                        @if ($periods->hasPages())
+                            <div class="me-pagination-wrap mt-3">{{ $periods->links() }}</div>
+                        @endif
+                    </div>
+                </section>
+            @endif
+
             @php
                 $registerTitle = match ($tab) {
-                    'forms' => 'Form templates',
-                    'periods' => 'Reporting periods',
+                    'forms' => 'Generated forms',
                     'reports' => 'Quarterly performance reports',
-                    'submissions' => 'Participant submissions',
-                    default => 'Data collections',
+                    'submissions' => 'Think-tank submissions by indicator',
+                    default => 'Indicator collection tracker',
                 };
                 $registerSubtitle = match ($tab) {
-                    'forms' => 'Build, publish and retire reusable reporting forms.',
-                    'periods' => 'Manage the portfolio reporting calendar.',
+                    'forms' => 'Create, link, publish and retire reusable indicator collection forms.',
                     'reports' => 'Create, complete and review quarterly indicator performance reports.',
-                    'submissions' => 'Track participant progress and submissions awaiting review.',
-                    default => 'Monitor open windows, assignments and collection progress.',
+                    'submissions' => 'See every assigned think tank, its indicator and how far the submission has progressed.',
+                    default => 'See the indicator, linked form, reporting deadline, assigned think tanks and submission progress together.',
                 };
                 $currentPaginator = match ($tab) {
                     'forms' => $forms,
-                    'periods' => $periods,
                     'reports' => $reports,
-                    'submissions' => $submissions,
+                    'submissions' => $submissionAssignments,
                     default => $collections,
                 };
                 $registerSearch = $tab === 'submissions'
@@ -2358,7 +2663,7 @@
                         </span>
                         <h3 class="h6 fw-bold mb-2">
                             @if ($tab === 'submissions')
-                                {{ $registerHasFilters ? 'No submissions match these filters' : 'No participant submissions yet' }}
+                                {{ $registerHasFilters ? 'No assignments match these filters' : 'No think-tank indicator assignments yet' }}
                             @else
                                 {{ $registerHasFilters ? 'No matching records' : 'Nothing here yet' }}
                             @endif
@@ -2368,12 +2673,10 @@
                                 {{ $tab === 'submissions' ? 'Try a different participant, indicator, template, period, portfolio or status.' : 'Try a different search term, portfolio or status.' }}
                             @elseif ($tab === 'forms')
                                 Create the first form template to define what participants will report.
-                            @elseif ($tab === 'periods')
-                                Create a reporting period before opening a collection.
                             @elseif ($tab === 'reports')
                                 Choose a published form, quarter and year to create the first performance report.
                             @elseif ($tab === 'submissions')
-                                Participant submissions will appear here when collection work begins.
+                                Assigned think tanks will appear here, including those that have not started.
                             @else
                                 Publish a form and activate a period, then create the first collection.
                             @endif
@@ -2397,15 +2700,24 @@
 
                     @if ($tab === 'forms')
                     <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable form template register" tabindex="0">
-                        <table class="table me-register-table align-middle">
+                        <table class="table me-register-table me-form-template-table align-middle">
                             <caption class="visually-hidden">Collection form templates</caption>
+                            <colgroup>
+                                <col class="me-form-col-template">
+                                <col class="me-form-col-indicator">
+                                <col class="me-form-col-portfolio">
+                                <col class="me-form-col-ownership">
+                                <col class="me-form-col-usage">
+                                <col class="me-form-col-actions">
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th style="width: 31%">Template</th>
-                                    <th style="width: 18%">Portfolio</th>
-                                    <th style="width: 18%">Ownership</th>
-                                    <th style="width: 18%">Usage</th>
-                                    <th class="text-end" style="width: 15%">Actions</th>
+                                    <th>Template</th>
+                                    <th>Linked indicator</th>
+                                    <th>Portfolio</th>
+                                    <th>Ownership</th>
+                                    <th>Usage</th>
+                                    <th class="text-end">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2417,6 +2729,25 @@
                                             <div class="me-record-meta">Version {{ $form->version }} · {{ \Illuminate\Support\Str::limit($form->description ?: 'No description provided', 90) }}</div>
                                         </td>
                                         <td>
+                                            @if ($form->indicator)
+                                                <div class="me-linked-indicator">
+                                                    <span class="me-code">{{ $form->indicator->indicator_code ?: 'NO CODE' }}</span>
+                                                    <div class="me-linked-indicator-name">{{ $form->indicator->name }}</div>
+                                                    <div class="me-record-meta mt-1">
+                                                        Unit: {{ $form->indicator->unit?->symbol ?: ($form->indicator->unit?->name ?: 'Not configured') }}
+                                                        @if ((int) $form->indicators_count > 1)
+                                                            &middot; {{ number_format((int) $form->indicators_count - 1) }} additional question {{ \Illuminate\Support\Str::plural('mapping', (int) $form->indicators_count - 1) }}
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @else
+                                                <div class="me-linked-indicator is-missing">
+                                                    <div class="fw-semibold small">No indicator linked</div>
+                                                    <div class="me-record-meta">Edit this template and select its performance indicator.</div>
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td>
                                             <div class="fw-semibold small text-dark">{{ $form->portfolio?->name ?: 'Portfolio unavailable' }}</div>
                                             <div class="me-record-meta mt-1">
                                                 {{ $form->projectComponent?->project_id ? $form->projectComponent->project_id.' · ' : '' }}{{ $form->projectComponent?->name ?: 'Component not linked' }}
@@ -2426,7 +2757,7 @@
                                         <td>
                                             <div class="small fw-semibold text-dark">{{ $form->responsiblePerson?->name ?: 'Not assigned' }}</div>
                                             <div class="me-record-meta">{{ $form->projectComponent?->governanceNode?->name ?: 'Directorate not assigned' }}</div>
-                                            <div class="me-record-meta">{{ number_format((int) $form->indicators_count) }} linked indicators · {{ number_format((int) $form->fields_count) }} fields</div>
+                                            <div class="me-record-meta">{{ number_format((int) $form->fields_count) }} {{ \Illuminate\Support\Str::plural('field', (int) $form->fields_count) }}</div>
                                         </td>
                                         <td>
                                             <div class="small fw-semibold text-dark">{{ number_format((int) $form->collections_count) }} collections</div>
@@ -2474,8 +2805,18 @@
                                 <div class="me-mobile-facts">
                                     <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $form->portfolio?->name ?: 'Unavailable' }}</strong></div>
                                     <div class="me-mobile-fact"><small>Component</small><strong>{{ $form->projectComponent?->name ?: 'Not linked' }}</strong></div>
+                                    <div class="me-mobile-fact">
+                                        <small>Linked indicator</small>
+                                        <strong>
+                                            @if ($form->indicator)
+                                                {{ $form->indicator->indicator_code ?: 'No code' }} &mdash; {{ $form->indicator->name }}
+                                            @else
+                                                No indicator linked
+                                            @endif
+                                        </strong>
+                                    </div>
                                     <div class="me-mobile-fact"><small>Responsible</small><strong>{{ $form->responsiblePerson?->name ?: 'Not assigned' }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Structure</small><strong>{{ $form->indicators_count }} indicators · {{ $form->fields_count }} fields · v{{ $form->version }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Structure</small><strong>{{ $form->fields_count }} fields · v{{ $form->version }}</strong></div>
                                     <div class="me-mobile-fact"><small>Usage</small><strong>{{ $form->collections_count }} collections · {{ $form->performance_reports_count }} reports</strong></div>
                                 </div>
                                 @if ($canManage && $form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
@@ -2492,65 +2833,28 @@
                             </article>
                         @endforeach
                     </div>
-                @elseif ($tab === 'periods')
-                    <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable reporting period register" tabindex="0">
-                        <table class="table me-register-table align-middle">
-                            <caption class="visually-hidden">Portfolio reporting periods</caption>
-                            <thead>
-                                <tr>
-                                    <th style="width: 27%">Reporting period</th>
-                                    <th style="width: 24%">Portfolio</th>
-                                    <th style="width: 24%">Date range</th>
-                                    <th style="width: 13%">Usage</th>
-                                    <th class="text-end" style="width: 12%">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($periods as $period)
-                                    <tr>
-                                        <td><span class="me-code">{{ $period->code }}</span><div class="me-record-title">{{ $period->label }}</div><div class="me-record-meta">{{ ucfirst($period->period_type) }}</div></td>
-                                        <td><div class="small fw-semibold text-dark">{{ $period->portfolio?->name ?: 'Portfolio unavailable' }}</div><span class="me-status {{ $period->lifecycle_status }} mt-2">{{ str($period->lifecycle_status)->replace('_', ' ')->title() }}</span></td>
-                                        <td><div class="small fw-semibold text-dark">{{ $period->period_start?->format('d M Y') }} — {{ $period->period_end?->format('d M Y') }}</div><div class="me-record-meta">{{ $period->period_start && $period->period_end ? $period->period_start->diffInDays($period->period_end) + 1 : 0 }} calendar days</div></td>
-                                        <td><div class="small fw-semibold text-dark">{{ number_format((int) $period->collections_count) }}</div><div class="me-record-meta">Collections</div></td>
-                                        <td>
-                                            @if ($canManage)
-                                                <div class="me-row-actions justify-content-end"><a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a></div>
-                                            @else
-                                                <div class="text-end me-muted small">View only</div>
-                                            @endif
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="me-mobile-register">
-                        @foreach ($periods as $period)
-                            <article class="me-mobile-card">
-                                <div class="d-flex align-items-start justify-content-between gap-2"><div><span class="me-code">{{ $period->code }}</span><h3 class="me-record-title mb-0">{{ $period->label }}</h3></div><span class="me-status {{ $period->lifecycle_status }}">{{ str($period->lifecycle_status)->replace('_', ' ')->title() }}</span></div>
-                                <div class="me-mobile-facts">
-                                    <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $period->portfolio?->name ?: 'Unavailable' }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Type</small><strong>{{ ucfirst($period->period_type) }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Starts</small><strong>{{ $period->period_start?->format('d M Y') }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Ends</small><strong>{{ $period->period_end?->format('d M Y') }}</strong></div>
-                                </div>
-                                @if ($canManage)<div class="me-row-actions justify-content-start"><a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'periods', 'edit_period' => $period->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit period</a></div>@endif
-                            </article>
-                        @endforeach
-                    </div>
                 @elseif ($tab === 'reports')
                     <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable performance report register" tabindex="0">
-                        <table class="table me-register-table align-middle">
+                        <table class="table me-register-table me-performance-report-table align-middle">
                             <caption class="visually-hidden">Quarterly performance reports</caption>
+                            <colgroup>
+                                <col style="width: 260px">
+                                <col style="width: 220px">
+                                <col style="width: 260px">
+                                <col style="width: 240px">
+                                <col style="width: 190px">
+                                <col style="width: 160px">
+                                <col style="width: 210px">
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th style="width: 22%">Report</th>
-                                    <th style="width: 16%">Author / owner</th>
-                                    <th style="width: 18%">Project Component</th>
-                                    <th style="width: 16%">Responsible Directorate</th>
-                                    <th style="width: 12%">Coverage</th>
-                                    <th style="width: 8%">Stage</th>
-                                    <th class="text-end" style="width: 8%">Actions</th>
+                                    <th>Report</th>
+                                    <th>Author / owner</th>
+                                    <th>Project Component</th>
+                                    <th>Responsible Directorate</th>
+                                    <th>Coverage</th>
+                                    <th>Stage</th>
+                                    <th class="text-end">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2616,8 +2920,8 @@
                 @elseif ($tab === 'submissions')
                     <div class="me-submission-results-summary" aria-live="polite">
                         <strong>
-                            Showing {{ number_format((int) $submissions->firstItem()) }}&ndash;{{ number_format((int) $submissions->lastItem()) }}
-                            of {{ number_format((int) $submissions->total()) }} {{ \Illuminate\Support\Str::plural('submission', $submissions->total()) }}
+                            Showing {{ number_format((int) $submissionAssignments->firstItem()) }}&ndash;{{ number_format((int) $submissionAssignments->lastItem()) }}
+                            of {{ number_format((int) $submissionAssignments->total()) }} think-tank indicator {{ \Illuminate\Support\Str::plural('assignment', $submissionAssignments->total()) }}
                         </strong>
                         @if ($registerHasFilters)
                             <span class="me-submission-filter-cue"><i class="feather-filter" aria-hidden="true"></i>Filters applied</span>
@@ -2628,42 +2932,48 @@
                     <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable participant submission register" tabindex="0">
                         <table class="table me-register-table me-submission-table align-middle">
                             <caption class="visually-hidden">Participant data submissions</caption>
+                            <colgroup>
+                                <col style="width: 270px">
+                                <col style="width: 300px">
+                                <col style="width: 310px">
+                                <col style="width: 230px">
+                                <col style="width: 240px">
+                                <col style="width: 220px">
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th style="width: 14%">Portfolio</th>
-                                    <th style="width: 18%">Indicator</th>
-                                    <th style="width: 18%">Participant / think tank</th>
-                                    <th style="width: 21%">Template / period</th>
-                                    <th style="width: 16%">Submitted / status</th>
-                                    <th style="width: 13%">Review</th>
+                                    <th>Think tank</th>
+                                    <th>Indicator</th>
+                                    <th>Linked form / period</th>
+                                    <th>Data required by</th>
+                                    <th>Submission so far</th>
+                                    <th>Review / action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach ($submissions as $submission)
+                                @foreach ($submissionAssignments as $assignment)
                                     @php
-                                        $assignment = $submission->assignment;
-                                        $submissionCollection = $assignment?->collection;
+                                        $submission = $assignment->submission;
+                                        $submissionCollection = $assignment->collection;
                                         $submissionForm = $submissionCollection?->form;
                                         $submissionIndicator = $submissionForm?->indicator;
                                         $submissionPortfolio = $submissionForm?->portfolio;
-                                        $submissionParticipant = $assignment?->thinkTank;
+                                        $submissionParticipant = $assignment->thinkTank;
                                         $submissionPeriod = $submissionCollection?->reportingPeriod;
                                         $indicatorUnit = $submissionIndicator?->unit?->symbol ?: $submissionIndicator?->unit?->name;
-                                        $submissionStatus = $submission->effectiveStatus();
+                                        $submissionStatus = $submission?->effectiveStatus() ?? 'not_started';
                                     @endphp
                                     <tr>
-                                        <td><div class="me-record-title">{{ $submissionPortfolio?->name ?: 'Portfolio unavailable' }}</div></td>
+                                        <td>
+                                            <div class="me-record-title">{{ $submissionParticipant?->name ?: 'Think tank unavailable' }}</div>
+                                            <div class="me-record-meta">{{ $submissionParticipant?->country ?: 'Country not set' }}</div>
+                                            @if ($submission?->submittedBy?->name)<div class="me-record-meta">Submitted by {{ $submission->submittedBy->name }}</div>@endif
+                                        </td>
                                         <td>
                                             @if ($submissionIndicator?->indicator_code)<span class="me-code">{{ $submissionIndicator->indicator_code }}</span>@endif
                                             <div class="me-record-title">{{ $submissionIndicator?->name ?: 'Indicator unavailable' }}</div>
                                             @if ($indicatorUnit)<div class="me-record-meta">Measured in {{ $indicatorUnit }}</div>@endif
-                                        </td>
-                                        <td>
-                                            <div class="me-record-title">{{ $submissionParticipant?->name ?: 'Participant unavailable' }}</div>
-                                            <div class="me-record-meta">{{ $submissionParticipant?->country ?: 'Country not set' }}</div>
-                                            @if ($submission->submittedBy?->name)
-                                                <div class="me-record-meta">Submitted by {{ $submission->submittedBy->name }}</div>
-                                            @endif
+                                            <div class="me-record-meta">{{ $submissionPortfolio?->name ?: 'Portfolio unavailable' }}</div>
                                         </td>
                                         <td>
                                             @if ($submissionForm?->code)<span class="me-code">{{ $submissionForm->code }}</span>@endif
@@ -2674,28 +2984,37 @@
                                             </div>
                                         </td>
                                         <td>
+                                            <div class="small fw-semibold text-dark">{{ $submissionCollection?->due_at?->format('d M Y, H:i') ?: 'Deadline not set' }}</div>
+                                            <div class="me-record-meta">Assigned {{ $assignment->assigned_at?->format('d M Y') ?: 'date unavailable' }}</div>
+                                            <div class="me-record-meta">Window: {{ $submissionCollection?->opens_at?->format('d M') ?: 'not set' }} &mdash; {{ $submissionCollection?->closes_at?->format('d M Y') ?: 'not set' }}</div>
+                                        </td>
+                                        <td>
                                             <span class="me-status {{ $submissionStatus }}">{{ str($submissionStatus)->replace('_', ' ')->title() }}</span>
                                             <div class="me-record-meta">
-                                                @if ($submission->submitted_at)
+                                                @if ($submission?->submitted_at)
                                                     Submitted {{ $submission->submitted_at->format('d M Y, H:i') }}
-                                                @else
+                                                @elseif ($submission)
                                                     Last saved {{ $submission->updated_at?->format('d M Y, H:i') ?: 'date unavailable' }}
+                                                @else
+                                                    No response has been started
                                                 @endif
-                                                <br>{{ number_format((int) $submission->answers_count) }} {{ \Illuminate\Support\Str::plural('answer', (int) $submission->answers_count) }} &middot; Revision {{ $submission->revision }}
+                                                <br>{{ number_format((int) ($submission?->answers_count ?? 0)) }} {{ \Illuminate\Support\Str::plural('answer', (int) ($submission?->answers_count ?? 0)) }}@if ($submission) &middot; Revision {{ $submission->revision }}@endif
                                             </div>
                                         </td>
                                         <td>
                                             <div class="me-submission-review">
-                                                <i class="{{ $submission->reviewed_at ? 'feather-check-circle' : 'feather-clock' }}" aria-hidden="true"></i>
+                                                <i class="{{ $submission?->reviewed_at ? 'feather-check-circle' : 'feather-clock' }}" aria-hidden="true"></i>
                                                 <div>
-                                                    <div class="small fw-semibold text-dark">{{ $submission->reviewedBy?->name ?: ($submissionStatus === 'draft' ? 'Not ready for review' : 'Awaiting review') }}</div>
-                                                    <div class="me-record-meta">{{ $submission->reviewed_at?->format('d M Y, H:i') ?: 'No review recorded' }}</div>
+                                                    <div class="small fw-semibold text-dark">{{ $submission?->reviewedBy?->name ?: ($submission ? ($submissionStatus === 'draft' ? 'Not ready for review' : 'Awaiting review') : 'Waiting for think tank') }}</div>
+                                                    <div class="me-record-meta">{{ $submission?->reviewed_at?->format('d M Y, H:i') ?: 'No review recorded' }}</div>
                                                 </div>
                                             </div>
-                                            @if ($canManage)
+                                            @if ($canManage && $submission)
                                                 <a href="{{ route('budget.me.submission-reviews.show', $submission) }}" class="btn btn-sm btn-outline-primary mt-2">
                                                     <i class="feather-eye me-1" aria-hidden="true"></i>{{ $submissionStatus === 'draft' ? 'View submission' : 'Open review' }}
                                                 </a>
+                                            @elseif (! $submission)
+                                                <div class="me-record-meta mt-2">Follow up with the assigned think tank.</div>
                                             @endif
                                         </td>
                                     </tr>
@@ -2704,15 +3023,16 @@
                         </table>
                     </div>
                     <div class="me-mobile-register">
-                        @foreach ($submissions as $submission)
+                        @foreach ($submissionAssignments as $assignment)
                             @php
-                                $submissionCollection = $submission->assignment?->collection;
+                                $submission = $assignment->submission;
+                                $submissionCollection = $assignment->collection;
                                 $submissionForm = $submissionCollection?->form;
                                 $submissionIndicator = $submissionForm?->indicator;
                                 $submissionPortfolio = $submissionForm?->portfolio;
-                                $submissionParticipant = $submission->assignment?->thinkTank;
+                                $submissionParticipant = $assignment->thinkTank;
                                 $submissionPeriod = $submissionCollection?->reportingPeriod;
-                                $submissionStatus = $submission->effectiveStatus();
+                                $submissionStatus = $submission?->effectiveStatus() ?? 'not_started';
                             @endphp
                             <article class="me-mobile-card">
                                 <div class="d-flex align-items-start justify-content-between gap-2">
@@ -2720,7 +3040,7 @@
                                         @if ($submissionForm?->code)<span class="me-code">{{ $submissionForm->code }}</span>@endif
                                         <h3 class="me-record-title mb-0">{{ $submissionParticipant?->name ?: 'Participant unavailable' }}</h3>
                                         <div class="me-record-meta">{{ $submissionParticipant?->country ?: 'Country not set' }}</div>
-                                        @if ($submission->submittedBy?->name)
+                                        @if ($submission?->submittedBy?->name)
                                             <div class="me-record-meta">Submitted by {{ $submission->submittedBy->name }}</div>
                                         @endif
                                     </div>
@@ -2731,17 +3051,18 @@
                                     <div class="me-mobile-fact"><small>Indicator</small><strong>{{ $submissionIndicator?->name ?: 'Unavailable' }}</strong></div>
                                     <div class="me-mobile-fact"><small>Template</small><strong>{{ $submissionForm?->title ?: 'Unavailable' }}</strong></div>
                                     <div class="me-mobile-fact"><small>Reporting period</small><strong>{{ $submissionPeriod?->label ?: 'Unavailable' }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Submitted</small><strong>{{ $submission->submitted_at?->format('d M Y, H:i') ?: 'Draft not submitted' }}</strong></div>
-                                    <div class="me-mobile-fact"><small>Response</small><strong>{{ number_format((int) $submission->answers_count) }} {{ \Illuminate\Support\Str::plural('answer', (int) $submission->answers_count) }} &middot; Revision {{ $submission->revision }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Due</small><strong>{{ $submissionCollection?->due_at?->format('d M Y, H:i') ?: 'Not set' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Submitted</small><strong>{{ $submission?->submitted_at?->format('d M Y, H:i') ?: ($submission ? 'Draft not submitted' : 'Not started') }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Response</small><strong>{{ number_format((int) ($submission?->answers_count ?? 0)) }} {{ \Illuminate\Support\Str::plural('answer', (int) ($submission?->answers_count ?? 0)) }}</strong></div>
                                 </div>
                                 <div class="me-submission-review">
-                                    <i class="{{ $submission->reviewed_at ? 'feather-check-circle' : 'feather-clock' }}" aria-hidden="true"></i>
+                                    <i class="{{ $submission?->reviewed_at ? 'feather-check-circle' : 'feather-clock' }}" aria-hidden="true"></i>
                                     <div class="me-record-meta mt-0">
-                                        Reviewer: {{ $submission->reviewedBy?->name ?: ($submissionStatus === 'draft' ? 'Not ready for review' : 'Awaiting review') }}
-                                        @if ($submission->reviewed_at)<br>{{ $submission->reviewed_at->format('d M Y, H:i') }}@endif
+                                        Reviewer: {{ $submission?->reviewedBy?->name ?: ($submission ? ($submissionStatus === 'draft' ? 'Not ready for review' : 'Awaiting review') : 'Waiting for think tank') }}
+                                        @if ($submission?->reviewed_at)<br>{{ $submission->reviewed_at->format('d M Y, H:i') }}@endif
                                     </div>
                                 </div>
-                                @if ($canManage)
+                                @if ($canManage && $submission)
                                     <a href="{{ route('budget.me.submission-reviews.show', $submission) }}" class="btn btn-sm btn-outline-primary mt-3">
                                         <i class="feather-eye me-1" aria-hidden="true"></i>{{ $submissionStatus === 'draft' ? 'View submission' : 'Open review' }}
                                     </a>
@@ -2751,35 +3072,82 @@
                     </div>
                 @else
                     <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable data collection register" tabindex="0">
-                        <table class="table me-register-table align-middle">
+                        <table class="table me-register-table me-collection-table align-middle">
                             <caption class="visually-hidden">Data collections and progress</caption>
+                            <colgroup>
+                                <col style="width: 260px">
+                                <col style="width: 250px">
+                                <col style="width: 250px">
+                                <col style="width: 260px">
+                                <col style="width: 230px">
+                                <col style="width: 250px">
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th style="width: 29%">Collection</th>
-                                    <th style="width: 22%">Schedule</th>
-                                    <th style="width: 19%">Assignments</th>
-                                    <th style="width: 15%">Progress</th>
-                                    <th class="text-end" style="width: 15%">Actions</th>
+                                    <th>Indicator</th>
+                                    <th>Linked form</th>
+                                    <th>When data is needed</th>
+                                    <th>Assigned think tanks</th>
+                                    <th>Submission progress</th>
+                                    <th class="text-end">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach ($collections as $collection)
                                     @php
-                                        $completion = $collection->assignments_count > 0 ? min(100, round(($collection->submissions_count / $collection->assignments_count) * 100)) : 0;
+                                        $submittedAssignments = $collection->assignments->filter(fn ($assignment) => (bool) $assignment->submission?->submitted_at);
+                                        $draftAssignments = $collection->assignments->filter(fn ($assignment) => $assignment->submission && ! $assignment->submission->submitted_at);
+                                        $notStartedAssignments = $collection->assignments->filter(fn ($assignment) => ! $assignment->submission);
+                                        $submittedCount = $submittedAssignments->count();
+                                        $completion = $collection->assignments_count > 0 ? min(100, round(($submittedCount / $collection->assignments_count) * 100)) : 0;
                                         $isPastDue = $collection->due_at && now()->isAfter($collection->due_at) && $collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED;
+                                        $collectionIndicator = $collection->form?->indicator;
                                     @endphp
                                     <tr>
-                                        <td><span class="me-code">{{ $collection->form?->code }}</span><div class="me-record-title">{{ $collection->form?->title ?: 'Form unavailable' }}</div><div class="me-record-meta">{{ $collection->form?->portfolio?->name }} · {{ $collection->reportingPeriod?->label }}</div><span class="me-status {{ $collection->status }} mt-2">{{ $collection->status }}</span></td>
-                                        <td><div class="small fw-semibold text-dark">Due {{ $collection->due_at?->format('d M Y, H:i') }}</div><div class="me-record-meta">Opens {{ $collection->opens_at?->format('d M Y') }} · Closes {{ $collection->closes_at?->format('d M Y') }}</div>@if ($isPastDue)<span class="text-danger small fw-semibold"><i class="feather-alert-circle me-1" aria-hidden="true"></i>Past due</span>@endif</td>
-                                        <td><div class="small fw-semibold text-dark">{{ number_format((int) $collection->assignments_count) }} think tanks</div><div class="me-record-meta">{{ $collection->assignments->take(2)->pluck('thinkTank.name')->filter()->join(', ') }}@if ($collection->assignments_count > 2) +{{ $collection->assignments_count - 2 }} more @endif</div></td>
-                                        <td><div class="small fw-semibold text-dark">{{ $collection->submissions_count }} / {{ $collection->assignments_count }} submitted</div><div class="progress mt-2" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div></td>
+                                        <td>
+                                            @if ($collectionIndicator?->indicator_code)<span class="me-code">{{ $collectionIndicator->indicator_code }}</span>@endif
+                                            <div class="me-record-title">{{ $collectionIndicator?->name ?: 'Indicator unavailable' }}</div>
+                                            <div class="me-record-meta">Unit: {{ $collectionIndicator?->unit?->symbol ?: ($collectionIndicator?->unit?->name ?: 'Not configured') }}</div>
+                                        </td>
+                                        <td>
+                                            <span class="me-code">{{ $collection->form?->code ?: 'No code' }}</span>
+                                            <div class="me-record-title">{{ $collection->form?->title ?: 'Form unavailable' }}</div>
+                                            <div class="me-record-meta">{{ $collection->form?->portfolio?->name ?: 'Portfolio unavailable' }}</div>
+                                            <span class="me-status {{ $collection->status }} mt-2">{{ $collection->status }}</span>
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">Due {{ $collection->due_at?->format('d M Y, H:i') ?: 'Not set' }}</div>
+                                            <div class="me-record-meta">{{ $collection->reportingPeriod?->label ?: 'Period unavailable' }}@if ($collection->reportingPeriod?->code) &middot; {{ $collection->reportingPeriod->code }}@endif</div>
+                                            <div class="me-record-meta">Open {{ $collection->opens_at?->format('d M Y') ?: 'not set' }} &middot; Close {{ $collection->closes_at?->format('d M Y') ?: 'not set' }}</div>
+                                            @if ($isPastDue)<span class="text-danger small fw-semibold"><i class="feather-alert-circle me-1" aria-hidden="true"></i>Past due</span>@endif
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">{{ number_format((int) $collection->assignments_count) }} {{ \Illuminate\Support\Str::plural('think tank', (int) $collection->assignments_count) }}</div>
+                                            <div class="me-record-meta">{{ $collection->assignments->take(3)->pluck('thinkTank.name')->filter()->join(', ') ?: 'No think tank assigned' }}@if ($collection->assignments_count > 3) +{{ $collection->assignments_count - 3 }} more @endif</div>
+                                        </td>
+                                        <td>
+                                            <div class="small fw-semibold text-dark">{{ $submittedCount }} / {{ $collection->assignments_count }} submitted</div>
+                                            <div class="progress mt-2" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div>
+                                            <div class="me-progress-breakdown">
+                                                <span class="me-progress-chip is-complete">{{ $submittedCount }} submitted</span>
+                                                <span class="me-progress-chip">{{ $draftAssignments->count() }} draft</span>
+                                                <span class="me-progress-chip is-pending">{{ $notStartedAssignments->count() }} not started</span>
+                                            </div>
+                                            @if ($submittedAssignments->isNotEmpty())
+                                                <div class="me-record-meta">Submitted by: {{ $submittedAssignments->take(3)->pluck('thinkTank.name')->filter()->join(', ') }}@if ($submittedCount > 3) +{{ $submittedCount - 3 }} more @endif</div>
+                                            @endif
+                                        </td>
                                         <td>
                                             @if ($canManage)
                                                 <div class="me-row-actions justify-content-end">
-                                                    @if ($collection->submissions_count > 0)
+                                                    @if ($collection->assignments_count > 0)
                                                         <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'submissions', 'q' => $collection->form?->code]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-file-text" aria-hidden="true"></i> Submissions</a>
                                                     @endif
                                                     @if ($collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                                        <form method="POST" action="{{ route('budget.me.data-entry.collections.publish', $collection) }}" data-confirm="{{ $collection->status === \App\Models\MeDataCollection::STATUS_DRAFT ? 'Publish this collection and notify every assigned think tank? The linked form will appear in their M&E portal.' : 'Send this open collection to assigned think tanks again? Accounts already notified today will not receive a duplicate.' }}">
+                                                            @csrf
+                                                            <button type="submit" class="btn btn-sm btn-success"><i class="feather-send" aria-hidden="true"></i> Publish / Send to Think Tanks</button>
+                                                        </form>
                                                         <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a>
                                                         <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock" aria-hidden="true"></i> Close</button></form>
                                                     @endif
@@ -2795,23 +3163,34 @@
                     </div>
                     <div class="me-mobile-register">
                         @foreach ($collections as $collection)
-                            @php $completion = $collection->assignments_count > 0 ? min(100, round(($collection->submissions_count / $collection->assignments_count) * 100)) : 0; @endphp
+                            @php
+                                $submittedCount = $collection->assignments->filter(fn ($assignment) => (bool) $assignment->submission?->submitted_at)->count();
+                                $draftCount = $collection->assignments->filter(fn ($assignment) => $assignment->submission && ! $assignment->submission->submitted_at)->count();
+                                $notStartedCount = $collection->assignments->filter(fn ($assignment) => ! $assignment->submission)->count();
+                                $completion = $collection->assignments_count > 0 ? min(100, round(($submittedCount / $collection->assignments_count) * 100)) : 0;
+                                $collectionIndicator = $collection->form?->indicator;
+                            @endphp
                             <article class="me-mobile-card">
-                                <div class="d-flex align-items-start justify-content-between gap-2"><div><span class="me-code">{{ $collection->form?->code }}</span><h3 class="me-record-title mb-0">{{ $collection->form?->title ?: 'Form unavailable' }}</h3></div><span class="me-status {{ $collection->status }}">{{ $collection->status }}</span></div>
-                                <div class="me-record-meta mt-2">{{ $collection->form?->portfolio?->name }} · {{ $collection->reportingPeriod?->label }}</div>
+                                <div class="d-flex align-items-start justify-content-between gap-2"><div><span class="me-code">{{ $collectionIndicator?->indicator_code ?: 'No indicator code' }}</span><h3 class="me-record-title mb-0">{{ $collectionIndicator?->name ?: 'Indicator unavailable' }}</h3></div><span class="me-status {{ $collection->status }}">{{ $collection->status }}</span></div>
                                 <div class="me-mobile-facts">
-                                    <div class="me-mobile-fact"><small>Opens</small><strong>{{ $collection->opens_at?->format('d M Y, H:i') }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Linked form</small><strong>{{ $collection->form?->title ?: 'Unavailable' }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Period</small><strong>{{ $collection->reportingPeriod?->label ?: 'Unavailable' }}</strong></div>
                                     <div class="me-mobile-fact"><small>Due</small><strong>{{ $collection->due_at?->format('d M Y, H:i') }}</strong></div>
                                     <div class="me-mobile-fact"><small>Assigned</small><strong>{{ $collection->assignments_count }} think tanks</strong></div>
-                                    <div class="me-mobile-fact"><small>Submitted</small><strong>{{ $collection->submissions_count }} / {{ $collection->assignments_count }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Submitted</small><strong>{{ $submittedCount }} / {{ $collection->assignments_count }}</strong></div>
+                                    <div class="me-mobile-fact"><small>Still pending</small><strong>{{ $draftCount }} draft &middot; {{ $notStartedCount }} not started</strong></div>
                                 </div>
                                 <div class="progress mb-3" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div>
                                 @if ($canManage)
                                     <div class="me-row-actions justify-content-start">
-                                        @if ($collection->submissions_count > 0)
+                                        @if ($collection->assignments_count > 0)
                                             <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'submissions', 'q' => $collection->form?->code]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-file-text me-1" aria-hidden="true"></i>Submissions</a>
                                         @endif
                                         @if ($collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                            <form method="POST" action="{{ route('budget.me.data-entry.collections.publish', $collection) }}" data-confirm="{{ $collection->status === \App\Models\MeDataCollection::STATUS_DRAFT ? 'Publish this collection and notify every assigned think tank? The linked form will appear in their M&E portal.' : 'Send this open collection to assigned think tanks again? Accounts already notified today will not receive a duplicate.' }}">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-success"><i class="feather-send me-1" aria-hidden="true"></i>Publish / Send to Think Tanks</button>
+                                            </form>
                                             <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
                                             <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock me-1" aria-hidden="true"></i>Close</button></form>
                                         @endif
@@ -2990,13 +3369,20 @@
                 </article>
             </template>
         @endif
+        </div>
+    @unless ($isDataEntryFragment ?? false)
     </main>
+    @endunless
 @endsection
 
+@unless ($isDataEntryFragment ?? false)
 @push('scripts')
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        (() => {
+            const initializeWorkspace = () => {
             document.querySelectorAll('.me-data-entry form[data-confirm]').forEach((form) => {
+                if (form.dataset.confirmInitialized === 'true') return;
+                form.dataset.confirmInitialized = 'true';
                 form.addEventListener('submit', (event) => {
                     if (!window.confirm(form.dataset.confirm || 'Continue with this action?')) {
                         event.preventDefault();
@@ -3020,7 +3406,12 @@
             const templateIndicatorSelect = builder?.querySelector('[data-template-indicator]');
             const templateIndicatorHelp = builder?.querySelector('[data-template-indicator-help]');
             const builderCounts = builder?.querySelector('[data-builder-counts]');
-            const sectionPalette = @json($sectionPalette ?? []);
+            let sectionPalette = [];
+            try {
+                sectionPalette = JSON.parse(builder?.dataset.sectionPalette || '[]');
+            } catch (error) {
+                sectionPalette = [];
+            }
 
             const filterTemplateComponents = () => {
                 if (!componentSelect) return;
@@ -3556,6 +3947,289 @@
                 updateMemberCount();
             });
             updateMemberCount();
-        });
+            };
+
+            const dataEntryUrl = new URL(@json(route('budget.me.rebuild.data-entry')), window.location.origin);
+            const fragmentCache = new Map();
+            const fragmentCacheLifetime = 30000;
+            let activeRequest = null;
+            let navigationSequence = 0;
+
+            const navigationStatus = () => {
+                let status = document.getElementById('me-data-entry-navigation-status');
+                if (!status) {
+                    status = document.createElement('div');
+                    status.id = 'me-data-entry-navigation-status';
+                    status.className = 'visually-hidden';
+                    status.setAttribute('role', 'status');
+                    status.setAttribute('aria-live', 'polite');
+                    status.setAttribute('aria-atomic', 'true');
+                    document.body.appendChild(status);
+                }
+                return status;
+            };
+
+            const announceNavigation = (message) => {
+                const status = navigationStatus();
+                status.textContent = '';
+                window.requestAnimationFrame(() => {
+                    status.textContent = message;
+                });
+            };
+
+            const normalizedDataEntryUrl = (destination) => {
+                const url = new URL(destination, window.location.href);
+                url.searchParams.delete('fragment');
+                return url;
+            };
+
+            const isDataEntryUrl = (url) => (
+                url.origin === window.location.origin
+                && url.pathname === dataEntryUrl.pathname
+            );
+
+            const fragmentFromHtml = (html) => {
+                const parsed = new DOMParser().parseFromString(html, 'text/html');
+                return parsed.querySelector('[data-me-data-entry-fragment]');
+            };
+
+            const cachedFragment = (key) => {
+                const cached = fragmentCache.get(key);
+                if (!cached || Date.now() - cached.storedAt > fragmentCacheLifetime) {
+                    fragmentCache.delete(key);
+                    return null;
+                }
+                return fragmentFromHtml(cached.html);
+            };
+
+            const requestFragment = async (url, signal) => {
+                const key = `${url.pathname}${url.search}`;
+                const cached = cachedFragment(key);
+                if (cached) return cached;
+
+                const requestUrl = new URL(url.href);
+                requestUrl.hash = '';
+                requestUrl.searchParams.set('fragment', '1');
+
+                const response = await fetch(requestUrl.href, {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    signal,
+                    headers: {
+                        Accept: 'text/html',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-ME-Fragment': 'data-entry',
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error(`The data-entry tab request failed with status ${response.status}.`);
+                }
+
+                const fragment = fragmentFromHtml(await response.text());
+                if (!fragment) {
+                    throw new Error('The data-entry tab response did not contain the expected workspace.');
+                }
+
+                fragmentCache.set(key, {
+                    html: fragment.outerHTML,
+                    storedAt: Date.now(),
+                });
+
+                return fragment;
+            };
+
+            const saveCurrentScrollPosition = () => {
+                window.history.replaceState({
+                    ...(window.history.state || {}),
+                    meDataEntry: true,
+                    scrollY: window.scrollY,
+                }, '', window.location.href);
+            };
+
+            const scrollAfterNavigation = (url, scrollTarget, restoreScroll) => {
+                window.requestAnimationFrame(() => {
+                    if (Number.isFinite(restoreScroll)) {
+                        window.scrollTo({ top: restoreScroll, left: 0, behavior: 'auto' });
+                        return;
+                    }
+
+                    let target = null;
+                    if (url.hash) {
+                        try {
+                            target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+                        } catch (error) {
+                            target = null;
+                        }
+                    }
+                    target = target || (scrollTarget ? document.querySelector(scrollTarget) : null);
+                    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            };
+
+            const navigateDataEntry = async (destination, options = {}) => {
+                const url = normalizedDataEntryUrl(destination);
+                if (!isDataEntryUrl(url)) {
+                    window.location.assign(url.href);
+                    return;
+                }
+
+                const sequence = ++navigationSequence;
+                activeRequest?.abort();
+                activeRequest = new AbortController();
+
+                const currentFragment = document.querySelector('[data-me-data-entry-fragment]');
+                currentFragment?.classList.add('is-loading');
+                currentFragment?.setAttribute('aria-busy', 'true');
+                document.body.classList.add('me-data-entry-ajax-loading');
+                announceNavigation('Loading M&E data-entry workspace.');
+
+                try {
+                    const replacement = await requestFragment(url, activeRequest.signal);
+                    if (sequence !== navigationSequence) return;
+
+                    const heroTemplate = replacement.querySelector('[data-me-data-entry-hero-action-template]');
+                    const heroSlot = document.querySelector('[data-me-data-entry-hero-action]');
+                    if (heroTemplate && heroSlot) heroSlot.innerHTML = heroTemplate.innerHTML;
+                    heroTemplate?.remove();
+
+                    const existing = document.querySelector('[data-me-data-entry-fragment]');
+                    if (!existing) throw new Error('The current data-entry workspace is unavailable.');
+                    existing.replaceWith(replacement);
+
+                    document.title = replacement.dataset.pageTitle || document.title;
+                    if (options.history !== false) {
+                        saveCurrentScrollPosition();
+                        window.history.pushState({ meDataEntry: true, scrollY: 0 }, '', url.href);
+                    }
+
+                    initializeWorkspace();
+                    initializeDirtyState();
+                    scrollAfterNavigation(url, options.scrollTarget, options.restoreScroll);
+                    if (options.focusActiveTab) {
+                        replacement.querySelector('.me-tab.active')?.focus({ preventScroll: true });
+                    }
+                    announceNavigation(`${replacement.dataset.pageTitle || 'M&E data-entry workspace'} loaded.`);
+                } catch (error) {
+                    if (error.name === 'AbortError') return;
+                    window.location.assign(url.href);
+                } finally {
+                    if (sequence === navigationSequence) {
+                        activeRequest = null;
+                        document.body.classList.remove('me-data-entry-ajax-loading');
+                        document.querySelector('[data-me-data-entry-fragment]')?.classList.remove('is-loading');
+                        document.querySelector('[data-me-data-entry-fragment]')?.removeAttribute('aria-busy');
+                    }
+                }
+            };
+
+            const hasUnsavedWorkspaceChanges = () => (
+                document.querySelector('#data-entry-workspace form[data-me-form-dirty="true"]') !== null
+            );
+
+            const confirmWorkspaceNavigation = () => (
+                !hasUnsavedWorkspaceChanges()
+                || window.confirm('You have unsaved changes in this form. Leave this tab and discard them?')
+            );
+
+            const initializeDirtyState = () => {
+                document.querySelectorAll('#data-entry-workspace form').forEach((form) => {
+                    if (form.method.toUpperCase() === 'GET' || form.dataset.dirtyInitialized === 'true') return;
+                    form.dataset.dirtyInitialized = 'true';
+                    const markDirty = () => { form.dataset.meFormDirty = 'true'; };
+                    form.addEventListener('input', markDirty);
+                    form.addEventListener('change', markDirty);
+                    form.addEventListener('submit', () => { form.dataset.meFormDirty = 'false'; });
+                });
+            };
+
+            const initializeAsyncNavigation = () => {
+                if (!window.fetch || !window.DOMParser || !window.history?.pushState) return;
+
+                document.addEventListener('click', (event) => {
+                    if (
+                        event.defaultPrevented
+                        || event.button !== 0
+                        || event.metaKey
+                        || event.ctrlKey
+                        || event.shiftKey
+                        || event.altKey
+                    ) return;
+
+                    const link = event.target.closest('a[href]');
+                    if (
+                        !link
+                        || !link.closest('.me-data-entry')
+                        || link.target
+                        || link.hasAttribute('download')
+                        || link.dataset.noAjax === 'true'
+                    ) return;
+
+                    const url = normalizedDataEntryUrl(link.href);
+                    if (!isDataEntryUrl(url)) return;
+                    if (!confirmWorkspaceNavigation()) {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    event.preventDefault();
+                    const isTab = link.closest('.me-tabs') !== null;
+                    const isPagination = link.closest('.me-pagination-wrap') !== null;
+                    navigateDataEntry(url, {
+                        focusActiveTab: isTab,
+                        scrollTarget: isTab ? '.me-tabs' : (isPagination ? '#data-entry-register-title' : '#data-entry-workspace'),
+                    });
+                });
+
+                document.addEventListener('submit', (event) => {
+                    const form = event.target.closest('form');
+                    if (
+                        !form
+                        || !form.closest('[data-me-data-entry-fragment]')
+                        || form.method.toUpperCase() !== 'GET'
+                    ) return;
+
+                    const url = normalizedDataEntryUrl(form.action || dataEntryUrl.href);
+                    if (!isDataEntryUrl(url)) return;
+
+                    event.preventDefault();
+                    url.search = '';
+                    new FormData(form).forEach((value, name) => {
+                        if (typeof value === 'string') url.searchParams.append(name, value);
+                    });
+                    navigateDataEntry(url, { scrollTarget: '#data-entry-register-title' });
+                });
+
+                window.addEventListener('popstate', (event) => {
+                    const url = normalizedDataEntryUrl(window.location.href);
+                    if (!isDataEntryUrl(url)) return;
+                    navigateDataEntry(url, {
+                        history: false,
+                        restoreScroll: Number.isFinite(event.state?.scrollY) ? event.state.scrollY : 0,
+                    });
+                });
+
+                window.addEventListener('beforeunload', (event) => {
+                    if (!hasUnsavedWorkspaceChanges()) return;
+                    event.preventDefault();
+                    event.returnValue = '';
+                });
+
+                saveCurrentScrollPosition();
+            };
+
+            const bootDataEntryPage = () => {
+                initializeWorkspace();
+                initializeDirtyState();
+                initializeAsyncNavigation();
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', bootDataEntryPage, { once: true });
+            } else {
+                bootDataEntryPage();
+            }
+        })();
     </script>
 @endpush
+@endunless

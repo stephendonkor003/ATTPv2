@@ -12,6 +12,7 @@ use Illuminate\View\View;
 class MeReportingNotificationController extends Controller
 {
     private const CATEGORIES = [
+        'me_collection' => 'Data collections',
         'me_submission' => 'M&E submissions',
         'reporting_period' => 'Reporting periods',
         'performance_report' => 'Performance reports',

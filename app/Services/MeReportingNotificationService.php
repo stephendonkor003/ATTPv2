@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\MeDataCollection;
 use App\Models\MeDataSubmission;
 use App\Models\MeMissionReport;
 use App\Models\MePerformanceReport;
@@ -63,6 +64,74 @@ class MeReportingNotificationService
             'portal_url' => route('think-tank.me-data.index'),
             'category' => 'reporting_period',
         ]);
+    }
+
+    /**
+     * Notify each assigned think tank through its active M&E portal accounts.
+     * Every recipient receives a direct link to that think tank's assigned form.
+     *
+     * @return array{recipients: int, sent: int, already_notified: int, failed: int, unreachable_think_tanks: int}
+     */
+    public function collectionPublished(MeDataCollection $collection): array
+    {
+        $collection->loadMissing([
+            'form.indicator:id,indicator_code,name',
+            'reportingPeriod:id,label',
+            'assignments.thinkTank.portalUser',
+            'assignments.thinkTank.portalUsers',
+        ]);
+
+        $result = [
+            'recipients' => 0,
+            'sent' => 0,
+            'already_notified' => 0,
+            'failed' => 0,
+            'unreachable_think_tanks' => 0,
+        ];
+        $form = $collection->form;
+        $indicator = $form?->indicator;
+        $indicatorLabel = trim(($indicator?->indicator_code ? $indicator->indicator_code.' - ' : '').($indicator?->name ?: ''));
+        $deadline = $collection->due_at?->format('d M Y, H:i');
+
+        foreach ($collection->assignments as $assignment) {
+            $thinkTank = $assignment->thinkTank;
+            $recipients = collect([$thinkTank?->portalUser])
+                ->merge($thinkTank?->portalUsers ?? collect())
+                ->filter(fn ($user): bool => $user instanceof User)
+                ->filter(fn (User $user): bool => $user->user_type === 'think_tank'
+                    && ! $user->is_disabled
+                    && ($user->can('think_tank.me.view') || $user->can('think_tank.me.submit')))
+                ->unique('id')
+                ->values();
+
+            if ($recipients->isEmpty()) {
+                $result['unreachable_think_tanks']++;
+
+                continue;
+            }
+
+            $result['recipients'] += $recipients->count();
+            $delivery = $this->notify($recipients, 'collection_published', $collection, [
+                'title' => 'New M&E data collection assigned',
+                'message' => ($indicatorLabel ?: ($form?->title ?: 'An M&E collection form'))
+                    .' is ready for '.$thinkTank->name
+                    .($collection->reportingPeriod?->label ? ' for '.$collection->reportingPeriod->label : '')
+                    .($deadline ? '. Submit by '.$deadline : '').'.',
+                'severity' => 'info',
+                'admin_url' => route('budget.me.rebuild.data-entry', [
+                    'tab' => 'submissions',
+                    'q' => $form?->code,
+                ]),
+                'portal_url' => route('think-tank.me-data.show', $assignment),
+                'category' => 'me_collection',
+            ], true);
+
+            $result['sent'] += $delivery['sent'];
+            $result['already_notified'] += $delivery['already_notified'];
+            $result['failed'] += $delivery['failed'];
+        }
+
+        return $result;
     }
 
     public function performanceLifecycle(MePerformanceReport $report, string $event): void
@@ -152,13 +221,16 @@ class MeReportingNotificationService
         return User::query()->whereIn('id', $ids->unique())->get();
     }
 
+    /** @return array{sent: int, already_notified: int, failed: int} */
     private function notify(
         Collection $recipients,
         string $event,
         Model $subject,
         array $payload,
         bool $dailyDedupe = false
-    ): void {
+    ): array {
+        $result = ['sent' => 0, 'already_notified' => 0, 'failed' => 0];
+
         foreach ($recipients as $user) {
             $dedupeLog = null;
             if ($dailyDedupe) {
@@ -170,6 +242,8 @@ class MeReportingNotificationService
                     'notification_date' => today(),
                 ]);
                 if (! $dedupeLog->wasRecentlyCreated) {
+                    $result['already_notified']++;
+
                     continue;
                 }
             }
@@ -182,13 +256,17 @@ class MeReportingNotificationService
                     'subject_id' => (string) $subject->getKey(),
                     'occurred_at' => now()->toIso8601String(),
                 ]));
+                $result['sent']++;
             } catch (\Throwable $exception) {
                 $dedupeLog?->delete();
                 report($exception);
+                $result['failed']++;
 
                 continue;
             }
         }
+
+        return $result;
     }
 
     private function payloadForRecipient(array $payload, User $user): array

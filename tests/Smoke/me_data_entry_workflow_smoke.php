@@ -406,7 +406,7 @@ class MeDataEntryWorkflowSmoke
                 'period_end' => $periodEnd,
                 'status' => MeReportingPeriod::STATUS_ACTIVE,
             ])
-            ->assertRedirect(route('budget.me.rebuild.data-entry', ['tab' => 'periods']));
+            ->assertRedirect(route('budget.me.rebuild.data-entry', ['tab' => 'collections']));
 
         $period = MeReportingPeriod::query()->where('code', $periodCode)->first();
         $this->assertTrue((bool) $period, 'Admin reporting-period route did not persist the period.');
@@ -423,7 +423,7 @@ class MeDataEntryWorkflowSmoke
                 'opens_at' => $opensAt,
                 'due_at' => $dueAt,
                 'closes_at' => $closesAt,
-                'status' => MeDataCollection::STATUS_OPEN,
+                'status' => MeDataCollection::STATUS_DRAFT,
                 'member_ids' => [$context['firstMember']->id],
             ])
             ->assertRedirect(route('budget.me.rebuild.data-entry', ['tab' => 'collections']));
@@ -433,7 +433,7 @@ class MeDataEntryWorkflowSmoke
             ->where('reporting_period_id', $period->id)
             ->first();
         $this->assertTrue((bool) $collection, 'Admin collection route did not persist the collection.');
-        $this->assertSame(MeDataCollection::STATUS_OPEN, $collection->status, 'Collection was not opened.');
+        $this->assertSame(MeDataCollection::STATUS_DRAFT, $collection->status, 'Collection was not saved as a draft.');
         $this->assertSame(1, $collection->assignments()->count(), 'Collection must have exactly one assigned think tank.');
 
         $assignment = $collection->assignments()->first();
@@ -441,6 +441,46 @@ class MeDataEntryWorkflowSmoke
             $context['firstMember']->id,
             $assignment->think_tank_member_id,
             'Collection was assigned to the wrong think tank.'
+        );
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.data-entry.collections.publish', $collection))
+            ->assertRedirect(route('budget.me.rebuild.data-entry', ['tab' => 'collections']));
+        $this->assertSame(
+            MeDataCollection::STATUS_OPEN,
+            $collection->fresh()->status,
+            'Publishing did not expose the collection in the think-tank portal.'
+        );
+        $publicationNotification = $context['firstUser']->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->get()
+            ->first(fn ($notification): bool => data_get($notification->data, 'event') === 'collection_published'
+                && (string) data_get($notification->data, 'subject_id') === (string) $collection->id);
+        $this->assertTrue((bool) $publicationNotification, 'The assigned think tank did not receive a publication notification.');
+        $this->assertSame(
+            route('think-tank.me-data.show', $assignment),
+            data_get($publicationNotification->data, 'url'),
+            'The publication notification does not link to the assigned portal form.'
+        );
+        $publicationNotificationCount = $context['firstUser']->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->get()
+            ->filter(fn ($notification): bool => data_get($notification->data, 'event') === 'collection_published'
+                && (string) data_get($notification->data, 'subject_id') === (string) $collection->id)
+            ->count();
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.data-entry.collections.publish', $collection))
+            ->assertRedirect(route('budget.me.rebuild.data-entry', ['tab' => 'collections']));
+        $publicationNotificationCountAfterRepeat = $context['firstUser']->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->get()
+            ->filter(fn ($notification): bool => data_get($notification->data, 'event') === 'collection_published'
+                && (string) data_get($notification->data, 'subject_id') === (string) $collection->id)
+            ->count();
+        $this->assertSame(
+            $publicationNotificationCount,
+            $publicationNotificationCountAfterRepeat,
+            'Publishing twice on the same day created a duplicate think-tank notification.'
         );
 
         return compact(
@@ -663,10 +703,13 @@ class MeDataEntryWorkflowSmoke
             ->get(route('budget.me.rebuild.data-entry'))
             ->assertOk()
             ->assertSee('Data Entry and Performance Tracking')
-            ->assertSee('Active Collections')
-            ->assertSee('Form Templates')
-            ->assertSee('Reporting Periods')
+            ->assertSee('Think Tanks Data Collections')
+            ->assertSee('Forms Generator')
+            ->assertSee('Performance Reports')
             ->assertSee('Submissions')
+            ->assertSee('How to use this page')
+            ->assertSee('Reporting schedule')
+            ->assertSee('Publish / Send to Think Tanks')
             ->assertSee($workflow['formTitle'])
             ->assertSee($workflow['periodLabel']);
 
@@ -681,12 +724,24 @@ class MeDataEntryWorkflowSmoke
 
         $this->asAdmin($admin)
             ->get(route('budget.me.rebuild.data-entry', [
-                'tab' => 'periods',
-                'status' => MeReportingPeriod::LIFECYCLE_OPEN,
+                'tab' => 'collections',
             ]))
             ->assertOk()
             ->assertSee($workflow['periodLabel'])
             ->assertDontSee('No matching records');
+
+        $this->asAdmin($admin)
+            ->get(route('budget.me.rebuild.data-entry', [
+                'tab' => 'forms',
+                'fragment' => 1,
+            ]), ['X-Requested-With' => 'XMLHttpRequest'])
+            ->assertOk()
+            ->assertSee('data-me-data-entry-fragment', false)
+            ->assertSee('<th>Linked indicator</th>', false)
+            ->assertSee($workflow['form']->indicator?->indicator_code)
+            ->assertSee($workflow['form']->indicator?->name)
+            ->assertDontSee('<html', false)
+            ->assertDontSee('Think-tank reporting readiness');
 
         $createFormResponse = $this->asAdmin($admin)
             ->get(route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'create' => 'form']));
@@ -748,6 +803,18 @@ class MeDataEntryWorkflowSmoke
             ->assertSee($workflow['formTitle'])
             ->assertSee($workflow['periodLabel'])
             ->assertSee('Start update')
+            ->assertSee($assignmentUrl, false);
+
+        $this->asThinkTank($context['firstUser'])
+            ->get(route('think-tank.me-dashboard'))
+            ->assertOk()
+            ->assertSee('Submit indicator data with confidence')
+            ->assertSee('How to submit indicator data')
+            ->assertSee('Start indicator submission')
+            ->assertSee('Before you submit')
+            ->assertSee('What each status means')
+            ->assertSee($workflow['formTitle'])
+            ->assertSee($workflow['periodLabel'])
             ->assertSee($assignmentUrl, false);
 
         $this->asThinkTank($context['secondUser'])
@@ -1336,13 +1403,14 @@ class MeDataEntryWorkflowSmoke
         $this->asAdmin($context['admin'])
             ->get($registerRoute.'?'.http_build_query(['tab' => 'submissions']))
             ->assertOk()
-            ->assertSee('Participant submissions')
-            ->assertSee('>Portfolio</th>', false)
+            ->assertSee('Think-tank submissions by indicator')
+            ->assertSee('Review every think tank assignment by indicator')
+            ->assertSee('>Think tank</th>', false)
             ->assertSee('>Indicator</th>', false)
-            ->assertSee('>Participant / think tank</th>', false)
-            ->assertSee('>Template / period</th>', false)
-            ->assertSee('>Submitted / status</th>', false)
-            ->assertSee('>Review</th>', false)
+            ->assertSee('>Linked form / period</th>', false)
+            ->assertSee('>Data required by</th>', false)
+            ->assertSee('>Submission so far</th>', false)
+            ->assertSee('>Review / action</th>', false)
             ->assertSee('me-data-table-region', false)
             ->assertSee('Open review')
             ->assertSee(route('budget.me.submission-reviews.show', $submission), false)
@@ -1383,7 +1451,7 @@ class MeDataEntryWorkflowSmoke
                 ->assertSee($workflow['formTitle'])
                 ->assertSee($context['indicator']->name)
                 ->assertSee('Filters applied')
-                ->assertDontSee('No submissions match these filters');
+                ->assertDontSee('No assignments match these filters');
         }
 
         $composedQuery = [
@@ -1399,7 +1467,7 @@ class MeDataEntryWorkflowSmoke
             ->assertSee($workflow['formTitle'])
             ->assertSee($context['indicator']->name)
             ->assertSee('Filters applied')
-            ->assertDontSee('No submissions match these filters');
+            ->assertDontSee('No assignments match these filters');
 
         $this->asAdmin($context['admin'])
             ->get($registerRoute.'?'.http_build_query([
@@ -1407,7 +1475,7 @@ class MeDataEntryWorkflowSmoke
                 'q' => 'NO-SUBMISSION-MATCH-'.Str::upper(Str::random(16)),
             ]))
             ->assertOk()
-            ->assertSee('No submissions match these filters')
+            ->assertSee('No assignments match these filters')
             ->assertSee('Try a different participant, indicator, template, period, portfolio or status.')
             ->assertSee('aria-label="Clear filters"', false)
             ->assertDontSee($workflow['formTitle']);

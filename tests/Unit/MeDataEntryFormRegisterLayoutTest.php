@@ -1,0 +1,53 @@
+<?php
+
+it('keeps every data-entry register separated and displays the linked indicator', function () {
+    $root = dirname(__DIR__, 2);
+    $view = file_get_contents(
+        $root.'/resources/views/me/data-entry/index.blade.php'
+    );
+    $controller = file_get_contents($root.'/app/Http/Controllers/MeDataEntryController.php');
+
+    expect($view)
+        ->toContain('Think Tanks Data Collections')
+        ->toContain('Forms Generator')
+        ->toContain('Performance Reports')
+        ->toContain("'submissions' => ['label' => 'Submissions'")
+        ->toContain('How to use this page')
+        ->toContain('Plan and monitor what every think tank must submit')
+        ->toContain('Review every think tank assignment by indicator')
+        ->toContain('Reporting schedule')
+        ->toContain('Publish / Send to Think Tanks')
+        ->toContain("route('budget.me.data-entry.collections.publish', \$collection)")
+        ->toContain('me-form-template-table')
+        ->toContain('me-performance-report-table')
+        ->toContain('me-submission-table')
+        ->toContain('me-collection-table')
+        ->toContain('<col class="me-form-col-indicator">')
+        ->toContain('<th>Linked indicator</th>')
+        ->toContain('{{ $form->indicator->indicator_code')
+        ->toContain('{{ $form->indicator->name }}')
+        ->toContain('<small>Linked indicator</small>')
+        ->toContain('position: static;')
+        ->toContain('table-layout: fixed !important;')
+        ->toContain('flex-wrap: wrap;')
+        ->toContain('white-space: normal !important;')
+        ->toContain('overflow-wrap: anywhere !important;')
+        ->toContain('word-break: break-word !important;')
+        ->toContain('hyphens: auto;')
+        ->toContain('data-me-data-entry-fragment')
+        ->toContain("'X-Requested-With': 'XMLHttpRequest'")
+        ->toContain("requestUrl.searchParams.set('fragment', '1')")
+        ->toContain('fragmentCacheLifetime = 30000')
+        ->toContain('window.history.pushState')
+        ->toContain("window.addEventListener('popstate'")
+        ->and($controller)
+        ->toContain("private const TABS = ['collections', 'forms', 'reports', 'submissions'];")
+        ->toContain('scopedAssignmentQuery')
+        ->toContain("\$statusFilter === 'not_started'")
+        ->toContain('publishCollection(')
+        ->toContain('collectionPublished(')
+        ->toContain("->paginate(6, ['*'], 'periods_page')")
+        ->toContain("\$request->ajax() && \$request->boolean('fragment')")
+        ->toContain('if (! $isDataEntryFragment)')
+        ->toContain("'isDataEntryFragment'");
+});
