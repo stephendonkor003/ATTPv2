@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MeDataCollectionAssignment;
+use App\Models\MeKnowledgeEvidenceItem;
 use App\Models\MeMissionReport;
 use App\Models\MePerformanceReport;
 use App\Models\MePerformanceReportDocument;
@@ -13,6 +13,7 @@ use Illuminate\Console\Command;
 class SendMeReportingReminders extends Command
 {
     protected $signature = 'me:send-reporting-reminders';
+
     protected $description = 'Generate M&E reporting deadlines, corrective-action and MOV validation reminders';
 
     public function handle(MeReportingNotificationService $notifications): int
@@ -33,7 +34,7 @@ class SendMeReportingReminders extends Command
                     'message' => ($assignment->collection?->form?->title ?: 'An assigned reporting form')
                         .($overdue ? ' was due ' : ' is due ').optional($due)->format('d M Y').'.',
                     'severity' => $overdue ? 'danger' : 'warning',
-                    'url' => route('think-tank.performance-reports.index'),
+                    'portal_url' => route('think-tank.performance-reports.index'),
                     'category' => 'deadline',
                 ], $notifications->authorsFor($assignment));
             });
@@ -49,9 +50,10 @@ class SendMeReportingReminders extends Command
                     'title' => $overdue ? 'Performance report overdue' : 'Reporting deadline approaching',
                     'message' => ($overdue ? 'This report was due ' : 'This report is due ').optional($due)->format('d M Y').'.',
                     'severity' => $overdue ? 'danger' : 'warning',
-                    'url' => $report->think_tank_member_id
+                    'admin_url' => route('budget.me.performance-reports.edit', $report),
+                    'portal_url' => $report->think_tank_member_id
                         ? route('think-tank.performance-reports.edit', $report)
-                        : route('budget.me.performance-reports.edit', $report),
+                        : null,
                     'category' => 'deadline',
                 ], $notifications->authorsFor($report));
             });
@@ -63,9 +65,10 @@ class SendMeReportingReminders extends Command
                 'title' => 'Report corrections outstanding',
                 'message' => 'A returned performance report still requires correction and resubmission.',
                 'severity' => 'warning',
-                'url' => $report->think_tank_member_id
+                'admin_url' => route('budget.me.performance-reports.edit', $report),
+                'portal_url' => $report->think_tank_member_id
                     ? route('think-tank.performance-reports.edit', $report)
-                    : route('budget.me.performance-reports.edit', $report),
+                    : null,
                 'category' => 'corrective_action',
             ], $notifications->authorsFor($report)));
 
@@ -78,7 +81,7 @@ class SendMeReportingReminders extends Command
                 'title' => $report->action_due_at?->isPast() ? 'Mission corrective action overdue' : 'Mission corrective action due soon',
                 'message' => 'Follow-up action is due '.$report->action_due_at?->format('d M Y').'.',
                 'severity' => $report->action_due_at?->isPast() ? 'danger' : 'warning',
-                'url' => route('budget.me.mission-reports.edit', $report),
+                'admin_url' => route('budget.me.mission-reports.edit', $report),
                 'category' => 'corrective_action',
             ], $notifications->authorsFor($report)));
 
@@ -89,7 +92,7 @@ class SendMeReportingReminders extends Command
                 'title' => 'Means of Verification requires validation',
                 'message' => $document->document_name.' is awaiting Secretariat validation.',
                 'severity' => 'info',
-                'url' => route('budget.me.performance-reports.edit', $document->report),
+                'admin_url' => route('budget.me.performance-reports.edit', $document->report),
                 'category' => 'mov_validation',
             ], $reviewers));
 
@@ -100,7 +103,7 @@ class SendMeReportingReminders extends Command
                 'title' => 'Repository MOV requires validation',
                 'message' => $evidence->title.' is awaiting validation.',
                 'severity' => 'info',
-                'url' => route('budget.me.rebuild.knowledge-repository', ['q' => $evidence->title]),
+                'admin_url' => route('budget.me.rebuild.knowledge-repository', ['q' => $evidence->title]),
                 'category' => 'mov_validation',
             ], $reviewers));
 

@@ -710,6 +710,7 @@
                                     $indicator = $result->indicator;
                                     $unit = $indicator?->unit?->symbol ?: $indicator?->unit?->name;
                                     $actualValue = old('indicator_results.'.$result->id.'.actual_value', $result->actual_value);
+                                    $actualText = old('indicator_results.'.$result->id.'.actual_text', $result->actual_text);
                                     $rollupNumerator = old('indicator_results.'.$result->id.'.rollup_numerator', $result->rollup_numerator);
                                     $rollupDenominator = old('indicator_results.'.$result->id.'.rollup_denominator', $result->rollup_denominator);
                                 @endphp
@@ -725,7 +726,7 @@
                                             <div class="result-cell">
                                                 <small>Result this period</small>
                                                 <div class="result-value" data-period-value>
-                                                    {{ $result->actual_value !== null ? number_format((float) $result->actual_value, 2) : 'Pending' }}
+                                                    {{ $indicator?->value_type === 'milestone' ? ($result->actual_text ?: 'Pending') : ($result->actual_value !== null ? number_format((float) $result->actual_value, 2) : 'Pending') }}
                                                 </div>
                                             </div>
                                             <div class="result-cell">
@@ -759,7 +760,16 @@
                                                 </div>
                                             </div>
                                             <div class="result-cell">
-                                                <small>Period result</small>
+                                                <small>{{ $indicator?->value_type === 'milestone' ? 'Milestone status' : 'Period result' }}</small>
+                                                @if($indicator?->value_type === 'milestone')
+                                                <textarea
+                                                    name="indicator_results[{{ $result->id }}][actual_text]"
+                                                    class="form-control"
+                                                    rows="3"
+                                                    aria-label="Qualitative result for {{ $indicator?->name }}"
+                                                    @disabled(!$editable)
+                                                >{{ $actualText }}</textarea>
+                                                @else
                                                 <input
                                                     type="number"
                                                     step="any"
@@ -770,6 +780,7 @@
                                                     data-actual
                                                     @disabled(!$editable)
                                                 >
+                                                @endif
                                             </div>
                                             <div class="result-cell">
                                                 <small>Period-target progress</small>

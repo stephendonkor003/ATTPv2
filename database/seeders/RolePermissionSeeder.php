@@ -123,6 +123,12 @@ class RolePermissionSeeder extends Seeder
             'me.configuration.manage',
             'me.data_entry.view',
             'me.data_entry.manage',
+            'me.framework.manage',
+            'me.targets.manage',
+            'me.submissions.review',
+            'me.results.view',
+            'me.reports.export',
+            'me.dqa.manage',
             'me.performance_reports.view',
             'me.mission_reports.view',
             'me.reporting_notifications.view',
@@ -156,11 +162,17 @@ class RolePermissionSeeder extends Seeder
         $this->syncRolePermissionsByNames('Portfolio Coordinator', $portfolioLeadershipPermissions);
 
         // Monitoring and Evaluation Manager
-        $this->syncRolePermissionsByNames('Monitoring and Evaluation Manager', [
+        $melManagementPermissions = [
             'me.configuration.view',
             'me.configuration.manage',
             'me.data_entry.view',
             'me.data_entry.manage',
+            'me.framework.manage',
+            'me.targets.manage',
+            'me.submissions.review',
+            'me.results.view',
+            'me.reports.export',
+            'me.dqa.manage',
             'me.performance_reports.view',
             'me.performance_reports.review',
             'me.performance_reports.archive',
@@ -187,7 +199,9 @@ class RolePermissionSeeder extends Seeder
             'grm.submit',
             'grm.view',
             'grm.reports',
-        ]);
+        ];
+        $this->syncRolePermissionsByNames('Monitoring and Evaluation Manager', $melManagementPermissions);
+        $this->syncRolePermissionsByNames('M&e', $melManagementPermissions);
 
         $communicationOfficerPermissions = [
             'communications.view',

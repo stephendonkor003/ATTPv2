@@ -19,6 +19,9 @@ class Evaluation extends BaseModel
         'type',
         'portfolio_id',
         'is_portfolio_custom',
+        'think_tank_member_id',
+        'evaluation_phase',
+        'procurement_id',
         'created_by',
     ];
 
@@ -54,6 +57,16 @@ class Evaluation extends BaseModel
     public function portfolio()
     {
         return $this->belongsTo(Sector::class, 'portfolio_id');
+    }
+
+    public function thinkTankMember()
+    {
+        return $this->belongsTo(ConsortiumThinkTank::class, 'think_tank_member_id');
+    }
+
+    public function procurement()
+    {
+        return $this->belongsTo(Procurement::class);
     }
 
     /**

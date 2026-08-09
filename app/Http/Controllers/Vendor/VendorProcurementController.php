@@ -87,6 +87,7 @@ class VendorProcurementController extends Controller
 
         $existingSubmission = FormSubmission::where('procurement_id', $procurement->id)
             ->where('submitted_by', $user->id)
+            ->where('status', '!=', FormSubmission::STATUS_WITHDRAWN)
             ->first();
 
         return view('vendor.procurements.show', [
@@ -152,6 +153,7 @@ class VendorProcurementController extends Controller
 
         $existingSubmission = FormSubmission::where('procurement_id', $procurement->id)
             ->where('submitted_by', $user->id)
+            ->where('status', '!=', FormSubmission::STATUS_WITHDRAWN)
             ->first();
 
         if ($existingSubmission) {
@@ -215,6 +217,7 @@ class VendorProcurementController extends Controller
                 'submitted_by' => $user->id,
                 'status' => 'submitted',
                 'submitted_at' => now(),
+                'publication_version' => max(1, (int) $procurement->publication_version),
             ]);
 
             foreach ($form->fields as $field) {

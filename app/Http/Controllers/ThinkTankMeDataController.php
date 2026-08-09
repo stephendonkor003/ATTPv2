@@ -11,7 +11,11 @@ use App\Models\MeDataEntryFormField;
 use App\Models\MeDataEntryFormSection;
 use App\Models\MeDataSubmission;
 use App\Models\MeDataSubmissionAnswer;
-use App\Models\MeReportingPeriod;
+use App\Models\MeDataSubmissionReview;
+use App\Models\MeDataSubmissionVersion;
+use App\Models\MeSubmissionEvidence;
+use App\Services\MeDataQualityService;
+use App\Services\MeReportingNotificationService;
 use App\Services\ThinkTankMeAssignmentService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -78,7 +82,7 @@ class ThinkTankMeDataController extends Controller
         $editable = $this->canSubmit($request)
             && $this->submissionIsEditable($submission)
             && $assignment->collection->isAcceptingSubmissions()
-            && $assignment->collection->reportingPeriod?->status === MeReportingPeriod::STATUS_ACTIVE;
+            && $assignment->collection->reportingPeriod?->isOpenForSubmission();
 
         return view('think-tank.me-data.show', [
             'member' => $member,
@@ -204,6 +208,7 @@ class ThinkTankMeDataController extends Controller
                         'assignment_id' => $lockedAssignment->id,
                         'revision' => 1,
                         'status' => MeDataSubmission::STATUS_DRAFT,
+                        'workflow_status' => MeDataSubmission::STATUS_DRAFT,
                         'schema_snapshot' => $this->schemaSnapshot($lockedAssignment),
                         'notes' => $request->input('notes'),
                     ]);
@@ -258,13 +263,15 @@ class ThinkTankMeDataController extends Controller
         $storedPaths = [];
         $obsoletePaths = [];
 
+        $submittedRecord = null;
         try {
             DB::transaction(function () use (
                 $request,
                 $assignment,
                 $member,
                 &$storedPaths,
-                &$obsoletePaths
+                &$obsoletePaths,
+                &$submittedRecord
             ): void {
                 $lockedAssignment = $this->lockedAssignmentForMember($assignment, $member);
                 $this->assertPublishedForm($lockedAssignment);
@@ -279,6 +286,7 @@ class ThinkTankMeDataController extends Controller
                         'assignment_id' => $lockedAssignment->id,
                         'revision' => 1,
                         'status' => MeDataSubmission::STATUS_DRAFT,
+                        'workflow_status' => MeDataSubmission::STATUS_DRAFT,
                         'schema_snapshot' => $this->schemaSnapshot($lockedAssignment),
                     ]);
                 } elseif (blank($submission->schema_snapshot)) {
@@ -293,16 +301,33 @@ class ThinkTankMeDataController extends Controller
                     $obsoletePaths
                 );
 
-                if ($submission->status === MeDataSubmission::STATUS_RETURNED) {
+                $isResubmission = $submission->effectiveStatus() === MeDataSubmission::STATUS_RETURNED;
+                if ($isResubmission) {
                     $submission->revision = max(1, (int) $submission->revision) + 1;
                 }
 
                 $submission->fill([
                     'status' => MeDataSubmission::STATUS_SUBMITTED,
+                    'workflow_status' => $isResubmission
+                        ? MeDataSubmission::STATUS_RESUBMITTED
+                        : MeDataSubmission::STATUS_SUBMITTED,
+                    'current_version' => max(1, (int) $submission->revision),
                     'notes' => $request->input('notes'),
                     'submitted_by' => $request->user()->id,
                     'submitted_at' => now(),
-                ])->save();
+                ] + ($isResubmission ? [
+                    'reviewed_by' => null,
+                    'reviewed_at' => null,
+                    'review_notes' => null,
+                    'under_review_by' => null,
+                    'under_review_at' => null,
+                    'verified_by' => null,
+                    'verified_at' => null,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                    'rejected_by' => null,
+                    'rejected_at' => null,
+                ] : []))->save();
 
                 $this->createIndicatorResults(
                     $lockedAssignment,
@@ -313,6 +338,33 @@ class ThinkTankMeDataController extends Controller
                     $member,
                     $request
                 );
+                $this->syncSubmissionEvidence($lockedAssignment, $submission, $fields, $answers, $member, $request);
+
+                MeDataSubmissionVersion::query()->updateOrCreate(
+                    ['submission_id' => $submission->id, 'version' => (int) $submission->revision],
+                    [
+                        'status' => $submission->workflow_status,
+                        'schema_snapshot' => $submission->schema_snapshot,
+                        'answers_snapshot' => $answers->mapWithKeys(fn (MeDataSubmissionAnswer $answer): array => [
+                            $answer->field_key => $answer->value,
+                        ])->all(),
+                        'evidence_snapshot' => $answers->filter(fn (MeDataSubmissionAnswer $answer): bool => $answer->field?->isUpload())->pluck('value', 'field_key')->all(),
+                        'submitter_notes' => $submission->notes,
+                        'created_by' => $request->user()->id,
+                        'submitted_at' => $submission->submitted_at,
+                    ]
+                );
+                MeDataSubmissionReview::query()->create([
+                    'submission_id' => $submission->id,
+                    'submission_version' => (int) $submission->revision,
+                    'from_status' => $isResubmission ? MeDataSubmission::STATUS_RETURNED : MeDataSubmission::STATUS_DRAFT,
+                    'to_status' => $submission->workflow_status,
+                    'action' => $isResubmission ? 'resubmitted' : 'submitted',
+                    'comments' => $submission->notes,
+                    'reviewed_by' => $request->user()->id,
+                    'reviewed_at' => now(),
+                ]);
+                $submittedRecord = $submission;
             });
         } catch (Throwable $exception) {
             $this->deleteStoredPaths($storedPaths);
@@ -321,6 +373,13 @@ class ThinkTankMeDataController extends Controller
         }
 
         $this->deleteStoredPaths($obsoletePaths);
+        if ($submittedRecord) {
+            app(MeDataQualityService::class)->evaluate($submittedRecord);
+            app(MeReportingNotificationService::class)->submissionLifecycle(
+                $submittedRecord,
+                $submittedRecord->workflow_status
+            );
+        }
 
         return redirect()
             ->route('think-tank.me-data.show', array_merge(
@@ -446,7 +505,7 @@ class ThinkTankMeDataController extends Controller
         }
 
         if (! $collection->reportingPeriod
-            || $collection->reportingPeriod->status !== MeReportingPeriod::STATUS_ACTIVE) {
+            || ! $collection->reportingPeriod->isOpenForSubmission()) {
             throw ValidationException::withMessages([
                 'collection' => 'The reporting period is not active.',
             ]);
@@ -472,10 +531,7 @@ class ThinkTankMeDataController extends Controller
             return true;
         }
 
-        return in_array($submission->status, [
-            MeDataSubmission::STATUS_DRAFT,
-            MeDataSubmission::STATUS_RETURNED,
-        ], true);
+        return $submission->isEditable();
     }
 
     private function answerValues(?MeDataSubmission $submission, Collection $fields): Collection
@@ -631,6 +687,42 @@ class ThinkTankMeDataController extends Controller
             $fieldErrors = $this->validateEnteredAnswer($field, $value);
             if ($fieldErrors !== []) {
                 $errors["answers.{$fieldId}"] = $fieldErrors;
+            }
+        }
+
+        foreach ($fields->where('field_type', MeDataEntryFormField::TYPE_PERCENTAGE) as $percentageField) {
+            $validation = is_array($percentageField->validation) ? $percentageField->validation : [];
+            $numeratorField = $fields->firstWhere(
+                'field_key',
+                $validation['rollup_numerator_field_key'] ?? null
+            );
+            $denominatorField = $fields->firstWhere(
+                'field_key',
+                $validation['rollup_denominator_field_key'] ?? null
+            );
+            if (! $numeratorField || ! $denominatorField) {
+                continue;
+            }
+
+            $percentage = $values[(string) $percentageField->id] ?? null;
+            $numerator = $values[(string) $numeratorField->id] ?? null;
+            $denominator = $values[(string) $denominatorField->id] ?? null;
+            if (! is_numeric($percentage) || ! is_numeric($numerator) || ! is_numeric($denominator)) {
+                continue;
+            }
+
+            if ((float) $denominator <= 0) {
+                $errors['answers.'.(string) $denominatorField->id][] = "{$denominatorField->label} must be greater than zero.";
+
+                continue;
+            }
+            if ((float) $numerator > (float) $denominator) {
+                $errors['answers.'.(string) $numeratorField->id][] = "{$numeratorField->label} cannot exceed {$denominatorField->label}.";
+            }
+
+            $expected = round(((float) $numerator / (float) $denominator) * 100, 2);
+            if (abs((float) $percentage - $expected) > 0.01) {
+                $errors['answers.'.(string) $percentageField->id][] = "{$percentageField->label} must equal numerator ÷ denominator × 100 ({$expected}%).";
             }
         }
 
@@ -1441,15 +1533,46 @@ class ThinkTankMeDataController extends Controller
         foreach ($fields as $field) {
             $value = $values[(string) $field->id] ?? null;
 
-            if (! $field->indicator_id
-                || ! $field->isNumeric()
-                || $this->answerIsBlank($value)) {
+            if (! $field->indicator_id || $this->answerIsBlank($value)) {
                 continue;
             }
 
             $indicator = $field->indicator;
             if (! $indicator) {
                 continue;
+            }
+            $isMilestone = $indicator->value_type === 'milestone';
+            $isBoolean = $indicator->value_type === 'boolean';
+            if (! $field->isNumeric() && ! $isMilestone && ! $isBoolean) {
+                continue;
+            }
+            $actualText = $isMilestone ? trim((string) $value) : null;
+            $actualValue = $isBoolean
+                ? (in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'y'], true) ? 1 : 0)
+                : ($isMilestone ? null : $value);
+            $rollupNumerator = null;
+            $rollupDenominator = null;
+            if ($indicator->value_type === 'percentage') {
+                $validation = is_array($field->validation) ? $field->validation : [];
+                $numeratorField = $fields->firstWhere(
+                    'field_key',
+                    $validation['rollup_numerator_field_key'] ?? null
+                );
+                $denominatorField = $fields->firstWhere(
+                    'field_key',
+                    $validation['rollup_denominator_field_key'] ?? null
+                );
+                $numeratorValue = $numeratorField
+                    ? ($values[(string) $numeratorField->id] ?? null)
+                    : null;
+                $denominatorValue = $denominatorField
+                    ? ($values[(string) $denominatorField->id] ?? null)
+                    : null;
+                $rollupNumerator = is_numeric($numeratorValue) ? (float) $numeratorValue : null;
+                $rollupDenominator = is_numeric($denominatorValue) ? (float) $denominatorValue : null;
+                if ($rollupNumerator !== null && $rollupDenominator !== null && $rollupDenominator > 0) {
+                    $actualValue = round(($rollupNumerator / $rollupDenominator) * 100, 4);
+                }
             }
 
             $result = IndicatorResult::updateOrCreate(
@@ -1465,7 +1588,10 @@ class ThinkTankMeDataController extends Controller
                     'period_label' => $period->label,
                     'period_start' => $period->period_start,
                     'period_end' => $period->period_end,
-                    'actual_value' => $value,
+                    'actual_value' => $actualValue,
+                    'actual_text' => $actualText,
+                    'rollup_numerator' => $rollupNumerator,
+                    'rollup_denominator' => $rollupDenominator,
                     'unit_id' => $indicator->unit_id,
                     'data_source' => 'Think tank portal: '.$member->name,
                     'method' => 'M&E data collection form: '.$form->title,
@@ -1481,6 +1607,41 @@ class ThinkTankMeDataController extends Controller
             $answers->get((string) $field->id)?->update([
                 'indicator_result_id' => $result->id,
             ]);
+        }
+    }
+
+    private function syncSubmissionEvidence(
+        MeDataCollectionAssignment $assignment,
+        MeDataSubmission $submission,
+        Collection $fields,
+        Collection $answers,
+        ConsortiumThinkTank $member,
+        Request $request
+    ): void {
+        $submission->evidence()->delete();
+        foreach ($fields->filter(fn (MeDataEntryFormField $field): bool => $field->isUpload()) as $field) {
+            $answer = $answers->get((string) $field->id);
+            if (! $answer) {
+                continue;
+            }
+            foreach ($this->storedFilesForAnswer($answer, $submission, $field, false) as $file) {
+                MeSubmissionEvidence::query()->create([
+                    'submission_id' => $submission->id,
+                    'indicator_id' => $field->indicator_id ?: $assignment->collection->form->indicator_id,
+                    'reporting_period_id' => $assignment->collection->reporting_period_id,
+                    'think_tank_member_id' => $member->id,
+                    'answer_id' => $answer->id,
+                    'evidence_type' => (string) data_get($field->validation, 'evidence_type', 'other'),
+                    'document_title' => $field->label.' — '.$file['original_name'],
+                    'file_path' => $file['path'],
+                    'original_name' => $file['original_name'],
+                    'mime_type' => $file['mime_type'] ?? null,
+                    'file_size' => $file['size'] ?? null,
+                    'checksum' => $file['sha256'] ?? null,
+                    'verification_status' => 'pending',
+                    'uploaded_by' => $request->user()->id,
+                ]);
+            }
         }
     }
 

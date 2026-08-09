@@ -118,6 +118,69 @@
             object-fit: cover;
         }
 
+        .event-card-media {
+            position: relative;
+            height: 200px;
+            overflow: hidden;
+            background: #dce9ed;
+        }
+
+        .event-card-media > img {
+            height: 100%;
+        }
+
+        .event-card-owner {
+            position: absolute;
+            left: 14px;
+            right: 14px;
+            bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 9px;
+            background: rgba(7, 63, 82, .9);
+            padding: 8px 10px;
+            color: #fff;
+            backdrop-filter: blur(8px);
+        }
+
+        .event-card-owner img,
+        .event-card-owner span:first-child {
+            display: grid;
+            width: 30px;
+            height: 30px;
+            flex: 0 0 30px;
+            place-items: center;
+            border-radius: 7px;
+            background: #fff;
+            object-fit: contain;
+            color: #075c7a;
+            font-weight: 800;
+        }
+
+        .event-card-owner strong {
+            overflow: hidden;
+            font-size: .78rem;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin: .8rem 0 0;
+        }
+
+        .card-meta span {
+            border-radius: 999px;
+            background: #eaf3f5;
+            padding: 5px 8px;
+            color: #075c7a;
+            font-size: .74rem;
+            font-weight: 700;
+        }
+
         .card-body {
             padding: 1.2rem 1.3rem;
         }
@@ -165,13 +228,6 @@
 </head>
 
 <body>
-    @php
-        $procurementImages = collect(File::files(public_path('assets/images')))
-            ->filter(fn($file) => in_array($file->getExtension(), ['jpg', 'jpeg', 'png', 'webp']))
-            ->shuffle()
-            ->values();
-    @endphp
-
     <header class="navbar">
         <div class="logo">
 
@@ -220,12 +276,19 @@
 
         @forelse($procurements as $procurement)
             <div class="event-card">
-
-                @php
-                    $image = $procurementImages[$loop->index % $procurementImages->count()];
-                @endphp
-
-                <img src="{{ asset('assets/images/' . $image->getFilename()) }}" alt="Procurement Image">
+                <div class="event-card-media">
+                    <img src="{{ $procurement->cover_image_url ?: asset('assets/three.webp') }}" alt="{{ $procurement->title }} cover image">
+                    @if($procurement->thinkTankMember)
+                        <div class="event-card-owner">
+                            @if($procurement->thinkTankMember->logo_url)
+                                <img src="{{ $procurement->thinkTankMember->logo_url }}" alt="{{ $procurement->thinkTankMember->name }} logo">
+                            @else
+                                <span>{{ Str::upper(Str::substr($procurement->thinkTankMember->name, 0, 1)) }}</span>
+                            @endif
+                            <strong>{{ $procurement->thinkTankMember->name }}</strong>
+                        </div>
+                    @endif
+                </div>
 
                 <div class="card-body">
                     <h4>{{ $procurement->title }}</h4>
@@ -233,6 +296,12 @@
                     <p>
                         {{ \Illuminate\Support\Str::limit(strip_tags($procurement->description), 130) }}
                     </p>
+
+                    <div class="card-meta">
+                        <span>{{ $procurement->reference_no ?: 'Open call' }}</span>
+                        @if($procurement->application_end_date)<span>Closes {{ $procurement->application_end_date->format('d M Y') }}</span>@endif
+                        @if($procurement->activeForm)<span>{{ $procurement->activeForm->fields->count() }} form questions</span>@endif
+                    </div>
 
                     <a href="{{ route('public.procurement.show', $procurement->slug) }}" class="btn-view">
                         View Details & Apply

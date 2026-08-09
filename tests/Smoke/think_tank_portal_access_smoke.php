@@ -38,10 +38,10 @@ class ThinkTankPortalAccessSmoke
 
     private const AREA_LABELS = [
         'dashboard' => 'Dashboard',
-        'me' => 'M&E Data',
-        'finance' => 'Finance',
-        'procurement_plans' => 'Procurement Plans',
-        'report_uploads' => 'Report Uploads',
+        'me' => 'Indicator data',
+        'finance' => 'Finance and payments',
+        'procurement_plans' => 'Annual plans',
+        'report_uploads' => 'Submit activity report',
     ];
 
     private const ACCESS_MATRIX = [
@@ -67,6 +67,33 @@ class ThinkTankPortalAccessSmoke
         ],
     ];
 
+    private const NAVIGATION_GROUPS = [
+        'think_tank_admin' => [
+            'Dashboard',
+            'Procurement',
+            'Monitoring & Evaluation',
+            'Reporting',
+            'Audit Trails',
+            'Users',
+        ],
+        'procurement_officer' => [
+            'Dashboard',
+            'Procurement',
+            'Audit Trails',
+        ],
+        'me_officer' => [
+            'Dashboard',
+            'Monitoring & Evaluation',
+            'Reporting',
+            'Audit Trails',
+        ],
+        'finance_officer' => [
+            'Dashboard',
+            'Reporting',
+            'Audit Trails',
+        ],
+    ];
+
     private const LEGACY_ROUTE_NAMES = [
         'think-tank.reports',
         'think-tank.research',
@@ -74,6 +101,18 @@ class ThinkTankPortalAccessSmoke
     ];
 
     private const GRIEVANCE_ROUTE_NAME = 'think-tank.grievances.create';
+
+    private const AUDIT_ROUTE_NAME = 'think-tank.audit-trails';
+
+    private const PROCUREMENT_CREATE_ROUTE_NAME = 'think-tank.procurement-plans.create';
+
+    private const EVALUATIONS_ROUTE_NAME = 'think-tank.evaluations.index';
+
+    private const EVALUATION_ASSIGNMENTS_ROUTE_NAME = 'think-tank.evaluation-assignments.index';
+
+    private const TECHNICAL_TEMPLATES_ROUTE_NAME = 'think-tank.evaluation-templates.technical';
+
+    private const FINANCIAL_TEMPLATES_ROUTE_NAME = 'think-tank.evaluation-templates.financial';
 
     protected $app;
 
@@ -92,7 +131,9 @@ class ThinkTankPortalAccessSmoke
             $context = $this->prepareContext();
             $this->assertAreaRouteMiddleware();
             $this->assertRoleAccessMatrix($context['users']);
+            $this->assertProcurementWorkspacePages($context['users']);
             $this->assertGrievanceAccess($context['users']);
+            $this->assertAuditTrailAccess($context['users']);
             $this->assertLegacyRoutesAreForbidden($context['users']);
             $this->assertSimplifiedNavigation($context['users']);
 
@@ -110,7 +151,17 @@ class ThinkTankPortalAccessSmoke
             'The think-tank member and access-level user columns are not migrated.'
         );
 
-        foreach ([...array_values(self::AREA_ROUTES), ...self::LEGACY_ROUTE_NAMES, self::GRIEVANCE_ROUTE_NAME] as $routeName) {
+        foreach ([
+            ...array_values(self::AREA_ROUTES),
+            ...self::LEGACY_ROUTE_NAMES,
+            self::GRIEVANCE_ROUTE_NAME,
+            self::AUDIT_ROUTE_NAME,
+            self::PROCUREMENT_CREATE_ROUTE_NAME,
+            self::EVALUATIONS_ROUTE_NAME,
+            self::EVALUATION_ASSIGNMENTS_ROUTE_NAME,
+            self::TECHNICAL_TEMPLATES_ROUTE_NAME,
+            self::FINANCIAL_TEMPLATES_ROUTE_NAME,
+        ] as $routeName) {
             $this->assertTrue(
                 Route::has($routeName),
                 "Required think-tank portal route [{$routeName}] is missing."
@@ -230,6 +281,38 @@ class ThinkTankPortalAccessSmoke
     /**
      * @param  array<string, User>  $users
      */
+    private function assertProcurementWorkspacePages(array $users): void
+    {
+        foreach ($users as $accessLevel => $user) {
+            $canUseProcurement = in_array($accessLevel, ['think_tank_admin', 'procurement_officer'], true);
+
+            $createResponse = $this->asPortalUser($user)->get(route(self::PROCUREMENT_CREATE_ROUTE_NAME));
+            $evaluationResponse = $this->asPortalUser($user)->get(route(self::EVALUATIONS_ROUTE_NAME));
+            $assignmentResponse = $this->asPortalUser($user)->get(route(self::EVALUATION_ASSIGNMENTS_ROUTE_NAME));
+            $technicalResponse = $this->asPortalUser($user)->get(route(self::TECHNICAL_TEMPLATES_ROUTE_NAME));
+            $financialResponse = $this->asPortalUser($user)->get(route(self::FINANCIAL_TEMPLATES_ROUTE_NAME));
+
+            if ($canUseProcurement) {
+                $createResponse->assertOk()->assertSee('Create an annual procurement plan');
+                $evaluationResponse->assertOk()->assertSee('Evaluation workspace');
+                $assignmentResponse->assertOk()->assertSee('Evaluation assignments');
+                $technicalResponse->assertOk()->assertSee('Technical evaluation templates');
+                $financialResponse->assertOk()->assertSee('Financial evaluation templates');
+
+                continue;
+            }
+
+            $createResponse->assertForbidden();
+            $evaluationResponse->assertForbidden();
+            $assignmentResponse->assertForbidden();
+            $technicalResponse->assertForbidden();
+            $financialResponse->assertForbidden();
+        }
+    }
+
+    /**
+     * @param  array<string, User>  $users
+     */
     private function assertGrievanceAccess(array $users): void
     {
         foreach ($users as $accessLevel => $user) {
@@ -249,25 +332,51 @@ class ThinkTankPortalAccessSmoke
     /**
      * @param  array<string, User>  $users
      */
+    private function assertAuditTrailAccess(array $users): void
+    {
+        foreach ($users as $user) {
+            $this->asPortalUser($user)
+                ->get(route(self::AUDIT_ROUTE_NAME, ['scope' => 'all']))
+                ->assertOk()
+                ->assertSee('Organization accountability')
+                ->assertSee('Activity register');
+        }
+    }
+
+    /**
+     * @param  array<string, User>  $users
+     */
     private function assertSimplifiedNavigation(array $users): void
     {
         foreach (self::ACCESS_MATRIX as $accessLevel => $allowedAreas) {
             $response = $this->asPortalUser($users[$accessLevel])
                 ->get(route('think-tank.dashboard'))
                 ->assertOk();
-            $navigation = $this->portalNavigation($response->getContent());
+            $html = $response->getContent();
+            $navigation = $this->portalNavigation($html);
+
+            $this->assertTrue(
+                str_contains($html, asset('think-tank-portal/assets/css/portal.css')),
+                'The Think Tank portal is not loading its dedicated design system.'
+            );
+            $this->assertTrue(
+                str_contains($html, asset('think-tank-portal/assets/css/modules.css')),
+                'The Think Tank portal is not loading its isolated module design layer.'
+            );
+            $this->assertTrue(
+                str_contains($html, asset('think-tank-portal/assets/js/portal.js')),
+                'The Think Tank portal is not loading its dedicated interaction bundle.'
+            );
+            $this->assertTrue(
+                ! str_contains($html, '/admin/assets/'),
+                'The Think Tank portal is still loading an administration asset.'
+            );
+
             $navigationText = preg_replace('/\s+/', ' ', strip_tags(html_entity_decode(
                 $navigation,
                 ENT_QUOTES | ENT_HTML5,
                 'UTF-8'
             ))) ?: '';
-            preg_match_all('/<a\b/i', $navigation, $navigationLinks);
-
-            $this->assertTrue(
-                count($navigationLinks[0]) === count($allowedAreas) + 1,
-                "The {$accessLevel} menu must contain its allowed portal areas and the grievance link."
-            );
-
             $this->assertTrue(
                 str_contains($navigation, 'href="'.route(self::GRIEVANCE_ROUTE_NAME).'"'),
                 "The {$accessLevel} menu is missing the grievance link."
@@ -276,6 +385,50 @@ class ThinkTankPortalAccessSmoke
                 str_contains($navigationText, 'Grievance'),
                 "The {$accessLevel} menu is missing the Grievance label."
             );
+
+            $expectedGroups = self::NAVIGATION_GROUPS[$accessLevel];
+            foreach (['Dashboard', 'Procurement', 'Monitoring & Evaluation', 'Reporting', 'Audit Trails', 'Users'] as $groupLabel) {
+                $hasGroup = str_contains($navigation, '<summary title="'.e($groupLabel).'">');
+
+                $this->assertTrue(
+                    $hasGroup === in_array($groupLabel, $expectedGroups, true),
+                    "The {$accessLevel} grouped menu has an incorrect [{$groupLabel}] section."
+                );
+            }
+
+            $this->assertTrue(
+                str_contains($navigation, 'href="'.route('think-tank.audit-trails', ['scope' => 'all']).'"'),
+                "The {$accessLevel} menu is missing the organization audit trail."
+            );
+
+            $hasProcurementTools = in_array($accessLevel, ['think_tank_admin', 'procurement_officer'], true);
+            foreach ([
+                self::PROCUREMENT_CREATE_ROUTE_NAME,
+                self::EVALUATIONS_ROUTE_NAME,
+                self::EVALUATION_ASSIGNMENTS_ROUTE_NAME,
+                self::TECHNICAL_TEMPLATES_ROUTE_NAME,
+                self::FINANCIAL_TEMPLATES_ROUTE_NAME,
+            ] as $routeName) {
+                $hasLink = str_contains($navigation, 'href="'.route($routeName).'"');
+                $this->assertTrue(
+                    $hasLink === $hasProcurementTools,
+                    "The {$accessLevel} menu has an incorrect [{$routeName}] link."
+                );
+            }
+            $this->assertTrue(
+                str_contains($navigationText, 'Assignments') === $hasProcurementTools
+                    && str_contains($navigationText, 'Templates') === $hasProcurementTools
+                    && str_contains($navigationText, 'Technical evaluations') === $hasProcurementTools
+                    && str_contains($navigationText, 'Financial evaluations') === $hasProcurementTools,
+                "The {$accessLevel} menu has incorrect evaluation-management submenus."
+            );
+
+            if ($accessLevel === 'think_tank_admin') {
+                $this->assertTrue(
+                    str_contains($navigation, 'href="'.route('think-tank.team-access').'"'),
+                    'The Think Tank Administrator menu is missing the user directory.'
+                );
+            }
 
             foreach (self::AREA_ROUTES as $area => $routeName) {
                 $link = 'href="'.route($routeName).'"';

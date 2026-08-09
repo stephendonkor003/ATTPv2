@@ -1,33 +1,221 @@
 @extends('layouts.app')
 
-@section('title', 'Reporting Notifications')
+@section('title', 'M&E Reporting Notifications')
 @section('lean_admin_scripts', '1')
 
+@push('styles')
+    @include('me.reporting-notifications.partials.styles')
+@endpush
+
 @section('content')
-<div class="container-fluid py-4" style="max-width:1100px">
-    <div class="p-4 rounded-4 text-white mb-4" style="background:linear-gradient(120deg,#163b65,#0b6d50)">
-        <div class="d-flex justify-content-between align-items-center gap-3">
-            <div><div class="small text-uppercase fw-bold opacity-75">Monitoring &amp; Evaluation</div><h2 class="text-white fw-bold mb-1">Notifications &amp; Reminders</h2><p class="mb-0 opacity-75">Deadlines, review decisions, corrective actions and MOV validation in one place.</p></div>
-            <span class="badge bg-light text-dark fs-6">{{ $unreadCount }} unread</span>
+@php
+    $tabQuery = request()->except(['page', 'state', 'unread']);
+    $readCount = max(0, $metrics['total'] - $metrics['unread']);
+    $categoryInitials = [
+        'me_submission' => 'ME',
+        'reporting_period' => 'RP',
+        'performance_report' => 'PR',
+        'mission_report' => 'MR',
+        'deadline' => 'DL',
+        'corrective_action' => 'CA',
+        'mov_validation' => 'MV',
+    ];
+@endphp
+<div class="mel-notify">
+    <header class="mn-header">
+        <div>
+            <span class="mn-eyebrow">Monitoring, Evaluation and Learning</span>
+            <h1>Reporting notification centre</h1>
+            <p>Track submission decisions, reporting deadlines, corrective actions and Means of Verification checks without losing important follow-up work.</p>
         </div>
-    </div>
-    @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
-        <div><a href="{{ route('budget.me.reporting-notifications.index') }}" class="btn btn-sm {{ !$unreadOnly?'btn-success':'btn-outline-success' }}">All</a> <a href="{{ route('budget.me.reporting-notifications.index',['unread'=>1]) }}" class="btn btn-sm {{ $unreadOnly?'btn-success':'btn-outline-success' }}">Unread</a></div>
-        @if($unreadCount)<form method="POST" action="{{ route('budget.me.reporting-notifications.read-all') }}">@csrf<button class="btn btn-sm btn-outline-secondary">Mark all read</button></form>@endif
-    </div>
-    <div class="card border-0 shadow-sm"><div class="list-group list-group-flush">
-        @forelse($notifications as $notification)
-            @php($data=$notification->data)
-            <form method="POST" action="{{ route('budget.me.reporting-notifications.read',$notification->id) }}">
-                @csrf
-                <button class="list-group-item list-group-item-action text-start w-100 p-3 {{ $notification->read_at?'':'bg-light' }}">
-                    <div class="d-flex justify-content-between gap-3"><div><div class="d-flex align-items-center gap-2"><strong>{{ $data['title'] ?? 'Reporting notification' }}</strong>@unless($notification->read_at)<span class="badge bg-primary">New</span>@endunless</div><div class="text-muted mt-1">{{ $data['message'] ?? '' }}</div><small class="text-muted">{{ $notification->created_at?->diffForHumans() }}</small></div><i class="feather-chevron-right"></i></div>
-                </button>
+        <div class="mn-header-count" aria-label="Unread notifications">
+            <strong>{{ number_format($metrics['unread']) }}</strong>
+            <span>unread<br>notifications</span>
+        </div>
+    </header>
+
+    @if(session('success'))<div class="alert alert-success mn-alert" role="status">{{ session('success') }}</div>@endif
+    @if($errors->any())
+        <div class="alert alert-danger mn-alert" role="alert">
+            <strong>The notification request could not be completed.</strong>
+            <ul class="mb-0 mt-1">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
+        </div>
+    @endif
+
+    <section class="mn-metrics" aria-label="Notification summary">
+        <article class="mn-metric">
+            <span class="mn-metric-label">All notifications</span>
+            <strong>{{ number_format($metrics['total']) }}</strong>
+            <small>Your complete M&amp;E notification history</small>
+        </article>
+        <article class="mn-metric" style="--metric:#a76b17">
+            <span class="mn-metric-label">Unread</span>
+            <strong>{{ number_format($metrics['unread']) }}</strong>
+            <small>Items still requiring your attention</small>
+        </article>
+        <article class="mn-metric" style="--metric:#ae3f3d">
+            <span class="mn-metric-label">Urgent and unread</span>
+            <strong>{{ number_format($metrics['urgent']) }}</strong>
+            <small>Overdue or high-priority actions</small>
+        </article>
+        <article class="mn-metric" style="--metric:#187459">
+            <span class="mn-metric-label">Received today</span>
+            <strong>{{ number_format($metrics['today']) }}</strong>
+            <small>New activity since midnight</small>
+        </article>
+    </section>
+
+    <details class="mn-panel" @if($activeFilterCount > 0) open @endif>
+        <summary class="mn-panel-head mn-filter-summary">
+            <div><h2>Search and filter</h2><p>Narrow the inbox by workstream, priority or date.</p></div>
+            <span class="mn-badge">{{ $activeFilterCount }} active {{ str('filter')->plural($activeFilterCount) }}</span>
+        </summary>
+        <div class="mn-panel-body">
+            <form method="GET" action="{{ route('budget.me.reporting-notifications.index') }}" class="mn-filter-grid">
+                <input type="hidden" name="state" value="{{ $filters['state'] }}">
+                <div class="mn-field mn-filter-wide">
+                    <label for="notification-search">Search notification content</label>
+                    <input id="notification-search" class="form-control" name="q" value="{{ $filters['q'] }}" placeholder="Title, message, event or linked record">
+                </div>
+                <div class="mn-field">
+                    <label for="notification-category">Workstream</label>
+                    <select id="notification-category" class="form-select" name="category">
+                        <option value="">All workstreams</option>
+                        @foreach($categories as $key => $label)<option value="{{ $key }}" @selected($filters['category'] === $key)>{{ $label }}</option>@endforeach
+                    </select>
+                </div>
+                <div class="mn-field">
+                    <label for="notification-severity">Priority</label>
+                    <select id="notification-severity" class="form-select" name="severity">
+                        <option value="">All priorities</option>
+                        @foreach($severityOptions as $key => $label)<option value="{{ $key }}" @selected($filters['severity'] === $key)>{{ $label }}</option>@endforeach
+                    </select>
+                </div>
+                <div class="mn-field">
+                    <label for="notification-from">Received from</label>
+                    <input id="notification-from" class="form-control" type="date" name="from" value="{{ $filters['from'] }}">
+                </div>
+                <div class="mn-field">
+                    <label for="notification-to">Received to</label>
+                    <input id="notification-to" class="form-control" type="date" name="to" value="{{ $filters['to'] }}">
+                </div>
+                <div class="mn-field">
+                    <label for="notification-sort">Sort order</label>
+                    <select id="notification-sort" class="form-select" name="sort">
+                        <option value="newest" @selected($filters['sort'] === 'newest')>Newest first</option>
+                        <option value="oldest" @selected($filters['sort'] === 'oldest')>Oldest first</option>
+                    </select>
+                </div>
+                <div class="mn-field">
+                    <label for="notification-page-size">Items per page</label>
+                    <select id="notification-page-size" class="form-select" name="per_page">
+                        @foreach([10,20,50,100] as $size)<option value="{{ $size }}" @selected($filters['per_page'] === $size)>{{ $size }} items</option>@endforeach
+                    </select>
+                </div>
+                <div class="mn-filter-actions">
+                    <a class="mn-btn mn-btn-secondary" href="{{ route('budget.me.reporting-notifications.index', $filters['state'] !== 'all' ? ['state' => $filters['state']] : []) }}">Clear filters</a>
+                    <button class="mn-btn mn-btn-primary" type="submit">Apply filters</button>
+                </div>
             </form>
-        @empty
-            <div class="text-center text-muted p-5"><i class="feather-bell-off fs-2 d-block mb-2"></i>No reporting notifications in this view.</div>
-        @endforelse
-    </div>@if($notifications->hasPages())<div class="card-footer bg-white">{{ $notifications->links() }}</div>@endif</div>
+        </div>
+    </details>
+
+    <section class="mn-panel mt-3" aria-labelledby="notification-inbox-title">
+        <div class="mn-panel-head">
+            <div><h2 id="notification-inbox-title">Personal notification inbox</h2><p>Only notifications assigned to your account are displayed.</p></div>
+            <nav class="mn-tabs" aria-label="Notification read status">
+                <a class="mn-tab {{ $filters['state'] === 'all' ? 'active' : '' }}" href="{{ route('budget.me.reporting-notifications.index', array_merge($tabQuery, ['state' => 'all'])) }}">All <span>{{ number_format($metrics['total']) }}</span></a>
+                <a class="mn-tab {{ $filters['state'] === 'unread' ? 'active' : '' }}" href="{{ route('budget.me.reporting-notifications.index', array_merge($tabQuery, ['state' => 'unread'])) }}">Unread <span>{{ number_format($metrics['unread']) }}</span></a>
+                <a class="mn-tab {{ $filters['state'] === 'read' ? 'active' : '' }}" href="{{ route('budget.me.reporting-notifications.index', array_merge($tabQuery, ['state' => 'read'])) }}">Read <span>{{ number_format($readCount) }}</span></a>
+            </nav>
+        </div>
+
+        <form id="notification-bulk-form" method="POST" action="{{ route('budget.me.reporting-notifications.bulk') }}">@csrf</form>
+        <div class="mn-bulk">
+            <div class="mn-bulk-left">
+                <label class="mn-select-label" for="select-notifications"><input id="select-notifications" class="mn-checkbox" type="checkbox"> Select this page</label>
+                <span id="selected-notification-count" class="mn-badge secondary">0 selected</span>
+                <span class="mn-showing">@if($notifications->total())Showing {{ number_format($notifications->firstItem()) }}-{{ number_format($notifications->lastItem()) }} of {{ number_format($notifications->total()) }}@else No matching notifications @endif</span>
+            </div>
+            <div class="mn-bulk-actions">
+                <button class="mn-btn mn-btn-secondary mn-bulk-button" type="submit" form="notification-bulk-form" name="action" value="mark_unread" disabled>Mark unread</button>
+                <button class="mn-btn mn-btn-primary mn-bulk-button" type="submit" form="notification-bulk-form" name="action" value="mark_read" disabled>Mark read</button>
+                @if($metrics['unread'] > 0)
+                    <form method="POST" action="{{ route('budget.me.reporting-notifications.read-all') }}">@csrf<button class="mn-btn mn-btn-secondary" type="submit">Mark all read</button></form>
+                @endif
+            </div>
+        </div>
+
+        <div class="mn-list">
+            @forelse($notifications as $notification)
+                @php
+                    $data = is_array($notification->data) ? $notification->data : [];
+                    $category = (string) ($data['category'] ?? '');
+                    $severity = in_array(($data['severity'] ?? ''), array_keys($severityOptions), true) ? (string) $data['severity'] : 'info';
+                    $title = trim((string) ($data['title'] ?? '')) ?: 'Reporting notification';
+                    $message = trim((string) ($data['message'] ?? ''));
+                    $hasTarget = filled($data['url'] ?? null);
+                @endphp
+                <article class="mn-item {{ $notification->read_at ? 'read' : 'unread' }}">
+                    <div class="pt-2"><input class="mn-checkbox notification-checkbox" type="checkbox" name="notification_ids[]" value="{{ $notification->id }}" form="notification-bulk-form" aria-label="Select {{ $title }}"></div>
+                    <div class="mn-item-icon {{ $severity }}" aria-hidden="true">{{ $categoryInitials[$category] ?? 'ME' }}</div>
+                    <div class="mn-item-content">
+                        <div class="mn-item-title-row">
+                            @unless($notification->read_at)<span class="mn-new-dot" title="Unread"></span>@endunless
+                            <h3 class="mn-item-title" title="{{ $title }}">{{ $title }}</h3>
+                            <span class="mn-badge {{ $severity }}">{{ $severityOptions[$severity] ?? str($severity)->headline() }}</span>
+                        </div>
+                        @if($message !== '')<p class="mn-message">{{ $message }}</p>@endif
+                        <div class="mn-meta">
+                            <span>{{ $categories[$category] ?? str($category ?: 'M&E reporting')->headline() }}</span>
+                            @if(filled($data['event'] ?? null))<span>Event: {{ str($data['event'])->headline() }}</span>@endif
+                            <span title="{{ $notification->created_at?->format('d M Y, H:i:s') }}">{{ $notification->created_at?->diffForHumans() ?: 'Time unavailable' }}</span>
+                            @if($notification->read_at)<span>Read {{ $notification->read_at->diffForHumans() }}</span>@endif
+                        </div>
+                    </div>
+                    <div class="mn-item-actions">
+                        @if($notification->read_at)
+                            <form method="POST" action="{{ route('budget.me.reporting-notifications.unread', $notification->id) }}">@csrf<button class="mn-btn mn-btn-secondary" type="submit">Mark unread</button></form>
+                        @endif
+                        <form method="POST" action="{{ route('budget.me.reporting-notifications.read', $notification->id) }}">@csrf<button class="mn-btn mn-btn-primary" type="submit">{{ $hasTarget ? 'Open item' : 'Mark read' }}</button></form>
+                    </div>
+                </article>
+            @empty
+                <div class="mn-empty">
+                    <div class="mn-empty-mark" aria-hidden="true">0</div>
+                    <strong>No notifications match this view</strong>
+                    <span>Change the read-status tab, clear a filter, or return when new reporting activity is assigned to you.</span>
+                    @if($activeFilterCount > 0)<a class="mn-btn mn-btn-secondary mt-3" href="{{ route('budget.me.reporting-notifications.index') }}">Clear all filters</a>@endif
+                </div>
+            @endforelse
+        </div>
+        @if($notifications->hasPages())<div class="mn-pagination">{{ $notifications->links() }}</div>@endif
+    </section>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const selectAll = document.getElementById('select-notifications');
+    const checkboxes = Array.from(document.querySelectorAll('.notification-checkbox'));
+    const counter = document.getElementById('selected-notification-count');
+    const buttons = Array.from(document.querySelectorAll('.mn-bulk-button'));
+    if (!selectAll || !counter) return;
+
+    function refreshSelection() {
+        const selected = checkboxes.filter(function (item) { return item.checked; }).length;
+        counter.textContent = selected + ' selected';
+        buttons.forEach(function (button) { button.disabled = selected === 0; });
+        selectAll.checked = checkboxes.length > 0 && selected === checkboxes.length;
+        selectAll.indeterminate = selected > 0 && selected < checkboxes.length;
+    }
+    selectAll.addEventListener('change', function () {
+        checkboxes.forEach(function (item) { item.checked = selectAll.checked; });
+        refreshSelection();
+    });
+    checkboxes.forEach(function (item) { item.addEventListener('change', refreshSelection); });
+    refreshSelection();
+});
+</script>
+@endpush

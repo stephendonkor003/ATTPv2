@@ -1,5 +1,5 @@
 <div class="modal fade me-disaggregation-modal" id="indicatorDisaggregationModal" tabindex="-1" aria-labelledby="indicatorDisaggregationModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <div class="modal-content">
             <form method="POST" action="#" data-disaggregation-form>
                 @csrf
@@ -20,7 +20,7 @@
                 <div class="modal-body">
                     <div class="me-disaggregation-note mb-3">
                         <i class="feather-info" aria-hidden="true"></i>
-                        <span>“Required” blocks submission when the dimension is missing. “Count” identifies beneficiary dimensions used in the calculated beneficiary total. Reporting period is captured automatically from the report as quarterly, semi-annual, or annual.</span>
+                        <span><strong>Required</strong> blocks submission when the dimension is missing. <strong>Count</strong> identifies beneficiary dimensions used in the calculated beneficiary total. The reporting period is captured automatically from the quarterly, semi-annual or annual report.</span>
                     </div>
 
                     <div class="table-responsive border rounded-3">

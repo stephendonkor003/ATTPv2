@@ -1,981 +1,325 @@
 @extends('layouts.app')
 
-@section('title', 'Report Visualizations and Performance Dashboard')
+@section('title', 'M&E Reporting Operations Dashboard')
 @section('lean_admin_scripts', '1')
 
 @push('styles')
-    <style>
-        .report-dashboard {
-            --dash-green: #0b5c45;
-            --dash-green-dark: #073f30;
-            --dash-ink: #183b31;
-            --dash-muted: #687a73;
-            --dash-line: #dce8e3;
-            max-width: 1480px;
-            margin: 0 auto;
-        }
-
-        .report-dashboard .dashboard-hero {
-            overflow: hidden;
-            border-radius: 1rem;
-            color: #fff;
-            background:
-                radial-gradient(circle at 85% 15%, rgba(255, 255, 255, .15), transparent 25%),
-                linear-gradient(120deg, var(--dash-green-dark), #0d7456);
-            box-shadow: 0 16px 38px rgba(7, 63, 48, .17);
-        }
-
-        .report-dashboard .hero-main {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 1.35rem 1.5rem;
-        }
-
-        .report-dashboard .hero-eyebrow,
-        .report-dashboard .panel-eyebrow {
-            font-size: .64rem;
-            font-weight: 850;
-            letter-spacing: .07em;
-            text-transform: uppercase;
-        }
-
-        .report-dashboard .hero-eyebrow {
-            color: rgba(255, 255, 255, .65);
-        }
-
-        .report-dashboard .hero-main h1 {
-            margin: .35rem 0 .25rem;
-            color: #fff;
-            font-size: 1.45rem;
-            font-weight: 850;
-        }
-
-        .report-dashboard .hero-main p {
-            max-width: 760px;
-            margin: 0;
-            color: rgba(255, 255, 255, .75);
-            font-size: .78rem;
-        }
-
-        .report-dashboard .hero-actions {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: flex-end;
-            gap: .5rem;
-        }
-
-        .report-dashboard .hero-actions .btn {
-            font-size: .72rem;
-            font-weight: 800;
-        }
-
-        .report-dashboard .hero-foot {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            padding: .7rem 1.5rem;
-            border-top: 1px solid rgba(255, 255, 255, .14);
-            background: rgba(0, 0, 0, .08);
-            color: rgba(255, 255, 255, .68);
-            font-size: .67rem;
-        }
-
-        .report-dashboard .filter-panel,
-        .report-dashboard .dashboard-panel,
-        .report-dashboard .metric-card {
-            border: 1px solid var(--dash-line);
-            border-radius: .95rem;
-            background: #fff;
-            box-shadow: 0 8px 24px rgba(22, 61, 49, .045);
-        }
-
-        .report-dashboard .filter-panel {
-            margin-top: 1rem;
-            padding: 1rem;
-        }
-
-        .report-dashboard .filter-heading,
-        .report-dashboard .panel-heading {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: .8rem;
-        }
-
-        .report-dashboard .filter-heading h2,
-        .report-dashboard .panel-heading h2 {
-            margin: 0;
-            color: var(--dash-ink);
-            font-size: .92rem;
-            font-weight: 850;
-        }
-
-        .report-dashboard .filter-heading p,
-        .report-dashboard .panel-heading p {
-            margin: .18rem 0 0;
-            color: var(--dash-muted);
-            font-size: .7rem;
-        }
-
-        .report-dashboard .filter-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: .65rem;
-            margin-top: .8rem;
-        }
-
-        .report-dashboard .filter-grid label {
-            display: block;
-            margin-bottom: .25rem;
-            color: var(--dash-ink);
-            font-size: .65rem;
-            font-weight: 800;
-        }
-
-        .report-dashboard .filter-grid .form-select {
-            min-height: 38px;
-            border-color: #ceddd7;
-            border-radius: .6rem;
-            font-size: .72rem;
-        }
-
-        .report-dashboard .filter-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: .5rem;
-            margin-top: .75rem;
-        }
-
-        .report-dashboard .metric-grid {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: .7rem;
-            margin-top: 1rem;
-        }
-
-        .report-dashboard .metric-card {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: .75rem;
-            min-width: 0;
-            padding: .85rem;
-            color: inherit;
-            text-decoration: none;
-            transition: transform .15s ease, box-shadow .15s ease;
-        }
-
-        .report-dashboard a.metric-card:hover,
-        .report-dashboard a.metric-card:focus-visible {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 28px rgba(22, 61, 49, .09);
-        }
-
-        .report-dashboard .metric-icon {
-            display: grid;
-            place-items: center;
-            flex: 0 0 auto;
-            width: 2.35rem;
-            height: 2.35rem;
-            border-radius: .7rem;
-            color: var(--metric-color, var(--dash-green));
-            background: var(--metric-soft, #edf8f3);
-        }
-
-        .report-dashboard .metric-copy {
-            min-width: 0;
-        }
-
-        .report-dashboard .metric-copy small,
-        .report-dashboard .metric-copy strong,
-        .report-dashboard .metric-copy span {
-            display: block;
-        }
-
-        .report-dashboard .metric-copy small {
-            overflow: hidden;
-            color: var(--dash-muted);
-            font-size: .61rem;
-            font-weight: 800;
-            text-overflow: ellipsis;
-            text-transform: uppercase;
-            white-space: nowrap;
-        }
-
-        .report-dashboard .metric-copy strong {
-            margin-top: .12rem;
-            color: var(--dash-ink);
-            font-size: 1.22rem;
-            line-height: 1.1;
-        }
-
-        .report-dashboard .metric-copy span {
-            margin-top: .14rem;
-            color: var(--dash-muted);
-            font-size: .61rem;
-        }
-
-        .report-dashboard .visual-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: .8rem;
-            margin-top: .8rem;
-        }
-
-        .report-dashboard .dashboard-panel {
-            min-width: 0;
-            padding: 1rem;
-        }
-
-        .report-dashboard .workflow-layout {
-            display: grid;
-            grid-template-columns: 180px minmax(0, 1fr);
-            gap: 1rem;
-            align-items: center;
-            margin-top: 1rem;
-        }
-
-        .report-dashboard .workflow-donut {
-            position: relative;
-            width: 170px;
-            height: 170px;
-            border-radius: 50%;
-            background: var(--workflow-gradient);
-        }
-
-        .report-dashboard .workflow-donut::after {
-            position: absolute;
-            inset: 25px;
-            display: block;
-            border: 1px solid #edf2ef;
-            border-radius: 50%;
-            background: #fff;
-            content: "";
-        }
-
-        .report-dashboard .donut-total {
-            position: absolute;
-            inset: 0;
-            z-index: 1;
-            display: grid;
-            place-content: center;
-            text-align: center;
-        }
-
-        .report-dashboard .donut-total strong,
-        .report-dashboard .donut-total span {
-            display: block;
-        }
-
-        .report-dashboard .donut-total strong {
-            color: var(--dash-ink);
-            font-size: 1.55rem;
-            line-height: 1;
-        }
-
-        .report-dashboard .donut-total span {
-            margin-top: .25rem;
-            color: var(--dash-muted);
-            font-size: .58rem;
-            font-weight: 800;
-            text-transform: uppercase;
-        }
-
-        .report-dashboard .stage-list,
-        .report-dashboard .bar-list {
-            display: grid;
-            gap: .48rem;
-        }
-
-        .report-dashboard .stage-row,
-        .report-dashboard .bar-row {
-            display: grid;
-            gap: .3rem;
-            min-width: 0;
-            padding: .45rem .5rem;
-            border-radius: .55rem;
-            color: inherit;
-            text-decoration: none;
-        }
-
-        .report-dashboard .stage-row:hover,
-        .report-dashboard .bar-row:hover {
-            background: #f7faf8;
-        }
-
-        .report-dashboard .stage-line,
-        .report-dashboard .bar-line {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: .6rem;
-            min-width: 0;
-            color: var(--dash-ink);
-            font-size: .7rem;
-        }
-
-        .report-dashboard .stage-label {
-            display: inline-flex;
-            align-items: center;
-            gap: .4rem;
-            min-width: 0;
-            font-weight: 750;
-        }
-
-        .report-dashboard .stage-dot {
-            flex: 0 0 auto;
-            width: .55rem;
-            height: .55rem;
-            border-radius: 50%;
-            background: var(--stage-color);
-        }
-
-        .report-dashboard .stage-line strong,
-        .report-dashboard .bar-line strong {
-            flex: 0 0 auto;
-            font-size: .72rem;
-        }
-
-        .report-dashboard .bar-track {
-            height: 6px;
-            overflow: hidden;
-            border-radius: 999px;
-            background: #edf2ef;
-        }
-
-        .report-dashboard .bar-track span {
-            display: block;
-            height: 100%;
-            min-width: 3px;
-            border-radius: inherit;
-            background: var(--bar-color, var(--dash-green));
-        }
-
-        .report-dashboard .bar-meta {
-            display: flex;
-            justify-content: space-between;
-            gap: .5rem;
-            color: var(--dash-muted);
-            font-size: .58rem;
-        }
-
-        .report-dashboard .completion-visual {
-            display: grid;
-            grid-template-columns: 110px minmax(0, 1fr);
-            gap: 1rem;
-            align-items: center;
-            margin-top: 1rem;
-        }
-
-        .report-dashboard .completion-ring {
-            display: grid;
-            place-items: center;
-            width: 105px;
-            height: 105px;
-            border-radius: 50%;
-            background: conic-gradient(#15935d var(--completion), #e8efeb 0);
-        }
-
-        .report-dashboard .completion-ring > div {
-            display: grid;
-            place-items: center;
-            width: 76px;
-            height: 76px;
-            border-radius: 50%;
-            color: var(--dash-ink);
-            background: #fff;
-            font-size: 1.15rem;
-            font-weight: 850;
-        }
-
-        .report-dashboard .completion-actions {
-            display: grid;
-            gap: .5rem;
-        }
-
-        .report-dashboard .completion-actions a {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: .6rem;
-            padding: .6rem;
-            border: 1px solid var(--dash-line);
-            border-radius: .6rem;
-            color: var(--dash-ink);
-            background: #fbfdfc;
-            font-size: .68rem;
-            text-decoration: none;
-        }
-
-        .report-dashboard .completion-actions strong {
-            font-size: .74rem;
-        }
-
-        .report-dashboard .definition-note {
-            margin-top: .75rem;
-            padding: .65rem .75rem;
-            border-left: 3px solid #d8941d;
-            border-radius: .45rem;
-            color: #6f5827;
-            background: #fff9ec;
-            font-size: .64rem;
-        }
-
-        .report-dashboard .records-panel {
-            margin-top: .8rem;
-        }
-
-        .report-dashboard .records-summary {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: .7rem;
-            margin-top: .8rem;
-            padding: .55rem .65rem;
-            border-radius: .6rem;
-            color: var(--dash-muted);
-            background: #f7faf8;
-            font-size: .66rem;
-        }
-
-        .report-dashboard .records-summary strong {
-            color: var(--dash-ink);
-        }
-
-        .report-dashboard .dashboard-table {
-            margin-top: .65rem;
-            font-size: .7rem;
-        }
-
-        .report-dashboard .dashboard-table thead th {
-            padding: .65rem;
-            border-bottom-width: 1px;
-            color: #61736c;
-            background: #f7faf8;
-            font-size: .58rem;
-            font-weight: 850;
-            letter-spacing: .045em;
-            text-transform: uppercase;
-            white-space: nowrap;
-        }
-
-        .report-dashboard .dashboard-table tbody td {
-            padding: .7rem .65rem;
-            border-color: #edf2ef;
-            vertical-align: middle;
-        }
-
-        .report-dashboard .record-title,
-        .report-dashboard .record-meta {
-            display: block;
-        }
-
-        .report-dashboard .record-title {
-            max-width: 260px;
-            overflow: hidden;
-            color: var(--dash-ink);
-            font-weight: 800;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .report-dashboard .record-meta {
-            margin-top: .12rem;
-            color: var(--dash-muted);
-            font-size: .61rem;
-        }
-
-        .report-dashboard .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: .3rem;
-            padding: .3rem .48rem;
-            border: 1px solid var(--pill-color);
-            border-radius: 999px;
-            color: var(--pill-color);
-            background: var(--pill-soft);
-            font-size: .59rem;
-            font-weight: 850;
-            white-space: nowrap;
-        }
-
-        .report-dashboard .empty-state {
-            padding: 2rem 1rem;
-            color: var(--dash-muted);
-            text-align: center;
-        }
-
-        @media (max-width: 1199.98px) {
-            .report-dashboard .metric-grid {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-        }
-
-        @media (max-width: 991.98px) {
-            .report-dashboard .filter-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .report-dashboard .visual-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 767.98px) {
-            .report-dashboard .hero-main,
-            .report-dashboard .filter-heading,
-            .report-dashboard .panel-heading {
-                align-items: stretch;
-                flex-direction: column;
-            }
-
-            .report-dashboard .hero-actions {
-                justify-content: flex-start;
-            }
-
-            .report-dashboard .metric-grid,
-            .report-dashboard .filter-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-
-            .report-dashboard .workflow-layout {
-                grid-template-columns: 1fr;
-                justify-items: center;
-            }
-
-            .report-dashboard .stage-list {
-                width: 100%;
-            }
-        }
-
-        @media (max-width: 479.98px) {
-            .report-dashboard .metric-grid,
-            .report-dashboard .filter-grid,
-            .report-dashboard .completion-visual {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    @include('me.performance-reports.partials.dashboard-styles')
 @endpush
 
 @section('content')
-    @php
-        $activeFilters = collect($filters)
-            ->filter(fn ($value) => filled($value))
-            ->all();
-        $dashboardUrl = fn (array $parameters = []) => route(
-            'budget.me.rebuild.reporting-dashboard',
-            array_merge($activeFilters, $parameters)
-        );
-        $drilldownUrl = fn (string $key) => $dashboardUrl(['drilldown' => $key]).'#report-records';
+@php
+    $viewer = auth()->user();
+    $canOpenRegister = $viewer && ($viewer->can('me.data_entry.view') || $viewer->can('me.data_entry.manage') || $viewer->can('me.configuration.view') || $viewer->can('me.configuration.manage'));
+    $canCreateReport = $viewer && ($viewer->can('me.data_entry.manage') || $viewer->can('me.configuration.manage'));
+    $canReviewReports = $viewer && $viewer->can('me.performance_reports.review');
+    $canOpenConsolidated = $viewer && ($viewer->can('me.performance_reports.view') || $viewer->can('me.performance_reports.review') || $viewer->can('me.configuration.view') || $viewer->can('me.configuration.manage'));
+    $canOpenResults = $viewer && ($viewer->can('me.results.view') || $viewer->can('me.performance_reports.view') || $viewer->can('me.configuration.view') || $viewer->can('me.configuration.manage'));
+    $canOpenNotifications = $viewer && $viewer->can('me.reporting_notifications.view');
+    $advancedKeys = ['geographic_scope','country','rec','implementing_institution_type','implementing_institution','priority_theme','gender','age_group','stakeholder_category'];
+    $activeFilterCount = collect($filters)
+        ->except(['sort','per_page'])
+        ->filter(fn ($value) => filled($value))
+        ->count();
+    $advancedFilterCount = collect($filters)->only($advancedKeys)->filter(fn ($value) => filled($value))->count();
+    $preservedFilters = collect($filters)
+        ->reject(fn ($value) => $value === null || $value === '')
+        ->reject(fn ($value, $key) => ($key === 'sort' && $value === 'latest_period') || ($key === 'per_page' && (int) $value === 15))
+        ->all();
+    $dashboardUrl = fn (array $parameters = []) => route('budget.me.rebuild.reporting-dashboard', array_merge($preservedFilters, $parameters));
+    $drilldownUrl = fn (string $key) => $dashboardUrl(['drilldown' => $key]).'#report-records';
+    $recordStart = $records->total() > 0 ? $records->firstItem() : 0;
+    $recordEnd = $records->total() > 0 ? $records->lastItem() : 0;
+@endphp
 
-        $cursor = 0.0;
-        $gradientSegments = [];
-        foreach ($distribution as $stage) {
-            if ($stage['percentage'] <= 0) {
-                continue;
-            }
-            $end = min(100, $cursor + $stage['percentage']);
-            $gradientSegments[] = $stage['color'].' '.$cursor.'% '.$end.'%';
-            $cursor = $end;
-        }
-        if ($cursor < 100 && $gradientSegments !== []) {
-            $gradientSegments[] = '#e8efeb '.$cursor.'% 100%';
-        }
-        $workflowGradient = $gradientSegments === []
-            ? '#e8efeb'
-            : 'conic-gradient('.implode(', ', $gradientSegments).')';
-    @endphp
+<div class="mel-reporting">
+    <header class="rp-header">
+        <div>
+            <span class="rp-eyebrow">Monitoring, Evaluation and Learning</span>
+            <h1>Reporting operations dashboard</h1>
+            <p>Manage the complete performance-report lifecycle, monitor reporting deadlines, identify review bottlenecks and inspect submission quality across your authorized portfolio.</p>
+        </div>
+        <div class="rp-header-side">
+            <span class="rp-generated">Updated {{ $generatedAt->format('d M Y, H:i') }}</span>
+            <div class="rp-actions">
+                @if($canOpenRegister)<a class="rp-btn rp-btn-header" href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'reports']) }}">Report register</a>@endif
+                @if($canCreateReport)<a class="rp-btn rp-btn-header" href="{{ route('budget.me.performance-reports.create') }}">Create report</a>@endif
+                <a class="rp-btn rp-btn-header" href="{{ route('budget.me.rebuild.reporting-dashboard.csv', $preservedFilters) }}">Download CSV</a>
+                <button class="rp-btn rp-btn-header" id="reporting-print" type="button">Print dashboard</button>
+            </div>
+        </div>
+    </header>
 
-    <div class="nxl-container">
-        <main class="report-dashboard">
-            <header class="dashboard-hero">
-                <div class="hero-main">
-                    <div>
-                        <span class="hero-eyebrow">Monitoring &amp; Evaluation · Reporting intelligence</span>
-                        <h1>Report Visualizations and Performance Dashboard</h1>
-                        <p>Live workflow distribution, timeliness, review efficiency and indicator-reporting completeness across the authorized M&amp;E portfolio.</p>
-                    </div>
-                    <div class="hero-actions">
-                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'reports']) }}" class="btn btn-light">
-                            <i class="feather-list me-1" aria-hidden="true"></i>Report register
-                        </a>
-                        @canany(['me.data_entry.manage', 'me.configuration.manage'])
-                            <a href="{{ route('budget.me.performance-reports.create') }}" class="btn btn-outline-light">
-                                <i class="feather-plus me-1" aria-hidden="true"></i>Create report
-                            </a>
-                        @endcanany
-                    </div>
+    <aside class="rp-scope-note" aria-label="Dashboard scope information">
+        <span class="rp-scope-mark">SCP</span>
+        <div>
+            <strong>Permission and portfolio scope is enforced</strong>
+            <p>Every metric, chart, attention item, drill-down and CSV row uses the same authorized data scope and active filters. Select a metric or chart segment to inspect the supporting reports.</p>
+        </div>
+    </aside>
+
+    <details class="rp-panel rp-filter" @if($activeFilterCount > 0) open @endif>
+        <summary class="rp-panel-head">
+            <div><h2>Search and report scope</h2><p>Narrow the complete workspace by reporting context, owner, lifecycle or beneficiary dimension.</p></div>
+            <div class="rp-summary-right"><span class="rp-badge">{{ $activeFilterCount }} active {{ str('filter')->plural($activeFilterCount) }}</span><span class="rp-chevron" aria-hidden="true">⌄</span></div>
+        </summary>
+        <div class="rp-panel-body">
+            <form method="GET" action="{{ route('budget.me.rebuild.reporting-dashboard') }}" class="rp-filter-grid">
+                <div class="rp-field rp-field-wide">
+                    <label for="dashboard-search">Search reports</label>
+                    <input id="dashboard-search" class="form-control" name="q" value="{{ $filters['q'] }}" placeholder="Form title, code, owner, country, component or portfolio">
+                    <small>Search is case-insensitive and updates every dashboard calculation.</small>
                 </div>
-                <div class="hero-foot">
-                    <span><i class="feather-clock me-1" aria-hidden="true"></i>Generated {{ $generatedAt->format('d M Y, H:i') }}</span>
-                    <span><i class="feather-shield me-1" aria-hidden="true"></i>Permission and portfolio scope applied</span>
-                    <span><i class="feather-mouse-pointer me-1" aria-hidden="true"></i>Select any metric to inspect its report records</span>
+                <div class="rp-field">
+                    <label for="dashboard-year">Reporting year</label>
+                    <select class="form-select" id="dashboard-year" name="reporting_year"><option value="">All years</option>@foreach($filterOptions['years'] as $year)<option value="{{ $year }}" @selected((string)$filters['reporting_year']===(string)$year)>{{ $year }}</option>@endforeach</select>
                 </div>
-            </header>
-
-            <section class="filter-panel" aria-labelledby="dashboard-filter-title">
-                <div class="filter-heading">
-                    <div>
-                        <h2 id="dashboard-filter-title"><i class="feather-filter me-1" aria-hidden="true"></i>Dashboard filters</h2>
-                        <p>All cards, charts, percentages and drill-down records use the same active filter set.</p>
-                    </div>
-                    @if ($activeFilters !== [])
-                        <span class="badge bg-success-subtle text-success border border-success-subtle">{{ count($activeFilters) }} active</span>
-                    @endif
+                <div class="rp-field">
+                    <label for="dashboard-period-type">Reporting frequency</label>
+                    <select class="form-select" id="dashboard-period-type" name="reporting_period_type"><option value="">All frequencies</option>@foreach($filterOptions['period_types'] as $value=>$label)<option value="{{ $value }}" @selected($filters['reporting_period_type']===$value)>{{ $label }}</option>@endforeach</select>
                 </div>
-                <form method="GET" action="{{ route('budget.me.rebuild.reporting-dashboard') }}">
-                    <div class="filter-grid">
-                        <div>
-                            <label for="dashboard-year">Reporting year</label>
-                            <select class="form-select" id="dashboard-year" name="reporting_year">
-                                <option value="">All years</option>
-                                @foreach ($filterOptions['years'] as $year)
-                                    <option value="{{ $year }}" @selected((string) $filters['reporting_year'] === (string) $year)>{{ $year }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label for="dashboard-period-type">Reporting frequency</label>
-                            <select class="form-select" id="dashboard-period-type" name="reporting_period_type">
-                                <option value="">All frequencies</option>
-                                @foreach ($filterOptions['period_types'] as $value => $label)
-                                    <option value="{{ $value }}" @selected($filters['reporting_period_type'] === $value)>{{ $label }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label for="dashboard-period">Reporting period</label>
-                            <select class="form-select" id="dashboard-period" name="reporting_period_label"><option value="">All periods</option></select>
-                        </div>
-                        <div>
-                            <label for="dashboard-component">Project component</label>
-                            <select class="form-select" id="dashboard-component" name="component_id">
-                                <option value="">All components</option>
-                                @foreach ($filterOptions['components'] as $component)
-                                    <option value="{{ $component->id }}" @selected((string) $filters['component_id'] === (string) $component->id)>
-                                        {{ $component->project_id ? $component->project_id.' · ' : '' }}{{ $component->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label for="dashboard-results-level">Results level</label>
-                            <select class="form-select" id="dashboard-results-level" name="results_level">
-                                <option value="">All results levels</option>
-                                @foreach ($filterOptions['results_levels'] as $value => $label)
-                                    <option value="{{ $value }}" @selected($filters['results_level'] === $value)>{{ $label }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label for="dashboard-owner">Think tank / implementing partner</label>
-                            <select class="form-select" id="dashboard-owner" name="think_tank_id">
-                                <option value="">All report owners</option>
-                                <option value="internal" @selected($filters['think_tank_id'] === 'internal')>Secretariat / Internal</option>
-                                @foreach ($filterOptions['think_tanks'] as $thinkTank)
-                                    <option value="{{ $thinkTank->id }}" @selected((string) $filters['think_tank_id'] === (string) $thinkTank->id)>
-                                        {{ $thinkTank->name }} · {{ \Illuminate\Support\Str::headline($thinkTank->role ?: 'think tank') }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label for="dashboard-indicator">Indicator</label>
-                            <select class="form-select" id="dashboard-indicator" name="indicator_id">
-                                <option value="">All indicators</option>
-                                @foreach ($filterOptions['indicators'] as $indicator)
-                                    <option value="{{ $indicator->id }}" @selected((string) $filters['indicator_id'] === (string) $indicator->id)>
-                                        {{ $indicator->indicator_code }} · {{ $indicator->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label for="dashboard-theme">Thematic area / Portfolio</label>
-                            <select class="form-select" id="dashboard-theme" name="thematic_area_id">
-                                <option value="">All thematic areas</option>
-                                @foreach ($filterOptions['thematic_areas'] as $thematicArea)
-                                    <option value="{{ $thematicArea->id }}" @selected((string) $filters['thematic_area_id'] === (string) $thematicArea->id)>{{ $thematicArea->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label for="dashboard-status">Report status</label>
-                            <select class="form-select" id="dashboard-status" name="status">
-                                <option value="">All workflow stages</option>
-                                @foreach ($filterOptions['statuses'] as $value => $label)
-                                    <option value="{{ $value }}" @selected($filters['status'] === $value)>{{ $label }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
-                    <details class="mt-3" @if(collect($filters)->only(['geographic_scope','country','rec','implementing_institution_type','implementing_institution','priority_theme','gender','age_group','stakeholder_category'])->filter()->isNotEmpty()) open @endif>
-                        <summary class="fw-semibold text-success">Beneficiary and achievement disaggregation filters</summary>
-                        <div class="filter-grid mt-3">
-                            <div><label>Geographic scope</label><select class="form-select" name="geographic_scope"><option value="">All scopes</option>@foreach($filterOptions['geographic_scopes'] as $value=>$label)<option value="{{ $value }}" @selected($filters['geographic_scope']===$value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label>Country</label><select class="form-select" name="country"><option value="">All countries</option>@foreach($filterOptions['countries'] as $value=>$label)<option value="{{ $value }}" @selected($filters['country']===$value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label>Regional Economic Community</label><select class="form-select" name="rec"><option value="">All RECs</option>@foreach($filterOptions['recs'] as $value=>$label)<option value="{{ $value }}" @selected($filters['rec']===$value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label>Institution type</label><select class="form-select" name="implementing_institution_type"><option value="">All types</option>@foreach($filterOptions['institution_types'] as $value=>$label)<option value="{{ $value }}" @selected($filters['implementing_institution_type']===$value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label>Implementing institution</label><select class="form-select" name="implementing_institution"><option value="">All institutions</option>@foreach($filterOptions['institutions'] as $value=>$label)<option value="{{ $value }}" @selected($filters['implementing_institution']===$value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label>ATTP priority thematic area</label><select class="form-select" name="priority_theme"><option value="">All priority areas</option>@foreach($filterOptions['priority_themes'] as $value=>$label)<option value="{{ $value }}" @selected($filters['priority_theme']===$value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label>Gender</label><select class="form-select" name="gender"><option value="">Female and male</option>@foreach($filterOptions['genders'] as $value=>$label)<option value="{{ $value }}" @selected($filters['gender']===$value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label>Age group</label><select class="form-select" name="age_group"><option value="">All age groups</option>@foreach($filterOptions['age_groups'] as $value=>$label)<option value="{{ $value }}" @selected($filters['age_group']===$value)>{{ $label }}</option>@endforeach</select></div>
-                            <div><label>Stakeholder category</label><select class="form-select" name="stakeholder_category"><option value="">All stakeholders</option>@foreach($filterOptions['stakeholder_categories'] as $value=>$label)<option value="{{ $value }}" @selected($filters['stakeholder_category']===$value)>{{ $label }}</option>@endforeach</select></div>
-                        </div>
-                    </details>
-                    <div class="filter-actions">
-                        <a href="{{ route('budget.me.rebuild.reporting-dashboard') }}" class="btn btn-light border">
-                            <i class="feather-rotate-ccw me-1" aria-hidden="true"></i>Reset
-                        </a>
-                        <button type="submit" class="btn btn-success">
-                            <i class="feather-sliders me-1" aria-hidden="true"></i>Apply filters
-                        </button>
-                    </div>
-                </form>
-            </section>
+                <div class="rp-field">
+                    <label for="dashboard-period">Reporting period</label>
+                    <select class="form-select" id="dashboard-period" name="reporting_period_label"><option value="">All periods</option></select>
+                </div>
+                <div class="rp-field">
+                    <label for="dashboard-status">Workflow stage</label>
+                    <select class="form-select" id="dashboard-status" name="status"><option value="">All stages</option>@foreach($filterOptions['statuses'] as $value=>$label)<option value="{{ $value }}" @selected($filters['status']===$value)>{{ $label }}</option>@endforeach</select>
+                </div>
+                <div class="rp-field">
+                    <label for="dashboard-rating">Performance rating</label>
+                    <select class="form-select" id="dashboard-rating" name="performance_rating"><option value="">All ratings</option>@foreach($filterOptions['performance_ratings'] as $value=>$label)<option value="{{ $value }}" @selected($filters['performance_rating']===$value)>{{ $label }}</option>@endforeach</select>
+                </div>
+                <div class="rp-field">
+                    <label for="dashboard-component">Project component</label>
+                    <select class="form-select" id="dashboard-component" name="component_id"><option value="">All components</option>@foreach($filterOptions['components'] as $component)<option value="{{ $component->id }}" @selected((string)$filters['component_id']===(string)$component->id)>{{ $component->project_id ? $component->project_id.' · ' : '' }}{{ $component->name }}</option>@endforeach</select>
+                </div>
+                <div class="rp-field">
+                    <label for="dashboard-results-level">Results level</label>
+                    <select class="form-select" id="dashboard-results-level" name="results_level"><option value="">All results levels</option>@foreach($filterOptions['results_levels'] as $value=>$label)<option value="{{ $value }}" @selected($filters['results_level']===$value)>{{ $label }}</option>@endforeach</select>
+                </div>
+                <div class="rp-field">
+                    <label for="dashboard-owner">Report owner</label>
+                    <select class="form-select" id="dashboard-owner" name="think_tank_id"><option value="">All report owners</option><option value="internal" @selected($filters['think_tank_id']==='internal')>Secretariat / Internal</option>@foreach($filterOptions['think_tanks'] as $thinkTank)<option value="{{ $thinkTank->id }}" @selected((string)$filters['think_tank_id']===(string)$thinkTank->id)>{{ $thinkTank->name }} · {{ str($thinkTank->role ?: 'think tank')->headline() }}</option>@endforeach</select>
+                </div>
+                <div class="rp-field">
+                    <label for="dashboard-indicator">Indicator</label>
+                    <select class="form-select" id="dashboard-indicator" name="indicator_id"><option value="">All indicators</option>@foreach($filterOptions['indicators'] as $indicator)<option value="{{ $indicator->id }}" @selected((string)$filters['indicator_id']===(string)$indicator->id)>{{ $indicator->indicator_code }} · {{ $indicator->name }}</option>@endforeach</select>
+                </div>
+                <div class="rp-field">
+                    <label for="dashboard-theme">Thematic area / Portfolio</label>
+                    <select class="form-select" id="dashboard-theme" name="thematic_area_id"><option value="">All thematic areas</option>@foreach($filterOptions['thematic_areas'] as $thematicArea)<option value="{{ $thematicArea->id }}" @selected((string)$filters['thematic_area_id']===(string)$thematicArea->id)>{{ $thematicArea->name }}</option>@endforeach</select>
+                </div>
 
-            <section class="metric-grid" aria-label="Reporting performance indicators">
-                <a href="{{ $dashboardUrl() }}#report-records" class="metric-card" style="--metric-color:#0b5c45;--metric-soft:#edf8f3">
-                    <span class="metric-icon"><i class="feather-file-text" aria-hidden="true"></i></span>
-                    <span class="metric-copy"><small>Total reports</small><strong>{{ number_format($totalReports) }}</strong><span>Matching current filters</span></span>
-                </a>
-                <a href="{{ $drilldownUrl('stage_submitted') }}" class="metric-card" style="--metric-color:#1676b8;--metric-soft:#eaf5fc">
-                    <span class="metric-icon"><i class="feather-user-check" aria-hidden="true"></i></span>
-                    <span class="metric-copy"><small>Awaiting review</small><strong>{{ number_format($awaitingReview) }}</strong><span>Secretariat action required</span></span>
-                </a>
-                <a href="{{ $drilldownUrl('timeliness_overdue') }}" class="metric-card" style="--metric-color:#c43d38;--metric-soft:#fff0ef">
-                    <span class="metric-icon"><i class="feather-alert-octagon" aria-hidden="true"></i></span>
-                    <span class="metric-copy"><small>Overdue reports</small><strong>{{ number_format($overdueReports) }}</strong><span>Past linked collection deadline</span></span>
-                </a>
-                <a href="{{ $drilldownUrl('timeliness_on_time') }}" class="metric-card" style="--metric-color:#15935d;--metric-soft:#eaf8f0">
-                    <span class="metric-icon"><i class="feather-calendar" aria-hidden="true"></i></span>
-                    <span class="metric-copy"><small>On-time submission</small><strong>{{ number_format($onTimeRate, 1) }}%</strong><span>Of submitted reports with deadlines</span></span>
-                </a>
-                <a href="{{ $drilldownUrl('reviewed_decisions') }}" class="metric-card" style="--metric-color:#7b5fb5;--metric-soft:#f3effb">
-                    <span class="metric-icon"><i class="feather-clock" aria-hidden="true"></i></span>
-                    <span class="metric-copy"><small>Avg. review &amp; approval</small><strong>{{ $averageReviewLabel }}</strong><span>{{ number_format($reviewDecisionCount) }} filtered {{ \Illuminate\Support\Str::plural('decision', $reviewDecisionCount) }}</span></span>
-                </a>
-            </section>
+                <details class="rp-advanced" @if($advancedFilterCount > 0) open @endif>
+                    <summary>Beneficiary and achievement disaggregation filters · {{ $advancedFilterCount }} active</summary>
+                    <div class="rp-filter-grid">
+                        <div class="rp-field"><label for="dashboard-geography">Geographic scope</label><select id="dashboard-geography" class="form-select" name="geographic_scope"><option value="">All scopes</option>@foreach($filterOptions['geographic_scopes'] as $value=>$label)<option value="{{ $value }}" @selected($filters['geographic_scope']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div class="rp-field"><label for="dashboard-country">Country</label><select id="dashboard-country" class="form-select" name="country"><option value="">All countries</option>@foreach($filterOptions['countries'] as $value=>$label)<option value="{{ $value }}" @selected($filters['country']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div class="rp-field"><label for="dashboard-rec">Regional Economic Community</label><select id="dashboard-rec" class="form-select" name="rec"><option value="">All RECs</option>@foreach($filterOptions['recs'] as $value=>$label)<option value="{{ $value }}" @selected($filters['rec']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div class="rp-field"><label for="dashboard-institution-type">Institution type</label><select id="dashboard-institution-type" class="form-select" name="implementing_institution_type"><option value="">All types</option>@foreach($filterOptions['institution_types'] as $value=>$label)<option value="{{ $value }}" @selected($filters['implementing_institution_type']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div class="rp-field"><label for="dashboard-institution">Implementing institution</label><select id="dashboard-institution" class="form-select" name="implementing_institution"><option value="">All institutions</option>@foreach($filterOptions['institutions'] as $value=>$label)<option value="{{ $value }}" @selected($filters['implementing_institution']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div class="rp-field"><label for="dashboard-priority">ATTP priority thematic area</label><select id="dashboard-priority" class="form-select" name="priority_theme"><option value="">All priority areas</option>@foreach($filterOptions['priority_themes'] as $value=>$label)<option value="{{ $value }}" @selected($filters['priority_theme']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div class="rp-field"><label for="dashboard-gender">Gender</label><select id="dashboard-gender" class="form-select" name="gender"><option value="">Female and male</option>@foreach($filterOptions['genders'] as $value=>$label)<option value="{{ $value }}" @selected($filters['gender']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div class="rp-field"><label for="dashboard-age">Age group</label><select id="dashboard-age" class="form-select" name="age_group"><option value="">All age groups</option>@foreach($filterOptions['age_groups'] as $value=>$label)<option value="{{ $value }}" @selected($filters['age_group']===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div class="rp-field"><label for="dashboard-stakeholder">Stakeholder category</label><select id="dashboard-stakeholder" class="form-select" name="stakeholder_category"><option value="">All stakeholders</option>@foreach($filterOptions['stakeholder_categories'] as $value=>$label)<option value="{{ $value }}" @selected($filters['stakeholder_category']===$value)>{{ $label }}</option>@endforeach</select></div>
+                    </div>
+                </details>
 
-            <section class="visual-grid" aria-label="Workflow and timeliness visualizations">
-                <article class="dashboard-panel">
-                    <div class="panel-heading">
-                        <div><span class="panel-eyebrow text-success">Workflow distribution</span><h2>Reports by lifecycle stage</h2><p>Current, mutually exclusive stage for every matching report.</p></div>
-                        <span class="badge bg-light text-dark border">{{ number_format($totalReports) }} total</span>
-                    </div>
-                    <div class="workflow-layout">
-                        <div class="workflow-donut" style="--workflow-gradient:{{ $workflowGradient }}">
-                            <div class="donut-total"><strong>{{ number_format($totalReports) }}</strong><span>reports</span></div>
-                        </div>
-                        <div class="stage-list">
-                            @foreach ($distribution as $stage)
-                                <a href="{{ $drilldownUrl('stage_'.$stage['key']) }}" class="stage-row">
-                                    <div class="stage-line">
-                                        <span class="stage-label"><span class="stage-dot" style="--stage-color:{{ $stage['color'] }}"></span>{{ $stage['label'] }}</span>
-                                        <strong>{{ number_format($stage['count']) }} · {{ number_format($stage['percentage'], 1) }}%</strong>
-                                    </div>
-                                    <div class="bar-track"><span style="width:{{ $stage['percentage'] }}%;--bar-color:{{ $stage['color'] }}"></span></div>
-                                </a>
-                            @endforeach
-                        </div>
-                    </div>
-                    <div class="definition-note"><strong>Returned</strong> means a report currently reopened as a draft following a recorded Secretariat return-for-correction decision. Approved corresponds to the reviewed-and-approved lifecycle stage.</div>
-                </article>
+                <div class="rp-field">
+                    <label for="dashboard-sort">Register order</label>
+                    <select id="dashboard-sort" class="form-select" name="sort"><option value="latest_period" @selected($filters['sort']==='latest_period')>Latest reporting period</option><option value="oldest_period" @selected($filters['sort']==='oldest_period')>Oldest reporting period</option><option value="recently_updated" @selected($filters['sort']==='recently_updated')>Recently updated</option><option value="workflow_stage" @selected($filters['sort']==='workflow_stage')>Workflow priority</option></select>
+                </div>
+                <div class="rp-field">
+                    <label for="dashboard-page-size">Rows per page</label>
+                    <select id="dashboard-page-size" class="form-select" name="per_page">@foreach([15,25,50,100] as $size)<option value="{{ $size }}" @selected($filters['per_page']===$size)>{{ $size }} rows</option>@endforeach</select>
+                </div>
+                <div class="rp-filter-actions">
+                    <p class="rp-filter-tip"><strong>Tip:</strong> lifecycle filters describe where reports are now. Timeliness compares the submission timestamp with the linked collection deadline. Returned reports remain drafts until their author resubmits them.</p>
+                    <div class="rp-actions"><a class="rp-btn rp-btn-secondary" href="{{ route('budget.me.rebuild.reporting-dashboard') }}">Clear filters</a><button class="rp-btn rp-btn-primary" type="submit">Apply report scope</button></div>
+                </div>
+            </form>
+        </div>
+    </details>
 
-                <article class="dashboard-panel">
-                    <div class="panel-heading">
-                        <div><span class="panel-eyebrow text-success">Submission timeliness</span><h2>Deadline performance</h2><p>Calculated from the report’s linked collection deadline and latest submission.</p></div>
-                        <span class="badge bg-success-subtle text-success border border-success-subtle">{{ number_format($onTimeRate, 1) }}% on time</span>
-                    </div>
-                    <div class="bar-list mt-3">
-                        @foreach ($timeliness as $item)
-                            <a href="{{ $drilldownUrl('timeliness_'.$item['key']) }}" class="bar-row">
-                                <div class="bar-line"><span>{{ $item['label'] }}</span><strong>{{ number_format($item['count']) }}</strong></div>
-                                <div class="bar-track"><span style="width:{{ $item['percentage'] }}%;--bar-color:{{ $item['color'] }}"></span></div>
-                                <div class="bar-meta"><span>{{ number_format($item['percentage'], 1) }}% of filtered reports</span><span>View records <i class="feather-arrow-right" aria-hidden="true"></i></span></div>
-                            </a>
+    <section class="rp-metrics" aria-label="Reporting workflow summary">
+        <a class="rp-metric" href="{{ $dashboardUrl() }}#report-records"><span class="rp-metric-label">Total reports</span><strong>{{ number_format($totalReports) }}</strong><small>Matching the current authorized scope</small></a>
+        <a class="rp-metric" style="--metric:#1676b8" href="{{ $drilldownUrl('review_queue') }}"><span class="rp-metric-label">Awaiting review</span><strong>{{ number_format($awaitingReview) }}</strong><small>{{ $awaitingVerification }} verification · {{ $awaitingApproval }} final approval</small></a>
+        <a class="rp-metric" style="--metric:#ae3f3d" href="{{ $drilldownUrl('timeliness_overdue') }}"><span class="rp-metric-label">Overdue reports</span><strong>{{ number_format($overdueReports) }}</strong><small>Draft or returned after the deadline</small></a>
+        <a class="rp-metric" style="--metric:#187459" href="{{ $drilldownUrl('timeliness_on_time') }}"><span class="rp-metric-label">On-time submission</span><strong>{{ number_format($onTimeRate,1) }}%</strong><small>Submitted reports with a configured deadline</small></a>
+        <a class="rp-metric" style="--metric:#6b63a8" href="{{ $drilldownUrl('submission_ready') }}"><span class="rp-metric-label">Submission readiness</span><strong>{{ number_format($submissionReadiness,1) }}%</strong><small>{{ $submissionReadyCount }} reports have all seven sections</small></a>
+        <a class="rp-metric" style="--metric:#a56a17" href="{{ $drilldownUrl('approved_decisions') }}"><span class="rp-metric-label">Avg. final approval</span><strong>{{ $averageApprovalLabel }}</strong><small>{{ $approvalDecisionCount }} completed {{ str('decision')->plural($approvalDecisionCount) }}</small></a>
+    </section>
+
+    <div class="rp-grid">
+        <section class="rp-panel" aria-labelledby="workflow-chart-title">
+            <div class="rp-panel-head"><div><h2 id="workflow-chart-title">Workflow distribution</h2><p>Mutually exclusive lifecycle stage for every matching report.</p></div><span class="rp-badge">{{ $totalReports }} reports</span></div>
+            @if($totalReports > 0)<div id="report-workflow-chart" class="rp-chart" role="img" aria-label="Donut chart showing reports by lifecycle stage"></div>@else<div class="rp-empty"><span class="rp-empty-mark">WF</span><strong>No reports in this scope</strong><p>Create a report or broaden the filters to populate lifecycle analytics.</p></div>@endif
+        </section>
+        <section class="rp-panel" aria-labelledby="timeliness-chart-title">
+            <div class="rp-panel-head"><div><h2 id="timeliness-chart-title">Submission timeliness</h2><p>Deadline performance based on each linked data collection.</p></div><span class="rp-badge">{{ number_format($onTimeRate,1) }}% on time</span></div>
+            @if($totalReports > 0)<div id="report-timeliness-chart" class="rp-chart" role="img" aria-label="Horizontal bar chart of reporting timeliness"></div>@else<div class="rp-empty"><span class="rp-empty-mark">DL</span><strong>No deadline performance yet</strong><p>Timeliness becomes available when reporting assignments and reports exist.</p></div>@endif
+        </section>
+    </div>
+
+    <div class="rp-grid">
+        <section class="rp-panel" aria-labelledby="period-chart-title">
+            <div class="rp-panel-head"><div><h2 id="period-chart-title">Reports by reporting period</h2><p>Reporting volume across year, frequency and period.</p></div></div>
+            @if($reportsByPeriod->isNotEmpty())<div id="report-period-chart" class="rp-chart rp-chart-tall" role="img" aria-label="Column chart of reports by reporting period"></div>@else<div class="rp-empty"><span class="rp-empty-mark">RP</span><strong>No reporting-period data</strong><p>No reports match the selected reporting context.</p></div>@endif
+        </section>
+        <section class="rp-panel" aria-labelledby="owner-chart-title">
+            <div class="rp-panel-head"><div><h2 id="owner-chart-title">Reports by think tank or partner</h2><p>Highest reporting volume by organization.</p></div></div>
+            @if($reportsByThinkTank->isNotEmpty())<div id="report-owner-chart" class="rp-chart rp-chart-tall" role="img" aria-label="Horizontal bar chart of reports by think tank or partner"></div>@else<div class="rp-empty"><span class="rp-empty-mark">TT</span><strong>No organization-level data</strong><p>Organization comparisons will appear when reports match this scope.</p></div>@endif
+        </section>
+    </div>
+
+    <div class="rp-grid">
+        <section class="rp-panel" aria-labelledby="component-chart-title">
+            <div class="rp-panel-head"><div><h2 id="component-chart-title">Reports by project component</h2><p>Reporting coverage across ATTP delivery components.</p></div></div>
+            @if($reportsByComponent->isNotEmpty())<div id="report-component-chart" class="rp-chart" role="img" aria-label="Horizontal bar chart of reports by project component"></div>@else<div class="rp-empty"><span class="rp-empty-mark">PC</span><strong>No component report data</strong><p>Component coverage will appear when reports match this scope.</p></div>@endif
+        </section>
+        <section class="rp-panel" aria-labelledby="quality-chart-title">
+            <div class="rp-panel-head"><div><h2 id="quality-chart-title">Indicator completeness and report quality</h2><p>Indicator completeness, seven-section readiness, evidence coverage and performance ratings.</p></div></div>
+            @if($totalReports > 0)
+                <div class="rp-mini-grid">
+                    <div class="rp-mini-card"><h3>Reporting readiness</h3><p>Indicator completeness · sections · evidence</p><div id="report-readiness-chart" class="rp-mini-chart" role="img" aria-label="Radial chart of reporting readiness"></div></div>
+                    <div class="rp-mini-card"><h3>Performance ratings</h3><p>Author-assessed overall report performance</p><div id="report-rating-chart" class="rp-mini-chart" role="img" aria-label="Donut chart of report performance ratings"></div></div>
+                </div>
+            @else<div class="rp-empty"><span class="rp-empty-mark">DQ</span><strong>No quality signals yet</strong><p>Quality analytics appear once reports are created.</p></div>@endif
+        </section>
+    </div>
+
+    <div class="rp-insight-grid">
+        <section class="rp-panel" aria-labelledby="attention-title">
+            <div class="rp-panel-head"><div><h2 id="attention-title">Management attention queue</h2><p>Overdue submissions and reports awaiting Secretariat decisions.</p></div><span class="rp-badge {{ $attentionReports->isNotEmpty() ? 'warning' : '' }}">{{ $attentionReports->count() }} shown</span></div>
+            <div class="rp-panel-body">
+                @if($attentionReports->isNotEmpty())
+                    <div class="rp-attention-list">
+                        @foreach($attentionReports as $item)
+                            @php $isOverdue = $item['timeliness'] === 'overdue'; @endphp
+                            <article class="rp-attention">
+                                <span class="rp-attention-mark" style="--mark:{{ $isOverdue ? '#ae3f3d' : '#1676b8' }};--mark-soft:{{ $isOverdue ? '#fff0ef' : '#eaf5fc' }}">{{ $isOverdue ? '!' : 'RV' }}</span>
+                                <div><strong>{{ $item['title'] }}</strong><p>{{ $item['reason'] }}</p><div class="rp-attention-meta">{{ $item['owner'] }} · {{ $item['period'] }}@if($item['due_at']) · Due {{ $item['due_at']->format('d M Y, H:i') }}@endif</div></div>
+                                <a class="rp-btn rp-btn-secondary rp-btn-small" href="{{ route('budget.me.performance-reports.edit', $item['id']) }}">{{ $canReviewReports && in_array($item['stage'], ['submitted','verified'], true) ? 'Review' : 'Open' }}</a>
+                            </article>
                         @endforeach
                     </div>
-                </article>
-
-                <article class="dashboard-panel">
-                    <div class="panel-heading">
-                        <div><span class="panel-eyebrow text-success">Organization coverage</span><h2>Reports by think tank or partner</h2><p>Top reporting organizations under the active filters.</p></div>
-                    </div>
-                    <div class="bar-list mt-3">
-                        @forelse ($reportsByThinkTank as $group)
-                            <a href="{{ route('budget.me.rebuild.reporting-dashboard', array_merge($activeFilters, ['think_tank_id' => $group['key']])).'#report-records' }}" class="bar-row">
-                                <div class="bar-line"><span>{{ $group['label'] }}</span><strong>{{ number_format($group['count']) }}</strong></div>
-                                <div class="bar-track"><span style="width:{{ $group['percentage'] }}%;--bar-color:#1676b8"></span></div>
-                                <div class="bar-meta"><span>{{ $group['subtitle'] }}</span><span>{{ number_format($group['percentage'], 1) }}%</span></div>
-                            </a>
-                        @empty
-                            <div class="empty-state">No organization-level report data matches the filters.</div>
-                        @endforelse
-                    </div>
-                </article>
-
-                <article class="dashboard-panel">
-                    <div class="panel-heading">
-                        <div><span class="panel-eyebrow text-success">Component delivery</span><h2>Reports by project component</h2><p>Top components by reporting volume.</p></div>
-                    </div>
-                    <div class="bar-list mt-3">
-                        @forelse ($reportsByComponent as $group)
-                            <a href="{{ route('budget.me.rebuild.reporting-dashboard', array_merge($activeFilters, ['component_id' => $group['key']])).'#report-records' }}" class="bar-row">
-                                <div class="bar-line"><span>{{ $group['label'] }}</span><strong>{{ number_format($group['count']) }}</strong></div>
-                                <div class="bar-track"><span style="width:{{ $group['percentage'] }}%;--bar-color:#7b5fb5"></span></div>
-                                <div class="bar-meta"><span>{{ $group['subtitle'] }}</span><span>{{ number_format($group['percentage'], 1) }}%</span></div>
-                            </a>
-                        @empty
-                            <div class="empty-state">No component report data matches the filters.</div>
-                        @endforelse
-                    </div>
-                </article>
-
-                <article class="dashboard-panel">
-                    <div class="panel-heading">
-                        <div><span class="panel-eyebrow text-success">Reporting cadence</span><h2>Reports by reporting period</h2><p>Distribution across year and quarter.</p></div>
-                    </div>
-                    <div class="bar-list mt-3">
-                        @forelse ($reportsByPeriod as $group)
-                            @php [$groupYear, $groupPeriodType, $groupPeriodLabel] = array_pad(explode('|', $group['key'], 3), 3, null); @endphp
-                            <a href="{{ route('budget.me.rebuild.reporting-dashboard', array_merge($activeFilters, ['reporting_year' => $groupYear, 'reporting_period_type' => $groupPeriodType, 'reporting_period_label' => $groupPeriodLabel])).'#report-records' }}" class="bar-row">
-                                <div class="bar-line"><span>{{ $group['label'] }}</span><strong>{{ number_format($group['count']) }}</strong></div>
-                                <div class="bar-track"><span style="width:{{ $group['percentage'] }}%;--bar-color:#0b7b78"></span></div>
-                                <div class="bar-meta"><span>{{ $group['subtitle'] }}</span><span>{{ number_format($group['percentage'], 1) }}%</span></div>
-                            </a>
-                        @empty
-                            <div class="empty-state">No reporting-period data matches the filters.</div>
-                        @endforelse
-                    </div>
-                </article>
-
-                <article class="dashboard-panel">
-                    <div class="panel-heading">
-                        <div><span class="panel-eyebrow text-success">Indicator completeness</span><h2>Required indicator results reported</h2><p>Complete means both a period result and its linked indicator result record are saved.</p></div>
-                    </div>
-                    <div class="completion-visual">
-                        <div class="completion-ring" style="--completion:{{ $indicatorCompleteness }}%"><div>{{ number_format($indicatorCompleteness, 1) }}%</div></div>
-                        <div class="completion-actions">
-                            <a href="{{ $drilldownUrl('indicator_complete') }}"><span>Complete indicator reporting</span><strong>{{ number_format($reportedIndicators) }}</strong></a>
-                            <a href="{{ $drilldownUrl('indicator_incomplete') }}"><span>Missing indicator results</span><strong>{{ number_format(max(0, $indicatorTotal - $reportedIndicators)) }}</strong></a>
-                            <div class="text-muted small">{{ number_format($reportedIndicators) }} of {{ number_format($indicatorTotal) }} due indicator results reported.</div>
-                        </div>
-                    </div>
-                </article>
-            </section>
-
-            <section class="dashboard-panel records-panel" id="report-records" aria-labelledby="report-records-title">
-                <div class="panel-heading">
-                    <div>
-                        <span class="panel-eyebrow text-success">Permission-scoped drill-down</span>
-                        <h2 id="report-records-title">{{ $drilldownLabel }}</h2>
-                        <p>Open a report to view its standardized sections, evidence, status actions and lifecycle history.</p>
-                    </div>
-                    @if ($drilldown)
-                        <a href="{{ $dashboardUrl() }}#report-records" class="btn btn-sm btn-light border"><i class="feather-x me-1" aria-hidden="true"></i>Clear drill-down</a>
-                    @endif
-                </div>
-                <div class="records-summary">
-                    <strong>{{ number_format($records->total()) }} {{ \Illuminate\Support\Str::plural('report', $records->total()) }}</strong>
-                    <span>Page {{ $records->currentPage() }} of {{ max(1, $records->lastPage()) }}</span>
-                </div>
-
-                @if ($records->isEmpty())
-                    <div class="empty-state">
-                        <i class="feather-inbox d-block fs-3 mb-2" aria-hidden="true"></i>
-                        No report records match this filter and drill-down selection.
-                    </div>
-                @else
-                    <div class="table-responsive">
-                        <table class="table dashboard-table align-middle">
-                            <caption class="visually-hidden">Report records matching the active dashboard filters</caption>
-                            <thead>
-                                <tr>
-                                    <th>Report</th>
-                                    <th>Owner</th>
-                                    <th>Component / Theme</th>
-                                    <th>Stage</th>
-                                    <th>Timeliness</th>
-                                    <th>Indicator completeness</th>
-                                    <th class="text-end">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($records as $report)
-                                    @php
-                                        $stage = $stageConfiguration[$report->dashboard_stage] ?? $stageConfiguration['draft'];
-                                        $time = $timelinessConfiguration[$report->dashboard_timeliness] ?? $timelinessConfiguration['no_deadline'];
-                                        $resultTotal = (int) $report->indicator_results_count;
-                                        $resultComplete = (int) $report->reported_indicator_results_count;
-                                        $resultPercent = $resultTotal > 0 ? round(($resultComplete / $resultTotal) * 100, 1) : 0;
-                                    @endphp
-                                    <tr>
-                                        <td>
-                                            <span class="record-title" title="{{ $report->form?->title }}">{{ $report->form?->title ?: 'Form unavailable' }}</span>
-                                            <span class="record-meta">{{ $report->form?->code }} · {{ $report->periodLabel() }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="record-title">{{ $report->thinkTank?->name ?: 'Secretariat / Internal' }}</span>
-                                            <span class="record-meta">{{ $report->thinkTank ? \Illuminate\Support\Str::headline($report->thinkTank->role ?: 'think tank') : 'Internal report' }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="record-title">{{ $report->projectComponent?->name ?: 'Unavailable' }}</span>
-                                            <span class="record-meta">{{ $report->portfolio?->name ?: 'No thematic area' }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="status-pill" style="--pill-color:{{ $stage['color'] }};--pill-soft:{{ $stage['soft_color'] }}">
-                                                <i class="{{ $stage['icon'] }}" aria-hidden="true"></i>{{ $stage['label'] }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="status-pill" style="--pill-color:{{ $time['color'] }};--pill-soft:#fff">
-                                                {{ $time['label'] }}
-                                            </span>
-                                            <span class="record-meta">{{ $report->assignment?->collection?->due_at?->format('d M Y, H:i') ?: 'Deadline not set' }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="record-title">{{ $resultComplete }}/{{ $resultTotal }} results · {{ number_format($resultPercent, 1) }}%</span>
-                                            <span class="record-meta">{{ $report->documents_count }} supporting {{ \Illuminate\Support\Str::plural('document', $report->documents_count) }}</span>
-                                        </td>
-                                        <td class="text-end">
-                                            <a href="{{ route('budget.me.performance-reports.edit', $report) }}" class="btn btn-sm btn-outline-primary">
-                                                <i class="feather-eye me-1" aria-hidden="true"></i>Open report
-                                            </a>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="mt-3">{{ $records->links() }}</div>
-                @endif
-            </section>
-        </main>
+                @else<div class="rp-empty"><span class="rp-empty-mark">OK</span><strong>No immediate reporting exceptions</strong><p>There are no overdue drafts or pending review decisions in the selected scope.</p></div>@endif
+            </div>
+        </section>
+        <section class="rp-panel" aria-labelledby="signals-title">
+            <div class="rp-panel-head"><div><h2 id="signals-title">Operational signals</h2><p>Supporting measures behind the management view.</p></div></div>
+            <div class="rp-panel-body rp-signal-list">
+                <div class="rp-signal"><span>Submitted for verification</span><strong>{{ number_format($awaitingVerification) }}</strong></div>
+                <div class="rp-signal"><span>Verified, awaiting approval</span><strong>{{ number_format($awaitingApproval) }}</strong></div>
+                <div class="rp-signal"><span>Avg. first review / verification</span><strong>{{ $averageReviewLabel }} · {{ $reviewDecisionCount }} decisions</strong></div>
+                <div class="rp-signal"><span>Avg. review &amp; approval (final)</span><strong>{{ $averageApprovalLabel }}</strong></div>
+                <div class="rp-signal"><span>Indicator completeness</span><strong>{{ number_format($reportedIndicators) }}/{{ number_format($indicatorTotal) }} · {{ number_format($indicatorCompleteness,1) }}%</strong></div>
+                <div class="rp-signal"><span>Evidence coverage</span><strong>{{ $evidenceReportCount }}/{{ $totalReports }} · {{ number_format($evidenceCoverage,1) }}%</strong></div>
+                <div class="rp-signal"><span>Reports missing required sections</span><strong>{{ max(0,$totalReports-$submissionReadyCount) }}</strong></div>
+            </div>
+        </section>
     </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const type = document.getElementById('dashboard-period-type');
-            const period = document.getElementById('dashboard-period');
-            const labels = @json($filterOptions['period_labels']);
-            const current = @json($filters['reporting_period_label']);
-            const refresh = () => {
-                if (!period) return;
-                period.innerHTML = '<option value="">All periods</option>';
-                const groups = type?.value ? {[type.value]: labels[type.value] || {}} : labels;
-                Object.entries(groups).forEach(([frequency, options]) => {
-                    Object.entries(options).forEach(([value, label]) => {
-                        const option = new Option(label, value, false, value === current);
-                        option.dataset.frequency = frequency;
-                        period.add(option);
-                    });
-                });
-            };
-            type?.addEventListener('change', refresh);
-            refresh();
-        });
-    </script>
+
+    <section class="rp-panel rp-records" id="report-records" aria-labelledby="report-records-title">
+        <div class="rp-panel-head">
+            <div><h2 id="report-records-title">{{ $drilldownLabel }}</h2><p>Permission-scoped drill-down with lifecycle, timeliness, readiness and evidence details.</p></div>
+            <div class="rp-actions">
+                @if($drilldown)<a class="rp-btn rp-btn-secondary rp-btn-small" href="{{ $dashboardUrl() }}#report-records">Clear drill-down</a>@endif
+                @if($canOpenConsolidated)<a class="rp-btn rp-btn-secondary rp-btn-small" href="{{ route('budget.me.consolidated-reports.index') }}">Consolidated reports</a>@endif
+                @if($canOpenResults)<a class="rp-btn rp-btn-secondary rp-btn-small" href="{{ route('budget.me.results-dashboard.index') }}">Approved results</a>@endif
+                @if($canOpenNotifications)<a class="rp-btn rp-btn-secondary rp-btn-small" href="{{ route('budget.me.reporting-notifications.index') }}">Notifications</a>@endif
+                <a class="rp-btn rp-btn-primary rp-btn-small" href="{{ route('budget.me.rebuild.reporting-dashboard.csv', $preservedFilters) }}">Export filtered CSV</a>
+            </div>
+        </div>
+        <div class="rp-record-summary"><strong>Showing {{ number_format($recordStart) }}–{{ number_format($recordEnd) }} of {{ number_format($records->total()) }} {{ str('report')->plural($records->total()) }}</strong><span>Page {{ $records->currentPage() }} of {{ max(1,$records->lastPage()) }}</span></div>
+        @if($records->isEmpty())
+            <div class="rp-empty"><span class="rp-empty-mark">0</span><strong>No reports match this selection</strong><p>Clear the drill-down or broaden one or more report filters.</p></div>
+        @else
+            <div class="rp-table-wrap">
+                <table class="rp-table">
+                    <thead><tr><th>Report</th><th>Owner</th><th>Component / Portfolio</th><th>Workflow</th><th>Timeliness</th><th>Reporting readiness</th><th>Evidence / Rating</th><th>Action</th></tr></thead>
+                    <tbody>
+                    @foreach($records as $report)
+                        @php
+                            $stage = $stageConfiguration[$report->dashboard_stage] ?? $stageConfiguration['draft'];
+                            $time = $timelinessConfiguration[$report->dashboard_timeliness] ?? $timelinessConfiguration['no_deadline'];
+                            $resultTotal = (int)$report->indicator_results_count;
+                            $resultComplete = (int)$report->reported_indicator_results_count;
+                            $resultPercent = $resultTotal > 0 ? round(($resultComplete/$resultTotal)*100,1) : 0;
+                            $sectionPercent = round(((int)$report->dashboard_completed_sections/7)*100,1);
+                            $reviewAction = $canReviewReports && in_array($report->dashboard_stage,['submitted','verified'],true);
+                        @endphp
+                        <tr>
+                            <td><span class="rp-record-title">{{ $report->form?->title ?: 'Form unavailable' }}</span><span class="rp-record-meta">{{ $report->form?->code ?: 'No form code' }} · {{ $report->periodLabel() }}</span><span class="rp-record-meta">Updated {{ $report->updated_at?->format('d M Y, H:i') }}</span></td>
+                            <td><span class="rp-record-title">{{ $report->thinkTank?->name ?: 'Secretariat / Internal' }}</span><span class="rp-record-meta">{{ $report->thinkTank ? str($report->thinkTank->role ?: 'think tank')->headline() : 'Internal report' }}</span></td>
+                            <td><span class="rp-record-title">{{ $report->projectComponent?->name ?: 'Component unavailable' }}</span><span class="rp-record-meta">{{ $report->projectComponent?->project_id ?: 'No component code' }} · {{ $report->portfolio?->name ?: 'No portfolio' }}</span></td>
+                            <td><span class="rp-status" style="--pill:{{ $stage['color'] }};--soft:{{ $stage['soft_color'] }}">{{ $stage['label'] }}</span><span class="rp-record-meta">{{ $report->dashboard_submission_ready ? 'All required sections complete' : $report->dashboard_missing_sections.' required sections incomplete' }}</span></td>
+                            <td><span class="rp-status" style="--pill:{{ $time['color'] }};--soft:#fff">{{ $time['label'] }}</span><span class="rp-record-meta">{{ $report->assignment?->collection?->due_at?->format('d M Y, H:i') ?: 'Deadline not configured' }}</span></td>
+                            <td><strong>{{ $resultComplete }}/{{ $resultTotal }} indicator results</strong><div class="rp-progress"><span style="width:{{ min(100,$resultPercent) }}%"></span></div><span class="rp-record-meta">{{ $report->dashboard_completed_sections }}/7 sections · {{ number_format($sectionPercent,1) }}%</span></td>
+                            <td><strong>{{ $report->documents_count }} supporting {{ str('file')->plural($report->documents_count) }}</strong><span class="rp-record-meta">{{ \App\Models\MePerformanceReport::PERFORMANCE_RATINGS[$report->performance_rating] ?? 'Not rated' }}</span></td>
+                            <td><a class="rp-btn {{ $reviewAction ? 'rp-btn-primary' : 'rp-btn-secondary' }} rp-btn-small" href="{{ route('budget.me.performance-reports.edit',$report) }}">{{ $reviewAction ? 'Review report' : ($report->isEditable() && $canCreateReport ? 'Continue report' : 'View report') }}</a></td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <div class="rp-scroll-tip"><span>Scroll horizontally to view all operational fields.</span><span>Milestone and numeric indicator results use their correct completion rules.</span></div>
+            <div class="rp-pagination">{{ $records->links() }}</div>
+        @endif
+    </section>
+</div>
 @endsection
+
+@push('scripts')
+<script src="{{ asset('admin/assets/vendors/js/apexcharts.min.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const distribution = {{ \Illuminate\Support\Js::from($distribution->values()->all()) }};
+    const timeliness = {{ \Illuminate\Support\Js::from($timeliness->values()->all()) }};
+    const periods = {{ \Illuminate\Support\Js::from($reportsByPeriod->values()->all()) }};
+    const owners = {{ \Illuminate\Support\Js::from($reportsByThinkTank->values()->all()) }};
+    const components = {{ \Illuminate\Support\Js::from($reportsByComponent->values()->all()) }};
+    const ratings = {{ \Illuminate\Support\Js::from($ratingDistribution->values()->all()) }};
+    const readiness = {{ \Illuminate\Support\Js::from([$indicatorCompleteness,$submissionReadiness,$evidenceCoverage]) }};
+    const dashboardRoute = {{ \Illuminate\Support\Js::from(route('budget.me.rebuild.reporting-dashboard')) }};
+    const base = { chart:{fontFamily:'Inter, Arial, sans-serif',foreColor:'#657980',toolbar:{show:false},animations:{speed:420}}, grid:{borderColor:'#e5edef',strokeDashArray:3}, dataLabels:{style:{fontSize:'10px',fontWeight:700}}, tooltip:{theme:'light'}, legend:{fontSize:'10px',fontWeight:600} };
+    const render = function (selector, options) { const target=document.querySelector(selector); if(target && window.ApexCharts) new ApexCharts(target,options).render(); };
+    const inspectReports = function (parameters) {
+        const destination = new URL(dashboardRoute, window.location.origin);
+        const current = new URL(window.location.href);
+        current.searchParams.forEach((value,key) => { if (!['records_page','drilldown'].includes(key)) destination.searchParams.set(key,value); });
+        Object.entries(parameters).forEach(([key,value]) => {
+            if (value === null || value === '') destination.searchParams.delete(key);
+            else destination.searchParams.set(key,String(value));
+        });
+        destination.hash = 'report-records';
+        window.location.assign(destination.toString());
+    };
+    const pointSelection = function (items, resolver, useSeriesIndex = false) {
+        return { dataPointSelection: function (_event,_chart,selection) {
+            const position = useSeriesIndex ? selection.seriesIndex : selection.dataPointIndex;
+            const item = items[position];
+            if (item) inspectReports(resolver(item));
+        }};
+    };
+
+    render('#report-workflow-chart',{...base,chart:{...base.chart,type:'donut',height:305,events:pointSelection(distribution,item=>({drilldown:'stage_'+item.key}))},series:distribution.map(item=>item.count),labels:distribution.map(item=>item.label),colors:distribution.map(item=>item.color),stroke:{colors:['#fff'],width:3},plotOptions:{pie:{donut:{size:'67%',labels:{show:true,total:{show:true,label:'Reports',formatter:()=>distribution.reduce((sum,item)=>sum+item.count,0)}}}}},legend:{position:'bottom',fontSize:'11px'},dataLabels:{enabled:false},noData:{text:'No workflow data'}});
+    render('#report-timeliness-chart',{...base,chart:{...base.chart,type:'bar',height:305,events:pointSelection(timeliness,item=>({drilldown:'timeliness_'+item.key}))},series:[{name:'Reports',data:timeliness.map(item=>item.count)}],colors:timeliness.map(item=>item.color),plotOptions:{bar:{horizontal:true,distributed:true,borderRadius:4,barHeight:'58%'}},xaxis:{categories:timeliness.map(item=>item.label),min:0,forceNiceScale:true,labels:{formatter:value=>Math.round(value)}},legend:{show:false},dataLabels:{enabled:true,formatter:value=>Math.round(value)}});
+    render('#report-period-chart',{...base,chart:{...base.chart,type:'bar',height:350,events:pointSelection(periods,item=>{const [reporting_year,reporting_period_type,reporting_period_label]=item.key.split('|');return {reporting_year,reporting_period_type,reporting_period_label};})},series:[{name:'Reports',data:periods.map(item=>item.count)}],colors:['#075c7a'],plotOptions:{bar:{borderRadius:4,columnWidth:'50%'}},xaxis:{categories:periods.map(item=>item.label),labels:{rotate:-35,trim:true,style:{fontSize:'11px'}}},yaxis:{min:0,forceNiceScale:true,labels:{formatter:value=>Math.round(value)}},dataLabels:{enabled:true,formatter:value=>Math.round(value)},legend:{show:false}});
+    render('#report-owner-chart',{...base,chart:{...base.chart,type:'bar',height:Math.max(350,owners.length*38),events:pointSelection(owners,item=>({think_tank_id:item.key}))},series:[{name:'Reports',data:owners.map(item=>item.count)}],colors:['#3f8aa0'],plotOptions:{bar:{horizontal:true,borderRadius:4,barHeight:'60%'}},xaxis:{categories:owners.map(item=>item.label),min:0,forceNiceScale:true,labels:{formatter:value=>Math.round(value)}},yaxis:{labels:{maxWidth:190,style:{fontSize:'11px'}}},dataLabels:{enabled:true,formatter:value=>Math.round(value)},legend:{show:false}});
+    render('#report-component-chart',{...base,chart:{...base.chart,type:'bar',height:305,events:pointSelection(components,item=>({component_id:item.key}))},series:[{name:'Reports',data:components.map(item=>item.count)}],colors:['#6b63a8'],plotOptions:{bar:{horizontal:true,borderRadius:4,barHeight:'58%'}},xaxis:{categories:components.map(item=>item.subtitle),min:0,forceNiceScale:true,labels:{formatter:value=>Math.round(value)}},yaxis:{labels:{maxWidth:150,style:{fontSize:'11px'}}},dataLabels:{enabled:true,formatter:value=>Math.round(value)},legend:{show:false}});
+    render('#report-readiness-chart',{...base,chart:{...base.chart,type:'radialBar',height:245,events:pointSelection([{drilldown:'indicator_complete'},{drilldown:'submission_ready'},{drilldown:'evidence_present'}],item=>({drilldown:item.drilldown}),true)},series:readiness,labels:['Indicators','Seven sections','Evidence'],colors:['#075c7a','#6b63a8','#187459'],plotOptions:{radialBar:{hollow:{size:'28%'},track:{background:'#e7eef0'},dataLabels:{name:{fontSize:'11px'},value:{fontSize:'14px',formatter:value=>Number(value).toFixed(0)+'%'},total:{show:true,label:'Ready',formatter:()=>Number(readiness[1]||0).toFixed(0)+'%'}}}},legend:{show:false}});
+    render('#report-rating-chart',{...base,chart:{...base.chart,type:'donut',height:245,events:pointSelection(ratings,item=>({performance_rating:item.key}))},series:ratings.map(item=>item.count),labels:ratings.map(item=>item.label),colors:ratings.map(item=>item.color),stroke:{colors:['#fbfcfc'],width:3},plotOptions:{pie:{donut:{size:'61%',labels:{show:true,total:{show:true,label:'Reports',formatter:()=>ratings.reduce((sum,item)=>sum+item.count,0)}}}}},legend:{position:'bottom',fontSize:'11px'},dataLabels:{enabled:false}});
+
+    const type=document.getElementById('dashboard-period-type');
+    const period=document.getElementById('dashboard-period');
+    const periodLabels={{ \Illuminate\Support\Js::from($filterOptions['period_labels']) }};
+    let currentPeriod={{ \Illuminate\Support\Js::from($filters['reporting_period_label']) }};
+    const refreshPeriods=function(){ if(!period)return; period.innerHTML=''; period.add(new Option('All periods','')); const groups=type?.value?{[type.value]:periodLabels[type.value]||{}}:periodLabels; Object.entries(groups).forEach(([frequency,options])=>Object.entries(options).forEach(([value,label])=>{const option=new Option(label,value,false,value===currentPeriod);option.dataset.frequency=frequency;period.add(option);})); };
+    type?.addEventListener('change',function(){currentPeriod=null;refreshPeriods();});
+    refreshPeriods();
+    document.getElementById('reporting-print')?.addEventListener('click',()=>window.print());
+});
+</script>
+@endpush

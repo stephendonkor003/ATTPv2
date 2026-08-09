@@ -1,0 +1,20 @@
+[dir="rtl"] body.tt-portal-body {
+    direction: rtl;
+}
+
+[dir="rtl"] .text-start {
+    text-align: right !important;
+}
+
+[dir="rtl"] .tt-account-panel,
+[dir="rtl"] .lang-switcher .lang-menu {
+    transform-origin: top left;
+}
+
+[dir="rtl"] .tt-sidebar-link.is-active {
+    box-shadow: none;
+}
+
+[dir="rtl"] .tt-update-row.is-overdue {
+    box-shadow: inset -3px 0 0 var(--tt-danger);
+}

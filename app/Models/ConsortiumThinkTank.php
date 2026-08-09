@@ -10,6 +10,11 @@ use Illuminate\Support\Str;
 
 class ConsortiumThinkTank extends BaseModel
 {
+    public const DEFAULT_PORTAL_BRANDING = [
+        'primary_color' => '#075c7a',
+        'accent_color' => '#2b84a0',
+    ];
+
     protected $table = 'attp_consortium_think_tanks';
 
     protected $fillable = [
@@ -21,6 +26,7 @@ class ConsortiumThinkTank extends BaseModel
         'au_sap_vendor_number',
         'name',
         'logo_path',
+        'portal_branding',
         'country',
         'email',
         'role',
@@ -32,6 +38,7 @@ class ConsortiumThinkTank extends BaseModel
     protected $casts = [
         'budget_allocated' => 'decimal:2',
         'joined_at' => 'date',
+        'portal_branding' => 'array',
     ];
 
     public function consortium(): BelongsTo
@@ -48,6 +55,22 @@ class ConsortiumThinkTank extends BaseModel
         }
 
         return Storage::disk('public')->url($path);
+    }
+
+    /**
+     * @return array{primary_color: string, accent_color: string}
+     */
+    public function resolvedPortalBranding(): array
+    {
+        $branding = array_merge(self::DEFAULT_PORTAL_BRANDING, (array) $this->portal_branding);
+
+        foreach (self::DEFAULT_PORTAL_BRANDING as $key => $fallback) {
+            if (! preg_match('/^#[0-9a-f]{6}$/i', (string) ($branding[$key] ?? ''))) {
+                $branding[$key] = $fallback;
+            }
+        }
+
+        return $branding;
     }
 
     public function thinkDataset(): BelongsTo

@@ -10,7 +10,7 @@ Think tank: {{ $member->name }}
 
 Consortium: {{ $consortium->name }}
 
-Role: {{ ucfirst(str_replace('_', ' ', $member->role ?? 'member')) }}
+Portal access: {{ $user->thinkTankAccessLabel() }}
 
 Country: {{ $member->country ?? 'Not specified' }}
 

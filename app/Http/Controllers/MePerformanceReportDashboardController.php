@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MePerformanceReportDashboardController extends Controller
 {
@@ -92,8 +93,10 @@ class MePerformanceReportDashboardController extends Controller
                 'form:id,code,title',
                 'assignment:id,collection_id',
                 'assignment.collection:id,due_at',
-                'indicatorResults:id,report_id,indicator_id,indicator_result_id,actual_value',
-                'indicatorResults.indicator:id,indicator_code,name,results_level',
+                'indicatorResults:id,report_id,indicator_id,indicator_result_id,actual_value,actual_text,rollup_numerator,rollup_denominator',
+                'indicatorResults.indicator:id,indicator_code,name,results_level,value_type,organization_rollup_method',
+                'indicatorResults.achievements:id,report_indicator_result_id',
+                'documents:id,report_id',
             ])
             ->withExists([
                 'transitions as has_return_transition' => fn ($query) => $query
@@ -136,7 +139,9 @@ class MePerformanceReportDashboardController extends Controller
         $onTimeCount = (int) ($timeliness->firstWhere('key', 'on_time')['count'] ?? 0);
         $onTimeRate = $this->percentage($onTimeCount, (int) $submittedWithDeadline);
         $overdueReports = (int) ($timeliness->firstWhere('key', 'overdue')['count'] ?? 0);
-        $awaitingReview = (int) ($distribution->firstWhere('key', 'submitted')['count'] ?? 0);
+        $awaitingVerification = (int) ($distribution->firstWhere('key', 'submitted')['count'] ?? 0);
+        $awaitingApproval = (int) ($distribution->firstWhere('key', 'verified')['count'] ?? 0);
+        $awaitingReview = $awaitingVerification + $awaitingApproval;
 
         $reviewMinutes = $reports
             ->filter(fn (MePerformanceReport $report): bool => $report->submitted_at !== null
@@ -147,6 +152,15 @@ class MePerformanceReportDashboardController extends Controller
         $averageReviewMinutes = $reviewMinutes->isEmpty()
             ? null
             : (int) round($reviewMinutes->average());
+        $approvalMinutes = $reports
+            ->filter(fn (MePerformanceReport $report): bool => $report->submitted_at !== null
+                && $report->approved_at !== null
+                && $report->approved_at->greaterThanOrEqualTo($report->submitted_at))
+            ->map(fn (MePerformanceReport $report): int => (int) $report->submitted_at
+                ->diffInMinutes($report->approved_at));
+        $averageApprovalMinutes = $approvalMinutes->isEmpty()
+            ? null
+            : (int) round($approvalMinutes->average());
 
         $indicatorResults = $reports
             ->flatMap(fn (MePerformanceReport $report): Collection => $report->indicatorResults)
@@ -161,10 +175,42 @@ class MePerformanceReportDashboardController extends Controller
                 )
             );
         $reportedIndicators = $indicatorResults
-            ->filter(fn ($result): bool => $result->actual_value !== null && filled($result->indicator_result_id))
+            ->filter(fn ($result): bool => $this->resultIsComplete($result))
             ->count();
         $indicatorTotal = $indicatorResults->count();
         $indicatorCompleteness = $this->percentage($reportedIndicators, $indicatorTotal);
+        $submissionReadyCount = $reports
+            ->filter(fn (MePerformanceReport $report): bool => $report->isSubmissionReady())
+            ->count();
+        $evidenceReportCount = $reports
+            ->filter(fn (MePerformanceReport $report): bool => $report->documents->isNotEmpty())
+            ->count();
+        $submissionReadiness = $this->percentage($submissionReadyCount, $totalReports);
+        $evidenceCoverage = $this->percentage($evidenceReportCount, $totalReports);
+
+        $ratingColors = [
+            'exceptional' => '#187459',
+            'on_track' => '#0e7490',
+            'at_risk' => '#a56a17',
+            'off_track' => '#ae3f3d',
+            'not_rated' => '#64748b',
+        ];
+        $ratingDistribution = collect(MePerformanceReport::PERFORMANCE_RATINGS)
+            ->map(function (string $label, string $key) use ($reports, $totalReports, $ratingColors): array {
+                $count = $key === 'not_rated'
+                    ? $reports->filter(fn (MePerformanceReport $report): bool => blank($report->performance_rating)
+                        || $report->performance_rating === 'not_rated')->count()
+                    : $reports->where('performance_rating', $key)->count();
+
+                return [
+                    'key' => $key,
+                    'label' => $label,
+                    'color' => $ratingColors[$key] ?? '#64748b',
+                    'count' => $count,
+                    'percentage' => $this->percentage($count, $totalReports),
+                ];
+            })
+            ->values();
 
         $reportsByThinkTank = $this->groupReports(
             $reports,
@@ -200,6 +246,35 @@ class MePerformanceReportDashboardController extends Controller
             $totalReports,
             true
         );
+        $attentionReports = $reports
+            ->filter(fn (MePerformanceReport $report): bool => in_array($this->stageKey($report), ['submitted', 'verified'], true)
+                || $this->timelinessKey($report) === 'overdue')
+            ->sortBy(function (MePerformanceReport $report): string {
+                $overduePriority = $this->timelinessKey($report) === 'overdue' ? '0' : '1';
+                $dueAt = $report->assignment?->collection?->due_at?->format('YmdHis') ?? '99999999999999';
+
+                return $overduePriority.'|'.$dueAt;
+            })
+            ->take(6)
+            ->map(function (MePerformanceReport $report): array {
+                $stage = $this->stageKey($report);
+                $timeliness = $this->timelinessKey($report);
+
+                return [
+                    'id' => $report->id,
+                    'title' => $report->form?->title ?: 'Performance report',
+                    'owner' => $report->thinkTank?->name ?: 'Secretariat / Internal',
+                    'period' => $report->periodLabel(),
+                    'stage' => $stage,
+                    'stage_label' => self::STAGES[$stage]['label'] ?? Str::headline($stage),
+                    'timeliness' => $timeliness,
+                    'reason' => $timeliness === 'overdue'
+                        ? 'Submission is past the linked collection deadline.'
+                        : ($stage === 'verified' ? 'Verified and awaiting final approval.' : 'Submitted and awaiting verification.'),
+                    'due_at' => $report->assignment?->collection?->due_at,
+                ];
+            })
+            ->values();
 
         $drilldown = $this->drilldown($request);
         $drilldownReports = $this->applyDrilldown($reports, $drilldown);
@@ -217,25 +292,23 @@ class MePerformanceReportDashboardController extends Controller
                 'thinkTank:id,name,role',
                 'assignment:id,collection_id',
                 'assignment.collection:id,due_at',
+                'indicatorResults:id,report_id,indicator_id,indicator_result_id,actual_value,actual_text,rollup_numerator,rollup_denominator',
+                'indicatorResults.indicator:id,indicator_code,name,value_type,organization_rollup_method',
+                'indicatorResults.achievements:id,report_indicator_result_id',
+                'documents:id,report_id',
             ])
             ->withCount([
-                'indicatorResults',
-                'indicatorResults as reported_indicator_results_count' => fn ($query) => $query
-                    ->whereNotNull('actual_value')
-                    ->whereNotNull('indicator_result_id'),
                 'documents',
             ])
             ->withExists([
                 'transitions as has_return_transition' => fn ($query) => $query
                     ->where('action', 'returned_for_correction'),
             ])
-            ->orderByDesc('reporting_year')
-            ->orderByDesc('reporting_quarter')
-            ->paginate(15, ['*'], 'records_page')
+            ->tap(fn (Builder $query): Builder => $this->applyRecordSort($query, $filters['sort']))
+            ->paginate($filters['per_page'], ['*'], 'records_page')
             ->withQueryString();
         $records->getCollection()->each(function (MePerformanceReport $report): void {
-            $report->setAttribute('dashboard_stage', $this->stageKey($report));
-            $report->setAttribute('dashboard_timeliness', $this->timelinessKey($report));
+            $this->decorateReport($report);
         });
 
         $filterOptions = $this->filterOptions($scopeQuery);
@@ -249,15 +322,26 @@ class MePerformanceReportDashboardController extends Controller
             'onTimeRate' => $onTimeRate,
             'overdueReports' => $overdueReports,
             'awaitingReview' => $awaitingReview,
+            'awaitingVerification' => $awaitingVerification,
+            'awaitingApproval' => $awaitingApproval,
             'averageReviewMinutes' => $averageReviewMinutes,
             'averageReviewLabel' => $this->durationLabel($averageReviewMinutes),
             'reviewDecisionCount' => $reviewMinutes->count(),
+            'averageApprovalMinutes' => $averageApprovalMinutes,
+            'averageApprovalLabel' => $this->durationLabel($averageApprovalMinutes),
+            'approvalDecisionCount' => $approvalMinutes->count(),
             'indicatorCompleteness' => $indicatorCompleteness,
             'reportedIndicators' => $reportedIndicators,
             'indicatorTotal' => $indicatorTotal,
+            'submissionReadyCount' => $submissionReadyCount,
+            'submissionReadiness' => $submissionReadiness,
+            'evidenceReportCount' => $evidenceReportCount,
+            'evidenceCoverage' => $evidenceCoverage,
+            'ratingDistribution' => $ratingDistribution,
             'reportsByThinkTank' => $reportsByThinkTank,
             'reportsByComponent' => $reportsByComponent,
             'reportsByPeriod' => $reportsByPeriod,
+            'attentionReports' => $attentionReports,
             'drilldown' => $drilldown,
             'drilldownLabel' => $this->drilldownLabel($drilldown),
             'records' => $records,
@@ -265,6 +349,70 @@ class MePerformanceReportDashboardController extends Controller
             'timelinessConfiguration' => self::TIMELINESS,
             'generatedAt' => now(),
         ]);
+    }
+
+    public function csv(Request $request): StreamedResponse
+    {
+        $filters = $this->filters($request);
+        $reports = $this->applyFilters($this->scopedReportQuery($request), $filters)
+            ->with([
+                'form:id,code,title',
+                'portfolio:id,name',
+                'projectComponent:id,project_id,name',
+                'thinkTank:id,name,role,country',
+                'assignment:id,collection_id',
+                'assignment.collection:id,due_at',
+                'indicatorResults:id,report_id,indicator_id,indicator_result_id,actual_value,actual_text,rollup_numerator,rollup_denominator',
+                'indicatorResults.indicator:id,indicator_code,name,value_type,organization_rollup_method',
+                'indicatorResults.achievements:id,report_indicator_result_id',
+                'documents:id,report_id',
+            ])
+            ->withExists([
+                'transitions as has_return_transition' => fn ($query) => $query
+                    ->where('action', 'returned_for_correction'),
+            ])
+            ->tap(fn (Builder $query): Builder => $this->applyRecordSort($query, $filters['sort']))
+            ->get();
+        $reports->each(fn (MePerformanceReport $report) => $this->decorateReport($report));
+        $filename = 'ATTP-MEL-reporting-workflow-'.now()->format('Ymd-His').'.csv';
+
+        return response()->streamDownload(function () use ($reports): void {
+            $stream = fopen('php://output', 'wb');
+            fwrite($stream, "\xEF\xBB\xBF");
+            fputcsv($stream, [
+                'Report ID', 'Form Code', 'Report', 'Owner', 'Country', 'Portfolio',
+                'Project Component', 'Reporting Period', 'Workflow Stage', 'Timeliness',
+                'Deadline', 'Submitted At', 'Verified At', 'Approved At', 'Indicator Results',
+                'Complete Indicator Results', 'Required Sections Complete', 'Submission Ready',
+                'Supporting Documents', 'Performance Rating', 'Last Updated',
+            ], ',', '"', '');
+            foreach ($reports as $report) {
+                fputcsv($stream, [
+                    $report->id,
+                    $report->form?->code,
+                    $report->form?->title,
+                    $report->thinkTank?->name ?: 'Secretariat / Internal',
+                    $report->thinkTank?->country,
+                    $report->portfolio?->name,
+                    $report->projectComponent?->name,
+                    $report->periodLabel(),
+                    self::STAGES[$report->dashboard_stage]['label'] ?? Str::headline($report->dashboard_stage),
+                    self::TIMELINESS[$report->dashboard_timeliness]['label'] ?? Str::headline($report->dashboard_timeliness),
+                    $report->assignment?->collection?->due_at?->toIso8601String(),
+                    $report->submitted_at?->toIso8601String(),
+                    $report->verified_at?->toIso8601String(),
+                    $report->approved_at?->toIso8601String(),
+                    $report->indicator_results_count,
+                    $report->reported_indicator_results_count,
+                    $report->dashboard_completed_sections.'/7',
+                    $report->dashboard_submission_ready ? 'Yes' : 'No',
+                    $report->documents->count(),
+                    MePerformanceReport::PERFORMANCE_RATINGS[$report->performance_rating] ?? 'Not Rated',
+                    $report->updated_at?->toIso8601String(),
+                ], ',', '"', '');
+            }
+            fclose($stream);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     private function scopedReportQuery(Request $request): Builder
@@ -295,6 +443,26 @@ class MePerformanceReportDashboardController extends Controller
         }
 
         return $query
+            ->when(filled($filters['q']), function (Builder $builder) use ($filters): Builder {
+                $term = '%'.mb_strtolower($filters['q']).'%';
+
+                return $builder->where(function (Builder $search) use ($term): void {
+                    $search
+                        ->whereRaw('LOWER(reporting_period_label) LIKE ?', [$term])
+                        ->orWhereRaw('LOWER(performance_rating) LIKE ?', [$term])
+                        ->orWhereHas('form', fn (Builder $form): Builder => $form
+                            ->whereRaw('LOWER(title) LIKE ?', [$term])
+                            ->orWhereRaw('LOWER(code) LIKE ?', [$term]))
+                        ->orWhereHas('thinkTank', fn (Builder $thinkTank): Builder => $thinkTank
+                            ->whereRaw('LOWER(name) LIKE ?', [$term])
+                            ->orWhereRaw('LOWER(country) LIKE ?', [$term]))
+                        ->orWhereHas('projectComponent', fn (Builder $component): Builder => $component
+                            ->whereRaw('LOWER(name) LIKE ?', [$term])
+                            ->orWhereRaw('LOWER(project_id) LIKE ?', [$term]))
+                        ->orWhereHas('portfolio', fn (Builder $portfolio): Builder => $portfolio
+                            ->whereRaw('LOWER(name) LIKE ?', [$term]));
+                });
+            })
             ->when(filled($filters['reporting_year']), fn (Builder $builder): Builder => $builder
                 ->where('reporting_year', $filters['reporting_year']))
             ->when(filled($filters['reporting_period_type']), fn (Builder $builder): Builder => $builder
@@ -317,7 +485,12 @@ class MePerformanceReportDashboardController extends Controller
             ->when(filled($filters['thematic_area_id']), fn (Builder $builder): Builder => $builder
                 ->where('portfolio_id', $filters['thematic_area_id']))
             ->when(filled($filters['status']), fn (Builder $builder): Builder => $this
-                ->applyStageFilter($builder, $filters['status']));
+                ->applyStageFilter($builder, $filters['status']))
+            ->when(filled($filters['performance_rating']), fn (Builder $builder): Builder => $filters['performance_rating'] === 'not_rated'
+                ? $builder->where(function (Builder $rating): void {
+                    $rating->whereNull('performance_rating')->orWhere('performance_rating', 'not_rated');
+                })
+                : $builder->where('performance_rating', $filters['performance_rating']));
     }
 
     private function applyStageFilter(Builder $query, string $stage): Builder
@@ -333,7 +506,7 @@ class MePerformanceReportDashboardController extends Controller
                     ->where('action', 'returned_for_correction')),
             'submitted' => $query->where('status', MePerformanceReport::STATUS_SUBMITTED),
             'verified' => $query->where('status', MePerformanceReport::STATUS_VERIFIED),
-            'approved' => $query->whereIn('status', [MePerformanceReport::STATUS_REVIEWED, MePerformanceReport::STATUS_APPROVED]),
+            'approved' => $query->where('status', MePerformanceReport::STATUS_APPROVED),
             'archived' => $query->where('status', MePerformanceReport::STATUS_ARCHIVED),
             default => $query,
         };
@@ -347,8 +520,13 @@ class MePerformanceReportDashboardController extends Controller
         $resultsLevel = trim((string) $request->query('results_level'));
         $status = trim((string) $request->query('status'));
         $thinkTank = trim((string) $request->query('think_tank_id'));
+        $performanceRating = trim((string) $request->query('performance_rating'));
+        $query = trim((string) $request->query('q'));
+        $sort = trim((string) $request->query('sort', 'latest_period'));
+        $perPage = (int) $request->query('per_page', 15);
 
         return [
+            'q' => $query !== '' ? Str::limit($query, 120, '') : null,
             'reporting_year' => $year && $year >= 2000 && $year <= 2100 ? $year : null,
             'reporting_period_type' => array_key_exists($periodType, MePerformanceReport::REPORTING_PERIOD_TYPES) ? $periodType : null,
             'reporting_period_label' => $periodType && isset(MePerformanceReport::PERIOD_LABELS[$periodType][$periodLabel]) ? $periodLabel : null,
@@ -362,6 +540,9 @@ class MePerformanceReportDashboardController extends Controller
             'indicator_id' => $this->uuidOrNull($request->query('indicator_id')),
             'thematic_area_id' => $this->uuidOrNull($request->query('thematic_area_id')),
             'status' => array_key_exists($status, self::STAGES) ? $status : null,
+            'performance_rating' => array_key_exists($performanceRating, MePerformanceReport::PERFORMANCE_RATINGS)
+                ? $performanceRating
+                : null,
             'geographic_scope' => $this->allowedFilter($request, 'geographic_scope', MeIndicatorAchievement::GEOGRAPHIC_SCOPES),
             'country' => $request->filled('country') ? trim((string) $request->query('country')) : null,
             'rec' => $this->allowedFilter($request, 'rec', MeIndicatorAchievement::RECS),
@@ -371,6 +552,10 @@ class MePerformanceReportDashboardController extends Controller
             'gender' => $this->allowedFilter($request, 'gender', MeIndicatorAchievement::GENDERS),
             'age_group' => $this->allowedFilter($request, 'age_group', MeIndicatorAchievement::AGE_GROUPS),
             'stakeholder_category' => $this->allowedFilter($request, 'stakeholder_category', MeIndicatorAchievement::STAKEHOLDER_CATEGORIES),
+            'sort' => in_array($sort, ['latest_period', 'oldest_period', 'recently_updated', 'workflow_stage'], true)
+                ? $sort
+                : 'latest_period',
+            'per_page' => in_array($perPage, [15, 25, 50, 100], true) ? $perPage : 15,
         ];
     }
 
@@ -424,6 +609,7 @@ class MePerformanceReportDashboardController extends Controller
             'statuses' => collect(self::STAGES)->mapWithKeys(
                 fn (array $configuration, string $key): array => [$key => $configuration['label']]
             ),
+            'performance_ratings' => MePerformanceReport::PERFORMANCE_RATINGS,
             'geographic_scopes' => MeIndicatorAchievement::GEOGRAPHIC_SCOPES,
             'countries' => MeDisaggregationDimension::query()
                 ->where('code', 'country')
@@ -432,6 +618,8 @@ class MePerformanceReportDashboardController extends Controller
             'recs' => MeIndicatorAchievement::RECS,
             'institution_types' => MeIndicatorAchievement::INSTITUTION_TYPES,
             'institutions' => MeIndicatorAchievementDisaggregation::query()
+                ->whereHas('achievement', fn (Builder $achievement): Builder => $achievement
+                    ->whereIn('report_id', $reportIds))
                 ->whereNotNull('implementing_institution')
                 ->where('implementing_institution', '!=', '')
                 ->distinct()
@@ -489,8 +677,8 @@ class MePerformanceReportDashboardController extends Controller
 
         return match ($report->status) {
             MePerformanceReport::STATUS_SUBMITTED => 'submitted',
-            MePerformanceReport::STATUS_VERIFIED => 'verified',
-            MePerformanceReport::STATUS_REVIEWED, MePerformanceReport::STATUS_APPROVED => 'approved',
+            MePerformanceReport::STATUS_REVIEWED, MePerformanceReport::STATUS_VERIFIED => 'verified',
+            MePerformanceReport::STATUS_APPROVED => 'approved',
             MePerformanceReport::STATUS_ARCHIVED => 'archived',
             default => 'draft',
         };
@@ -536,19 +724,43 @@ class MePerformanceReportDashboardController extends Controller
         if ($drilldown === 'indicator_complete') {
             return $reports->filter(fn (MePerformanceReport $report): bool => $report->indicatorResults->isNotEmpty()
                 && $report->indicatorResults->every(
-                    fn ($result): bool => $result->actual_value !== null && filled($result->indicator_result_id)
+                    fn ($result): bool => $this->resultIsComplete($result)
                 ))->values();
         }
         if ($drilldown === 'indicator_incomplete') {
             return $reports->filter(fn (MePerformanceReport $report): bool => $report->indicatorResults->isEmpty()
                 || $report->indicatorResults->contains(
-                    fn ($result): bool => $result->actual_value === null || blank($result->indicator_result_id)
+                    fn ($result): bool => ! $this->resultIsComplete($result)
                 ))->values();
+        }
+        if ($drilldown === 'review_queue') {
+            return $reports->filter(fn (MePerformanceReport $report): bool => in_array(
+                $this->stageKey($report),
+                ['submitted', 'verified'],
+                true
+            ))->values();
+        }
+        if ($drilldown === 'submission_ready') {
+            return $reports->filter(fn (MePerformanceReport $report): bool => $report->isSubmissionReady())->values();
+        }
+        if ($drilldown === 'submission_incomplete') {
+            return $reports->reject(fn (MePerformanceReport $report): bool => $report->isSubmissionReady())->values();
+        }
+        if ($drilldown === 'evidence_present') {
+            return $reports->filter(fn (MePerformanceReport $report): bool => $report->documents->isNotEmpty())->values();
+        }
+        if ($drilldown === 'evidence_missing') {
+            return $reports->filter(fn (MePerformanceReport $report): bool => $report->documents->isEmpty())->values();
         }
         if ($drilldown === 'reviewed_decisions') {
             return $reports->filter(fn (MePerformanceReport $report): bool => $report->submitted_at !== null
                 && $report->reviewed_at !== null
                 && $report->reviewed_at->greaterThanOrEqualTo($report->submitted_at))->values();
+        }
+        if ($drilldown === 'approved_decisions') {
+            return $reports->filter(fn (MePerformanceReport $report): bool => $report->submitted_at !== null
+                && $report->approved_at !== null
+                && $report->approved_at->greaterThanOrEqualTo($report->submitted_at))->values();
         }
 
         return $reports;
@@ -562,7 +774,13 @@ class MePerformanceReportDashboardController extends Controller
             ...collect(array_keys(self::TIMELINESS))->map(fn (string $key): string => 'timeliness_'.$key)->all(),
             'indicator_complete',
             'indicator_incomplete',
+            'review_queue',
+            'submission_ready',
+            'submission_incomplete',
+            'evidence_present',
+            'evidence_missing',
             'reviewed_decisions',
+            'approved_decisions',
         ];
 
         return in_array($value, $allowed, true) ? $value : null;
@@ -587,8 +805,64 @@ class MePerformanceReportDashboardController extends Controller
         return match ($drilldown) {
             'indicator_complete' => 'Reports with complete indicator reporting',
             'indicator_incomplete' => 'Reports with incomplete indicator reporting',
-            'reviewed_decisions' => 'Reports included in average review and approval time',
+            'review_queue' => 'Reports requiring Secretariat review or final approval',
+            'submission_ready' => 'Reports with all seven required sections complete',
+            'submission_incomplete' => 'Reports with one or more required sections incomplete',
+            'evidence_present' => 'Reports with supporting evidence',
+            'evidence_missing' => 'Reports without supporting evidence',
+            'reviewed_decisions' => 'Reports included in average first-review time',
+            'approved_decisions' => 'Reports included in average final-approval time',
             default => 'All matching report records',
+        };
+    }
+
+    private function resultIsComplete(MePerformanceReportIndicatorResult $result): bool
+    {
+        $hasActual = $result->indicator?->value_type === 'milestone'
+            ? filled($result->actual_text)
+            : $result->actual_value !== null;
+
+        return $hasActual && filled($result->indicator_result_id);
+    }
+
+    private function decorateReport(MePerformanceReport $report): void
+    {
+        $resultTotal = $report->indicatorResults->count();
+        $resultComplete = $report->indicatorResults
+            ->filter(fn (MePerformanceReportIndicatorResult $result): bool => $this->resultIsComplete($result))
+            ->count();
+        $sections = collect($report->sectionCompletion());
+        $completedSections = $sections->where('status', 'complete')->count();
+
+        $report->setAttribute('dashboard_stage', $this->stageKey($report));
+        $report->setAttribute('dashboard_timeliness', $this->timelinessKey($report));
+        $report->setAttribute('indicator_results_count', $resultTotal);
+        $report->setAttribute('reported_indicator_results_count', $resultComplete);
+        $report->setAttribute('documents_count', $report->documents->count());
+        $report->setAttribute('dashboard_completed_sections', $completedSections);
+        $report->setAttribute('dashboard_missing_sections', max(0, 7 - $completedSections));
+        $report->setAttribute('dashboard_submission_ready', $sections->every(
+            fn (array $section): bool => $section['status'] === 'complete'
+        ));
+    }
+
+    private function applyRecordSort(Builder $query, string $sort): Builder
+    {
+        return match ($sort) {
+            'oldest_period' => $query
+                ->orderBy('reporting_year')
+                ->orderBy('reporting_period_type')
+                ->orderBy('reporting_period_label')
+                ->orderBy('created_at'),
+            'recently_updated' => $query->orderByDesc('updated_at')->orderByDesc('created_at'),
+            'workflow_stage' => $query
+                ->orderByRaw("CASE status WHEN 'submitted' THEN 1 WHEN 'verified' THEN 2 WHEN 'draft' THEN 3 WHEN 'approved' THEN 4 WHEN 'archived' THEN 5 ELSE 6 END")
+                ->orderByDesc('updated_at'),
+            default => $query
+                ->orderByDesc('reporting_year')
+                ->orderByDesc('reporting_period_type')
+                ->orderByDesc('reporting_period_label')
+                ->orderByDesc('updated_at'),
         };
     }
 

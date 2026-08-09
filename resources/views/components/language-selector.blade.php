@@ -17,6 +17,7 @@
     $uid = 'ls-' . $styleSlug . '-' . $languageSelectorInstance;
 @endphp
 
+@if ($style !== 'think-tank')
 @once
 <style>
 .lang-switcher {
@@ -316,6 +317,7 @@
 }
 </style>
 @endonce
+@endif
 
 <div class="lang-switcher lang-switcher--{{ $styleSlug }}" id="{{ $uid }}">
     <button type="button" class="lang-btn"
@@ -357,6 +359,7 @@
     </ul>
 </div>
 
+@if ($style !== 'think-tank')
 @once
 <script>
 document.addEventListener('click', function (event) {
@@ -380,3 +383,4 @@ document.addEventListener('keydown', function (event) {
 });
 </script>
 @endonce
+@endif

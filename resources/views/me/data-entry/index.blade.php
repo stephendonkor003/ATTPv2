@@ -512,6 +512,630 @@
             width: 100%;
         }
 
+        /* Page-specific visual system: deliberately isolated from the wider admin theme. */
+        .me-data-entry {
+            --me-green-950: #073b4c;
+            --me-green-800: #075c7a;
+            --me-green-700: #08708e;
+            --me-green-100: #eaf4f7;
+            --me-ink: #172b35;
+            --me-muted: #627680;
+            --me-border: #d9e4e8;
+            --me-surface: #f7f9fa;
+            padding-bottom: 2.5rem;
+            color: var(--me-ink);
+        }
+
+        .me-data-entry .me-hero {
+            padding: clamp(1.35rem, 2.5vw, 2rem);
+            border: 1px solid #cfdde2;
+            border-left: 5px solid var(--me-green-800);
+            border-radius: .9rem;
+            background: #fff;
+            box-shadow: 0 10px 28px rgba(18, 49, 63, .06);
+        }
+
+        .me-data-entry .me-hero::after {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 210px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(7, 92, 122, .045));
+            content: '';
+            pointer-events: none;
+        }
+
+        .me-data-entry .me-hero > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .me-data-entry .me-eyebrow {
+            color: var(--me-green-700);
+        }
+
+        .me-data-entry .me-hero h1 {
+            color: var(--me-green-950);
+            font-size: clamp(1.45rem, 2.6vw, 2.05rem);
+            letter-spacing: -.02em;
+        }
+
+        .me-data-entry .me-hero p {
+            max-width: 820px;
+            color: #5c707a;
+            font-size: .9rem;
+            line-height: 1.65;
+        }
+
+        .me-data-entry .me-primary-action {
+            min-height: 42px;
+            border-color: var(--me-green-800);
+            background: var(--me-green-800);
+            box-shadow: none;
+        }
+
+        .me-data-entry .me-report-dashboard-callout {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: .85rem;
+            padding: .9rem 1rem;
+            border: 1px solid #d5e2e7;
+            border-radius: .72rem;
+            background: #f7fafb;
+        }
+
+        .me-data-entry .me-report-dashboard-callout strong,
+        .me-data-entry .me-report-dashboard-callout small {
+            display: block;
+        }
+
+        .me-data-entry .me-report-dashboard-callout strong {
+            color: var(--me-green-950);
+            font-size: .8rem;
+        }
+
+        .me-data-entry .me-report-dashboard-callout small {
+            margin-top: .2rem;
+            color: var(--me-muted);
+            font-size: .69rem;
+        }
+
+        .me-data-entry .me-primary-action:hover,
+        .me-data-entry .me-primary-action:focus-visible {
+            border-color: #06475e;
+            background: #06475e;
+        }
+
+        .me-data-entry .btn-success,
+        .me-data-entry .btn-outline-success:hover,
+        .me-data-entry .btn-outline-success:focus-visible,
+        .me-data-entry .btn-outline-primary:hover,
+        .me-data-entry .btn-outline-primary:focus-visible {
+            border-color: var(--me-green-800);
+            background: var(--me-green-800);
+            color: #fff;
+        }
+
+        .me-data-entry .btn-outline-success,
+        .me-data-entry .btn-outline-primary {
+            border-color: #8ab2c0;
+            color: var(--me-green-800);
+        }
+
+        .me-data-entry .progress-bar.bg-success {
+            background-color: var(--me-green-700) !important;
+        }
+
+        .me-data-entry .me-summary-grid {
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: .75rem;
+            margin: .9rem 0;
+        }
+
+        .me-data-entry .me-summary-card {
+            min-height: 82px;
+            padding: .9rem 1rem;
+            border-color: #d9e4e8;
+            border-radius: .75rem;
+            box-shadow: none;
+        }
+
+        .me-data-entry .me-summary-card:hover {
+            border-color: #b9cdd5;
+        }
+
+        .me-data-entry .me-summary-icon {
+            width: 2.35rem;
+            height: 2.35rem;
+            border-radius: .6rem;
+            background: var(--me-green-100);
+            color: var(--me-green-800);
+        }
+
+        .me-data-entry .me-summary-value {
+            color: var(--me-green-950);
+            font-size: 1.2rem;
+        }
+
+        .me-data-entry .me-readiness {
+            overflow: hidden;
+            margin-bottom: 1rem;
+            border: 1px solid #d7e3e7;
+            border-radius: .8rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-readiness > summary {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto auto;
+            align-items: center;
+            gap: .75rem;
+            padding: .85rem 1rem;
+            cursor: pointer;
+            list-style: none;
+        }
+
+        .me-data-entry .me-readiness > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .me-data-entry .me-readiness > summary:focus-visible {
+            outline: 3px solid rgba(8, 112, 142, .16);
+            outline-offset: -3px;
+        }
+
+        .me-data-entry .me-readiness-summary-icon,
+        .me-data-entry .me-readiness-gate-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 2.1rem;
+            height: 2.1rem;
+            border-radius: .55rem;
+            background: var(--me-green-100);
+            color: var(--me-green-800);
+        }
+
+        .me-data-entry .me-readiness-summary-copy {
+            min-width: 0;
+        }
+
+        .me-data-entry .me-readiness-summary-copy strong,
+        .me-data-entry .me-readiness-summary-copy small {
+            display: block;
+        }
+
+        .me-data-entry .me-readiness-summary-copy strong {
+            color: var(--me-green-950);
+            font-size: .86rem;
+        }
+
+        .me-data-entry .me-readiness-summary-copy small {
+            margin-top: .15rem;
+            color: var(--me-muted);
+            font-size: .7rem;
+        }
+
+        .me-data-entry .me-readiness-state {
+            padding: .28rem .55rem;
+            border-radius: 999px;
+            background: #fff1d6;
+            color: #855600;
+            font-size: .65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .me-data-entry .me-readiness-state.is-ready {
+            background: #e3f4eb;
+            color: #176441;
+        }
+
+        .me-data-entry .me-readiness-chevron {
+            color: #73858d;
+            transition: transform .2s ease;
+        }
+
+        .me-data-entry .me-readiness[open] .me-readiness-chevron {
+            transform: rotate(180deg);
+        }
+
+        .me-data-entry .me-readiness-body {
+            padding: 1rem;
+            border-top: 1px solid #e1eaed;
+            background: #f8fafb;
+        }
+
+        .me-data-entry .me-readiness-progress {
+            display: grid;
+            grid-template-columns: minmax(240px, .8fr) minmax(260px, 1.2fr);
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: .9rem;
+        }
+
+        .me-data-entry .me-readiness-progress strong,
+        .me-data-entry .me-readiness-progress small {
+            display: block;
+        }
+
+        .me-data-entry .me-readiness-progress strong {
+            color: #253d48;
+            font-size: .79rem;
+        }
+
+        .me-data-entry .me-readiness-progress small {
+            margin-top: .18rem;
+            color: var(--me-muted);
+            font-size: .68rem;
+        }
+
+        .me-data-entry .me-readiness-progress .progress {
+            height: 7px;
+            background: #e3eaed;
+        }
+
+        .me-data-entry .me-readiness-progress .progress-bar {
+            background: var(--me-green-700);
+        }
+
+        .me-data-entry .me-readiness-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .65rem;
+        }
+
+        .me-data-entry .me-readiness-gate {
+            min-width: 0;
+            padding: .8rem;
+            border: 1px solid #dce6e9;
+            border-radius: .65rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-readiness-gate.needs-action {
+            border-color: #ecd9af;
+        }
+
+        .me-data-entry .me-readiness-gate-head {
+            display: flex;
+            align-items: flex-start;
+            gap: .6rem;
+        }
+
+        .me-data-entry .me-readiness-gate-head strong,
+        .me-data-entry .me-readiness-gate-head small {
+            display: block;
+            overflow-wrap: anywhere;
+        }
+
+        .me-data-entry .me-readiness-gate-head strong {
+            color: #263e49;
+            font-size: .75rem;
+        }
+
+        .me-data-entry .me-readiness-gate-head small {
+            margin-top: .15rem;
+            color: var(--me-green-700);
+            font-size: .67rem;
+            font-weight: 750;
+        }
+
+        .me-data-entry .me-readiness-gate p {
+            margin: .65rem 0;
+            color: var(--me-muted);
+            font-size: .68rem;
+            line-height: 1.45;
+        }
+
+        .me-data-entry .me-readiness-gate a {
+            color: var(--me-green-800);
+            font-size: .68rem;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .me-data-entry .me-readiness-gate a:hover {
+            text-decoration: underline;
+        }
+
+        .me-data-entry .me-tabs {
+            gap: .25rem;
+            margin-bottom: .85rem;
+            padding: .28rem;
+            border-color: #d4e1e5;
+            border-radius: .72rem;
+            box-shadow: none;
+        }
+
+        .me-data-entry .me-tab {
+            min-height: 42px;
+            border: 1px solid transparent;
+            border-radius: .5rem;
+            color: #526873;
+            font-size: .74rem;
+        }
+
+        .me-data-entry .me-tab:hover,
+        .me-data-entry .me-tab:focus-visible {
+            border-color: #c9dce3;
+            background: #f2f7f9;
+            color: var(--me-green-950);
+        }
+
+        .me-data-entry .me-tab.active {
+            border-color: var(--me-green-800);
+            background: var(--me-green-800);
+            box-shadow: none;
+        }
+
+        .me-data-entry .me-workflow-guide,
+        .me-data-entry .me-workflow-guide.me-report-lifecycle {
+            grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+            gap: 0;
+            overflow: hidden;
+            margin: .85rem 0;
+            border: 1px solid #d9e4e8;
+            border-radius: .75rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-workflow-step {
+            min-width: 0;
+            border: 0;
+            border-right: 1px solid #e0e8eb;
+            border-radius: 0;
+            background: #fff;
+        }
+
+        .me-data-entry .me-workflow-step:last-child {
+            border-right: 0;
+        }
+
+        .me-data-entry .me-workflow-number {
+            width: 1.85rem;
+            height: 1.85rem;
+            background: var(--me-green-100);
+            color: var(--me-green-800);
+        }
+
+        .me-data-entry .me-panel {
+            overflow: hidden;
+            border-color: #d7e3e7;
+            border-radius: .8rem;
+            box-shadow: 0 7px 22px rgba(18, 49, 63, .045);
+        }
+
+        .me-data-entry .me-panel-header {
+            padding: 1rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-panel-body {
+            padding: 1rem;
+        }
+
+        .me-data-entry .me-form-section {
+            min-width: 0;
+            padding: 1rem;
+            border: 1px solid #e0e8eb;
+            border-radius: .7rem;
+            background: #fafcfc;
+        }
+
+        .me-data-entry .me-form-section + .me-form-section {
+            margin-top: .9rem;
+        }
+
+        .me-data-entry .row,
+        .me-data-entry .row > *,
+        .me-data-entry form,
+        .me-data-entry .me-filter-grid > * {
+            min-width: 0;
+        }
+
+        .me-data-entry .form-control,
+        .me-data-entry .form-select {
+            width: 100%;
+            max-width: 100%;
+            border-color: #cbd9de;
+            background-color: #fff;
+        }
+
+        .me-data-entry .form-control:focus,
+        .me-data-entry .form-select:focus {
+            border-color: var(--me-green-700);
+            box-shadow: 0 0 0 .18rem rgba(8, 112, 142, .12);
+        }
+
+        .me-data-entry .me-section-builder {
+            border-color: #d9e4e8;
+            border-top-width: 4px;
+            background: #f9fbfb;
+            box-shadow: none;
+        }
+
+        .me-data-entry .me-section-builder-header {
+            background: rgba(255, 255, 255, .72);
+        }
+
+        .me-data-entry .me-builder-row {
+            border-color: #dce6e9;
+            background: #fff;
+            box-shadow: 0 3px 10px rgba(18, 49, 63, .035);
+        }
+
+        .me-data-entry .me-builder-heading {
+            padding-bottom: .7rem;
+            border-bottom: 1px solid #e5ecef;
+        }
+
+        .me-data-entry .me-builder-actions .btn:disabled {
+            opacity: .38;
+        }
+
+        .me-data-entry .me-member-picker {
+            scrollbar-color: #8aaab6 #edf3f5;
+            scrollbar-width: thin;
+        }
+
+        .me-data-entry .me-member-tools {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: .55rem;
+            margin-top: .55rem;
+        }
+
+        .me-data-entry .me-member-count {
+            color: var(--me-muted);
+            font-size: .7rem;
+            font-weight: 700;
+        }
+
+        .me-data-entry .me-member-bulk-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+        }
+
+        .me-data-entry .me-register-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: .65rem;
+            padding: .62rem 1rem;
+            border-bottom: 1px solid #dfe8eb;
+            background: #f8fafb;
+            color: var(--me-muted);
+            font-size: .69rem;
+        }
+
+        .me-data-entry .me-register-toolbar strong {
+            color: var(--me-green-950);
+        }
+
+        .me-data-entry .me-data-table-region {
+            width: 100%;
+            max-height: min(68vh, 720px);
+            overflow: auto;
+            overscroll-behavior: contain;
+            scrollbar-color: #88a8b4 #edf3f5;
+            scrollbar-gutter: stable;
+        }
+
+        .me-data-entry .me-data-table-region:focus-visible {
+            outline: 3px solid rgba(8, 112, 142, .16);
+            outline-offset: -3px;
+        }
+
+        .me-data-entry .me-data-table-region::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+
+        .me-data-entry .me-data-table-region::-webkit-scrollbar-track {
+            background: #edf3f5;
+        }
+
+        .me-data-entry .me-data-table-region::-webkit-scrollbar-thumb {
+            border: 3px solid #edf3f5;
+            border-radius: 999px;
+            background: #88a8b4;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table {
+            width: 100%;
+            min-width: 1160px;
+            table-layout: auto;
+        }
+
+        .me-data-entry .me-data-table-region .me-submission-table {
+            min-width: 1340px;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table th {
+            top: 0;
+            z-index: 3;
+            padding: .7rem .8rem;
+            background: #f4f7f8;
+            color: #4e6570;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table td {
+            padding: .8rem;
+            background: #fff;
+            overflow-wrap: anywhere;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table tbody tr:hover td {
+            background: #f8fbfc;
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table th:last-child,
+        .me-data-entry .me-data-table-region .me-register-table td:last-child {
+            position: sticky;
+            right: 0;
+            z-index: 2;
+            background: #fff;
+            box-shadow: -9px 0 14px -14px rgba(20, 55, 70, .8);
+        }
+
+        .me-data-entry .me-data-table-region .me-register-table th:last-child {
+            z-index: 5;
+            background: #f4f7f8;
+        }
+
+        .me-data-entry .me-data-table-region .me-row-actions {
+            flex-wrap: nowrap;
+        }
+
+        .me-data-entry .me-data-table-region .me-row-actions .btn {
+            white-space: nowrap;
+        }
+
+        .me-data-entry .me-status.open,
+        .me-data-entry .me-status.active,
+        .me-data-entry .me-status.published,
+        .me-data-entry .me-status.reviewed,
+        .me-data-entry .me-status.approved,
+        .me-data-entry .me-status.validated,
+        .me-data-entry .me-status.verified,
+        .me-data-entry .me-status.completed {
+            background: #e1f2eb;
+            color: #166344;
+        }
+
+        .me-data-entry .me-status.planned,
+        .me-data-entry .me-status.under_review,
+        .me-data-entry .me-status.resubmitted {
+            background: #e8f1f8;
+            color: #315f7d;
+        }
+
+        .me-data-entry .me-status.rejected {
+            background: #f4e8e8;
+            color: #8c4141;
+        }
+
+        .me-data-entry .me-form-footer {
+            position: sticky;
+            bottom: 0;
+            z-index: 6;
+            margin: 1rem -1rem -1rem;
+            padding: .85rem 1rem;
+            border-top-color: #d7e3e7;
+            background: rgba(255, 255, 255, .96);
+            backdrop-filter: blur(8px);
+        }
+
         @media (max-width: 991.98px) {
             .me-data-entry .me-filter-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -519,6 +1143,10 @@
             }
 
             .me-data-entry .me-filter-grid.me-submission-filter-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .me-data-entry .me-readiness-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
@@ -529,8 +1157,27 @@
                 grid-template-columns: 1fr;
             }
 
+            .me-data-entry .me-workflow-step {
+                border-right: 0;
+                border-bottom: 1px solid #e0e8eb;
+            }
+
+            .me-data-entry .me-workflow-step:last-child {
+                border-bottom: 0;
+            }
+
+            .me-data-entry .me-readiness-progress,
+            .me-data-entry .me-readiness-grid {
+                grid-template-columns: 1fr;
+            }
+
             .me-data-entry .me-panel-header {
                 align-items: stretch;
+            }
+
+            .me-data-entry .me-report-dashboard-callout {
+                align-items: stretch;
+                flex-direction: column;
             }
 
             .me-data-entry .me-filter-grid {
@@ -556,6 +1203,34 @@
                 width: 100%;
             }
         }
+
+        @media (max-width: 575.98px) {
+            .me-data-entry .me-readiness > summary {
+                grid-template-columns: auto minmax(0, 1fr) auto;
+            }
+
+            .me-data-entry .me-readiness-state {
+                grid-column: 2;
+                justify-self: start;
+            }
+
+            .me-data-entry .me-readiness-chevron {
+                grid-column: 3;
+                grid-row: 1 / span 2;
+            }
+
+            .me-data-entry .me-panel-body,
+            .me-data-entry .me-form-section {
+                padding: .85rem;
+            }
+
+            .me-data-entry .me-form-footer {
+                margin-right: -.85rem;
+                margin-bottom: -.85rem;
+                margin-left: -.85rem;
+                padding: .8rem .85rem;
+            }
+        }
     </style>
 @endpush
 
@@ -571,9 +1246,19 @@
         ];
         $statusChoices = match ($tab) {
             'forms' => ['draft' => 'Draft', 'published' => 'Published', 'archived' => 'Archived'],
-            'periods' => ['draft' => 'Draft', 'active' => 'Active', 'closed' => 'Closed'],
+            'periods' => ['planned' => 'Planned', 'open' => 'Open', 'under_review' => 'Under review', 'closed' => 'Closed', 'completed' => 'Completed'],
             'reports' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'verified' => 'Verified', 'approved' => 'Approved', 'reviewed' => 'Legacy approved', 'archived' => 'Archived'],
-            'submissions' => ['draft' => 'Draft', 'submitted' => 'Submitted', 'returned' => 'Returned', 'validated' => 'Validated', 'approved' => 'Approved'],
+            'submissions' => [
+                'draft' => 'Draft',
+                'submitted' => 'Submitted',
+                'resubmitted' => 'Resubmitted',
+                'under_review' => 'Under review',
+                'returned' => 'Returned',
+                'validated' => 'Validated',
+                'verified' => 'Verified',
+                'approved' => 'Approved',
+                'rejected' => 'Rejected',
+            ],
             default => ['draft' => 'Draft', 'open' => 'Open', 'closed' => 'Closed'],
         };
         $createTarget = match ($tab) {
@@ -599,7 +1284,13 @@
                     </p>
                 </div>
 
-                @if ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
+                @if ($canManage && $tab === 'submissions')
+                    <div class="me-hero-actions">
+                        <a href="{{ route('budget.me.submission-reviews.index') }}" class="me-primary-action">
+                            <i class="feather-check-square" aria-hidden="true"></i> Open review queue
+                        </a>
+                    </div>
+                @elseif ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
                     <div class="me-hero-actions">
                         <a href="{{ $createHref }}" class="me-primary-action">
                             <i class="feather-plus" aria-hidden="true"></i> {{ $createTarget['label'] }}
@@ -608,59 +1299,6 @@
                 @endif
             </div>
         </header>
-
-        @if ($canManage)
-            <section class="card border-0 shadow-sm mb-4" aria-labelledby="reporting-readiness-title">
-                <div class="card-header bg-white border-bottom d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 py-3">
-                    <div>
-                        <div class="text-uppercase text-muted small fw-semibold">Live commissioning audit</div>
-                        <h2 class="h5 mb-1" id="reporting-readiness-title">Think-tank reporting readiness</h2>
-                        <p class="text-muted small mb-0">
-                            These controls are read directly from the current database. Reporting becomes available
-                            only after every required gate is complete.
-                        </p>
-                    </div>
-                    <div class="text-lg-end flex-shrink-0">
-                        <span class="badge {{ ($reportingReadiness['ready'] ?? false) ? 'bg-success' : 'bg-warning text-dark' }} px-3 py-2">
-                            {{ ($reportingReadiness['ready'] ?? false) ? 'Ready for reporting' : 'Setup incomplete' }}
-                        </span>
-                        <div class="small text-muted mt-1">
-                            {{ number_format((int) ($reportingReadiness['completed'] ?? 0)) }} of
-                            {{ number_format((int) ($reportingReadiness['total'] ?? 0)) }} controls complete
-                        </div>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="progress mb-3" role="progressbar"
-                        aria-label="Reporting readiness"
-                        aria-valuenow="{{ (int) ($reportingReadiness['percentage'] ?? 0) }}"
-                        aria-valuemin="0" aria-valuemax="100" style="height: 8px;">
-                        <div class="progress-bar {{ ($reportingReadiness['ready'] ?? false) ? 'bg-success' : 'bg-warning' }}"
-                            style="width: {{ (int) ($reportingReadiness['percentage'] ?? 0) }}%"></div>
-                    </div>
-                    <div class="row g-3">
-                        @foreach (($reportingReadiness['gates'] ?? []) as $readinessGate)
-                            <div class="col-md-6 col-xl-4">
-                                <article class="border rounded-3 p-3 h-100 bg-light-subtle">
-                                    <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
-                                        <div class="fw-bold text-dark">{{ $readinessGate['label'] }}</div>
-                                        <span class="badge {{ $readinessGate['complete'] ? 'bg-success' : 'bg-danger' }}">
-                                            {{ $readinessGate['complete'] ? 'Complete' : 'Action required' }}
-                                        </span>
-                                    </div>
-                                    <div class="fw-semibold text-success mb-1">{{ $readinessGate['value'] }}</div>
-                                    <p class="text-muted small mb-3">{{ $readinessGate['detail'] }}</p>
-                                    <a href="{{ route($readinessGate['route'], $readinessGate['query']) }}"
-                                        class="btn btn-sm {{ $readinessGate['complete'] ? 'btn-outline-secondary' : 'btn-outline-success' }}">
-                                        {{ $readinessGate['action'] }} <i class="feather-arrow-right ms-1" aria-hidden="true"></i>
-                                    </a>
-                                </article>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            </section>
-        @endif
 
         <section class="me-summary-grid" aria-label="Data entry summary">
             <article class="me-summary-card">
@@ -681,16 +1319,69 @@
                 <span class="me-summary-icon"><i class="feather-send" aria-hidden="true"></i></span>
                 <div>
                     <div class="me-summary-value">{{ number_format((int) ($summary['submitted'] ?? 0)) }}</div>
-                    <div class="me-summary-label">Submitted for review</div>
+                    <div class="me-summary-label">Submitted or reviewed</div>
                 </div>
             </article>
+            @if ($canManage)
+                <article class="me-summary-card">
+                    <span class="me-summary-icon"><i class="feather-check-circle" aria-hidden="true"></i></span>
+                    <div>
+                        <div class="me-summary-value">{{ (int) ($reportingReadiness['percentage'] ?? 0) }}%</div>
+                        <div class="me-summary-label">Reporting readiness</div>
+                    </div>
+                </article>
+            @endif
         </section>
 
+        @if ($canManage)
+            <details class="me-readiness">
+                <summary>
+                    <span class="me-readiness-summary-icon"><i class="feather-shield" aria-hidden="true"></i></span>
+                    <span class="me-readiness-summary-copy">
+                        <strong id="reporting-readiness-title">Think-tank reporting readiness</strong>
+                        <small>{{ number_format((int) ($reportingReadiness['completed'] ?? 0)) }} of {{ number_format((int) ($reportingReadiness['total'] ?? 0)) }} setup controls complete</small>
+                    </span>
+                    <span class="me-readiness-state {{ ($reportingReadiness['ready'] ?? false) ? 'is-ready' : 'needs-action' }}">
+                        {{ ($reportingReadiness['ready'] ?? false) ? 'Ready' : 'Action required' }}
+                    </span>
+                    <i class="feather-chevron-down me-readiness-chevron" aria-hidden="true"></i>
+                </summary>
+                <div class="me-readiness-body" aria-labelledby="reporting-readiness-title">
+                    <div class="me-readiness-progress">
+                        <div>
+                            <strong>Commissioning checklist</strong>
+                            <small>Live controls from the current database. Complete every gate before reporting begins.</small>
+                        </div>
+                        <div class="progress" role="progressbar" aria-label="Reporting readiness" aria-valuenow="{{ (int) ($reportingReadiness['percentage'] ?? 0) }}" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar" style="width: {{ (int) ($reportingReadiness['percentage'] ?? 0) }}%"></div>
+                        </div>
+                    </div>
+                    <div class="me-readiness-grid">
+                        @foreach (($reportingReadiness['gates'] ?? []) as $readinessGate)
+                            <article class="me-readiness-gate {{ $readinessGate['complete'] ? 'is-complete' : 'needs-action' }}">
+                                <div class="me-readiness-gate-head">
+                                    <span class="me-readiness-gate-icon"><i class="{{ $readinessGate['complete'] ? 'feather-check' : 'feather-alert-circle' }}" aria-hidden="true"></i></span>
+                                    <div>
+                                        <strong>{{ $readinessGate['label'] }}</strong>
+                                        <small>{{ $readinessGate['value'] }}</small>
+                                    </div>
+                                </div>
+                                <p>{{ $readinessGate['detail'] }}</p>
+                                <a href="{{ route($readinessGate['route'], $readinessGate['query']) }}">
+                                    {{ $readinessGate['action'] }} <i class="feather-arrow-right" aria-hidden="true"></i>
+                                </a>
+                            </article>
+                        @endforeach
+                    </div>
+                </div>
+            </details>
+        @endif
+
         @if ($tab === 'reports')
-            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3 p-3 border rounded-3 bg-white">
+            <div class="me-report-dashboard-callout">
                 <div>
-                    <div class="fw-bold text-dark">Reporting performance dashboard</div>
-                    <div class="text-muted small">Analyze workflow distribution, deadlines, review time and indicator completeness, then drill into report records.</div>
+                    <strong>Reporting performance dashboard</strong>
+                    <small>Analyze workflow distribution, deadlines, review time and indicator completeness, then drill into report records.</small>
                 </div>
                 <a href="{{ route('budget.me.rebuild.reporting-dashboard') }}" class="btn btn-success flex-shrink-0">
                     <i class="feather-bar-chart-2 me-1" aria-hidden="true"></i>Open dashboard
@@ -1045,6 +1736,9 @@
                                         <div class="me-form-section-title mb-1">Form sections and questions</div>
                                         <div class="me-field-help mt-0">Group related questions into clearly coloured sections, then arrange them in the order participants should complete them.</div>
                                     </div>
+                                    @unless ($formLocked)
+                                        <span class="me-status planned" data-builder-counts aria-live="polite">1 section · 1 question</span>
+                                    @endunless
                                 </div>
 
                                 @if ($formLocked)
@@ -1357,14 +2051,14 @@
                             <h2 class="me-panel-title" id="period-form-title">{{ $editingPeriod ? 'Edit reporting period' : 'Create reporting period' }}</h2>
                             <p class="me-panel-subtitle">Periods are portfolio-specific windows used to organise one or more data collections.</p>
                         </div>
-                        @if ($editingPeriod)<span class="me-status {{ $editingPeriod->status }}">{{ $editingPeriod->status }}</span>@endif
+                        @if ($editingPeriod)<span class="me-status {{ $editingPeriod->lifecycle_status }}">{{ str($editingPeriod->lifecycle_status)->replace('_', ' ')->title() }}</span>@endif
                     </div>
                     <div class="me-panel-body">
-                        <form method="POST" action="{{ $editingPeriod ? route('budget.me.data-entry.periods.update', $editingPeriod) : route('budget.me.data-entry.periods.store') }}">
+                        <form method="POST" action="{{ $editingPeriod ? route('budget.me.data-entry.periods.update', $editingPeriod) : route('budget.me.data-entry.periods.store') }}" data-period-form>
                             @csrf
                             @if ($editingPeriod) @method('PUT') @endif
 
-                            <div class="row g-3">
+                            <div class="row g-3 me-form-section">
                                 <div class="col-lg-6">
                                     <label class="form-label" for="period-portfolio">Portfolio <span class="text-danger">*</span></label>
                                     <select id="period-portfolio" name="portfolio_id" class="form-select @error('portfolio_id') is-invalid @enderror" required>
@@ -1383,7 +2077,7 @@
                                 <div class="col-lg-3">
                                     <label class="form-label" for="period-type">Period type <span class="text-danger">*</span></label>
                                     <select id="period-type" name="period_type" class="form-select @error('period_type') is-invalid @enderror" required>
-                                        @foreach (['year' => 'Year', 'quarter' => 'Quarter', 'month' => 'Month', 'custom' => 'Custom'] as $typeValue => $typeLabel)
+                                        @foreach (['month' => 'Monthly', 'quarter' => 'Quarterly', 'semi_annual' => 'Semi-Annual', 'year' => 'Year', 'annual' => 'Annual', 'custom' => 'Custom'] as $typeValue => $typeLabel)
                                             <option value="{{ $typeValue }}" @selected(old('period_type', $editingPeriod?->period_type ?? 'quarter') === $typeValue)>{{ $typeLabel }}</option>
                                         @endforeach
                                     </select>
@@ -1405,13 +2099,38 @@
                                     @error('period_end')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 </div>
                                 <div class="col-lg-2 col-md-4">
-                                    <label class="form-label" for="period-status">Status <span class="text-danger">*</span></label>
-                                    <select id="period-status" name="status" class="form-select @error('status') is-invalid @enderror" required>
-                                        @foreach (['draft' => 'Draft', 'active' => 'Active', 'closed' => 'Closed'] as $statusValue => $statusLabel)
-                                            <option value="{{ $statusValue }}" @selected(old('status', $editingPeriod?->status ?? 'draft') === $statusValue)>{{ $statusLabel }}</option>
+                                    <label class="form-label" for="period-status">Workflow status <span class="text-danger">*</span></label>
+                                    <select id="period-status" name="lifecycle_status" class="form-select @error('lifecycle_status') is-invalid @enderror" required>
+                                        @foreach (['planned' => 'Planned', 'open' => 'Open', 'closed' => 'Closed', 'under_review' => 'Under review', 'completed' => 'Completed'] as $statusValue => $statusLabel)
+                                            <option value="{{ $statusValue }}" @selected(old('lifecycle_status', $editingPeriod?->lifecycle_status ?? 'planned') === $statusValue)>{{ $statusLabel }}</option>
                                         @endforeach
                                     </select>
-                                    @error('status')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    @error('lifecycle_status')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label" for="period-year">Reporting year <span class="text-danger">*</span></label>
+                                    <input type="number" min="2000" max="2100" id="period-year" name="reporting_year" class="form-control @error('reporting_year') is-invalid @enderror" value="{{ old('reporting_year', $editingPeriod?->reporting_year ?? now()->year) }}" required>
+                                    @error('reporting_year')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label" for="submission-opens">Submission opens</label>
+                                    <input type="datetime-local" id="submission-opens" name="submission_opens_at" class="form-control @error('submission_opens_at') is-invalid @enderror" value="{{ old('submission_opens_at', $editingPeriod?->submission_opens_at?->format('Y-m-d\\TH:i')) }}">
+                                    @error('submission_opens_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label" for="submission-deadline">Submission deadline</label>
+                                    <input type="datetime-local" id="submission-deadline" name="submission_deadline" class="form-control @error('submission_deadline') is-invalid @enderror" value="{{ old('submission_deadline', $editingPeriod?->submission_deadline?->format('Y-m-d\\TH:i')) }}">
+                                    @error('submission_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label" for="review-deadline">Review deadline</label>
+                                    <input type="datetime-local" id="review-deadline" name="review_deadline" class="form-control @error('review_deadline') is-invalid @enderror" value="{{ old('review_deadline', $editingPeriod?->review_deadline?->format('Y-m-d\\TH:i')) }}">
+                                    @error('review_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-lg-9">
+                                    <label class="form-label" for="period-instructions">Instructions</label>
+                                    <textarea id="period-instructions" name="instructions" class="form-control @error('instructions') is-invalid @enderror" rows="2" maxlength="5000" placeholder="Explain submission expectations, evidence requirements, and review timing.">{{ old('instructions', $editingPeriod?->instructions) }}</textarea>
+                                    @error('instructions')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 </div>
                             </div>
 
@@ -1529,6 +2248,13 @@
                                         <div class="p-4 text-center me-muted small">No active think tanks are available for assignment.</div>
                                     @endforelse
                                 </div>
+                                <div class="me-member-tools">
+                                    <span class="me-member-count" data-member-count aria-live="polite">0 think tanks selected</span>
+                                    <div class="me-member-bulk-actions">
+                                        <button type="button" class="btn btn-sm btn-light border" data-member-select-visible>Select visible</button>
+                                        <button type="button" class="btn btn-sm btn-light border" data-member-clear-visible>Clear visible</button>
+                                    </div>
+                                </div>
                                 @error('member_ids')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
                                 @error('member_ids.*')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
                             </div>
@@ -1581,7 +2307,11 @@
                             <p class="me-panel-subtitle">{{ $registerSubtitle }}</p>
                         </div>
 
-                        @if ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
+                        @if ($canManage && $tab === 'submissions')
+                            <a href="{{ route('budget.me.submission-reviews.index') }}" class="btn btn-sm btn-outline-primary flex-shrink-0">
+                                <i class="feather-check-square me-1" aria-hidden="true"></i>Open full review queue
+                            </a>
+                        @elseif ($canManage && $createTarget && ! $showFormBuilder && ! $showPeriodForm && ! $showCollectionForm)
                             <a href="{{ $createHref }}" class="btn btn-sm btn-outline-success flex-shrink-0">
                                 <i class="feather-plus me-1" aria-hidden="true"></i>{{ $createTarget['label'] }}
                             </a>
@@ -1654,8 +2384,19 @@
                             </a>
                         @endif
                     </div>
-                @elseif ($tab === 'forms')
-                    <div class="table-responsive me-register-desktop">
+                @else
+                    @if ($tab !== 'submissions')
+                        <div class="me-register-toolbar" aria-live="polite">
+                            <span>
+                                Showing <strong>{{ number_format((int) $currentPaginator->firstItem()) }}&ndash;{{ number_format((int) $currentPaginator->lastItem()) }}</strong>
+                                of <strong>{{ number_format((int) $currentPaginator->total()) }}</strong> {{ \Illuminate\Support\Str::plural('record', $currentPaginator->total()) }}
+                            </span>
+                            <span class="me-register-desktop"><i class="feather-move me-1" aria-hidden="true"></i>Scroll to view every column</span>
+                        </div>
+                    @endif
+
+                    @if ($tab === 'forms')
+                    <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable form template register" tabindex="0">
                         <table class="table me-register-table align-middle">
                             <caption class="visually-hidden">Collection form templates</caption>
                             <thead>
@@ -1752,7 +2493,7 @@
                         @endforeach
                     </div>
                 @elseif ($tab === 'periods')
-                    <div class="table-responsive me-register-desktop">
+                    <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable reporting period register" tabindex="0">
                         <table class="table me-register-table align-middle">
                             <caption class="visually-hidden">Portfolio reporting periods</caption>
                             <thead>
@@ -1768,7 +2509,7 @@
                                 @foreach ($periods as $period)
                                     <tr>
                                         <td><span class="me-code">{{ $period->code }}</span><div class="me-record-title">{{ $period->label }}</div><div class="me-record-meta">{{ ucfirst($period->period_type) }}</div></td>
-                                        <td><div class="small fw-semibold text-dark">{{ $period->portfolio?->name ?: 'Portfolio unavailable' }}</div><span class="me-status {{ $period->status }} mt-2">{{ $period->status }}</span></td>
+                                        <td><div class="small fw-semibold text-dark">{{ $period->portfolio?->name ?: 'Portfolio unavailable' }}</div><span class="me-status {{ $period->lifecycle_status }} mt-2">{{ str($period->lifecycle_status)->replace('_', ' ')->title() }}</span></td>
                                         <td><div class="small fw-semibold text-dark">{{ $period->period_start?->format('d M Y') }} — {{ $period->period_end?->format('d M Y') }}</div><div class="me-record-meta">{{ $period->period_start && $period->period_end ? $period->period_start->diffInDays($period->period_end) + 1 : 0 }} calendar days</div></td>
                                         <td><div class="small fw-semibold text-dark">{{ number_format((int) $period->collections_count) }}</div><div class="me-record-meta">Collections</div></td>
                                         <td>
@@ -1786,7 +2527,7 @@
                     <div class="me-mobile-register">
                         @foreach ($periods as $period)
                             <article class="me-mobile-card">
-                                <div class="d-flex align-items-start justify-content-between gap-2"><div><span class="me-code">{{ $period->code }}</span><h3 class="me-record-title mb-0">{{ $period->label }}</h3></div><span class="me-status {{ $period->status }}">{{ $period->status }}</span></div>
+                                <div class="d-flex align-items-start justify-content-between gap-2"><div><span class="me-code">{{ $period->code }}</span><h3 class="me-record-title mb-0">{{ $period->label }}</h3></div><span class="me-status {{ $period->lifecycle_status }}">{{ str($period->lifecycle_status)->replace('_', ' ')->title() }}</span></div>
                                 <div class="me-mobile-facts">
                                     <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $period->portfolio?->name ?: 'Unavailable' }}</strong></div>
                                     <div class="me-mobile-fact"><small>Type</small><strong>{{ ucfirst($period->period_type) }}</strong></div>
@@ -1798,7 +2539,7 @@
                         @endforeach
                     </div>
                 @elseif ($tab === 'reports')
-                    <div class="table-responsive me-register-desktop">
+                    <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable performance report register" tabindex="0">
                         <table class="table me-register-table align-middle">
                             <caption class="visually-hidden">Quarterly performance reports</caption>
                             <thead>
@@ -1884,7 +2625,7 @@
                             <span><i class="feather-clock me-1" aria-hidden="true"></i>Newest activity first</span>
                         @endif
                     </div>
-                    <div class="table-responsive me-register-desktop">
+                    <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable participant submission register" tabindex="0">
                         <table class="table me-register-table me-submission-table align-middle">
                             <caption class="visually-hidden">Participant data submissions</caption>
                             <thead>
@@ -1908,6 +2649,7 @@
                                         $submissionParticipant = $assignment?->thinkTank;
                                         $submissionPeriod = $submissionCollection?->reportingPeriod;
                                         $indicatorUnit = $submissionIndicator?->unit?->symbol ?: $submissionIndicator?->unit?->name;
+                                        $submissionStatus = $submission->effectiveStatus();
                                     @endphp
                                     <tr>
                                         <td><div class="me-record-title">{{ $submissionPortfolio?->name ?: 'Portfolio unavailable' }}</div></td>
@@ -1932,7 +2674,7 @@
                                             </div>
                                         </td>
                                         <td>
-                                            <span class="me-status {{ $submission->status }}">{{ $submission->status }}</span>
+                                            <span class="me-status {{ $submissionStatus }}">{{ str($submissionStatus)->replace('_', ' ')->title() }}</span>
                                             <div class="me-record-meta">
                                                 @if ($submission->submitted_at)
                                                     Submitted {{ $submission->submitted_at->format('d M Y, H:i') }}
@@ -1946,10 +2688,15 @@
                                             <div class="me-submission-review">
                                                 <i class="{{ $submission->reviewed_at ? 'feather-check-circle' : 'feather-clock' }}" aria-hidden="true"></i>
                                                 <div>
-                                                    <div class="small fw-semibold text-dark">{{ $submission->reviewedBy?->name ?: ($submission->status === 'draft' ? 'Not ready for review' : 'Awaiting review') }}</div>
+                                                    <div class="small fw-semibold text-dark">{{ $submission->reviewedBy?->name ?: ($submissionStatus === 'draft' ? 'Not ready for review' : 'Awaiting review') }}</div>
                                                     <div class="me-record-meta">{{ $submission->reviewed_at?->format('d M Y, H:i') ?: 'No review recorded' }}</div>
                                                 </div>
                                             </div>
+                                            @if ($canManage)
+                                                <a href="{{ route('budget.me.submission-reviews.show', $submission) }}" class="btn btn-sm btn-outline-primary mt-2">
+                                                    <i class="feather-eye me-1" aria-hidden="true"></i>{{ $submissionStatus === 'draft' ? 'View submission' : 'Open review' }}
+                                                </a>
+                                            @endif
                                         </td>
                                     </tr>
                                 @endforeach
@@ -1965,6 +2712,7 @@
                                 $submissionPortfolio = $submissionForm?->portfolio;
                                 $submissionParticipant = $submission->assignment?->thinkTank;
                                 $submissionPeriod = $submissionCollection?->reportingPeriod;
+                                $submissionStatus = $submission->effectiveStatus();
                             @endphp
                             <article class="me-mobile-card">
                                 <div class="d-flex align-items-start justify-content-between gap-2">
@@ -1976,7 +2724,7 @@
                                             <div class="me-record-meta">Submitted by {{ $submission->submittedBy->name }}</div>
                                         @endif
                                     </div>
-                                    <span class="me-status {{ $submission->status }}">{{ $submission->status }}</span>
+                                    <span class="me-status {{ $submissionStatus }}">{{ str($submissionStatus)->replace('_', ' ')->title() }}</span>
                                 </div>
                                 <div class="me-mobile-facts">
                                     <div class="me-mobile-fact"><small>Portfolio</small><strong>{{ $submissionPortfolio?->name ?: 'Unavailable' }}</strong></div>
@@ -1989,15 +2737,20 @@
                                 <div class="me-submission-review">
                                     <i class="{{ $submission->reviewed_at ? 'feather-check-circle' : 'feather-clock' }}" aria-hidden="true"></i>
                                     <div class="me-record-meta mt-0">
-                                        Reviewer: {{ $submission->reviewedBy?->name ?: ($submission->status === 'draft' ? 'Not ready for review' : 'Awaiting review') }}
+                                        Reviewer: {{ $submission->reviewedBy?->name ?: ($submissionStatus === 'draft' ? 'Not ready for review' : 'Awaiting review') }}
                                         @if ($submission->reviewed_at)<br>{{ $submission->reviewed_at->format('d M Y, H:i') }}@endif
                                     </div>
                                 </div>
+                                @if ($canManage)
+                                    <a href="{{ route('budget.me.submission-reviews.show', $submission) }}" class="btn btn-sm btn-outline-primary mt-3">
+                                        <i class="feather-eye me-1" aria-hidden="true"></i>{{ $submissionStatus === 'draft' ? 'View submission' : 'Open review' }}
+                                    </a>
+                                @endif
                             </article>
                         @endforeach
                     </div>
                 @else
-                    <div class="table-responsive me-register-desktop">
+                    <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable data collection register" tabindex="0">
                         <table class="table me-register-table align-middle">
                             <caption class="visually-hidden">Data collections and progress</caption>
                             <thead>
@@ -2021,10 +2774,15 @@
                                         <td><div class="small fw-semibold text-dark">{{ number_format((int) $collection->assignments_count) }} think tanks</div><div class="me-record-meta">{{ $collection->assignments->take(2)->pluck('thinkTank.name')->filter()->join(', ') }}@if ($collection->assignments_count > 2) +{{ $collection->assignments_count - 2 }} more @endif</div></td>
                                         <td><div class="small fw-semibold text-dark">{{ $collection->submissions_count }} / {{ $collection->assignments_count }} submitted</div><div class="progress mt-2" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div></td>
                                         <td>
-                                            @if ($canManage && $collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                            @if ($canManage)
                                                 <div class="me-row-actions justify-content-end">
-                                                    <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a>
-                                                    <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock" aria-hidden="true"></i> Close</button></form>
+                                                    @if ($collection->submissions_count > 0)
+                                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'submissions', 'q' => $collection->form?->code]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-file-text" aria-hidden="true"></i> Submissions</a>
+                                                    @endif
+                                                    @if ($collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2" aria-hidden="true"></i> Edit</a>
+                                                        <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock" aria-hidden="true"></i> Close</button></form>
+                                                    @endif
                                                 </div>
                                             @elseif (! $canManage)
                                                 <div class="text-end me-muted small">View only</div>
@@ -2048,10 +2806,15 @@
                                     <div class="me-mobile-fact"><small>Submitted</small><strong>{{ $collection->submissions_count }} / {{ $collection->assignments_count }}</strong></div>
                                 </div>
                                 <div class="progress mb-3" style="height: 6px" role="progressbar" aria-label="Submission progress" aria-valuenow="{{ $completion }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ $completion }}%"></div></div>
-                                @if ($canManage && $collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                @if ($canManage)
                                     <div class="me-row-actions justify-content-start">
-                                        <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
-                                        <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock me-1" aria-hidden="true"></i>Close</button></form>
+                                        @if ($collection->submissions_count > 0)
+                                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'submissions', 'q' => $collection->form?->code]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-file-text me-1" aria-hidden="true"></i>Submissions</a>
+                                        @endif
+                                        @if ($collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                            <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'collections', 'edit_collection' => $collection->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
+                                            <form method="POST" action="{{ route('budget.me.data-entry.collections.close', $collection) }}" data-confirm="Close this collection? Participants will no longer be able to submit.">@csrf<button type="submit" class="btn btn-sm btn-outline-danger"><i class="feather-lock me-1" aria-hidden="true"></i>Close</button></form>
+                                        @endif
                                     </div>
                                 @endif
                             </article>
@@ -2061,6 +2824,7 @@
 
                 @if ($currentPaginator && $currentPaginator->hasPages())
                     <div class="me-pagination-wrap">{{ $currentPaginator->links() }}</div>
+                @endif
                 @endif
             </section>
         </div>
@@ -2255,6 +3019,7 @@
             const componentDirectorate = builder?.querySelector('[data-component-directorate]');
             const templateIndicatorSelect = builder?.querySelector('[data-template-indicator]');
             const templateIndicatorHelp = builder?.querySelector('[data-template-indicator-help]');
+            const builderCounts = builder?.querySelector('[data-builder-counts]');
             const sectionPalette = @json($sectionPalette ?? []);
 
             const filterTemplateComponents = () => {
@@ -2545,6 +3310,11 @@
                     if (sectionRemove) sectionRemove.disabled = sections.length === 1;
                     updateSectionColour(section);
                 });
+
+                if (builderCounts) {
+                    const questionCount = sectionList.querySelectorAll('[data-field-row]').length;
+                    builderCounts.textContent = `${sections.length} ${sections.length === 1 ? 'section' : 'sections'} · ${questionCount} ${questionCount === 1 ? 'question' : 'questions'}`;
+                }
             };
 
             const addQuestion = (section, focus = true) => {
@@ -2681,27 +3451,58 @@
                     filterTemplateIndicators();
                     sectionList.querySelectorAll('[data-indicator-select]').forEach(filterIndicatorOptions);
                 });
+                builder.addEventListener('submit', reindexBuilder);
+            }
+
+            const periodForm = document.querySelector('[data-period-form]');
+            if (periodForm) {
+                const periodStart = periodForm.querySelector('[name="period_start"]');
+                const periodEnd = periodForm.querySelector('[name="period_end"]');
+                const submissionOpens = periodForm.querySelector('[name="submission_opens_at"]');
+                const submissionDeadline = periodForm.querySelector('[name="submission_deadline"]');
+                const reviewDeadline = periodForm.querySelector('[name="review_deadline"]');
+                const updatePeriodDateLimits = () => {
+                    if (periodEnd) periodEnd.min = periodStart?.value || '';
+                    if (submissionOpens) submissionOpens.min = periodStart?.value ? `${periodStart.value}T00:00` : '';
+                    if (submissionDeadline) submissionDeadline.min = submissionOpens?.value || (periodStart?.value ? `${periodStart.value}T00:00` : '');
+                    if (reviewDeadline) reviewDeadline.min = submissionDeadline?.value || (periodEnd?.value ? `${periodEnd.value}T00:00` : '');
+                };
+                [periodStart, periodEnd, submissionOpens, submissionDeadline].forEach((control) => control?.addEventListener('change', updatePeriodDateLimits));
+                updatePeriodDateLimits();
             }
 
             const collectionForm = document.querySelector('[data-collection-form]');
             const collectionTemplate = collectionForm?.querySelector('[data-collection-template]');
             const collectionPeriod = collectionForm?.querySelector('[data-collection-period]');
+            const collectionPeriodHelp = collectionForm?.querySelector('[data-period-help]');
             const filterPeriods = () => {
                 if (!collectionTemplate || !collectionPeriod) return;
                 const selectedFormOption = collectionTemplate.options[collectionTemplate.selectedIndex];
                 const portfolioId = selectedFormOption?.dataset.portfolio || '';
                 let selectedStillAllowed = !collectionPeriod.value;
+                let availableCount = 0;
 
                 Array.from(collectionPeriod.options).forEach((option) => {
                     if (!option.value) return;
                     const allowed = portfolioId !== '' && option.dataset.portfolio === portfolioId;
                     option.hidden = !allowed;
                     option.disabled = !allowed;
+                    if (allowed) availableCount++;
                     if (allowed && option.selected) selectedStillAllowed = true;
                 });
 
                 if (!selectedStillAllowed) collectionPeriod.value = '';
                 collectionPeriod.disabled = portfolioId === '';
+                collectionPeriod.options[0].textContent = portfolioId === ''
+                    ? 'Choose a form template first'
+                    : (availableCount === 0 ? 'No open periods for this portfolio' : 'Choose reporting period');
+                if (collectionPeriodHelp) {
+                    collectionPeriodHelp.textContent = portfolioId === ''
+                        ? 'Select a form first to show periods from the same portfolio.'
+                        : (availableCount === 0
+                            ? 'This portfolio has no open reporting period. Create or open a period before saving the collection.'
+                            : `${availableCount} ${availableCount === 1 ? 'open period is' : 'open periods are'} available for the selected form.`);
+                }
             };
             if (collectionForm) {
                 filterPeriods();
@@ -2712,7 +3513,7 @@
                 const closesAt = collectionForm.querySelector('[name="closes_at"]');
                 const updateDateLimits = () => {
                     if (opensAt && dueAt) dueAt.min = opensAt.value;
-                    if (dueAt && closesAt) closesAt.min = dueAt.value;
+                    if (closesAt) closesAt.min = dueAt?.value || opensAt?.value || '';
                 };
                 opensAt?.addEventListener('change', updateDateLimits);
                 dueAt?.addEventListener('change', updateDateLimits);
@@ -2720,12 +3521,41 @@
             }
 
             const memberSearch = document.querySelector('[data-member-search]');
-            memberSearch?.addEventListener('input', () => {
+            const memberList = document.querySelector('[data-member-list]');
+            const memberCount = document.querySelector('[data-member-count]');
+            const memberOptions = () => Array.from(document.querySelectorAll('[data-member-option]'));
+            const updateMemberCount = () => {
+                if (!memberCount) return;
+                const options = memberOptions();
+                const selected = options.filter((option) => option.querySelector('input[type="checkbox"]')?.checked).length;
+                const visible = options.filter((option) => !option.classList.contains('is-hidden')).length;
+                memberCount.textContent = `${selected} ${selected === 1 ? 'think tank' : 'think tanks'} selected · ${visible} shown`;
+            };
+            const filterMembers = () => {
+                if (!memberSearch) return;
                 const term = memberSearch.value.trim().toLocaleLowerCase();
-                document.querySelectorAll('[data-member-option]').forEach((option) => {
+                memberOptions().forEach((option) => {
                     option.classList.toggle('is-hidden', term !== '' && !option.dataset.search.includes(term));
                 });
+                updateMemberCount();
+            };
+            memberSearch?.addEventListener('input', filterMembers);
+            memberList?.addEventListener('change', updateMemberCount);
+            document.querySelector('[data-member-select-visible]')?.addEventListener('click', () => {
+                memberOptions().filter((option) => !option.classList.contains('is-hidden')).forEach((option) => {
+                    const checkbox = option.querySelector('input[type="checkbox"]');
+                    if (checkbox && !checkbox.disabled) checkbox.checked = true;
+                });
+                updateMemberCount();
             });
+            document.querySelector('[data-member-clear-visible]')?.addEventListener('click', () => {
+                memberOptions().filter((option) => !option.classList.contains('is-hidden')).forEach((option) => {
+                    const checkbox = option.querySelector('input[type="checkbox"]');
+                    if (checkbox && !checkbox.disabled) checkbox.checked = false;
+                });
+                updateMemberCount();
+            });
+            updateMemberCount();
         });
     </script>
 @endpush

@@ -15,6 +15,16 @@ class MeReportingPeriod extends BaseModel
 
     public const TYPE_CUSTOM = 'custom';
 
+    public const TYPE_SEMI_ANNUAL = 'semi_annual';
+
+    public const TYPE_ANNUAL = 'annual';
+
+    public const LIFECYCLE_PLANNED = 'planned';
+    public const LIFECYCLE_OPEN = 'open';
+    public const LIFECYCLE_CLOSED = 'closed';
+    public const LIFECYCLE_UNDER_REVIEW = 'under_review';
+    public const LIFECYCLE_COMPLETED = 'completed';
+
     public const STATUS_DRAFT = 'draft';
 
     public const STATUS_ACTIVE = 'active';
@@ -33,11 +43,21 @@ class MeReportingPeriod extends BaseModel
         'status',
         'created_by',
         'updated_by',
+        'reporting_year',
+        'submission_opens_at',
+        'submission_deadline',
+        'review_deadline',
+        'lifecycle_status',
+        'instructions',
     ];
 
     protected $casts = [
         'period_start' => 'date',
         'period_end' => 'date',
+        'reporting_year' => 'integer',
+        'submission_opens_at' => 'datetime',
+        'submission_deadline' => 'datetime',
+        'review_deadline' => 'datetime',
     ];
 
     public function portfolio(): BelongsTo
@@ -77,7 +97,18 @@ class MeReportingPeriod extends BaseModel
 
     public function isActive(): bool
     {
-        return $this->status === self::STATUS_ACTIVE;
+        return $this->status === self::STATUS_ACTIVE
+            && in_array($this->lifecycle_status, [null, self::LIFECYCLE_OPEN], true);
+    }
+
+    public function isOpenForSubmission(): bool
+    {
+        if (! $this->isActive()) {
+            return false;
+        }
+
+        return (! $this->submission_opens_at || now()->greaterThanOrEqualTo($this->submission_opens_at))
+            && (! $this->submission_deadline || now()->lessThanOrEqualTo($this->submission_deadline));
     }
 
     public function isClosed(): bool

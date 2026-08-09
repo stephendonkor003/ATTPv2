@@ -1,6 +1,9 @@
 <?php
 
 use App\Models\Indicator;
+use App\Models\ConsortiumThinkTank;
+use App\Models\MeIndicatorAchievement;
+use App\Models\MeIndicatorAchievementDisaggregation;
 use App\Models\MePerformanceReport;
 use App\Models\MePerformanceReportIndicatorResult;
 use App\Models\ReportingFrequency;
@@ -105,6 +108,94 @@ it('suppresses overlapping approved results from the same organization and perio
     expect($row['value'])->toBe(10.0)
         ->and($row['organization_count'])->toBe(2)
         ->and($row['duplicate_result_count'])->toBe(1);
+});
+
+it('preserves qualitative milestone results with their reporting organization', function () {
+    $indicator = new Indicator([
+        'indicator_code' => 'INT C1.1',
+        'name' => 'Platform establishment milestone',
+        'value_type' => 'milestone',
+        'organization_rollup_method' => 'non_additive',
+    ]);
+    $indicator->id = '00000000-0000-0000-0000-000000000040';
+    $reports = collect([
+        ['tank' => '00000000-0000-0000-0000-000000000141', 'name' => 'Policy Centre Alpha', 'actual' => 'Governance charter approved'],
+        ['tank' => '00000000-0000-0000-0000-000000000142', 'name' => 'Policy Centre Beta', 'actual' => 'Secretariat established'],
+    ])->map(function (array $values, int $index) use ($indicator) {
+        $report = new MePerformanceReport(['think_tank_member_id' => $values['tank'], 'status' => 'approved']);
+        $report->id = '00000000-0000-0000-0000-00000000024'.$index;
+        $report->setRelation('thinkTank', new ConsortiumThinkTank(['name' => $values['name']]));
+        $result = new MePerformanceReportIndicatorResult([
+            'indicator_id' => $indicator->id,
+            'actual_text' => $values['actual'],
+        ]);
+        $result->setRelation('indicator', $indicator);
+        $result->setRelation('achievements', new EloquentCollection());
+        $report->setRelation('indicatorResults', new EloquentCollection([$result]));
+
+        return $report;
+    });
+
+    $row = app(MeConsolidatedReportingService::class)->build($reports)->first();
+
+    expect($row['value'])->toBeNull()
+        ->and($row['reported_value_count'])->toBe(2)
+        ->and($row['qualitative_values']->pluck('organization')->all())->toBe([
+            'Policy Centre Alpha',
+            'Policy Centre Beta',
+        ])
+        ->and($row['qualitative_values']->pluck('value')->all())->toBe([
+            'Governance charter approved',
+            'Secretariat established',
+        ]);
+});
+
+it('does not consolidate unrelated indicators from a report when disaggregation filters are active', function () {
+    $femaleIndicator = new Indicator([
+        'indicator_code' => 'PDO 1',
+        'name' => 'Female beneficiary indicator',
+        'organization_rollup_method' => 'sum',
+    ]);
+    $femaleIndicator->id = '00000000-0000-0000-0000-000000000051';
+    $maleIndicator = new Indicator([
+        'indicator_code' => 'PDO 2',
+        'name' => 'Male beneficiary indicator',
+        'organization_rollup_method' => 'sum',
+    ]);
+    $maleIndicator->id = '00000000-0000-0000-0000-000000000052';
+    $report = new MePerformanceReport([
+        'think_tank_member_id' => '00000000-0000-0000-0000-000000000151',
+        'status' => 'approved',
+    ]);
+    $report->setRelation('thinkTank', new ConsortiumThinkTank(['name' => 'Gender Evidence Centre']));
+
+    $resultFor = function (Indicator $indicator, string $gender, int $beneficiaries): MePerformanceReportIndicatorResult {
+        $breakdown = new MeIndicatorAchievementDisaggregation([
+            'gender' => $gender,
+            'beneficiary_count' => $beneficiaries,
+        ]);
+        $achievement = new MeIndicatorAchievement(['title' => $gender.' achievement']);
+        $achievement->setRelation('breakdowns', new EloquentCollection([$breakdown]));
+        $result = new MePerformanceReportIndicatorResult([
+            'indicator_id' => $indicator->id,
+            'actual_value' => $beneficiaries,
+        ]);
+        $result->setRelation('indicator', $indicator);
+        $result->setRelation('achievements', new EloquentCollection([$achievement]));
+
+        return $result;
+    };
+    $report->setRelation('indicatorResults', new EloquentCollection([
+        $resultFor($femaleIndicator, 'female', 7),
+        $resultFor($maleIndicator, 'male', 11),
+    ]));
+
+    $rows = app(MeConsolidatedReportingService::class)->build(collect([$report]), ['gender' => 'female']);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows->first()['indicator']->indicator_code)->toBe('PDO 1')
+        ->and($rows->first()['beneficiary_count'])->toBe(7)
+        ->and($rows->first()['gender']->get('female'))->toBe(7);
 });
 
 it('exposes the unified tracker, repository, matrix, focal and consolidated workflows', function () {

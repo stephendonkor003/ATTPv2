@@ -29,6 +29,12 @@ class Procurement extends BaseModel
         'estimated_budget',
         'status',
         'visibility_type',
+        'cover_image_path',
+        'publication_version',
+        'recalled_at',
+        'recalled_by',
+        'recall_reason',
+        'republished_at',
         'vendor_categories',
         'awarded_submission_id',
         'awarded_vendor_id',
@@ -39,6 +45,9 @@ class Procurement extends BaseModel
     protected $casts = [
         'application_start_date' => 'date',
         'application_end_date' => 'date',
+        'publication_version' => 'integer',
+        'recalled_at' => 'datetime',
+        'republished_at' => 'datetime',
         'vendor_categories' => 'array',
         'awarded_at' => 'datetime',
     ];
@@ -60,6 +69,17 @@ class Procurement extends BaseModel
         }
 
         return $today->lte($this->application_end_date);
+    }
+
+    public function getCoverImageUrlAttribute(): ?string
+    {
+        $path = str_replace('\\', '/', trim((string) $this->cover_image_path));
+
+        if ($path === '' || ! Str::startsWith($path, 'procurement-covers/') || str_contains($path, '../')) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($path);
     }
 
     public function autoCloseIfExpired(): bool
@@ -155,6 +175,11 @@ class Procurement extends BaseModel
         return $this->hasMany(EvaluationAssignment::class);
     }
 
+    public function thinkTankPlanningItem()
+    {
+        return $this->hasOne(ThinkTankProcurementItem::class, 'procurement_id');
+    }
+
     /* =========================================
      | ROUTE MODEL BINDING
      ========================================= */
@@ -215,6 +240,9 @@ class Procurement extends BaseModel
 
         static::deleting(function (Procurement $procurement) {
             Storage::disk('local')->deleteDirectory("procurements/{$procurement->id}");
+            if ($procurement->cover_image_path) {
+                Storage::disk('public')->delete($procurement->cover_image_path);
+            }
         });
     }
 

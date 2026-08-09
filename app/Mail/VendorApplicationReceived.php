@@ -6,10 +6,11 @@ use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class VendorApplicationReceived extends Mailable
+class VendorApplicationReceived extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -30,6 +31,7 @@ class VendorApplicationReceived extends Mailable
         $this->vendor = $vendor;
         $this->temporaryPassword = $temporaryPassword;
         $this->portalUrl = route('login');
+        $this->afterCommit();
     }
 
     public function build()

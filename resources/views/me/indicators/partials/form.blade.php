@@ -39,7 +39,7 @@
     $showConfigurationPortfolio = ($portfolios ?? collect())->count() > 1;
 @endphp
 
-<section class="me-panel" id="indicator-form" aria-labelledby="indicator-form-title">
+<section class="me-panel me-indicator-form-panel" id="indicator-form" aria-labelledby="indicator-form-title">
     <div class="me-panel-header">
         <div>
             <h2 class="me-panel-title" id="indicator-form-title">
@@ -58,7 +58,7 @@
             <span>All fields marked with <strong>*</strong> are required. Keep definitions concise and use the same unit for the baseline and target.</span>
         </div>
 
-        <form method="POST" action="{{ $formAction }}" novalidate data-indicator-form>
+        <form method="POST" action="{{ $formAction }}" class="me-indicator-editor" novalidate data-indicator-form>
             @csrf
             @if ($isEditing)
                 @method('PUT')
@@ -259,7 +259,7 @@
             <div class="me-form-section">
                 <h3 class="me-form-section-title">3. Measurement plan</h3>
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <div class="col-xl-3 col-lg-6">
                         <div class="me-field-label-row">
                             <label class="form-label" for="indicator-unit">Unit of measurement <span class="text-danger">*</span></label>
                             <a
@@ -299,7 +299,7 @@
                         ></small>
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-xl-3 col-lg-6">
                         <label class="form-label" for="indicator-baseline">Baseline <span class="text-danger">*</span></label>
                         <input
                             type="number"
@@ -314,7 +314,7 @@
                         @error('baseline_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-xl-3 col-lg-6">
                         <label class="form-label" for="indicator-annual-target">Annual target <span class="text-danger">*</span></label>
                         <input
                             type="number"
@@ -329,7 +329,7 @@
                         @error('annual_target')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-xl-3 col-lg-6">
                         <label class="form-label" for="indicator-target">Life-of-programme target <span class="text-danger">*</span></label>
                         <input
                             type="number"
@@ -344,7 +344,7 @@
                         @error('target_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-lg-6">
                         <label class="form-label" for="indicator-aggregation-method">Approved aggregation method <span class="text-danger">*</span></label>
                         <select
                             id="indicator-aggregation-method"
@@ -360,7 +360,7 @@
                         <small class="text-muted">Only “Sum” adds periods. Percentages, ratios, averages and other non-additive values are never summed.</small>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-lg-6">
                         <label class="form-label" for="indicator-organization-rollup">Cross-think-tank consolidation <span class="text-danger">*</span></label>
                         <select
                             id="indicator-organization-rollup"

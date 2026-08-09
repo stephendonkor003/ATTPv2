@@ -167,6 +167,7 @@ use App\Http\Controllers\System\{
     RoleController,
     PermissionController,
     UserAccessController,
+    ThinkTankUserController,
     MemberStateCommunicationAdminController,
     MemberStateQuestionAdminController,
     MemberStateNationalDataReviewController,
@@ -418,6 +419,18 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
                 ->name('permissions.sync');
 
         });
+
+        Route::middleware('permission:users.manage')
+            ->prefix('think-tank-users')
+            ->name('think-tank-users.')
+            ->controller(ThinkTankUserController::class)
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('/', 'store')->name('store');
+                Route::get('/{user}', 'show')->name('show');
+                Route::put('/{user}', 'update')->name('update');
+                Route::post('/{user}/reset-password', 'resetPassword')->name('reset-password');
+            });
 
 
         /*
@@ -1295,25 +1308,97 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->group(function () {
                 Route::get('results-framework-and-indicator-management', [MeModuleController::class, 'resultsFramework'])
                     ->name('results-framework');
-                Route::get('data-quality-and-approval-workflow', [MeModuleController::class, 'dataQuality'])
-                    ->name('data-quality');
-                Route::get('management-dashboard', [MeModuleController::class, 'managementDashboard'])
-                    ->name('management-dashboard');
-                Route::get('knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'index'])
-                    ->name('knowledge-repository');
-                Route::get('data-governance-framework', [MeModuleController::class, 'dataGovernance'])
+                Route::get('data-governance-framework', [\App\Http\Controllers\MeDataGovernanceController::class, 'index'])
                     ->name('data-governance');
+                Route::get('data-governance-framework/export/pdf', [\App\Http\Controllers\MeDataGovernanceController::class, 'pdf'])
+                    ->name('data-governance.pdf');
+                Route::get('data-governance-framework/export/csv', [\App\Http\Controllers\MeDataGovernanceController::class, 'csv'])
+                    ->name('data-governance.csv');
+                Route::post('data-governance-framework/controls', [\App\Http\Controllers\MeDataGovernanceController::class, 'store'])
+                    ->name('data-governance.controls.store');
+                Route::put('data-governance-framework/controls/{control}', [\App\Http\Controllers\MeDataGovernanceController::class, 'update'])
+                    ->name('data-governance.controls.update');
+                Route::post('data-governance-framework/controls/{control}/submit-review', [\App\Http\Controllers\MeDataGovernanceController::class, 'submitReview'])
+                    ->name('data-governance.controls.submit-review');
+                Route::post('data-governance-framework/controls/{control}/approve', [\App\Http\Controllers\MeDataGovernanceController::class, 'approve'])
+                    ->name('data-governance.controls.approve');
+                Route::post('data-governance-framework/controls/{control}/new-version', [\App\Http\Controllers\MeDataGovernanceController::class, 'newVersion'])
+                    ->name('data-governance.controls.new-version');
+                Route::post('data-governance-framework/controls/{control}/retire', [\App\Http\Controllers\MeDataGovernanceController::class, 'retire'])
+                    ->name('data-governance.controls.retire');
+                Route::post('data-governance-framework/controls/{control}/actions', [\App\Http\Controllers\MeDataGovernanceController::class, 'storeAction'])
+                    ->name('data-governance.actions.store');
+                Route::put('data-governance-framework/actions/{action}', [\App\Http\Controllers\MeDataGovernanceController::class, 'updateAction'])
+                    ->name('data-governance.actions.update');
+                Route::post('data-governance-framework/actions/{action}/resolve', [\App\Http\Controllers\MeDataGovernanceController::class, 'resolveAction'])
+                    ->name('data-governance.actions.resolve');
+                Route::post('data-governance-framework/actions/{action}/reopen', [\App\Http\Controllers\MeDataGovernanceController::class, 'reopenAction'])
+                    ->name('data-governance.actions.reopen');
             });
+
+        Route::get('me/rebuild/knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'index'])
+            ->name('me.rebuild.knowledge-repository');
+
+        Route::get('me/rebuild/management-dashboard', [\App\Http\Controllers\MeManagementDashboardController::class, 'index'])
+            ->middleware('permission:me.results.view|me.performance_reports.view|me.performance_reports.review|me.performance_reports.archive|me.data_entry.view|me.data_entry.manage|me.dqa.manage|me.submissions.review|me.configuration.view|me.configuration.manage')
+            ->name('me.rebuild.management-dashboard');
+
+        Route::get('me/rebuild/data-quality-and-approval-workflow', [MeModuleController::class, 'dataQuality'])
+            ->middleware('permission:me.configuration.view|me.configuration.manage|me.dqa.manage|me.submissions.review|me.data_entry.view|me.data_entry.manage')
+            ->name('me.rebuild.data-quality');
+        Route::post('me/rebuild/data-quality-and-approval-workflow/evaluate-selected', [MeModuleController::class, 'evaluateSelected'])
+            ->middleware('permission:me.dqa.manage|me.submissions.review|me.data_entry.manage|me.configuration.manage')
+            ->name('me.rebuild.data-quality.evaluate-selected');
+        Route::post('me/rebuild/data-quality-and-approval-workflow/{submission}/evaluate', [MeModuleController::class, 'evaluateSubmission'])
+            ->middleware('permission:me.dqa.manage|me.submissions.review|me.data_entry.manage|me.configuration.manage')
+            ->name('me.rebuild.data-quality.evaluate');
+
+        Route::get('me/rebuild/reporting-and-dashboard/export/csv', [MePerformanceReportDashboardController::class, 'csv'])
+            ->middleware('permission:me.performance_reports.view|me.performance_reports.review|me.performance_reports.archive|me.data_entry.view|me.data_entry.manage|me.configuration.view|me.configuration.manage')
+            ->name('me.rebuild.reporting-dashboard.csv');
 
         Route::get('me/rebuild/reporting-and-dashboard', [MePerformanceReportDashboardController::class, 'index'])
             ->middleware('permission:me.performance_reports.view|me.performance_reports.review|me.performance_reports.archive|me.data_entry.view|me.data_entry.manage|me.configuration.view|me.configuration.manage')
             ->name('me.rebuild.reporting-dashboard');
+
+        Route::prefix('me/framework')
+            ->name('me.framework.')
+            ->controller(\App\Http\Controllers\MeFrameworkController::class)
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::put('{framework}', 'updateFramework')->name('update');
+                Route::put('indicators/{indicator}', 'updateIndicator')->name('indicators.update');
+                Route::post('indicators/{indicator}/reference-sheets', 'storeReferenceSheet')->name('irs.store');
+                Route::post('indicators/{indicator}/targets', 'storeTarget')->name('targets.store');
+                Route::post('indicators/{indicator}/calculation-rules', 'storeCalculationRule')->name('calculations.store');
+            });
+
+        Route::prefix('me/results-dashboard')
+            ->name('me.results-dashboard.')
+            ->controller(\App\Http\Controllers\AttpMelResultsDashboardController::class)
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::get('export/excel', 'excel')->name('excel');
+                Route::get('export/csv', 'csv')->name('csv');
+                Route::get('export/pdf', 'pdf')->name('pdf');
+            });
 
         Route::prefix('me/consolidated-reports')->name('me.consolidated-reports.')->controller(\App\Http\Controllers\MeConsolidatedReportController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('export/excel', 'excel')->name('excel');
             Route::get('export/pdf', 'pdf')->name('pdf');
         });
+
+        Route::prefix('me/submission-reviews')
+            ->name('me.submission-reviews.')
+            ->controller(\App\Http\Controllers\MeSubmissionReviewController::class)
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::get('{submission}', 'show')->name('show');
+                Route::post('{submission}/decision', 'decide')->name('decide');
+                Route::post('{submission}/data-quality/{finding}/resolve', 'resolveFinding')->name('dqa.resolve');
+                Route::get('{submission}/evidence/{evidence}', 'downloadEvidence')->name('evidence.download');
+            });
 
         Route::post('me/knowledge-and-evidence-repository', [MeKnowledgeEvidenceController::class, 'store'])
             ->name('me.knowledge-evidence.store');
@@ -1329,6 +1414,8 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('me.knowledge-evidence.replace-file');
         Route::get('me/knowledge-and-evidence-repository/{evidence}/download', [MeKnowledgeEvidenceController::class, 'download'])
             ->name('me.knowledge-evidence.download');
+        Route::get('me/knowledge-and-evidence-repository/{evidence}/preview', [MeKnowledgeEvidenceController::class, 'preview'])
+            ->name('me.knowledge-evidence.preview');
         Route::get('me/knowledge-and-evidence-repository/{evidence}/versions/{version}/download', [MeKnowledgeEvidenceController::class, 'downloadVersion'])
             ->name('me.knowledge-evidence.versions.download');
         Route::post('me/knowledge-and-evidence-repository/{evidence}/validate', [MeKnowledgeEvidenceController::class, 'validateEvidence'])
@@ -1338,6 +1425,7 @@ Route::middleware(['auth', 'not.funding.partner'])
 
         Route::prefix('me/matrices')->name('me.matrices.')->controller(\App\Http\Controllers\MeMatrixController::class)->group(function () {
             Route::get('/', 'index')->name('index');
+            Route::get('export/pdf', 'pdf')->name('pdf');
             Route::post('/', 'store')->name('store');
             Route::post('{matrix}/activate', 'activate')->name('activate');
             Route::post('{matrix}/retire', 'retire')->name('retire');
@@ -1347,9 +1435,12 @@ Route::middleware(['auth', 'not.funding.partner'])
 
         Route::prefix('me/focal-units')->name('me.focal-units.')->controller(\App\Http\Controllers\MeFocalUnitController::class)->group(function () {
             Route::get('/', 'index')->name('index');
+            Route::get('export/pdf', 'pdf')->name('pdf');
             Route::post('/', 'store')->name('store');
             Route::put('{contact}', 'update')->name('update');
             Route::post('{contact}/link-account', 'linkAccount')->name('link-account');
+            Route::post('{contact}/unlink-account', 'unlinkAccount')->name('unlink-account');
+            Route::post('{contact}/restore', 'restore')->name('restore');
             Route::delete('{contact}', 'destroy')->name('destroy');
         });
 
@@ -1425,6 +1516,8 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->group(function () {
                 Route::get('/', 'index')->name('index');
                 Route::post('read-all', 'readAll')->name('read-all');
+                Route::post('bulk', 'bulk')->name('bulk');
+                Route::post('{notification}/unread', 'unread')->name('unread');
                 Route::post('{notification}/read', 'read')->name('read');
             });
 
@@ -3473,6 +3566,8 @@ Route::middleware(['auth'])
             ->name('applications.edit');
         Route::put('/applications/{submission}', [VendorPortalController::class, 'updateApplication'])
             ->name('applications.update');
+        Route::post('/applications/{submission}/withdraw', [VendorPortalController::class, 'withdrawApplication'])
+            ->name('applications.withdraw');
     });
 
 /*
@@ -3839,9 +3934,15 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
         Route::get('/dashboard', 'dashboard')
             ->middleware('think.tank.area:dashboard')
             ->name('dashboard');
+        Route::get('/audit-trails', 'auditTrails')
+            ->middleware('think.tank.area:dashboard')
+            ->name('audit-trails');
         Route::get('/dashboard/download', 'downloadDashboardReport')
             ->middleware(['think.tank.area:dashboard', 'permission:think_tank.dashboard.download'])
             ->name('dashboard.download');
+        Route::put('/preferences', 'updatePreferences')
+            ->middleware('think.tank.area:dashboard')
+            ->name('preferences.update');
 
         Route::get('/report-uploads', 'reportUploads')
             ->middleware(['think.tank.area:report_uploads', 'permission:think_tank.reports.submit'])
@@ -3865,6 +3966,9 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
         Route::get('/me-data', [\App\Http\Controllers\ThinkTankMeDataController::class, 'index'])
             ->middleware(['think.tank.area:me', 'permission:think_tank.me.view|think_tank.me.submit'])
             ->name('me-data.index');
+        Route::get('/me-dashboard', [\App\Http\Controllers\AttpMelResultsDashboardController::class, 'thinkTank'])
+            ->middleware(['think.tank.area:me', 'permission:think_tank.me.view'])
+            ->name('me-dashboard');
         Route::get('/me-data/performance-reports', [\App\Http\Controllers\ThinkTankPerformanceReportController::class, 'index'])
             ->middleware(['think.tank.area:me', 'permission:think_tank.me.reports.view|think_tank.me.reports.manage'])
             ->name('performance-reports.index');
@@ -3934,15 +4038,75 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
             ->middleware(['think.tank.area:finance', 'permission:think_tank.finance.view'])
             ->name('purchase-orders.download');
 
-        Route::get('/procurement-plans', 'procurementPlans')
+        Route::get('/procurement-plans', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'index'])
             ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.view'])
             ->name('procurement-plans');
-        Route::post('/procurement-plans', 'storeProcurementPlan')
+        Route::get('/procurement-plans/create', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'create'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.create');
+        Route::post('/procurement-plans', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'store'])
             ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
             ->name('procurement-plans.store');
-        Route::post('/procurement/plans', 'storeProcurementPlan')
+        Route::post('/procurement/plans', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'store'])
             ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
             ->name('procurement.plans.store');
+        Route::get('/procurement-plans/{plan}', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'show'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.view'])
+            ->name('procurement-plans.show');
+        Route::put('/procurement-plans/{plan}', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'update'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.update');
+        Route::post('/procurement-plans/{plan}/submit', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'submit'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.submit');
+        Route::post('/procurement-plans/{plan}/items', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'storeItem'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.items.store');
+        Route::put('/procurement-plans/{plan}/items/{item}', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'updateItem'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.items.update');
+        Route::delete('/procurement-plans/{plan}/items/{item}', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'destroyItem'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.items.destroy');
+        Route::get('/procurement-plans/{plan}/items/{item}/documents/{document}', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'downloadDocument'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.view'])
+            ->name('procurement-plans.documents.download');
+        Route::delete('/procurement-plans/{plan}/items/{item}/documents/{document}', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'destroyDocument'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.documents.destroy');
+        Route::post('/procurement-plans/{plan}/items/{item}/launch', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'launch'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.items.launch');
+        Route::post('/procurement-plans/{plan}/items/{item}/recall-publication', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'recallPublication'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.items.recall-publication');
+        Route::post('/procurement-plans/{plan}/items/{item}/republish', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'republishPublication'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.items.republish');
+        Route::post('/procurement-plans/{plan}/items/{item}/evaluations', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'storeEvaluation'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.evaluations.store');
+        Route::post('/procurement-plans/{plan}/items/{item}/evaluations/{evaluation}/assign', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'assignEvaluation'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('procurement-plans.evaluations.assign');
+        Route::get('/evaluations', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'evaluations'])
+            ->middleware(['think.tank.area:dashboard', 'permission:evaluations.evaluate'])
+            ->name('evaluations.index');
+        Route::get('/evaluation-assignments', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'evaluationAssignments'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('evaluation-assignments.index');
+        Route::get('/evaluation-templates/technical', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'technicalEvaluationTemplates'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('evaluation-templates.technical');
+        Route::post('/evaluation-templates/technical', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'storeTechnicalEvaluationTemplate'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('evaluation-templates.technical.store');
+        Route::get('/evaluation-templates/financial', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'financialEvaluationTemplates'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('evaluation-templates.financial');
+        Route::post('/evaluation-templates/financial', [\App\Http\Controllers\ThinkTankProcurementPlanController::class, 'storeFinancialEvaluationTemplate'])
+            ->middleware(['think.tank.area:procurement_plans', 'permission:think_tank.procurement_plans.manage'])
+            ->name('evaluation-templates.financial.store');
 
         Route::get('/team-access', 'teamAccess')
             ->middleware(['think.tank.area:team', 'permission:think_tank.team.manage'])
@@ -3967,4 +4131,43 @@ Route::middleware(['auth', 'think.tank', 'permission:think_tank.portal.access'])
         Route::get('/procurement/{procurement}/submissions', 'submissions')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.evaluate'])->name('procurement.submissions');
         Route::post('/procurement/{procurement}/submissions/{submission}/review', 'reviewSubmission')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.evaluate'])->name('procurement.submissions.review');
         Route::post('/procurement/{procurement}/submissions/{submission}/select', 'selectSubmission')->middleware(['think.tank.area:legacy_admin', 'permission:think_tank.procurement.select'])->name('procurement.submissions.select');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| ATTP Think Tank Procurement Oversight
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth', 'not.funding.partner'])
+    ->prefix('think-tank-procurement')
+    ->name('think-tank-procurement.')
+    ->controller(\App\Http\Controllers\AdminThinkTankProcurementController::class)
+    ->group(function () {
+        Route::get('/', 'index')
+            ->middleware('permission:think_tank.procurement.review|procurement.view_all|procurement.manage_all')
+            ->name('index');
+        Route::get('/reports', 'reports')
+            ->middleware('permission:think_tank.procurement.reports|procurement.view_all|procurement.manage_all')
+            ->name('reports');
+        Route::get('/reports/export/pdf', 'exportReportPdf')
+            ->middleware('permission:think_tank.procurement.reports|procurement.view_all|procurement.manage_all')
+            ->name('reports.pdf');
+        Route::post('/reports/step-export', 'exportStep')
+            ->middleware('permission:think_tank.procurement.step|procurement.manage_all')
+            ->name('step-export');
+        Route::get('/plans/{plan}', 'show')
+            ->middleware('permission:think_tank.procurement.review|procurement.view_all|procurement.manage_all')
+            ->name('show');
+        Route::post('/plans/{plan}/decision', 'decidePlan')
+            ->middleware('permission:think_tank.procurement.review|procurement.manage_all')
+            ->name('plans.decision');
+        Route::post('/plans/{plan}/items/{item}/decision', 'decideItem')
+            ->middleware('permission:think_tank.procurement.review|procurement.manage_all')
+            ->name('items.decision');
+        Route::post('/plans/{plan}/items/{item}/no-objection', 'noObjection')
+            ->middleware('permission:think_tank.procurement.step|procurement.manage_all')
+            ->name('items.no-objection');
+        Route::get('/plans/{plan}/items/{item}/documents/{document}', 'downloadDocument')
+            ->middleware('permission:think_tank.procurement.review|procurement.view_all|procurement.manage_all')
+            ->name('documents.download');
     });

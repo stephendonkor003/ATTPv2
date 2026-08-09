@@ -17,6 +17,7 @@ class IndicatorResult extends BaseModel
         'period_start',
         'period_end',
         'actual_value',
+        'actual_text',
         'unit_id',
         'data_source',
         'method',
@@ -31,6 +32,11 @@ class IndicatorResult extends BaseModel
         'collected_at',
         'created_by',
         'updated_by',
+        'rollup_numerator',
+        'rollup_denominator',
+        'source_record_type',
+        'source_record_id',
+        'deduplication_key',
     ];
 
     protected $casts = [
@@ -40,6 +46,8 @@ class IndicatorResult extends BaseModel
         'validated_at' => 'datetime',
         'approved_at' => 'datetime',
         'actual_value' => 'decimal:4',
+        'rollup_numerator' => 'decimal:4',
+        'rollup_denominator' => 'decimal:4',
     ];
 
     public function indicator()
@@ -90,5 +98,10 @@ class IndicatorResult extends BaseModel
     public function achievements()
     {
         return $this->hasMany(MeIndicatorAchievement::class, 'indicator_result_id');
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('review_status', 'approved')->whereNotNull('approved_at');
     }
 }

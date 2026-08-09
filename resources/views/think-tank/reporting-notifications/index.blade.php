@@ -1,8 +1,8 @@
 <x-think-tank.partials.shell :member="$member" title="Reporting Notifications">
-    <div style="max-width:1050px;margin:0 auto">
-        <div class="p-4 rounded-4 text-white mb-4" style="background:linear-gradient(120deg,#163b65,#0b6d50)">
-            <div class="d-flex justify-content-between align-items-center gap-3">
-                <div><div class="small text-uppercase fw-bold opacity-75">M&amp;E reporting</div><h2 class="text-white fw-bold mb-1">Notifications &amp; Reminders</h2><p class="mb-0 opacity-75">Deadlines, returned reports, approvals and outstanding actions.</p></div>
+    <div class="tt-notifications">
+        <div class="tt-notification-hero">
+            <div class="tt-notification-hero-row">
+                <div><div class="tt-notification-kicker">M&amp;E reporting</div><h2>Notifications &amp; Reminders</h2><p>Deadlines, returned reports, approvals and outstanding actions.</p></div>
                 <span class="badge bg-light text-dark fs-6">{{ $unreadCount }} unread</span>
             </div>
         </div>

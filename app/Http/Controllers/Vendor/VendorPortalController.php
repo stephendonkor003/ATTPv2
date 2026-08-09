@@ -16,9 +16,12 @@ use App\Models\VendorDocument;
 use App\Models\VendorInformationRequest;
 use App\Models\VendorMessage;
 use App\Models\VendorReport;
+use App\Services\ProcurementSubmissionScreeningService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\Rule;
 use App\Notifications\VendorRequestCreatedNotification;
 
 class VendorPortalController extends Controller
@@ -295,7 +298,11 @@ class VendorPortalController extends Controller
         ]);
     }
 
-    public function updateApplication(Request $request, FormSubmission $submission)
+    public function updateApplication(
+        Request $request,
+        FormSubmission $submission,
+        ProcurementSubmissionScreeningService $screeningService
+    )
     {
         $user = $request->user();
         $this->assertVendor($user);
@@ -309,31 +316,83 @@ class VendorPortalController extends Controller
 
         $existingValues = $submission->values->keyBy('field_key');
 
-        $rules = [];
+        $isRecallResponse = $submission->status === FormSubmission::STATUS_REVISION_REQUESTED;
+        $rules = [
+            'vendor_response' => [
+                $isRecallResponse ? 'required' : 'nullable',
+                'string',
+                'min:5',
+                'max:2000',
+            ],
+        ];
         foreach ($form->fields as $field) {
             $key = $field->field_key;
             $required = $field->is_required ? 'required' : 'nullable';
+            $configuration = (array) $field->validation_rules;
+            $options = $field->optionValues();
+            $maxLength = min(20000, max(1, (int) ($configuration['max_length'] ?? ($field->field_type === 'textarea' ? 20000 : 255))));
 
-            if ($field->field_type === 'file' && $field->is_required && $existingValues->get($key)) {
+            if (in_array($field->field_type, ['file', 'image'], true) && $field->is_required && $existingValues->get($key)) {
                 $required = 'nullable';
             }
 
             switch ($field->field_type) {
                 case 'email':
-                    $rules[$key] = "{$required}|email";
+                    $rules[$key] = [$required, 'email:rfc', 'max:'.$maxLength];
                     break;
                 case 'file':
-                    $rules[$key] = "{$required}|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip|max:20480";
+                case 'image':
+                    $defaultExtensions = $field->field_type === 'image'
+                        ? ['jpg', 'jpeg', 'png', 'webp']
+                        : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'zip'];
+                    $extensions = array_values(array_intersect((array) ($configuration['allowed_extensions'] ?? $defaultExtensions), $defaultExtensions));
+                    $maxKilobytes = min(20480, max(1024, (int) ($configuration['max_file_size_mb'] ?? 10) * 1024));
+                    $rules[$key] = [
+                        $required,
+                        'file',
+                        ...($field->field_type === 'image' ? ['image'] : []),
+                        'mimes:'.implode(',', $extensions ?: $defaultExtensions),
+                        'max:'.$maxKilobytes,
+                    ];
                     break;
                 case 'checkbox':
                 case 'multiselect':
-                    $rules[$key] = "{$required}|array";
+                    $rules[$key] = [$required, 'array', ...($field->is_required ? ['min:1'] : [])];
+                    $rules[$key.'.*'] = ['string', Rule::in($options)];
                     break;
                 case 'number':
-                    $rules[$key] = "{$required}|numeric";
+                    $rules[$key] = [
+                        $required,
+                        'numeric',
+                        ...(array_key_exists('min', $configuration) ? ['min:'.$configuration['min']] : []),
+                        ...(array_key_exists('max', $configuration) ? ['max:'.$configuration['max']] : []),
+                    ];
                     break;
                 case 'url':
-                    $rules[$key] = "{$required}|url";
+                    $rules[$key] = [$required, 'url:http,https', 'max:'.$maxLength];
+                    break;
+                case 'tel':
+                    $rules[$key] = [$required, 'string', 'max:'.$maxLength];
+                    break;
+                case 'date':
+                    $rules[$key] = [$required, 'date_format:Y-m-d'];
+                    break;
+                case 'time':
+                    $rules[$key] = [$required, 'date_format:H:i'];
+                    break;
+                case 'datetime-local':
+                    $rules[$key] = [$required, 'date_format:Y-m-d\\TH:i'];
+                    break;
+                case 'select':
+                case 'radio':
+                    $rules[$key] = [$required, 'string', Rule::in($options)];
+                    break;
+                case 'boolean':
+                    $rules[$key] = [$required, 'accepted'];
+                    break;
+                case 'textarea':
+                case 'text':
+                    $rules[$key] = [$required, 'string', 'max:'.$maxLength];
                     break;
                 default:
                     $rules[$key] = $required;
@@ -346,7 +405,7 @@ class VendorPortalController extends Controller
             $key = $field->field_key;
             $value = null;
 
-            if ($field->field_type === 'file') {
+            if (in_array($field->field_type, ['file', 'image'], true)) {
                 if ($request->hasFile($key)) {
                     $value = $request->file($key)->store('procurement_submissions');
                 } else {
@@ -370,11 +429,50 @@ class VendorPortalController extends Controller
         }
 
         $submission->screening()->delete();
-        $submission->touch();
+        $submission->update([
+            'status' => FormSubmission::STATUS_SUBMITTED,
+            'vendor_response' => trim((string) ($validated['vendor_response'] ?? '')) ?: null,
+            'publication_version' => max(1, (int) $submission->procurement?->publication_version),
+            'submitted_at' => now(),
+            'resubmitted_at' => now(),
+            'withdrawn_at' => null,
+            'withdrawal_reason' => null,
+        ]);
+        $screeningService->deferSubmissionScreening($submission->id);
 
         return redirect()
-            ->route('vendor.dashboard')
-            ->with('success', 'Application updated successfully.');
+            ->route('vendor.submissions')
+            ->with('success', $isRecallResponse ? 'Application response submitted successfully.' : 'Application updated and resubmitted successfully.');
+    }
+
+    public function withdrawApplication(Request $request, FormSubmission $submission)
+    {
+        $user = $request->user();
+        $this->assertVendor($user);
+        $this->assertSubmissionOwnership($submission, $user->id);
+        $submission->load('procurement');
+        $procurement = $submission->procurement;
+
+        abort_if($submission->isWithdrawn(), 422, 'This application has already been withdrawn.');
+        abort_unless($procurement && in_array($procurement->status, ['published', 'recalled'], true), 403, 'This application can no longer be withdrawn.');
+        abort_if($procurement->awarded_submission_id, 403, 'An awarded procurement application cannot be withdrawn.');
+
+        $data = $request->validate([
+            'withdrawal_reason' => 'required|string|min:5|max:1000',
+        ]);
+
+        DB::transaction(function () use ($submission, $data): void {
+            $submission->update([
+                'status' => FormSubmission::STATUS_WITHDRAWN,
+                'withdrawn_at' => now(),
+                'withdrawal_reason' => trim($data['withdrawal_reason']),
+                'vendor_response' => null,
+            ]);
+        });
+
+        return redirect()
+            ->route('vendor.submissions')
+            ->with('success', 'Application withdrawn. If the opportunity is open, you may submit a new application from the public procurement page.');
     }
 
     public function storeMessage(Request $request)
@@ -464,6 +562,11 @@ class VendorPortalController extends Controller
             }
 
             $submission->is_open = $procurement?->isApplicationOpen() ?? false;
+            $submission->is_recalled = $procurement?->status === 'recalled';
+            $submission->can_withdraw = ! $submission->isWithdrawn()
+                && in_array($procurement?->status, ['published', 'recalled'], true)
+                && ! $procurement?->awarded_submission_id;
+            $submission->can_apply_again = $submission->isWithdrawn() && ($procurement?->isApplicationOpen() ?? false);
             $submission->application_end_date = $procurement?->application_end_date?->toDateString();
             $submission->procurement_reference = $procurement?->reference_no;
 
@@ -646,6 +749,10 @@ class VendorPortalController extends Controller
 
     private function assertSubmissionOpen(FormSubmission $submission): void
     {
+        if ($submission->isWithdrawn()) {
+            abort(403, 'This application was withdrawn and cannot be edited. Submit a new application if the opportunity is open.');
+        }
+
         $submission->load('procurement');
         $procurement = $submission->procurement;
 

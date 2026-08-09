@@ -12,6 +12,7 @@ use App\Models\ConsortiumThinkTank;
 use App\Models\DynamicForm;
 use App\Models\DynamicFormField;
 use App\Models\FormSubmission;
+use App\Models\MePerformanceReportTransition;
 use App\Models\Procurement;
 use App\Models\ProcurementDisbursement;
 use App\Models\ProcurementInvoice;
@@ -19,6 +20,7 @@ use App\Models\ProcurementPurchaseOrder;
 use App\Models\Role;
 use App\Models\SystemAuditLog;
 use App\Models\ThinkTankProcurementPlan;
+use App\Models\ThinkTankProcurementEvent;
 use App\Models\ThinkTankProcurementReview;
 use App\Models\ThinkTankResearchOutput;
 use App\Models\User;
@@ -28,6 +30,7 @@ use App\Support\IpGeo;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -46,6 +49,166 @@ class ThinkTankPortalController extends Controller
     public function dashboard(Request $request)
     {
         return view('think-tank.dashboard', $this->dashboardPayload($request));
+    }
+
+    public function auditTrails(Request $request)
+    {
+        $member = $this->member($request);
+        $portalUser = $request->user();
+        $scope = in_array($request->query('scope'), ['all', 'procurement', 'me', 'portal'], true)
+            ? (string) $request->query('scope')
+            : 'all';
+        $keyword = Str::lower(trim((string) $request->query('q')));
+        $portalRouteParams = $this->portalRouteParams($request, $member);
+        $activity = collect();
+
+        if (in_array($scope, ['all', 'procurement'], true)
+            && $portalUser?->canAccessThinkTankArea('procurement_plans')) {
+            $procurementActivity = ThinkTankProcurementEvent::query()
+                ->with(['actor', 'plan', 'item'])
+                ->whereHas('plan', fn ($query) => $query->where('think_tank_member_id', $member->id))
+                ->latest('created_at')
+                ->limit(250)
+                ->get()
+                ->map(function (ThinkTankProcurementEvent $event) use ($portalRouteParams): array {
+                    $transition = collect([$event->from_status, $event->to_status])
+                        ->filter()
+                        ->map(fn ($status): string => Str::headline((string) $status))
+                        ->implode(' to ');
+
+                    return [
+                        'module' => 'Procurement',
+                        'module_key' => 'procurement',
+                        'action' => Str::headline($event->action),
+                        'message' => $event->reason ?: ($transition !== '' ? 'Status changed from '.$transition.'.' : 'Procurement workflow activity recorded.'),
+                        'actor' => $event->actor?->name ?: 'System',
+                        'reference' => $event->item?->item_code ?: $event->plan?->plan_code ?: 'Annual plan',
+                        'context' => $event->item?->title ?: $event->plan?->title,
+                        'occurred_at' => $event->created_at,
+                        'ip_address' => $event->ip_address,
+                        'icon' => 'feather-briefcase',
+                        'tone' => Str::contains($event->action, ['reject', 'revision', 'return']) ? 'warning' : 'brand',
+                        'url' => $event->plan
+                            ? route('think-tank.procurement-plans.show', array_merge($portalRouteParams, ['plan' => $event->plan]))
+                            : null,
+                    ];
+                });
+
+            $activity = $activity->concat($procurementActivity);
+        }
+
+        if (in_array($scope, ['all', 'me'], true) && $portalUser?->canAccessThinkTankArea('me')) {
+            $meActivity = MePerformanceReportTransition::query()
+                ->with(['actor', 'report.form'])
+                ->whereHas('report', fn ($query) => $query->where('think_tank_member_id', $member->id))
+                ->latest('created_at')
+                ->limit(250)
+                ->get()
+                ->map(function (MePerformanceReportTransition $transition) use ($portalRouteParams): array {
+                    $statusChange = collect([$transition->from_status, $transition->to_status])
+                        ->filter()
+                        ->map(fn ($status): string => Str::headline((string) $status))
+                        ->implode(' to ');
+
+                    return [
+                        'module' => 'Monitoring & Evaluation',
+                        'module_key' => 'me',
+                        'action' => Str::headline($transition->action),
+                        'message' => $transition->notes ?: ($statusChange !== '' ? 'Report moved from '.$statusChange.'.' : 'Performance report activity recorded.'),
+                        'actor' => $transition->actor?->name ?: 'System',
+                        'reference' => $transition->report?->periodLabel() ?: 'Performance report',
+                        'context' => $transition->report?->form?->title,
+                        'occurred_at' => $transition->created_at,
+                        'ip_address' => null,
+                        'icon' => 'feather-activity',
+                        'tone' => Str::contains($transition->action, ['return', 'reject']) ? 'warning' : 'info',
+                        'url' => $transition->report
+                            ? route('think-tank.performance-reports.edit', array_merge($portalRouteParams, ['report' => $transition->report]))
+                            : null,
+                    ];
+                });
+
+            $activity = $activity->concat($meActivity);
+        }
+
+        if (in_array($scope, ['all', 'portal'], true)) {
+            $teamUserIds = User::query()
+                ->where('user_type', 'think_tank')
+                ->where(function ($query) use ($member): void {
+                    $query->where('think_tank_member_id', $member->id)
+                        ->orWhere('id', $member->portal_user_id);
+                })
+                ->pluck('id');
+
+            $portalActivity = SystemAuditLog::query()
+                ->with('user')
+                ->where('module', 'think_tank_portal')
+                ->whereIn('user_id', $teamUserIds)
+                ->latest()
+                ->limit(250)
+                ->get()
+                ->map(fn (SystemAuditLog $log): array => [
+                    'module' => 'Portal administration',
+                    'module_key' => 'portal',
+                    'action' => Str::headline($log->action),
+                    'message' => $log->action_message ?: $log->description ?: 'Portal activity recorded.',
+                    'actor' => $log->user?->name ?: 'System',
+                    'reference' => $log->route_name ?: 'Think Tank portal',
+                    'context' => null,
+                    'occurred_at' => $log->created_at,
+                    'ip_address' => $log->ip_address,
+                    'icon' => 'feather-shield',
+                    'tone' => 'neutral',
+                    'url' => null,
+                ]);
+
+            $activity = $activity->concat($portalActivity);
+        }
+
+        $summary = [
+            'total' => $activity->count(),
+            'procurement' => $activity->where('module_key', 'procurement')->count(),
+            'me' => $activity->where('module_key', 'me')->count(),
+            'portal' => $activity->where('module_key', 'portal')->count(),
+        ];
+
+        if ($keyword !== '') {
+            $activity = $activity->filter(function (array $entry) use ($keyword): bool {
+                $searchable = Str::lower(implode(' ', array_filter([
+                    $entry['module'],
+                    $entry['action'],
+                    $entry['message'],
+                    $entry['actor'],
+                    $entry['reference'],
+                    $entry['context'],
+                ])));
+
+                return Str::contains($searchable, $keyword);
+            });
+        }
+
+        $activity = $activity->sortByDesc(fn (array $entry) => $entry['occurred_at']?->getTimestamp() ?? 0)->values();
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = 25;
+        $entries = new LengthAwarePaginator(
+            $activity->forPage($page, $perPage)->values(),
+            $activity->count(),
+            $perPage,
+            $page,
+            [
+                'path' => route('think-tank.audit-trails', $portalRouteParams),
+                'query' => $request->except('page'),
+            ]
+        );
+
+        return view('think-tank.audit-trails', compact(
+            'member',
+            'entries',
+            'summary',
+            'scope',
+            'keyword',
+            'portalRouteParams'
+        ));
     }
 
     public function teamAccess(Request $request)
@@ -184,33 +347,88 @@ class ThinkTankPortalController extends Controller
                 'dimensions:max_width=5000,max_height=5000',
             ],
             'remove_logo' => ['nullable', 'boolean'],
+            'primary_color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'accent_color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ]);
 
         $remove = $request->boolean('remove_logo');
+        $hasBrandColours = $request->filled('primary_color') || $request->filled('accent_color');
 
-        if (! $request->hasFile('logo') && ! $remove) {
+        if (! $request->hasFile('logo') && ! $remove && ! $hasBrandColours) {
             throw ValidationException::withMessages([
-                'logo' => 'Choose a PNG, JPEG, or WebP logo to upload.',
+                'logo' => 'Choose a logo or update at least one portal brand colour.',
             ]);
         }
 
-        $result = $logos->replace($member, $request->file('logo'), $remove);
-        $action = $result['removed'] ? 'think_tank.logo.removed' : 'think_tank.logo.updated';
-        $message = $result['removed'] ? 'Think tank logo removed' : 'Think tank logo updated';
+        $result = [
+            'removed' => false,
+            'previous_path' => $member->logo_path,
+        ];
+
+        if ($request->hasFile('logo') || $remove) {
+            $result = $logos->replace($member, $request->file('logo'), $remove);
+        }
+
+        if ($hasBrandColours) {
+            $branding = $member->resolvedPortalBranding();
+            $member->forceFill([
+                'portal_branding' => [
+                    'primary_color' => Str::lower((string) ($request->input('primary_color') ?: $branding['primary_color'])),
+                    'accent_color' => Str::lower((string) ($request->input('accent_color') ?: $branding['accent_color'])),
+                ],
+            ])->saveOrFail();
+        }
+
+        $action = $remove && ! $request->hasFile('logo')
+            ? 'think_tank.logo.removed'
+            : 'think_tank.branding.updated';
+        $message = $remove && ! $request->hasFile('logo') && ! $hasBrandColours
+            ? 'Think tank logo removed'
+            : 'Portal branding updated';
 
         $this->auditAction($action, $message, [
             'think_tank_member_id' => $member->id,
             'think_tank_name' => $member->name,
             'had_previous_logo' => filled($result['previous_path']),
+            'brand_colours_updated' => $hasBrandColours,
         ]);
 
-        return back()->with('success', $message . '.');
+        return back()->with('success', $message.'.');
+    }
+
+    public function updatePreferences(Request $request)
+    {
+        $data = $request->validate([
+            'theme_mode' => ['required', Rule::in(['system', 'light', 'dark'])],
+            'accent_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'sidebar_mode' => ['required', Rule::in(['expanded', 'compact'])],
+            'dashboard_widgets' => ['nullable', 'array'],
+            'dashboard_widgets.*' => ['string', Rule::in(['performance', 'deadlines', 'finance', 'filters'])],
+        ]);
+
+        $preferences = [
+            'theme_mode' => $data['theme_mode'],
+            'accent_color' => Str::lower($data['accent_color']),
+            'sidebar_mode' => $data['sidebar_mode'],
+            'dashboard_widgets' => array_values(array_unique($data['dashboard_widgets'] ?? [])),
+        ];
+
+        $request->user()->forceFill([
+            'think_tank_portal_preferences' => $preferences,
+        ])->saveOrFail();
+
+        $this->auditAction('think_tank.preferences.updated', 'Think tank portal preferences updated', [
+            'think_tank_member_id' => $this->member($request)->id,
+            'preferences' => $preferences,
+        ]);
+
+        return back()->with('success', 'Your workspace preferences were saved.');
     }
 
     public function downloadDashboardReport(Request $request)
     {
         $payload = $this->dashboardPayload($request);
-        $filename = 'think-tank-dashboard-' . Str::slug($payload['member']->name) . '-' . now()->format('Ymd-His') . '.pdf';
+        $filename = 'think-tank-dashboard-'.Str::slug($payload['member']->name).'-'.now()->format('Ymd-His').'.pdf';
 
         return Pdf::loadView('think-tank.dashboard-report-pdf', $payload)
             ->setPaper('a4', 'landscape')
@@ -420,9 +638,9 @@ class ThinkTankPortalController extends Controller
                 'type' => $reportSubmittedThisPeriod ? 'complete' : ($monthlyReportDaysLeft <= 3 ? 'urgent' : 'due'),
                 'title' => $reportSubmittedThisPeriod ? 'Monthly activity report submitted' : 'Submit this month\'s activity report',
                 'meta' => $reportSubmittedThisPeriod
-                    ? 'The Secretariat has a report for ' . $today->format('F Y') . '.'
-                    : 'Due ' . $monthlyReportDue->format('M d, Y') . ' to the ATTP Secretariat.',
-                'value' => $reportSubmittedThisPeriod ? 'Done' : ($monthlyReportDaysLeft >= 0 ? $monthlyReportDaysLeft . ' days left' : abs($monthlyReportDaysLeft) . ' days late'),
+                    ? 'The Secretariat has a report for '.$today->format('F Y').'.'
+                    : 'Due '.$monthlyReportDue->format('M d, Y').' to the ATTP Secretariat.',
+                'value' => $reportSubmittedThisPeriod ? 'Done' : ($monthlyReportDaysLeft >= 0 ? $monthlyReportDaysLeft.' days left' : abs($monthlyReportDaysLeft).' days late'),
                 'route' => route('think-tank.report-uploads', $this->portalRouteParams($request, $member)),
             ],
             [
@@ -460,8 +678,8 @@ class ThinkTankPortalController extends Controller
                 'area' => 'legacy_admin',
                 'type' => $daysLeft !== null && $daysLeft <= 3 ? 'urgent' : 'procurement',
                 'title' => $procurement->title,
-                'meta' => 'Procurement closes ' . ($procurement->application_end_date?->format('M d, Y') ?? 'soon') . ' with ' . number_format($procurement->submissions_count) . ' applications.',
-                'value' => $daysLeft === null ? 'Open' : ($daysLeft >= 0 ? $daysLeft . ' days left' : 'Closed'),
+                'meta' => 'Procurement closes '.($procurement->application_end_date?->format('M d, Y') ?? 'soon').' with '.number_format($procurement->submissions_count).' applications.',
+                'value' => $daysLeft === null ? 'Open' : ($daysLeft >= 0 ? $daysLeft.' days left' : 'Closed'),
                 'route' => route('think-tank.procurement.submissions', array_merge($this->portalRouteParams($request, $member), ['procurement' => $procurement])),
             ]);
         }
@@ -677,7 +895,7 @@ class ThinkTankPortalController extends Controller
     public function downloadReports(Request $request)
     {
         $payload = $this->reportsPayload($request);
-        $filename = 'think-tank-reports-' . Str::slug($payload['member']->name) . '-' . now()->format('Ymd-His') . '.pdf';
+        $filename = 'think-tank-reports-'.Str::slug($payload['member']->name).'-'.now()->format('Ymd-His').'.pdf';
 
         $this->auditAction('think_tank.reports.downloaded', 'Think tank reports dashboard downloaded', [
             'think_tank_member_id' => $payload['member']->id,
@@ -852,7 +1070,7 @@ class ThinkTankPortalController extends Controller
     public function downloadResearch(Request $request)
     {
         $payload = $this->researchPayload($request);
-        $filename = 'think-tank-research-' . Str::slug($payload['member']->name) . '-' . now()->format('Ymd-His') . '.pdf';
+        $filename = 'think-tank-research-'.Str::slug($payload['member']->name).'-'.now()->format('Ymd-His').'.pdf';
 
         $this->auditAction('think_tank.research.downloaded', 'Think tank research dashboard downloaded', [
             'think_tank_member_id' => $payload['member']->id,
@@ -901,7 +1119,7 @@ class ThinkTankPortalController extends Controller
             ->when($statusFilter !== '', fn ($query) => $query->where('status', $statusFilter))
             ->when($typeFilter !== '', fn ($query) => $query->where('output_type', $typeFilter))
             ->when($keyword !== '', function ($query) use ($keyword) {
-                $search = '%' . $keyword . '%';
+                $search = '%'.$keyword.'%';
 
                 $query->where(function ($searchQuery) use ($search) {
                     $searchQuery->where('title', 'like', $search)
@@ -1120,7 +1338,7 @@ class ThinkTankPortalController extends Controller
 
         return redirect()
             ->route('think-tank.purchase-orders.show', array_merge($this->portalRouteParams($request, $member), ['purchaseOrder' => $purchaseOrder]))
-            ->with('success', 'Purchase order created: ' . $purchaseOrder->reference_no);
+            ->with('success', 'Purchase order created: '.$purchaseOrder->reference_no);
     }
 
     public function showPurchaseOrder(Request $request, ProcurementPurchaseOrder $purchaseOrder)
@@ -1183,7 +1401,7 @@ class ThinkTankPortalController extends Controller
                 'created_by' => $purchaseOrder->created_by,
                 'approved_by' => $request->user()?->id,
                 'approved_at' => now(),
-                'notes' => 'Paid Funding to Think Tanks transfer for ' . $member->name,
+                'notes' => 'Paid Funding to Think Tanks transfer for '.$member->name,
             ]);
 
             $purchaseOrder->update(['invoice_id' => $invoice->id]);
@@ -1209,7 +1427,7 @@ class ThinkTankPortalController extends Controller
         $purchaseOrder->load(['vendor', 'consortium', 'thinkTankMember', 'disbursements']);
 
         return Pdf::loadView('think-tank.purchase-orders-pdf', compact('member', 'purchaseOrder'))
-            ->stream('purchase-order-' . ($purchaseOrder->reference_no ?? 'po') . '.pdf');
+            ->stream('purchase-order-'.($purchaseOrder->reference_no ?? 'po').'.pdf');
     }
 
     public function downloadPurchaseOrder(Request $request, ProcurementPurchaseOrder $purchaseOrder)
@@ -1220,7 +1438,7 @@ class ThinkTankPortalController extends Controller
         $purchaseOrder->load(['vendor', 'consortium', 'thinkTankMember', 'disbursements']);
 
         return Pdf::loadView('think-tank.purchase-orders-pdf', compact('member', 'purchaseOrder'))
-            ->download('purchase-order-' . ($purchaseOrder->reference_no ?? 'po') . '.pdf');
+            ->download('purchase-order-'.($purchaseOrder->reference_no ?? 'po').'.pdf');
     }
 
     public function storeResearch(Request $request)
@@ -1323,7 +1541,7 @@ class ThinkTankPortalController extends Controller
 
         return response($pdfContent, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $this->researchQascFilename($output) . '"',
+            'Content-Disposition' => 'inline; filename="'.$this->researchQascFilename($output).'"',
         ]);
     }
 
@@ -1348,7 +1566,7 @@ class ThinkTankPortalController extends Controller
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($fiscalYear !== '', fn ($query) => $query->where('fiscal_year', $fiscalYear))
             ->when($keyword !== '', function ($query) use ($keyword): void {
-                $search = '%' . $keyword . '%';
+                $search = '%'.$keyword.'%';
 
                 $query->where(function ($searchQuery) use ($search): void {
                     $searchQuery->where('title', 'like', $search)
@@ -1393,7 +1611,7 @@ class ThinkTankPortalController extends Controller
     public function downloadProcurement(Request $request)
     {
         $payload = $this->procurementPayload($request);
-        $filename = 'think-tank-procurement-' . Str::slug($payload['member']->name) . '-' . now()->format('Ymd-His') . '.pdf';
+        $filename = 'think-tank-procurement-'.Str::slug($payload['member']->name).'-'.now()->format('Ymd-His').'.pdf';
 
         $this->auditAction('think_tank.procurement.downloaded', 'Think tank procurement dashboard downloaded', [
             'think_tank_member_id' => $payload['member']->id,
@@ -1462,7 +1680,7 @@ class ThinkTankPortalController extends Controller
             ->when($planStatusFilter !== '', fn ($query) => $query->where('status', $planStatusFilter))
             ->when($fiscalYearFilter !== '', fn ($query) => $query->where('fiscal_year', $fiscalYearFilter))
             ->when($keyword !== '', function ($query) use ($keyword) {
-                $search = '%' . $keyword . '%';
+                $search = '%'.$keyword.'%';
 
                 $query->where(function ($searchQuery) use ($search) {
                     $searchQuery->where('title', 'like', $search)
@@ -1475,7 +1693,7 @@ class ThinkTankPortalController extends Controller
             ->when($statusFilter !== '', fn ($query) => $query->where('status', $statusFilter))
             ->when($fiscalYearFilter !== '', fn ($query) => $query->where('fiscal_year', $fiscalYearFilter))
             ->when($keyword !== '', function ($query) use ($keyword) {
-                $search = '%' . $keyword . '%';
+                $search = '%'.$keyword.'%';
 
                 $query->where(function ($searchQuery) use ($search) {
                     $searchQuery->where('title', 'like', $search)
@@ -1724,7 +1942,7 @@ class ThinkTankPortalController extends Controller
             ]);
 
             $form = DynamicForm::create([
-                'name' => $procurement->title . ' Application Form',
+                'name' => $procurement->title.' Application Form',
                 'applies_to' => 'procurement',
                 'status' => 'approved',
                 'is_active' => true,
@@ -1831,7 +2049,7 @@ class ThinkTankPortalController extends Controller
             $mode = 'custom';
             $start = $dateFrom ? CarbonImmutable::parse($dateFrom)->startOfDay() : null;
             $end = $dateTo ? CarbonImmutable::parse($dateTo)->endOfDay() : null;
-            $label = ($start?->format('M d, Y') ?? 'Start') . ' to ' . ($end?->format('M d, Y') ?? 'Today');
+            $label = ($start?->format('M d, Y') ?? 'Start').' to '.($end?->format('M d, Y') ?? 'Today');
         } elseif (preg_match('/^\d{4}-\d{2}$/', $month)) {
             $mode = 'month';
             $start = CarbonImmutable::createFromFormat('Y-m', $month)->startOfMonth();
@@ -1934,7 +2152,7 @@ class ThinkTankPortalController extends Controller
 
     private function nextCode(string $prefix): string
     {
-        return $prefix . '-' . now()->format('Ymd') . '-' . Str::upper(Str::random(5));
+        return $prefix.'-'.now()->format('Ymd').'-'.Str::upper(Str::random(5));
     }
 
     private function portalRouteParams(Request $request, ConsortiumThinkTank $member): array
@@ -2052,7 +2270,7 @@ class ThinkTankPortalController extends Controller
 
     private function researchQascFilename(ThinkTankResearchOutput $output): string
     {
-        return 'annex-b-qasc-' . Str::slug($output->title ?: 'research-output') . '.pdf';
+        return 'annex-b-qasc-'.Str::slug($output->title ?: 'research-output').'.pdf';
     }
 
     private function storedImageDataUri(?string $path): ?string
@@ -2063,7 +2281,7 @@ class ThinkTankPortalController extends Controller
 
         $mime = Storage::mimeType($path) ?: 'image/png';
 
-        return 'data:' . $mime . ';base64,' . base64_encode(Storage::get($path));
+        return 'data:'.$mime.';base64,'.base64_encode(Storage::get($path));
     }
 
     private function sendResearchQascEmail(

@@ -34,7 +34,7 @@
                 >
             </div>
             <label class="visually-hidden" for="indicator-component-filter">Project component</label>
-            <select id="indicator-component-filter" name="component_id" class="form-select" style="min-width: 220px">
+            <select id="indicator-component-filter" name="component_id" class="form-select me-component-filter">
                 <option value="">All project components</option>
                 @foreach ($componentOptions as $component)
                     <option value="{{ $component->id }}" @selected((string) $componentFilter === (string) $component->id)>
@@ -76,16 +76,31 @@
             @endcan
         </div>
     @else
-        <div class="table-responsive me-register-desktop">
+        <div class="me-table-statusbar me-register-desktop">
+            <span>
+                <i class="feather-list" aria-hidden="true"></i>
+                Showing <strong>{{ number_format((int) $indicators->firstItem()) }}–{{ number_format((int) $indicators->lastItem()) }}</strong>
+                of <strong>{{ number_format((int) $indicators->total()) }}</strong> indicators
+            </span>
+            <span class="me-scroll-hint"><i class="feather-move" aria-hidden="true"></i> Scroll horizontally to view all columns</span>
+        </div>
+        <div class="table-responsive me-register-desktop me-register-scroll" role="region" aria-label="Scrollable indicator register" tabindex="0">
             <table class="table me-register-table align-middle">
                 <caption class="visually-hidden">Results framework indicators and their required measurement information</caption>
+                <colgroup>
+                    <col class="me-col-indicator">
+                    <col class="me-col-measurement">
+                    <col class="me-col-reporting">
+                    <col class="me-col-responsible">
+                    <col class="me-col-actions">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th style="width: 30%">Indicator</th>
-                        <th style="width: 18%">Measurement</th>
-                        <th style="width: 24%">Reporting &amp; evidence</th>
-                        <th style="width: 15%">Responsible person</th>
-                        <th class="text-end" style="width: 13%">Actions</th>
+                        <th>Indicator</th>
+                        <th>Measurement</th>
+                        <th>Reporting &amp; evidence</th>
+                        <th>Responsible person</th>
+                        <th class="text-end me-actions-cell">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -107,7 +122,7 @@
                             }
                         @endphp
                         <tr>
-                            <td>
+                            <td class="me-indicator-cell">
                                 <span class="me-code">{{ $indicator->indicator_code ?: $indicator->id }}</span>
                                 <div class="me-indicator-name">{{ $indicator->name }}</div>
                                 <div class="me-definition" title="{{ $indicator->definitions }}">
@@ -161,7 +176,7 @@
                                     <span class="me-muted">Not assigned</span>
                                 @endif
                             </td>
-                            <td>
+                            <td class="me-actions-cell">
                                 @can('me.configuration.manage')
                                     <div class="me-row-actions">
                                         <button

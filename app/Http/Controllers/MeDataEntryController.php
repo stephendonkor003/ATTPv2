@@ -20,6 +20,7 @@ use App\Models\Sector;
 use App\Models\SubActivity;
 use App\Models\User;
 use App\Services\MeReportingReadinessService;
+use App\Services\MeReportingNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -135,6 +136,12 @@ class MeDataEntryController extends Controller
             : 'collections';
         $search = trim((string) $request->query('q', ''));
         $statusFilter = trim((string) $request->query('status', ''));
+        $searchTerm = '%'.addcslashes(Str::lower($search), '%_\\').'%';
+        $periodLifecycleFilter = match ($statusFilter) {
+            MeReportingPeriod::STATUS_DRAFT => MeReportingPeriod::LIFECYCLE_PLANNED,
+            MeReportingPeriod::STATUS_ACTIVE => MeReportingPeriod::LIFECYCLE_OPEN,
+            default => $statusFilter,
+        };
 
         $portfolioQuery = Sector::query()->orderBy('name');
         if ($this->userHasAssignedPortfolioScope($request->user())) {
@@ -158,11 +165,20 @@ class MeDataEntryController extends Controller
                 ->whereBetween('due_at', [now(), now()->addDays(self::DUE_SOON_DAYS)])
                 ->count(),
             'submitted' => $this->scopedSubmissionQuery($request, $portfolioId)
-                ->whereIn('status', [
-                    MeDataSubmission::STATUS_SUBMITTED,
-                    MeDataSubmission::STATUS_VALIDATED,
-                    MeDataSubmission::STATUS_APPROVED,
-                ])
+                ->where(function ($query): void {
+                    $statuses = [
+                        MeDataSubmission::STATUS_SUBMITTED,
+                        MeDataSubmission::STATUS_RESUBMITTED,
+                        MeDataSubmission::STATUS_UNDER_REVIEW,
+                        MeDataSubmission::STATUS_VALIDATED,
+                        MeDataSubmission::STATUS_VERIFIED,
+                        MeDataSubmission::STATUS_APPROVED,
+                    ];
+                    $query->whereIn('workflow_status', $statuses)
+                        ->orWhere(function ($legacyQuery) use ($statuses): void {
+                            $legacyQuery->whereNull('workflow_status')->whereIn('status', $statuses);
+                        });
+                })
                 ->count(),
         ];
 
@@ -193,15 +209,14 @@ class MeDataEntryController extends Controller
                     'performanceReports',
                     'collections as submitted_collections_count' => fn ($query) => $query->whereHas('submissions'),
                 ])
-                ->when($search !== '', function ($query) use ($search): void {
-                    $term = '%'.addcslashes($search, '%_\\').'%';
-                    $query->where(function ($searchQuery) use ($term): void {
-                        $searchQuery->where('title', 'like', $term)
-                            ->orWhere('code', 'like', $term)
-                            ->orWhere('description', 'like', $term)
-                            ->orWhereHas('indicator', function ($indicatorQuery) use ($term): void {
-                                $indicatorQuery->where('name', 'like', $term)
-                                    ->orWhere('indicator_code', 'like', $term);
+                ->when($search !== '', function ($query) use ($searchTerm): void {
+                    $query->where(function ($searchQuery) use ($searchTerm): void {
+                        $searchQuery->whereRaw('LOWER(title) LIKE ?', [$searchTerm])
+                            ->orWhereRaw('LOWER(code) LIKE ?', [$searchTerm])
+                            ->orWhereRaw('LOWER(description) LIKE ?', [$searchTerm])
+                            ->orWhereHas('indicator', function ($indicatorQuery) use ($searchTerm): void {
+                                $indicatorQuery->whereRaw('LOWER(name) LIKE ?', [$searchTerm])
+                                    ->orWhereRaw('LOWER(indicator_code) LIKE ?', [$searchTerm]);
                             });
                     });
                 })
@@ -239,20 +254,21 @@ class MeDataEntryController extends Controller
             $periods = $this->scopedPeriodQuery($request, $portfolioId)
                 ->with('portfolio:id,name')
                 ->withCount('collections')
-                ->when($search !== '', function ($query) use ($search): void {
-                    $term = '%'.addcslashes($search, '%_\\').'%';
-                    $query->where(function ($searchQuery) use ($term): void {
-                        $searchQuery->where('label', 'like', $term)
-                            ->orWhere('code', 'like', $term);
+                ->when($search !== '', function ($query) use ($searchTerm): void {
+                    $query->where(function ($searchQuery) use ($searchTerm): void {
+                        $searchQuery->whereRaw('LOWER(label) LIKE ?', [$searchTerm])
+                            ->orWhereRaw('LOWER(code) LIKE ?', [$searchTerm]);
                     });
                 })
                 ->when(
-                    in_array($statusFilter, [
-                        MeReportingPeriod::STATUS_DRAFT,
-                        MeReportingPeriod::STATUS_ACTIVE,
-                        MeReportingPeriod::STATUS_CLOSED,
+                    in_array($periodLifecycleFilter, [
+                        MeReportingPeriod::LIFECYCLE_PLANNED,
+                        MeReportingPeriod::LIFECYCLE_OPEN,
+                        MeReportingPeriod::LIFECYCLE_CLOSED,
+                        MeReportingPeriod::LIFECYCLE_UNDER_REVIEW,
+                        MeReportingPeriod::LIFECYCLE_COMPLETED,
                     ], true),
-                    fn ($query) => $query->where('status', $statusFilter)
+                    fn ($query) => $query->where('lifecycle_status', $periodLifecycleFilter)
                 )
                 ->orderByDesc('period_start')
                 ->paginate(12, ['*'], 'periods_page')
@@ -274,17 +290,16 @@ class MeDataEntryController extends Controller
                     'createdBy:id,name',
                 ])
                 ->withCount(['indicatorResults', 'documents'])
-                ->when($search !== '', function ($query) use ($search): void {
-                    $term = '%'.addcslashes($search, '%_\\').'%';
-                    $query->where(function ($searchQuery) use ($term): void {
+                ->when($search !== '', function ($query) use ($searchTerm): void {
+                    $query->where(function ($searchQuery) use ($searchTerm): void {
                         $searchQuery->whereHas('form', fn ($formQuery) => $formQuery
-                            ->where('title', 'like', $term)
-                            ->orWhere('code', 'like', $term))
+                            ->whereRaw('LOWER(title) LIKE ?', [$searchTerm])
+                            ->orWhereRaw('LOWER(code) LIKE ?', [$searchTerm]))
                             ->orWhereHas('projectComponent', fn ($componentQuery) => $componentQuery
-                                ->where('name', 'like', $term)
-                                ->orWhere('project_id', 'like', $term))
+                                ->whereRaw('LOWER(name) LIKE ?', [$searchTerm])
+                                ->orWhereRaw('LOWER(project_id) LIKE ?', [$searchTerm]))
                             ->orWhereHas('responsibleDirectorate', fn ($directorateQuery) => $directorateQuery
-                                ->where('name', 'like', $term));
+                                ->whereRaw('LOWER(name) LIKE ?', [$searchTerm]));
                     });
                 })
                 ->when(
@@ -323,11 +338,20 @@ class MeDataEntryController extends Controller
                     in_array($statusFilter, [
                         MeDataSubmission::STATUS_DRAFT,
                         MeDataSubmission::STATUS_SUBMITTED,
+                        MeDataSubmission::STATUS_RESUBMITTED,
+                        MeDataSubmission::STATUS_UNDER_REVIEW,
                         MeDataSubmission::STATUS_RETURNED,
                         MeDataSubmission::STATUS_VALIDATED,
+                        MeDataSubmission::STATUS_VERIFIED,
                         MeDataSubmission::STATUS_APPROVED,
+                        MeDataSubmission::STATUS_REJECTED,
                     ], true),
-                    fn ($query) => $query->where('status', $statusFilter)
+                    fn ($query) => $query->where(function ($statusQuery) use ($statusFilter): void {
+                        $statusQuery->where('workflow_status', $statusFilter)
+                            ->orWhere(function ($legacyQuery) use ($statusFilter): void {
+                                $legacyQuery->whereNull('workflow_status')->where('status', $statusFilter);
+                            });
+                    })
                 )
                 ->latest('updated_at')
                 ->paginate(15, ['*'], 'submissions_page')
@@ -343,14 +367,16 @@ class MeDataEntryController extends Controller
                     'assignments.thinkTank:id,name,country,status',
                 ])
                 ->withCount(['assignments', 'submissions'])
-                ->when($search !== '', function ($query) use ($search): void {
-                    $term = '%'.addcslashes($search, '%_\\').'%';
-                    $query->where(function ($searchQuery) use ($term): void {
-                        $searchQuery->whereHas('form', function ($formQuery) use ($term): void {
-                            $formQuery->where('title', 'like', $term)->orWhere('code', 'like', $term);
-                        })->orWhereHas('reportingPeriod', function ($periodQuery) use ($term): void {
-                            $periodQuery->where('label', 'like', $term)->orWhere('code', 'like', $term);
-                        })->orWhereHas('assignments.thinkTank', fn ($memberQuery) => $memberQuery->where('name', 'like', $term));
+                ->when($search !== '', function ($query) use ($searchTerm): void {
+                    $query->where(function ($searchQuery) use ($searchTerm): void {
+                        $searchQuery->whereHas('form', function ($formQuery) use ($searchTerm): void {
+                            $formQuery->whereRaw('LOWER(title) LIKE ?', [$searchTerm])
+                                ->orWhereRaw('LOWER(code) LIKE ?', [$searchTerm]);
+                        })->orWhereHas('reportingPeriod', function ($periodQuery) use ($searchTerm): void {
+                            $periodQuery->whereRaw('LOWER(label) LIKE ?', [$searchTerm])
+                                ->orWhereRaw('LOWER(code) LIKE ?', [$searchTerm]);
+                        })->orWhereHas('assignments.thinkTank', fn ($memberQuery) => $memberQuery
+                            ->whereRaw('LOWER(name) LIKE ?', [$searchTerm]));
                     });
                 })
                 ->when(
@@ -418,6 +444,7 @@ class MeDataEntryController extends Controller
                 ->get(['id', 'portfolio_id', 'indicator_id', 'code', 'title']);
             $activePeriods = $this->scopedPeriodQuery($request)
                 ->where('status', MeReportingPeriod::STATUS_ACTIVE)
+                ->where('lifecycle_status', MeReportingPeriod::LIFECYCLE_OPEN)
                 ->with('portfolio:id,name')
                 ->orderByDesc('period_start')
                 ->get(['id', 'portfolio_id', 'code', 'label', 'period_start', 'period_end']);
@@ -616,13 +643,16 @@ class MeDataEntryController extends Controller
     {
         $validated = $this->validatedPeriodPayload($request);
 
-        DB::transaction(function () use ($validated, $request): void {
-            MeReportingPeriod::query()->create([
+        $period = DB::transaction(function () use ($validated, $request): MeReportingPeriod {
+            return MeReportingPeriod::query()->create([
                 ...$validated,
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
         });
+        if ($period->lifecycle_status === MeReportingPeriod::LIFECYCLE_OPEN) {
+            app(MeReportingNotificationService::class)->periodOpened($period);
+        }
 
         return $this->redirectToTab('periods', 'Reporting period created.');
     }
@@ -631,6 +661,7 @@ class MeDataEntryController extends Controller
     {
         $this->assertPeriodInScope($request, $period);
         $validated = $this->validatedPeriodPayload($request, $period);
+        $wasOpen = $period->lifecycle_status === MeReportingPeriod::LIFECYCLE_OPEN;
 
         if ((string) $validated['portfolio_id'] !== (string) $period->portfolio_id && $period->collections()->exists()) {
             throw ValidationException::withMessages([
@@ -650,6 +681,9 @@ class MeDataEntryController extends Controller
                 'updated_by' => $request->user()->id,
             ]);
         });
+        if (! $wasOpen && $period->lifecycle_status === MeReportingPeriod::LIFECYCLE_OPEN) {
+            app(MeReportingNotificationService::class)->periodOpened($period);
+        }
 
         return $this->redirectToTab('periods', 'Reporting period updated.');
     }
@@ -793,11 +827,13 @@ class MeDataEntryController extends Controller
     {
         $term = '%'.Str::lower(addcslashes(trim($search), '%_\\')).'%';
         $statusColumn = (new MeDataSubmission)->qualifyColumn('status');
+        $workflowStatusColumn = (new MeDataSubmission)->qualifyColumn('workflow_status');
         $notesColumn = (new MeDataSubmission)->qualifyColumn('notes');
 
-        $query->where(function ($searchQuery) use ($term, $statusColumn, $notesColumn): void {
+        $query->where(function ($searchQuery) use ($term, $statusColumn, $workflowStatusColumn, $notesColumn): void {
             $searchQuery
                 ->whereRaw("LOWER({$statusColumn}) LIKE ?", [$term])
+                ->orWhereRaw("LOWER({$workflowStatusColumn}) LIKE ?", [$term])
                 ->orWhereRaw("LOWER({$notesColumn}) LIKE ?", [$term])
                 ->orWhereHas('submittedBy', function ($userQuery) use ($term): void {
                     $userQuery->where(function ($participantQuery) use ($term): void {
@@ -1568,10 +1604,33 @@ class MeDataEntryController extends Controller
     private function validatedPeriodPayload(Request $request, ?MeReportingPeriod $period = null): array
     {
         $request->merge(['code' => Str::upper(trim((string) $request->input('code')))]);
+        $lifecycleStatus = (string) $request->input('lifecycle_status', match ((string) $request->input('status')) {
+            MeReportingPeriod::STATUS_ACTIVE => MeReportingPeriod::LIFECYCLE_OPEN,
+            MeReportingPeriod::STATUS_CLOSED => MeReportingPeriod::LIFECYCLE_CLOSED,
+            default => MeReportingPeriod::LIFECYCLE_PLANNED,
+        });
+        $legacyStatus = match ($lifecycleStatus) {
+            MeReportingPeriod::LIFECYCLE_OPEN, MeReportingPeriod::LIFECYCLE_UNDER_REVIEW => MeReportingPeriod::STATUS_ACTIVE,
+            MeReportingPeriod::LIFECYCLE_CLOSED, MeReportingPeriod::LIFECYCLE_COMPLETED => MeReportingPeriod::STATUS_CLOSED,
+            default => MeReportingPeriod::STATUS_DRAFT,
+        };
+        $request->merge([
+            'lifecycle_status' => $lifecycleStatus,
+            'status' => $legacyStatus,
+            'reporting_year' => $request->input('reporting_year') ?: substr((string) $request->input('period_end'), 0, 4),
+        ]);
         $table = (new MeReportingPeriod)->getTable();
         $uniqueCode = Rule::unique($table, 'code');
         if ($period) {
             $uniqueCode->ignore($period->id);
+        }
+        $submissionDeadlineRules = ['nullable', 'date'];
+        if ($request->filled('submission_opens_at')) {
+            $submissionDeadlineRules[] = 'after_or_equal:submission_opens_at';
+        }
+        $reviewDeadlineRules = ['nullable', 'date'];
+        if ($request->filled('submission_deadline')) {
+            $reviewDeadlineRules[] = 'after_or_equal:submission_deadline';
         }
 
         $validated = $request->validate([
@@ -1583,6 +1642,8 @@ class MeDataEntryController extends Controller
                 MeReportingPeriod::TYPE_QUARTER,
                 MeReportingPeriod::TYPE_MONTH,
                 MeReportingPeriod::TYPE_CUSTOM,
+                MeReportingPeriod::TYPE_SEMI_ANNUAL,
+                MeReportingPeriod::TYPE_ANNUAL,
             ])],
             'period_start' => ['required', 'date'],
             'period_end' => ['required', 'date', 'after_or_equal:period_start'],
@@ -1591,6 +1652,18 @@ class MeDataEntryController extends Controller
                 MeReportingPeriod::STATUS_ACTIVE,
                 MeReportingPeriod::STATUS_CLOSED,
             ])],
+            'reporting_year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'submission_opens_at' => ['nullable', 'date'],
+            'submission_deadline' => $submissionDeadlineRules,
+            'review_deadline' => $reviewDeadlineRules,
+            'lifecycle_status' => ['required', Rule::in([
+                MeReportingPeriod::LIFECYCLE_PLANNED,
+                MeReportingPeriod::LIFECYCLE_OPEN,
+                MeReportingPeriod::LIFECYCLE_CLOSED,
+                MeReportingPeriod::LIFECYCLE_UNDER_REVIEW,
+                MeReportingPeriod::LIFECYCLE_COMPLETED,
+            ])],
+            'instructions' => ['nullable', 'string', 'max:5000'],
         ]);
 
         $this->assertPortfolioInScope($request, (string) $validated['portfolio_id']);
@@ -1623,8 +1696,8 @@ class MeDataEntryController extends Controller
         if ($form->status !== MeDataEntryForm::STATUS_PUBLISHED) {
             throw ValidationException::withMessages(['form_id' => 'Choose a published collection form.']);
         }
-        if ($period->status !== MeReportingPeriod::STATUS_ACTIVE) {
-            throw ValidationException::withMessages(['reporting_period_id' => 'Choose an active reporting period.']);
+        if (! $period->isActive()) {
+            throw ValidationException::withMessages(['reporting_period_id' => 'Choose an open reporting period.']);
         }
         if ((string) $form->portfolio_id !== (string) $period->portfolio_id) {
             throw ValidationException::withMessages([

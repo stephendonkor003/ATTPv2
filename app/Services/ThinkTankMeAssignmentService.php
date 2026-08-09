@@ -101,11 +101,7 @@ class ThinkTankMeAssignmentService
     {
         $submission = $assignment->submission;
 
-        if ($submission && in_array($submission->status, [
-            MeDataSubmission::STATUS_SUBMITTED,
-            MeDataSubmission::STATUS_VALIDATED,
-            MeDataSubmission::STATUS_APPROVED,
-        ], true)) {
+        if ($submission && ! $submission->isEditable()) {
             return 'submitted';
         }
 
@@ -114,7 +110,7 @@ class ThinkTankMeAssignmentService
 
         if (! $collection
             || $collection->status === MeDataCollection::STATUS_CLOSED
-            || $period?->status === MeReportingPeriod::STATUS_CLOSED
+            || ! $period?->isOpenForSubmission()
             || ($collection->closes_at && $collection->closes_at->isPast())) {
             return 'closed';
         }
@@ -164,7 +160,7 @@ class ThinkTankMeAssignmentService
             && $state === 'open'
             && (! $submission || $submission->isEditable())
             && $collection->isAcceptingSubmissions()
-            && $period?->status === MeReportingPeriod::STATUS_ACTIVE;
+            && $period?->isOpenForSubmission();
 
         return [
             'assignment' => $assignment,
@@ -184,8 +180,8 @@ class ThinkTankMeAssignmentService
             'due_at' => $collection->due_at,
             'closes_at' => $collection->closes_at,
             'is_overdue' => $collection->isPastDue() && $state === 'open',
-            'submission_status' => $submission?->status,
-            'submission_status_label' => $this->statusLabel($submission?->status),
+            'submission_status' => $submission?->effectiveStatus(),
+            'submission_status_label' => $this->statusLabel($submission?->effectiveStatus()),
             'progress' => $this->progressFor($form->fields, $submission),
             'url' => route('think-tank.me-data.show', array_merge(
                 ['assignment' => $assignment->getKey()],
@@ -240,6 +236,10 @@ class ThinkTankMeAssignmentService
             MeDataSubmission::STATUS_RETURNED => 'Returned for correction',
             MeDataSubmission::STATUS_VALIDATED => 'Validated',
             MeDataSubmission::STATUS_APPROVED => 'Approved',
+            MeDataSubmission::STATUS_RESUBMITTED => 'Resubmitted for review',
+            MeDataSubmission::STATUS_UNDER_REVIEW => 'Under Secretariat review',
+            MeDataSubmission::STATUS_VERIFIED => 'Verified',
+            MeDataSubmission::STATUS_REJECTED => 'Rejected',
             default => 'Not started',
         };
     }

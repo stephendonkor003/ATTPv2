@@ -79,11 +79,18 @@
     $thinkTankFinancePermissions = [
         'think_tanks.funding.view',
         'consortiums.view',
+        'think_tank.procurement.review',
+        'think_tank.procurement.reports',
+        'think_tank.procurement.step',
+        'procurement.view_all',
+        'procurement.manage_all',
     ];
     $canSeeThinkTankFinance = $sidebarUser
         && collect($thinkTankFinancePermissions)->contains(
             fn($permission) => $sidebarUser->can($permission)
         );
+    $canManageThinkTankUsers = (bool) ($sidebarUser?->can('users.manage'));
+    $canSeeThinkTankModule = $canSeeThinkTankFinance || $canManageThinkTankUsers;
     $vendorSidebarAlerts = $sidebarUser && $sidebarUser->can('vendor.requests.manage') && Route::has('vendors.requests.alerts.read')
         ? \App\Support\VendorAdminAlerts::forUser($sidebarUser)
         : [];
@@ -836,7 +843,7 @@
 
 
                 {{-- ================= THINK TANK MODULE ================= --}}
-                @if ($canSeeThinkTankFinance)
+                @if ($canSeeThinkTankModule)
                     <li class="nxl-item nxl-caption">
                         <label>Think Tank Module</label>
                     </li>
@@ -849,7 +856,7 @@
                         </a>
 
                         <ul class="nxl-submenu">
-                            @if (Route::has('think-tanks-admin.consortium-analysis'))
+                            @if ($canSeeThinkTankFinance && Route::has('think-tanks-admin.consortium-analysis'))
                                 <li class="nxl-item">
                                     <a href="{{ route('think-tanks-admin.consortium-analysis') }}" class="nxl-link">
                                         <i class="feather-grid me-2"></i> Consortium Analysis
@@ -857,7 +864,7 @@
                                 </li>
                             @endif
 
-                            @if (Route::has('think-tanks-admin.think-tank-analysis'))
+                            @if ($canSeeThinkTankFinance && Route::has('think-tanks-admin.think-tank-analysis'))
                                 <li class="nxl-item">
                                     <a href="{{ route('think-tanks-admin.think-tank-analysis') }}" class="nxl-link">
                                         <i class="feather-users me-2"></i> Think Tank Analysis
@@ -865,7 +872,7 @@
                                 </li>
                             @endif
 
-                            @if (Route::has('think-tanks-admin.consortium-reports'))
+                            @if ($canSeeThinkTankFinance && Route::has('think-tanks-admin.consortium-reports'))
                                 <li class="nxl-item">
                                     <a href="{{ route('think-tanks-admin.consortium-reports') }}" class="nxl-link">
                                         <i class="feather-file-text me-2"></i> Consortium Reports
@@ -873,13 +880,43 @@
                                 </li>
                             @endif
 
-                            @if (Route::has('think-tanks-admin.think-tank-reports'))
+                            @if ($canSeeThinkTankFinance && Route::has('think-tanks-admin.think-tank-reports'))
                                 <li class="nxl-item">
                                     <a href="{{ route('think-tanks-admin.think-tank-reports') }}" class="nxl-link">
                                         <i class="feather-layers me-2"></i> Think Tank Reports
                                     </a>
                                 </li>
                             @endif
+
+                            @can('users.manage')
+                                @if (Route::has('system.think-tank-users.index'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('system.think-tank-users.index') }}" class="nxl-link">
+                                            <i class="feather-user-check me-2"></i> Think Tank Users
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcan
+
+                            @canany(['think_tank.procurement.review', 'procurement.view_all', 'procurement.manage_all'])
+                                @if (Route::has('think-tank-procurement.index'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tank-procurement.index') }}" class="nxl-link">
+                                            <i class="feather-clipboard me-2"></i> Procurement Submissions
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcanany
+
+                            @canany(['think_tank.procurement.reports', 'think_tank.procurement.step', 'procurement.view_all', 'procurement.manage_all'])
+                                @if (Route::has('think-tank-procurement.reports'))
+                                    <li class="nxl-item">
+                                        <a href="{{ route('think-tank-procurement.reports') }}" class="nxl-link">
+                                            <i class="feather-bar-chart-2 me-2"></i> Procurement Reports
+                                        </a>
+                                    </li>
+                                @endif
+                            @endcanany
 
                         </ul>
                     </li>
@@ -1191,7 +1228,8 @@
                 {{-- ======================================================
                     | MONITORING & EVALUATION
                     ====================================================== --}}
-                @canany(['me.configuration.view', 'me.configuration.manage', 'me.data_entry.view', 'me.data_entry.manage', 'me.reporting_notifications.view', 'world.indicators.manage',
+                @canany(['me.configuration.view', 'me.configuration.manage', 'me.data_entry.view', 'me.data_entry.manage', 'me.reporting_notifications.view', 'me.results.view',
+                    'me.performance_reports.view', 'me.performance_reports.review', 'me.performance_reports.archive', 'me.dqa.manage', 'me.submissions.review', 'world.indicators.manage',
                     'biannual_site_visits.view', 'biannual_site_visits.create',
                     'biannual_site_visits.respond', 'biannual_site_visits.submit',
                     'biannual_site_visits.approve', 'biannual_site_visits.export'])
@@ -1209,6 +1247,11 @@
                         <ul class="nxl-submenu">
                             @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage'])
                                 <li class="nxl-item">
+                                    <a href="{{ route('budget.me.framework.index') }}" class="nxl-link">
+                                        <i class="feather-layers me-2"></i> Framework, IRS &amp; Targets
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
                                     <a href="{{ route('budget.me.indicators.index') }}" class="nxl-link">
                                         <i class="feather-target me-2"></i> Results Framework and Indicator Management
                                     </a>
@@ -1218,6 +1261,11 @@
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.data-entry') }}" class="nxl-link">
                                         <i class="feather-edit-3 me-2"></i> Data Entry and Performance Tracking
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.submission-reviews.index') }}" class="nxl-link">
+                                        <i class="feather-check-square me-2"></i> Think Tank Submission Review
                                     </a>
                                 </li>
                             @endcanany
@@ -1240,32 +1288,49 @@
                                     </a>
                                 </li>
                             @endcan
-                            @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage'])
+                            @canany(['me.configuration.view', 'me.configuration.manage', 'me.dqa.manage', 'me.submissions.review', 'me.data_entry.view', 'me.data_entry.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.data-quality') }}" class="nxl-link">
                                         <i class="feather-check-circle me-2"></i> Data Quality and Approval Workflow
                                     </a>
                                 </li>
+                            @endcanany
+                            @canany(['me.results.view', 'me.performance_reports.view', 'me.configuration.view', 'me.configuration.manage'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.results-dashboard.index') }}" class="nxl-link">
+                                        <i class="feather-trending-up me-2"></i> Official Results Framework Dashboard
+                                    </a>
+                                </li>
+                            @endcanany
+                            @canany(['me.performance_reports.view', 'me.performance_reports.review', 'me.performance_reports.archive', 'me.data_entry.view', 'me.data_entry.manage', 'me.configuration.view', 'me.configuration.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.reporting-dashboard') }}" class="nxl-link">
                                         <i class="feather-bar-chart-2 me-2"></i> Reporting and Dashboard
                                     </a>
                                 </li>
+                            @endcanany
+                            @canany(['me.performance_reports.view', 'me.performance_reports.review', 'me.configuration.view', 'me.configuration.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.consolidated-reports.index') }}" class="nxl-link">
                                         <i class="feather-pie-chart me-2"></i> Think Tank &amp; Consolidated Reports
                                     </a>
                                 </li>
+                            @endcanany
+                            @canany(['me.results.view', 'me.performance_reports.view', 'me.performance_reports.review', 'me.performance_reports.archive', 'me.data_entry.view', 'me.data_entry.manage', 'me.dqa.manage', 'me.submissions.review', 'me.configuration.view', 'me.configuration.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.management-dashboard') }}" class="nxl-link">
                                         <i class="feather-monitor me-2"></i> Management Dashboard
                                     </a>
                                 </li>
+                            @endcanany
+                            @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage', 'me.performance_reports.view', 'me.performance_reports.review', 'me.data_entry.view', 'me.data_entry.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.knowledge-repository') }}" class="nxl-link">
                                         <i class="feather-folder me-2"></i> Knowledge and Evidence Repository (MEAL plans, TOCs and pertinent documents)
                                     </a>
                                 </li>
+                            @endcanany
+                            @canany(['me.configuration.view', 'me.configuration.manage', 'world.indicators.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.matrices.index') }}" class="nxl-link">
                                         <i class="feather-grid me-2"></i> M&amp;E Matrix Manager

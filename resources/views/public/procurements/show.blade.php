@@ -20,7 +20,9 @@
         }
 
         .page-header {
-            background: url('/assets/three.webp') center/cover no-repeat;
+            background-position: center;
+            background-size: cover;
+            background-repeat: no-repeat;
             height: 320px;
             position: relative;
             display: flex;
@@ -33,7 +35,7 @@
             content: "";
             position: absolute;
             inset: 0;
-            background: rgba(82, 43, 57, .75);
+            background: linear-gradient(135deg, rgba(5, 55, 73, .9), rgba(7, 92, 122, .7));
         }
 
         .header-content {
@@ -46,6 +48,33 @@
         .header-content h1 {
             color: #fbbc05;
             font-size: 2.3rem;
+        }
+
+        .opportunity-owner {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, .3);
+            border-radius: 999px;
+            background: rgba(0, 0, 0, .18);
+            padding: 7px 12px 7px 7px;
+            color: #fff;
+            font-size: .85rem;
+            font-weight: 700;
+            backdrop-filter: blur(7px);
+        }
+
+        .opportunity-owner img,
+        .opportunity-owner b {
+            display: grid;
+            width: 31px;
+            height: 31px;
+            place-items: center;
+            border-radius: 50%;
+            background: #fff;
+            object-fit: contain;
+            color: #075c7a;
         }
 
         .container {
@@ -121,6 +150,42 @@
         .form-group textarea {
             resize: vertical;
             min-height: 120px;
+        }
+
+        .field-help {
+            margin: 7px 0 0;
+            color: #6b7478;
+            font-size: .82rem;
+            line-height: 1.5;
+        }
+
+        .choice-list {
+            display: grid;
+            gap: 8px;
+            border: 1px solid #d7e1e4;
+            border-radius: 9px;
+            background: #f8fbfc;
+            padding: 11px;
+        }
+
+        .choice-list label,
+        .confirmation-field {
+            display: flex;
+            align-items: flex-start;
+            gap: 9px;
+            margin: 0;
+            color: #2d4047;
+            font-weight: 500;
+        }
+
+        .choice-list input,
+        .confirmation-field input {
+            width: auto;
+            margin-top: 3px;
+        }
+
+        .form-group.is-wide {
+            grid-column: span 2;
         }
 
         .error-text {
@@ -309,12 +374,22 @@
     </header>
 
     {{-- ===== HEADER ===== --}}
-    <section class="page-header">
+    <section class="page-header" style="background-image: url('{{ $procurement->cover_image_url ?: asset('assets/three.webp') }}')">
         <div class="header-content">
             <br>
             <br>
             <br>
             <br>
+            @if($procurement->thinkTankMember)
+                <div class="opportunity-owner">
+                    @if($procurement->thinkTankMember->logo_url)
+                        <img src="{{ $procurement->thinkTankMember->logo_url }}" alt="{{ $procurement->thinkTankMember->name }} logo">
+                    @else
+                        <b>{{ Str::upper(Str::substr($procurement->thinkTankMember->name, 0, 1)) }}</b>
+                    @endif
+                    <span>Published by {{ $procurement->thinkTankMember->name }}</span>
+                </div>
+            @endif
             <h1>{{ $procurement->title }}</h1>
             <p>Reference: {{ $procurement->reference_no ?? 'N/A' }}</p>
         </div>
@@ -408,123 +483,83 @@
                         @foreach ($form->fields as $field)
                             @php
                                 $oldValue = old($field->field_key);
-
-                                // Normalize multi-select old value (Select2 may return CSV or array)
-                                if (in_array($field->field_type, ['checkbox', 'multiselect']) && is_string($oldValue)) {
+                                if (in_array($field->field_type, ['checkbox', 'multiselect'], true) && is_string($oldValue)) {
                                     $oldValue = array_filter(array_map('trim', explode(',', $oldValue)));
                                 }
-
-                                // Parse comma-separated options safely
-                                $options = collect(explode(',', (string) $field->options))
-                                    ->map(fn($opt) => trim($opt))
-                                    ->filter()
-                                    ->values()
-                                    ->toArray();
-
-                                $isRequired = $field->is_required;
-
-                                // Normalize datetime-local
+                                $options = $field->optionValues();
+                                $isRequired = (bool) $field->is_required;
+                                $configuration = (array) $field->validation_rules;
                                 $dateTimeValue = $oldValue;
                                 if ($field->field_type === 'datetime-local' && $oldValue) {
                                     try {
                                         $dateTimeValue = \Carbon\Carbon::parse($oldValue)->format('Y-m-d\TH:i');
-                                    } catch (\Exception $e) {
+                                    } catch (\Exception) {
                                         $dateTimeValue = $oldValue;
                                     }
                                 }
+                                $wideTypes = ['textarea', 'radio', 'checkbox', 'boolean', 'file', 'image'];
+                                $acceptedExtensions = collect((array) ($configuration['allowed_extensions'] ?? []))
+                                    ->map(fn($extension) => '.'.ltrim($extension, '.'))
+                                    ->implode(',');
+                                $acceptedFiles = $field->field_type === 'image'
+                                    ? 'image/jpeg,image/png,image/webp'
+                                    : $acceptedExtensions;
                             @endphp
 
-                            <div class="form-group">
-                                <label>
+                            <div class="form-group @if(in_array($field->field_type, $wideTypes, true)) is-wide @endif">
+                                <label for="field-{{ $field->id }}">
                                     {{ $field->label }}
-                                    @if ($isRequired)
-                                        <span class="required">*</span>
-                                    @endif
+                                    @if ($isRequired)<span class="required">*</span>@else<small>(Optional)</small>@endif
                                 </label>
 
-                                {{-- TEXT --}}
-                                @if ($field->field_type === 'text')
-                                    <input type="text" name="{{ $field->field_key }}" value="{{ $oldValue }}"
-                                        {{ $isRequired ? 'required' : '' }}>
-
-                                    {{-- EMAIL --}}
-                                @elseif ($field->field_type === 'email')
-                                    <input type="email" name="{{ $field->field_key }}" value="{{ $oldValue }}"
-                                        {{ $isRequired ? 'required' : '' }}>
-
-                                    {{-- NUMBER --}}
+                                @if (in_array($field->field_type, ['text', 'email', 'tel', 'url', 'date', 'time'], true))
+                                    <input id="field-{{ $field->id }}" type="{{ $field->field_type }}" name="{{ $field->field_key }}" value="{{ $oldValue }}"
+                                        placeholder="{{ $field->placeholder }}" @if($configuration['max_length'] ?? null) maxlength="{{ $configuration['max_length'] }}" @endif @required($isRequired)>
                                 @elseif ($field->field_type === 'number')
-                                    <input type="number" name="{{ $field->field_key }}" value="{{ $oldValue }}"
-                                        {{ $isRequired ? 'required' : '' }}>
-
-                                    {{-- DATE --}}
-                                @elseif ($field->field_type === 'date')
-                                    <input type="date" name="{{ $field->field_key }}" value="{{ $oldValue }}"
-                                        {{ $isRequired ? 'required' : '' }}>
-
-                                    {{-- TIME --}}
-                                @elseif ($field->field_type === 'time')
-                                    <input type="time" name="{{ $field->field_key }}" value="{{ $oldValue }}"
-                                        {{ $isRequired ? 'required' : '' }}>
-
-                                    {{-- DATETIME LOCAL --}}
+                                    <input id="field-{{ $field->id }}" type="number" step="any" name="{{ $field->field_key }}" value="{{ $oldValue }}"
+                                        placeholder="{{ $field->placeholder }}" @if(array_key_exists('min', $configuration)) min="{{ $configuration['min'] }}" @endif @if(array_key_exists('max', $configuration)) max="{{ $configuration['max'] }}" @endif @required($isRequired)>
                                 @elseif ($field->field_type === 'datetime-local')
-                                    <input type="datetime-local" name="{{ $field->field_key }}"
-                                        value="{{ $dateTimeValue }}" {{ $isRequired ? 'required' : '' }}>
-
-                                    {{-- URL --}}
-                                @elseif ($field->field_type === 'url')
-                                    <input type="url" name="{{ $field->field_key }}" value="{{ $oldValue }}"
-                                        {{ $isRequired ? 'required' : '' }}>
-
-                                    {{-- PHONE --}}
-                                @elseif ($field->field_type === 'tel')
-                                    <input type="tel" name="{{ $field->field_key }}" value="{{ $oldValue }}"
-                                        {{ $isRequired ? 'required' : '' }}>
-
-                                    {{-- TEXTAREA --}}
+                                    <input id="field-{{ $field->id }}" type="datetime-local" name="{{ $field->field_key }}" value="{{ $dateTimeValue }}" @required($isRequired)>
                                 @elseif ($field->field_type === 'textarea')
-                                    <textarea name="{{ $field->field_key }}" rows="4" {{ $isRequired ? 'required' : '' }}>{{ $oldValue }}</textarea>
-
-                                    {{-- SINGLE SELECT (SELECT2) --}}
+                                    <textarea id="field-{{ $field->id }}" name="{{ $field->field_key }}" rows="5" placeholder="{{ $field->placeholder }}" @if($configuration['max_length'] ?? null) maxlength="{{ $configuration['max_length'] }}" @endif @required($isRequired)>{{ $oldValue }}</textarea>
                                 @elseif ($field->field_type === 'select')
-                                    <select name="{{ $field->field_key }}" class="form-select select2-single"
-                                        data-placeholder="Select an option" {{ $isRequired ? 'required' : '' }}>
-                                        <option></option>
-                                        @foreach ($options as $option)
-                                            <option value="{{ $option }}"
-                                                {{ (string) $oldValue === (string) $option ? 'selected' : '' }}>
-                                                {{ $option }}
-                                            </option>
-                                        @endforeach
+                                    <select id="field-{{ $field->id }}" name="{{ $field->field_key }}" class="form-select select2-single" data-placeholder="Choose an option" @required($isRequired)>
+                                        <option value="">Choose an option</option>
+                                        @foreach ($options as $option)<option value="{{ $option }}" @selected((string) $oldValue === (string) $option)>{{ $option }}</option>@endforeach
                                     </select>
-
-                                    {{-- MULTI SELECT (SELECT2) --}}
-                                @elseif (in_array($field->field_type, ['checkbox', 'multiselect']))
-                                    <select name="{{ $field->field_key }}[]" class="form-select select2-multiple"
-                                        multiple data-placeholder="Select one or more options"
-                                        {{ $isRequired ? 'required' : '' }}>
-                                        @foreach ($options as $option)
-                                            <option value="{{ $option }}"
-                                                {{ is_array($oldValue) && in_array($option, $oldValue) ? 'selected' : '' }}>
-                                                {{ $option }}
-                                            </option>
-                                        @endforeach
+                                @elseif ($field->field_type === 'multiselect')
+                                    <select id="field-{{ $field->id }}" name="{{ $field->field_key }}[]" class="form-select select2-multiple" multiple data-placeholder="Choose one or more options" @required($isRequired)>
+                                        @foreach ($options as $option)<option value="{{ $option }}" @selected(is_array($oldValue) && in_array($option, $oldValue, true))>{{ $option }}</option>@endforeach
                                     </select>
-
-                                    @if ($isRequired)
-                                        <small class="text-muted">Select one or more options</small>
-                                    @endif
-
-                                    {{-- FILE --}}
-                                @elseif ($field->field_type === 'file')
-                                    <input type="file" name="{{ $field->field_key }}"
-                                        {{ $isRequired ? 'required' : '' }}>
+                                @elseif ($field->field_type === 'radio')
+                                    <div class="choice-list" id="field-{{ $field->id }}">
+                                        @foreach ($options as $option)
+                                            <label><input type="radio" name="{{ $field->field_key }}" value="{{ $option }}" @checked((string) $oldValue === (string) $option) @required($isRequired)><span>{{ $option }}</span></label>
+                                        @endforeach
+                                    </div>
+                                @elseif ($field->field_type === 'checkbox')
+                                    <div class="choice-list" id="field-{{ $field->id }}">
+                                        @foreach ($options as $option)
+                                            <label><input type="checkbox" name="{{ $field->field_key }}[]" value="{{ $option }}" @checked(is_array($oldValue) && in_array($option, $oldValue, true))><span>{{ $option }}</span></label>
+                                        @endforeach
+                                    </div>
+                                @elseif ($field->field_type === 'boolean')
+                                    <label class="confirmation-field" id="field-{{ $field->id }}"><input type="checkbox" name="{{ $field->field_key }}" value="1" @checked(old($field->field_key)) @required($isRequired)><span>{{ $field->placeholder ?: 'Yes, I confirm.' }}</span></label>
+                                @elseif (in_array($field->field_type, ['file', 'image'], true))
+                                    <input id="field-{{ $field->id }}" type="file" name="{{ $field->field_key }}" @if($acceptedFiles) accept="{{ $acceptedFiles }}" @endif @required($isRequired)>
                                 @endif
 
-                                @error($field->field_key)
-                                    <div class="error-text">{{ $message }}</div>
-                                @enderror
+                                @if(in_array($field->field_type, ['select', 'radio'], true))
+                                    <p class="field-help">Choose one of the answers specified above.</p>
+                                @elseif(in_array($field->field_type, ['multiselect', 'checkbox'], true))
+                                    <p class="field-help">Choose one or more of the answers specified above.</p>
+                                @endif
+                                @if($field->help_text)<p class="field-help">{{ $field->help_text }}</p>@endif
+                                @if(in_array($field->field_type, ['file', 'image'], true) && ($configuration['max_file_size_mb'] ?? null))
+                                    <p class="field-help">Maximum file size: {{ $configuration['max_file_size_mb'] }} MB.</p>
+                                @endif
+                                @error($field->field_key)<div class="error-text">{{ $message }}</div>@enderror
+                                @error($field->field_key.'.*')<div class="error-text">{{ $message }}</div>@enderror
                             </div>
                         @endforeach
 

@@ -16,6 +16,7 @@ use App\Models\DiscussionParticipantToken;
 use App\Models\DiscussionReaction;
 use App\Models\NewsPost;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -189,6 +190,12 @@ private function logModelEvent(string $type, array $data): void
  */
 private function redactAuditPayload(array $data): array
 {
+    foreach (['source_payload', 'row_payload', 'planned_milestones'] as $largeSourceKey) {
+        if (array_key_exists($largeSourceKey, $data)) {
+            $data[$largeSourceKey] = '[PRESERVED IN DEDICATED PROCUREMENT IMPORT TABLE]';
+        }
+    }
+
     $redactKeys = [
         'password',
         'remember_token',
@@ -264,6 +271,31 @@ private function resolveAuditModule(Model $model): string
         'FinanceResourceCategory' => 'finance',
         'FinanceResourceItem' => 'finance',
 
+        // Monitoring, Evaluation and Learning
+        'Indicator' => 'me',
+        'IndicatorTarget' => 'me',
+        'IndicatorResult' => 'me',
+        'MeFramework' => 'me',
+        'MeIndicatorReferenceSheet' => 'me',
+        'MeIndicatorCalculationRule' => 'me',
+        'MePerformanceThreshold' => 'me',
+        'MeReportingPeriod' => 'me',
+        'MeDataEntryForm' => 'me',
+        'MeDataEntryFormSection' => 'me',
+        'MeDataEntryFormField' => 'me',
+        'MeDataCollection' => 'me',
+        'MeDataCollectionAssignment' => 'me',
+        'MeDataSubmission' => 'me',
+        'MeDataSubmissionAnswer' => 'me',
+        'MeDataSubmissionVersion' => 'me',
+        'MeDataSubmissionReview' => 'me',
+        'MeSubmissionEvidence' => 'me',
+        'MeDataQualityFinding' => 'me',
+        'MePerformanceReport' => 'me',
+        'MePerformanceReportIndicatorResult' => 'me',
+        'MeIndicatorAchievement' => 'me',
+        'MeIndicatorAchievementBreakdown' => 'me',
+
         // Communications
         'MemberStateCommunication' => 'communications',
         'MemberStateCommunicationAttachment' => 'communications',
@@ -301,19 +333,17 @@ private function buildActionMessage(string $type, Model $model): string
 
     $modelName = strtolower(str_replace('_', ' ', class_basename($model)));
 
-    if ($type === 'created') {
-        return "Created a new {$modelName}: {$label}";
-    }
+    $message = match ($type) {
+        'created' => "Created a new {$modelName}: {$label}",
+        'updated' => "Updated {$modelName}: {$label}",
+        'deleted' => "Deleted {$modelName}: {$label}",
+        default => ucfirst($type) . " {$modelName}: {$label}",
+    };
 
-    if ($type === 'updated') {
-        return "Updated {$modelName}: {$label}";
-    }
-
-    if ($type === 'deleted') {
-        return "Deleted {$modelName}: {$label}";
-    }
-
-    return ucfirst($type) . " {$modelName}: {$label}";
+    // system_audit_logs.action_message is varchar(255). Long procurement
+    // descriptions remain in the model/import payload, while the label here
+    // is deliberately bounded so audit logging can never break a write.
+    return Str::limit($message, 250);
 }
 
 }

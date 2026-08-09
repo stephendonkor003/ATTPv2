@@ -71,6 +71,35 @@ class MeKnowledgeEvidenceItem extends BaseModel
         return $this->belongsTo(User::class, 'validated_by');
     }
 
+    public function formattedSize(): string
+    {
+        if (! $this->file_size) {
+            return $this->file_path ? 'Size unavailable' : 'External link';
+        }
+
+        if ($this->file_size >= 1_073_741_824) {
+            return number_format($this->file_size / 1_073_741_824, 1).' GB';
+        }
+        if ($this->file_size >= 1_048_576) {
+            return number_format($this->file_size / 1_048_576, 1).' MB';
+        }
+
+        return number_format(max($this->file_size, 1) / 1024, 1).' KB';
+    }
+
+    public function isPreviewable(): bool
+    {
+        return in_array($this->mime_type, [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'text/plain',
+            'text/csv',
+        ], true);
+    }
+
     public function indicators(): HasMany
     {
         return $this->hasMany(Indicator::class, 'means_of_verification_id');

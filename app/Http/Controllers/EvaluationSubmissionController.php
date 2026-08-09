@@ -394,8 +394,13 @@ class EvaluationSubmissionController extends Controller
         }
     }
 
+    $isThinkTankEvaluator = auth()->user()?->isThinkTankUser();
+
     return redirect()
-        ->route('eval.assign.applicants', $assignment)
+        ->route(
+            $isThinkTankEvaluator ? 'think-tank.evaluations.index' : 'eval.assign.applicants',
+            $isThinkTankEvaluator ? [] : [$assignment]
+        )
         ->with('success', 'Evaluation submitted successfully.');
 }
 
@@ -540,7 +545,7 @@ class EvaluationSubmissionController extends Controller
 
         if (! $assignment) {
             return redirect()
-                ->route('my.eval.index')
+                ->route($user->isThinkTankUser() ? 'think-tank.evaluations.index' : 'my.eval.index')
                 ->with('warning', 'No submitted evaluations are available for comparison yet.');
         }
 

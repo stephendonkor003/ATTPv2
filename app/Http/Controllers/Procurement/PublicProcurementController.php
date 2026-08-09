@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class PublicProcurementController extends Controller
 {
@@ -35,6 +36,10 @@ class PublicProcurementController extends Controller
             ->update(['status' => 'closed']);
 
         $procurements = Procurement::where('status', 'published')
+            ->with([
+                'thinkTankMember:id,name,logo_path',
+                'activeForm.fields',
+            ])
             ->where(function ($query) {
                 $query->whereNull('visibility_type')
                     ->orWhere('visibility_type', 'public');
@@ -66,7 +71,10 @@ class PublicProcurementController extends Controller
 
         $procurement->autoCloseIfExpired();
         abort_if(!$procurement->isApplicationOpen(), 404);
-        $procurement->load('documents');
+        $procurement->load([
+            'documents',
+            'thinkTankMember:id,name,logo_path',
+        ]);
 
         $form = DynamicForm::approved()
             ->where('procurement_id', $procurement->id)
@@ -132,29 +140,82 @@ class PublicProcurementController extends Controller
 
             $key = $field->field_key;
             $required = $field->is_required ? 'required' : 'nullable';
+            $configuration = (array) $field->validation_rules;
+            $options = $field->optionValues();
+            $maxLength = min(20000, max(1, (int) ($configuration['max_length'] ?? ($field->field_type === 'textarea' ? 20000 : 255))));
 
             switch ($field->field_type) {
 
                 case 'email':
-                    $rules[$key] = "$required|email";
+                    $rules[$key] = [$required, 'email:rfc', 'max:'.$maxLength];
                     break;
 
                 case 'file':
-                    // NOTE: Laravel's "max" is in kilobytes. Keep public uploads small to reduce DoS risk.
-                    $rules[$key] = "$required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip|max:20480"; // 20MB
+                case 'image':
+                    $defaultExtensions = $field->field_type === 'image'
+                        ? ['jpg', 'jpeg', 'png', 'webp']
+                        : ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'zip'];
+                    $extensions = array_values(array_intersect(
+                        (array) ($configuration['allowed_extensions'] ?? $defaultExtensions),
+                        $defaultExtensions
+                    ));
+                    $maxKilobytes = min(20480, max(1024, (int) ($configuration['max_file_size_mb'] ?? 10) * 1024));
+                    $rules[$key] = [
+                        $required,
+                        'file',
+                        ...($field->field_type === 'image' ? ['image'] : []),
+                        'mimes:'.implode(',', $extensions ?: $defaultExtensions),
+                        'max:'.$maxKilobytes,
+                    ];
                     break;
 
-                case 'checkbox':       // Select2 multi-select
+                case 'checkbox':
                 case 'multiselect':
-                    $rules[$key] = "$required|array";
+                    $rules[$key] = [$required, 'array', ...($field->is_required ? ['min:1'] : [])];
+                    $rules[$key.'.*'] = ['string', Rule::in($options)];
                     break;
 
                 case 'number':
-                    $rules[$key] = "$required|numeric";
+                    $rules[$key] = [
+                        $required,
+                        'numeric',
+                        ...(array_key_exists('min', $configuration) ? ['min:'.$configuration['min']] : []),
+                        ...(array_key_exists('max', $configuration) ? ['max:'.$configuration['max']] : []),
+                    ];
                     break;
 
                 case 'url':
-                    $rules[$key] = "$required|url";
+                    $rules[$key] = [$required, 'url:http,https', 'max:'.$maxLength];
+                    break;
+
+                case 'tel':
+                    $rules[$key] = [$required, 'string', 'max:'.$maxLength];
+                    break;
+
+                case 'date':
+                    $rules[$key] = [$required, 'date_format:Y-m-d'];
+                    break;
+
+                case 'time':
+                    $rules[$key] = [$required, 'date_format:H:i'];
+                    break;
+
+                case 'datetime-local':
+                    $rules[$key] = [$required, 'date_format:Y-m-d\\TH:i'];
+                    break;
+
+                case 'select':
+                case 'radio':
+                    $rules[$key] = [$required, 'string', Rule::in($options)];
+                    break;
+
+                case 'boolean':
+                    $rules[$key] = [$required, 'accepted'];
+                    break;
+
+                case 'textarea':
+                case 'text':
+                    $rules[$key] = [$required, 'string', 'max:'.$maxLength];
                     break;
 
                 default:
@@ -197,11 +258,12 @@ class PublicProcurementController extends Controller
 
             $alreadySubmitted = FormSubmission::where('procurement_id', $procurement->id)
                 ->where('submitted_by', $existingUser->id)
+                ->where('status', '!=', FormSubmission::STATUS_WITHDRAWN)
                 ->exists();
 
             if ($alreadySubmitted) {
                 return back()->withErrors([
-                    'official_email' => 'You have already submitted an application for this procurement.',
+                    'official_email' => 'You already have an active application. Sign in to the vendor portal to review, resubmit or withdraw it.',
                 ]);
             }
 
@@ -229,8 +291,9 @@ class PublicProcurementController extends Controller
                 'procurement_id' => $procurement->id,
                 'form_id'        => $form->id,
                 'submitted_by'   => $vendorUser?->id,
-                'status'         => 'submitted',
+                'status'         => FormSubmission::STATUS_SUBMITTED,
                 'submitted_at'   => now(),
+                'publication_version' => max(1, (int) $procurement->publication_version),
             ]);
 
             foreach ($form->fields as $field) {
@@ -239,7 +302,7 @@ class PublicProcurementController extends Controller
                 $value = null;
 
                 // FILE
-                if ($field->field_type === 'file' && $request->hasFile($key)) {
+                if (in_array($field->field_type, ['file', 'image'], true) && $request->hasFile($key)) {
                     $value = $request->file($key)
                         // Store submissions on the default (private) disk; access must be authorized.
                         ->store('procurement_submissions');
@@ -265,7 +328,7 @@ class PublicProcurementController extends Controller
 
         if ($vendorUser && $submission) {
             Mail::to($vendorUser->email)
-                ->send(new VendorApplicationReceived($procurement, $submission, $vendorUser, $temporaryPassword));
+                ->queue(new VendorApplicationReceived($procurement, $submission, $vendorUser, $temporaryPassword));
         }
 
         if ($submission) {

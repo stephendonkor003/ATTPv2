@@ -395,6 +395,7 @@ class MePerformanceReportController extends Controller
             $report,
             $action
         );
+        $this->recalculateReportIndicators($report);
 
         return redirect()
             ->route('budget.me.performance-reports.edit', $report)
@@ -441,6 +442,7 @@ class MePerformanceReportController extends Controller
             );
         });
         app(MeReportingNotificationService::class)->performanceLifecycle($report, 'archived');
+        $this->recalculateReportIndicators($report);
 
         return redirect()
             ->route('budget.me.performance-reports.edit', $report)
@@ -660,16 +662,23 @@ class MePerformanceReportController extends Controller
             ]);
         }
 
-        [$periodStart, $periodEnd] = $this->periodDates($year, $periodType, $periodLabel);
-        $period = $this->resolveReportingPeriod(
-            $form,
-            $year,
-            $periodType,
-            $periodLabel,
-            $periodStart,
-            $periodEnd,
-            (string) $request->user()->id
-        );
+        $assignedPeriod = $assignment?->collection?->reportingPeriod;
+        if ($assignedPeriod) {
+            $period = $assignedPeriod;
+            $periodStart = Carbon::parse($period->period_start);
+            $periodEnd = Carbon::parse($period->period_end);
+        } else {
+            [$periodStart, $periodEnd] = $this->periodDates($year, $periodType, $periodLabel);
+            $period = $this->resolveReportingPeriod(
+                $form,
+                $year,
+                $periodType,
+                $periodLabel,
+                $periodStart,
+                $periodEnd,
+                (string) $request->user()->id
+            );
+        }
 
         return DB::transaction(function () use (
             $form,
@@ -778,7 +787,8 @@ class MePerformanceReportController extends Controller
 
         return [
             'indicator_results' => ['required', 'array', 'min:1'],
-            'indicator_results.*.actual_value' => [$required, 'numeric'],
+            'indicator_results.*.actual_value' => ['nullable', 'numeric'],
+            'indicator_results.*.actual_text' => ['nullable', 'string', 'max:20000'],
             'indicator_results.*.rollup_numerator' => ['nullable', 'numeric', 'min:0'],
             'indicator_results.*.rollup_denominator' => ['nullable', 'numeric', 'gt:0'],
             'key_achievements' => [$required, 'string', 'max:20000'],
@@ -826,6 +836,12 @@ class MePerformanceReportController extends Controller
         foreach ($report->indicatorResults as $reportResult) {
             $actual = data_get($values, $reportResult->id.'.actual_value');
             $actual = $actual === null || $actual === '' ? null : (float) $actual;
+            $actualText = trim((string) data_get($values, $reportResult->id.'.actual_text', '')) ?: null;
+            if ($reportResult->indicator?->value_type === 'milestone') {
+                $actual = null;
+            } else {
+                $actualText = null;
+            }
             $numerator = data_get($values, $reportResult->id.'.rollup_numerator');
             $numerator = $numerator === null || $numerator === '' ? null : (float) $numerator;
             $denominator = data_get($values, $reportResult->id.'.rollup_denominator');
@@ -853,6 +869,9 @@ class MePerformanceReportController extends Controller
                 'period_start' => $report->reportingPeriod->period_start,
                 'period_end' => $report->reportingPeriod->period_end,
                 'actual_value' => $actual,
+                'actual_text' => $actualText,
+                'rollup_numerator' => $numerator,
+                'rollup_denominator' => $denominator,
                 'unit_id' => $reportResult->indicator?->unit_id,
                 'data_source' => Str::headline((string) $report->reporting_period_type).' performance report '.$report->form?->code,
                 'method' => $reportResult->indicator?->data_collection_method,
@@ -875,6 +894,7 @@ class MePerformanceReportController extends Controller
             $reportResult->update([
                 'indicator_result_id' => $indicatorResult->id,
                 'actual_value' => $actual,
+                'actual_text' => $actualText,
                 'rollup_numerator' => $numerator,
                 'rollup_denominator' => $denominator,
                 'progress_percent' => $progress,
@@ -882,6 +902,17 @@ class MePerformanceReportController extends Controller
         }
 
         foreach ($report->indicatorResults->pluck('indicator_id')->unique() as $indicatorId) {
+            app(IndicatorAggregationService::class)->recalculate(
+                (string) $indicatorId,
+                $report->think_tank_member_id ? (string) $report->think_tank_member_id : null
+            );
+        }
+    }
+
+    private function recalculateReportIndicators(MePerformanceReport $report): void
+    {
+        $report->loadMissing('indicatorResults:id,report_id,indicator_id');
+        foreach ($report->indicatorResults->pluck('indicator_id')->filter()->unique() as $indicatorId) {
             app(IndicatorAggregationService::class)->recalculate(
                 (string) $indicatorId,
                 $report->think_tank_member_id ? (string) $report->think_tank_member_id : null
@@ -1025,7 +1056,9 @@ class MePerformanceReportController extends Controller
             'period_type' => $this->reportingPeriodStorageType($periodType),
             'period_start' => $start,
             'period_end' => $end,
+            'reporting_year' => $year,
             'status' => MeReportingPeriod::STATUS_ACTIVE,
+            'lifecycle_status' => MeReportingPeriod::LIFECYCLE_OPEN,
             'created_by' => $userId,
             'updated_by' => $userId,
         ]);

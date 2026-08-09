@@ -6,12 +6,17 @@ use App\Models\Consortium;
 use App\Models\ConsortiumThinkTank;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class ThinkTankPortalWelcome extends Mailable
+class ThinkTankPortalWelcome extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
+
+    public int $tries = 1;
+
+    public int $timeout = 20;
 
     public function __construct(
         public ConsortiumThinkTank $member,
@@ -19,6 +24,7 @@ class ThinkTankPortalWelcome extends Mailable
         public User $user,
         public ?string $temporaryPassword = null
     ) {
+        $this->afterCommit();
     }
 
     public function build(): self

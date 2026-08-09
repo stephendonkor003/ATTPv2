@@ -85,14 +85,9 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
     {
         $member = $this->member($request);
         $this->assertCanAuthor($request);
-        $this->normalizeLegacyPeriodInput($request);
         $validated = $request->validate([
             'assignment_id' => ['required', 'uuid', Rule::exists('me_data_collection_assignments', 'id')],
-            'reporting_period_type' => ['required', Rule::in(array_keys(MePerformanceReport::REPORTING_PERIOD_TYPES))],
-            'reporting_period_label' => ['required', 'string', 'max:40'],
-            'reporting_year' => ['required', 'integer', 'min:2000', 'max:2100'],
         ]);
-        $this->assertValidPeriodSelection($validated['reporting_period_type'], $validated['reporting_period_label']);
 
         $assignment = MeDataCollectionAssignment::query()
             ->whereKey($validated['assignment_id'])
@@ -102,6 +97,7 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
                 'collection.form.indicators.frequency',
                 'collection.form.indicators.setupTarget',
                 'collection.form.indicators.targets',
+                'collection.reportingPeriod',
             ])
             ->firstOrFail();
         $form = $assignment->collection?->form;
@@ -110,12 +106,19 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
                 'assignment_id' => 'This assigned reporting form is not available for performance reporting.',
             ]);
         }
+        $period = $assignment->collection?->reportingPeriod;
+        if (! $assignment->collection?->isAcceptingSubmissions() || ! $period?->isOpenForSubmission()) {
+            throw ValidationException::withMessages([
+                'assignment_id' => 'This assignment is not in an open Secretariat reporting period.',
+            ]);
+        }
+        [$periodType, $periodLabel] = $this->portalPeriodIdentity($period);
 
         $report = $this->createReportFor(
             $form,
-            (int) $validated['reporting_year'],
-            (string) $validated['reporting_period_type'],
-            (string) $validated['reporting_period_label'],
+            (int) ($period->reporting_year ?: $period->period_end?->year),
+            $periodType,
+            $periodLabel,
             $request,
             $member,
             $assignment
@@ -215,6 +218,10 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
                 ->where('status', MeDataEntryForm::STATUS_PUBLISHED)
                 ->whereNotNull('project_component_id')
                 ->whereHas('indicators'))
+            ->whereHas('collection', fn ($query) => $query->where('status', 'open'))
+            ->whereHas('collection.reportingPeriod', fn ($query) => $query
+                ->where('status', \App\Models\MeReportingPeriod::STATUS_ACTIVE)
+                ->where('lifecycle_status', \App\Models\MeReportingPeriod::LIFECYCLE_OPEN))
             ->with([
                 'collection.form:id,portfolio_id,project_component_id,code,title,status',
                 'collection.form.portfolio:id,name',
@@ -222,12 +229,29 @@ class ThinkTankPerformanceReportController extends MePerformanceReportController
                 'collection.form.projectComponent.governanceNode:id,name,code',
                 'collection.form.indicators:id,indicator_code,name,frequency_of_reporting_id',
                 'collection.form.indicators.frequency:id,name,code,interval_unit,interval_value,frequency_in_days',
-                'collection.reportingPeriod:id,label,period_start,period_end',
+                'collection.reportingPeriod:id,code,label,period_type,reporting_year,period_start,period_end,status,lifecycle_status,submission_opens_at,submission_deadline',
             ])
             ->latest('assigned_at')
             ->get()
-            ->unique(fn (MeDataCollectionAssignment $assignment): string => (string) $assignment->collection?->form_id)
+            ->reject(fn (MeDataCollectionAssignment $assignment): bool => MePerformanceReport::query()
+                ->where('assignment_id', $assignment->id)->exists())
             ->values();
+    }
+
+    /** @return array{0:string,1:string} */
+    private function portalPeriodIdentity(\App\Models\MeReportingPeriod $period): array
+    {
+        $haystack = strtoupper($period->code.' '.$period->label);
+        if ($period->period_type === \App\Models\MeReportingPeriod::TYPE_QUARTER
+            && preg_match('/\bQ([1-4])\b/', $haystack, $match)) {
+            return ['quarter', 'Q'.$match[1]];
+        }
+        if ($period->period_type === \App\Models\MeReportingPeriod::TYPE_SEMI_ANNUAL
+            || preg_match('/\b(H[12]|SEMI)/', $haystack)) {
+            return ['semi_annual', str_contains($haystack, 'H2') ? 'H2' : 'H1'];
+        }
+
+        return ['annual', 'ANNUAL'];
     }
 
     private function member(Request $request): ConsortiumThinkTank

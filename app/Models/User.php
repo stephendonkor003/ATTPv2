@@ -26,6 +26,13 @@ class User extends Authenticatable
 
     public const THINK_TANK_ACCESS_FINANCE = 'finance_officer';
 
+    public const DEFAULT_THINK_TANK_PORTAL_PREFERENCES = [
+        'theme_mode' => 'system',
+        'accent_color' => null,
+        'sidebar_mode' => 'expanded',
+        'dashboard_widgets' => ['performance', 'deadlines', 'finance', 'filters'],
+    ];
+
     public const ADMINISTRATIVE_ASSISTANT_ROLES = [
         'Administrative Assistant',
         // Keep the spelling already used by the live role record compatible.
@@ -33,7 +40,7 @@ class User extends Authenticatable
     ];
 
     public const THINK_TANK_ACCESS_LEVELS = [
-        self::THINK_TANK_ACCESS_ADMIN => 'Think Tank Admin',
+        self::THINK_TANK_ACCESS_ADMIN => 'Think Tank Administrator',
         self::THINK_TANK_ACCESS_PROCUREMENT => 'Procurement Officer',
         self::THINK_TANK_ACCESS_ME => 'M&E Officer',
         self::THINK_TANK_ACCESS_FINANCE => 'Finance Officer',
@@ -136,6 +143,7 @@ class User extends Authenticatable
         'member_state_id',
         'think_tank_member_id',
         'think_tank_access_level',
+        'think_tank_portal_preferences',
     ];
 
     /**
@@ -162,7 +170,38 @@ class User extends Authenticatable
             'disabled_until' => 'datetime',
             'is_blacklisted' => 'boolean',
             'blacklisted_at' => 'datetime',
+            'think_tank_portal_preferences' => 'array',
         ];
+    }
+
+    /**
+     * @return array{theme_mode: string, accent_color: ?string, sidebar_mode: string, dashboard_widgets: array<int, string>}
+     */
+    public function resolvedThinkTankPortalPreferences(): array
+    {
+        $preferences = array_merge(
+            self::DEFAULT_THINK_TANK_PORTAL_PREFERENCES,
+            (array) $this->think_tank_portal_preferences
+        );
+
+        if (! in_array($preferences['theme_mode'], ['system', 'light', 'dark'], true)) {
+            $preferences['theme_mode'] = 'system';
+        }
+
+        if (! in_array($preferences['sidebar_mode'], ['expanded', 'compact'], true)) {
+            $preferences['sidebar_mode'] = 'expanded';
+        }
+
+        if (! preg_match('/^#[0-9a-f]{6}$/i', (string) $preferences['accent_color'])) {
+            $preferences['accent_color'] = null;
+        }
+
+        $preferences['dashboard_widgets'] = array_values(array_intersect(
+            (array) $preferences['dashboard_widgets'],
+            self::DEFAULT_THINK_TANK_PORTAL_PREFERENCES['dashboard_widgets']
+        ));
+
+        return $preferences;
     }
 
     protected static function booted(): void
@@ -376,6 +415,23 @@ class User extends Authenticatable
     {
         if ($this->isSuperAdmin() || $this->isAdmin()) {
             return true;
+        }
+
+        // Think Tank procurement evaluators use the shared scoring workspace,
+        // but only ever see assignments explicitly addressed to their account.
+        if ($this->isThinkTankUser() && $permission === 'evaluations.evaluate') {
+            if (in_array($this->resolvedThinkTankAccessLevel(), [
+                self::THINK_TANK_ACCESS_ADMIN,
+                self::THINK_TANK_ACCESS_PROCUREMENT,
+            ], true)) {
+                return true;
+            }
+
+            return EvaluationAssignment::query()
+                ->where('user_id', $this->id)
+                ->whereHas('procurement', fn ($query) => $query
+                    ->where('think_tank_member_id', $this->think_tank_member_id))
+                ->exists();
         }
 
         // The legacy Think Tank User role historically held every portal

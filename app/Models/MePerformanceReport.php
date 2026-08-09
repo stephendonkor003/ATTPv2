@@ -199,7 +199,7 @@ class MePerformanceReport extends BaseModel
 
     public function isApproved(): bool
     {
-        return in_array($this->status, [self::STATUS_REVIEWED, self::STATUS_APPROVED], true);
+        return in_array($this->status, [self::STATUS_APPROVED, self::STATUS_ARCHIVED], true);
     }
 
     public function isArchived(): bool
@@ -258,7 +258,10 @@ class MePerformanceReport extends BaseModel
             $label = $result->indicator?->indicator_code
                 ?: $result->indicator?->name
                 ?: 'Linked indicator';
-            $indicatorRequirements['Period result for '.$label] = $result->actual_value !== null
+            $hasResult = $result->indicator?->value_type === 'milestone'
+                ? filled($result->actual_text)
+                : $result->actual_value !== null;
+            $indicatorRequirements['Period result for '.$label] = $hasResult
                 && filled($result->indicator_result_id);
             $indicatorRequirements['Achievement detail for '.$label] = $result->achievements->isNotEmpty();
             if ($result->indicator?->organization_rollup_method === 'weighted_average') {

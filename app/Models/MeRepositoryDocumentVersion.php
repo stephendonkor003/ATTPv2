@@ -29,4 +29,21 @@ class MeRepositoryDocumentVersion extends BaseModel
     {
         return $this->belongsTo(MeKnowledgeEvidenceItem::class, 'repository_item_id');
     }
+
+    public function uploadedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function formattedSize(): string
+    {
+        if (! $this->file_size) {
+            return 'Size unavailable';
+        }
+        if ($this->file_size >= 1_048_576) {
+            return number_format($this->file_size / 1_048_576, 1).' MB';
+        }
+
+        return number_format(max($this->file_size, 1) / 1024, 1).' KB';
+    }
 }

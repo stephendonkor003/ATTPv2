@@ -6,6 +6,10 @@ use App\Models\BaseModel;
 
 class FormSubmission extends BaseModel
 {
+    public const STATUS_SUBMITTED = 'submitted';
+    public const STATUS_REVISION_REQUESTED = 'revision_requested';
+    public const STATUS_WITHDRAWN = 'withdrawn';
+
     protected $fillable = [
         'procurement_id',
         'procurement_submission_code',
@@ -13,12 +17,25 @@ class FormSubmission extends BaseModel
         'submitted_by',
         'assigned_prescreener_id',
         'status',
-        'submitted_at'
+        'submitted_at',
+        'publication_version',
+        'vendor_response',
+        'resubmitted_at',
+        'withdrawn_at',
+        'withdrawal_reason',
     ];
 
     protected $casts = [
         'submitted_at' => 'datetime',
+        'publication_version' => 'integer',
+        'resubmitted_at' => 'datetime',
+        'withdrawn_at' => 'datetime',
     ];
+
+    public function isWithdrawn(): bool
+    {
+        return $this->status === self::STATUS_WITHDRAWN;
+    }
 
     public function procurement()
     {

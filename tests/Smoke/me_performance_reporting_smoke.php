@@ -356,13 +356,30 @@ class MePerformanceReportingSmoke
                 'thematic_area_id' => $context['portfolio']->id,
             ]))
                 ->assertOk()
-                ->assertSee('Report Visualizations and Performance Dashboard')
+                ->assertSee('Reporting operations dashboard')
                 ->assertSee('Workflow distribution')
                 ->assertSee('Submission timeliness')
                 ->assertSee('Indicator completeness')
-                ->assertSee('Think tank / implementing partner')
+                ->assertSee('Reports by think tank or partner')
+                ->assertSee('Management attention queue')
+                ->assertSee('Export filtered CSV')
                 ->assertSee($context['form']->title)
-                ->assertSee('Open report');
+                ->assertSee('View report');
+
+            $dashboardCsv = $this->get(route('budget.me.rebuild.reporting-dashboard.csv', [
+                'reporting_year' => 2026,
+                'reporting_period_type' => 'quarter',
+                'reporting_period_label' => $context['quarter'],
+                'q' => $context['form']->title,
+            ]));
+            $dashboardCsv
+                ->assertOk()
+                ->assertStreamed()
+                ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+            $this->assertTrue(
+                str_contains($dashboardCsv->streamedContent(), $context['form']->title),
+                'The filtered dashboard CSV omitted the matching report.'
+            );
 
             $this->get(route('budget.me.rebuild.reporting-dashboard', [
                 'reporting_year' => 2026,
@@ -376,6 +393,24 @@ class MePerformanceReportingSmoke
                 ->assertSee($context['form']->title)
                 ->assertSee('Permission-scoped drill-down');
 
+            $this->get(route('budget.me.rebuild.management-dashboard', [
+                'reporting_year' => 2026,
+                'portfolio_id' => $context['portfolio']->id,
+            ]))
+                ->assertOk()
+                ->assertSee('Management dashboard')
+                ->assertSee('Official performance is approval-controlled')
+                ->assertSee('Portfolio readiness')
+                ->assertSee('Management action queue')
+                ->assertSee('Report lifecycle')
+                ->assertSee('Official performance rating')
+                ->assertSee('Reporting organization coverage')
+                ->assertSee('Reporting window health')
+                ->assertSee('Recent official decisions')
+                ->assertSee($context['portfolio']->name)
+                ->assertSee($context['member']->name)
+                ->assertSee($context['form']->title);
+
             $this->get(route('budget.me.consolidated-reports.index', [
                 'reporting_year' => 2026,
                 'reporting_period_type' => 'quarter',
@@ -383,6 +418,9 @@ class MePerformanceReportingSmoke
             ]))
                 ->assertOk()
                 ->assertSee('Think Tank Submissions &amp; Consolidated Report', false)
+                ->assertSee('Reporting coverage')
+                ->assertSee('Consolidation quality controls')
+                ->assertSee('Approved consolidated indicator performance')
                 ->assertSee($context['member']->name)
                 ->assertSee($context['indicator']->name);
             $consolidatedFilters = [
@@ -390,8 +428,20 @@ class MePerformanceReportingSmoke
                 'reporting_period_type' => 'quarter',
                 'reporting_period_label' => $context['quarter'],
             ];
-            $this->get(route('budget.me.consolidated-reports.excel', $consolidatedFilters))->assertOk();
-            $this->get(route('budget.me.consolidated-reports.pdf', $consolidatedFilters))->assertOk();
+            $this->get(route('budget.me.consolidated-reports.excel', $consolidatedFilters))
+                ->assertOk()
+                ->assertDownload('ATTP-Consolidated-MEL-2026-'.$context['quarter'].'.xlsx');
+            $this->get(route('budget.me.consolidated-reports.pdf', $consolidatedFilters))
+                ->assertOk()
+                ->assertDownload('ATTP-Consolidated-MEL-2026-'.$context['quarter'].'.pdf')
+                ->assertHeader('content-type', 'application/pdf');
+            $this->get(route('budget.me.consolidated-reports.index', [
+                'reporting_year' => 2026,
+                'reporting_period_type' => 'semi_annual',
+                'reporting_period_label' => 'Q1',
+            ]))
+                ->assertOk()
+                ->assertSee('H1 (January');
 
             echo "ME_PERFORMANCE_REPORTING_OK\n";
         } finally {
@@ -425,6 +475,8 @@ class MePerformanceReportingSmoke
             'disabled_until' => null,
             'is_blacklisted' => false,
             'blacklisted_at' => null,
+            'must_change_password' => false,
+            'password_changed_at' => now(),
         ])->save();
 
         $component = Project::query()

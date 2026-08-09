@@ -52,4 +52,28 @@ class MeMatrixVersion extends BaseModel
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function formatLabel(): string
+    {
+        return strtoupper((string) data_get($this->import_summary, 'format', 'File'));
+    }
+
+    /** @return array{sheet_count:int, data_rows:int, data_columns:int, formula_cells:int, validated_cells:int} */
+    public function inspectionTotals(): array
+    {
+        $sheets = collect(data_get($this->import_summary, 'sheets', []));
+
+        return [
+            'sheet_count' => (int) data_get($this->import_summary, 'sheet_count', $sheets->count()),
+            'data_rows' => (int) $sheets->sum('data_rows'),
+            'data_columns' => (int) $sheets->sum('data_columns'),
+            'formula_cells' => (int) $sheets->sum('formula_cells'),
+            'validated_cells' => (int) $sheets->sum('validated_cells'),
+        ];
+    }
 }

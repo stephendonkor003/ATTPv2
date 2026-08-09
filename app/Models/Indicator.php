@@ -12,6 +12,21 @@ class Indicator extends BaseModel
     public const SETUP_TARGET_CONTEXT = 'setup';
     public const ANNUAL_TARGET_CONTEXT = 'annual';
 
+    public const REPORTING_SOURCES = [
+        'secretariat' => 'Secretariat',
+        'think_tank' => 'Think Tank',
+        'both' => 'Secretariat and Think Tank',
+        'system_calculated' => 'System calculated',
+    ];
+
+    public const VALUE_TYPES = [
+        'number' => 'Number',
+        'percentage' => 'Percentage',
+        'boolean' => 'Yes / No',
+        'milestone' => 'Milestone / qualitative status',
+        'text' => 'Text',
+    ];
+
     public const AGGREGATION_METHODS = [
         'sum' => 'Sum (additive values only)',
         'latest' => 'Latest reported value',
@@ -63,6 +78,18 @@ class Indicator extends BaseModel
         'definitions',
         'created_by',
         'code_updated_by',
+        'framework_id',
+        'result_area',
+        'value_type',
+        'target_type',
+        'reporting_source',
+        'is_cumulative',
+        'calculation_key',
+        'requires_evidence',
+        'is_active',
+        'display_order',
+        'effective_from',
+        'effective_to',
     ];
 
     protected $casts = [
@@ -70,6 +97,12 @@ class Indicator extends BaseModel
         'baseline_value' => 'decimal:4',
         'annual_target' => 'decimal:4',
         'life_of_programme_target' => 'decimal:4',
+        'is_cumulative' => 'boolean',
+        'requires_evidence' => 'boolean',
+        'is_active' => 'boolean',
+        'display_order' => 'integer',
+        'effective_from' => 'date',
+        'effective_to' => 'date',
     ];
 
     protected static function booted(): void
@@ -100,6 +133,28 @@ class Indicator extends BaseModel
     public function projectComponent(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project_component_id');
+    }
+
+    public function framework(): BelongsTo
+    {
+        return $this->belongsTo(MeFramework::class, 'framework_id');
+    }
+
+    public function referenceSheets(): HasMany
+    {
+        return $this->hasMany(MeIndicatorReferenceSheet::class, 'indicator_id')->latest('version');
+    }
+
+    public function approvedReferenceSheet()
+    {
+        return $this->hasOne(MeIndicatorReferenceSheet::class, 'indicator_id')
+            ->where('approval_status', 'approved')
+            ->orderByDesc('version');
+    }
+
+    public function calculationRules(): HasMany
+    {
+        return $this->hasMany(MeIndicatorCalculationRule::class, 'indicator_id')->latest('version');
     }
 
     public function meansOfVerification(): BelongsTo

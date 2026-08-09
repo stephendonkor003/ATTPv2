@@ -7,13 +7,17 @@ use App\Models\MeDataCollection;
 use App\Models\MeDataEntryForm;
 use App\Models\MeDataEntryFormField;
 use App\Models\MeDataEntryFormSection;
+use App\Models\MeDataQualityFinding;
 use App\Models\MeDataSubmission;
+use App\Models\MeDataSubmissionReview;
 use App\Models\MeDataSubmissionAnswer;
 use App\Models\MeReportingPeriod;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\Sector;
 use App\Models\User;
+use App\Notifications\MeReportingNotification;
+use App\Services\MeReportingNotificationService;
 use App\Services\ThinkTankMeAssignmentService;
 use Database\Seeders\ConsortiumOperationsPermissionsSeeder;
 use Database\Seeders\PermissionSeeder;
@@ -74,7 +78,9 @@ class MeDataEntryWorkflowSmoke
             $this->assertAdminWorkspace($context['admin'], $workflow);
             $this->assertDashboardPerformanceUpdates($context, $workflow);
             $this->assertAssignedThinkTankWorkflow($context, $workflow);
+            $this->assertDataQualityApprovalWorkspace($context, $workflow);
             $this->assertParticipantSubmissionsRegister($context, $workflow);
+            $this->assertReportingNotificationCentre($context, $workflow);
             $this->assertSubmittedSectionStructureIsLocked($context, $workflow);
             $this->assertEveryAnswerTypeWorks($context);
             $this->assertThinkTankIsolation($context, $workflow);
@@ -140,6 +146,8 @@ class MeDataEntryWorkflowSmoke
             'disabled_until' => null,
             'is_blacklisted' => false,
             'blacklisted_at' => null,
+            'must_change_password' => false,
+            'password_changed_at' => now(),
         ])->save();
 
         foreach ([$firstUser, $secondUser] as $user) {
@@ -151,6 +159,8 @@ class MeDataEntryWorkflowSmoke
                 'disabled_until' => null,
                 'is_blacklisted' => false,
                 'blacklisted_at' => null,
+                'must_change_password' => false,
+                'password_changed_at' => now(),
                 'otp_verified_at' => now(),
             ])->save();
             $user->unsetRelation('role');
@@ -660,6 +670,24 @@ class MeDataEntryWorkflowSmoke
             ->assertSee($workflow['formTitle'])
             ->assertSee($workflow['periodLabel']);
 
+        $this->asAdmin($admin)
+            ->get(route('budget.me.rebuild.data-entry', [
+                'tab' => 'collections',
+                'q' => Str::lower($workflow['formTitle']),
+            ]))
+            ->assertOk()
+            ->assertSee($workflow['formTitle'])
+            ->assertDontSee('No matching records');
+
+        $this->asAdmin($admin)
+            ->get(route('budget.me.rebuild.data-entry', [
+                'tab' => 'periods',
+                'status' => MeReportingPeriod::LIFECYCLE_OPEN,
+            ]))
+            ->assertOk()
+            ->assertSee($workflow['periodLabel'])
+            ->assertDontSee('No matching records');
+
         $createFormResponse = $this->asAdmin($admin)
             ->get(route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'create' => 'form']));
         $createFormResponse
@@ -685,6 +713,7 @@ class MeDataEntryWorkflowSmoke
             ->assertSee('name="indicator_id"', false)
             ->assertSee('data-template-indicator', false)
             ->assertSee('data-form-portfolio', false)
+            ->assertSee('data-builder-counts', false)
             ->assertSee('data-portfolio="'.$workflow['form']->portfolio_id.'"', false)
             ->assertSee('filterTemplateIndicators', false)
             ->assertSee('id="data-entry-section-template"', false)
@@ -783,8 +812,7 @@ class MeDataEntryWorkflowSmoke
             ->assertSee('1 question')
             ->assertSee('Section 2')
             ->assertSee('2 questions')
-            ->assertSee('--section-bg: #F0FDF4', false)
-            ->assertSee('--section-bg: #FFF7ED', false)
+            ->assertDontSee('--section-bg:', false)
             ->assertSee('Save draft')
             ->assertSee('Submit data')
             ->assertSee('data-me-reporting-form', false)
@@ -1151,12 +1179,158 @@ class MeDataEntryWorkflowSmoke
         $this->flushSession();
     }
 
+    private function assertDataQualityApprovalWorkspace(array $context, array $workflow): void
+    {
+        $submission = MeDataSubmission::query()
+            ->where('assignment_id', $workflow['assignment']->id)
+            ->firstOrFail();
+        $workspaceRoute = route('budget.me.rebuild.data-quality');
+
+        $this->asAdmin($context['admin'])
+            ->get($workspaceRoute)
+            ->assertOk()
+            ->assertSee('Data quality and approval workspace')
+            ->assertSee('Automated DQA')
+            ->assertSee('Finding register')
+            ->assertSee('Approval pipeline')
+            ->assertSee('Rule catalogue')
+            ->assertSee('name="portfolio_id"', false)
+            ->assertSee('name="finding_status"', false)
+            ->assertSee('name="workflow_status"', false);
+
+        $this->asAdmin($context['admin'])
+            ->get($workspaceRoute.'?'.http_build_query([
+                'tab' => 'pipeline',
+                'portfolio_id' => $context['portfolio']->id,
+                'think_tank_id' => $context['firstMember']->id,
+                'workflow_status' => MeDataSubmission::STATUS_SUBMITTED,
+                'sort' => 'dqa',
+                'per_page' => 10,
+            ]))
+            ->assertOk()
+            ->assertSee($workflow['formTitle'])
+            ->assertSee($context['firstMember']->name)
+            ->assertSee('dq-bulk-form', false)
+            ->assertSee('name="submission_ids[]"', false)
+            ->assertSee(route('budget.me.rebuild.data-quality.evaluate', $submission), false)
+            ->assertDontSee('No submissions match this pipeline view');
+
+        $this->asAdmin($context['admin'])
+            ->get($workspaceRoute.'?tab=rules')
+            ->assertOk()
+            ->assertSee('Negative result value')
+            ->assertSee('Required evidence missing')
+            ->assertSee('Percentage denominator missing')
+            ->assertSee('How decisions work');
+
+        $runCountBefore = MeDataSubmissionReview::query()
+            ->where('submission_id', $submission->id)
+            ->where('action', 'dqa_evaluated')
+            ->count();
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.rebuild.data-quality.evaluate', $submission))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertSame(
+            $runCountBefore + 1,
+            MeDataSubmissionReview::query()->where('submission_id', $submission->id)->where('action', 'dqa_evaluated')->count(),
+            'An individual DQA rerun was not retained in the immutable history.'
+        );
+        $this->flushSession();
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.rebuild.data-quality.evaluate-selected'), [
+                'submission_ids' => [$submission->id],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertSame(
+            $runCountBefore + 2,
+            MeDataSubmissionReview::query()->where('submission_id', $submission->id)->where('action', 'dqa_evaluated')->count(),
+            'A bulk DQA rerun was not retained in the immutable history.'
+        );
+        $this->flushSession();
+
+        $token = 'WORKSPACE-DQA-'.Str::upper(Str::random(8));
+        $finding = MeDataQualityFinding::query()->create([
+            'submission_id' => $submission->id,
+            'rule_code' => 'required_evidence_missing',
+            'severity' => 'error',
+            'field_key' => 'supporting_evidence',
+            'message' => 'Controlled workspace exception '.$token,
+            'status' => 'open',
+        ]);
+        $this->asAdmin($context['admin'])
+            ->get($workspaceRoute.'?'.http_build_query([
+                'tab' => 'findings',
+                'q' => strtolower($token),
+                'severity' => 'error',
+                'finding_status' => 'open',
+            ]))
+            ->assertOk()
+            ->assertSee($token)
+            ->assertSee('Document resolution')
+            ->assertSee(route('budget.me.submission-reviews.dqa.resolve', [$submission, $finding]), false)
+            ->assertDontSee('No findings match this view');
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.submission-reviews.dqa.resolve', [$submission, $finding]), [
+                'resolution_notes' => 'The source file was inspected and the controlled workspace exception was closed.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertSame('resolved', $finding->fresh()->status, 'The workspace finding resolution was not stored.');
+        $this->flushSession();
+    }
+
     private function assertParticipantSubmissionsRegister(array $context, array $workflow): void
     {
         $submission = MeDataSubmission::query()
             ->where('assignment_id', $workflow['assignment']->id)
             ->first();
         $this->assertTrue((bool) $submission, 'The participant submission required by the admin register smoke is missing.');
+
+        $reviewQueueRoute = route('budget.me.submission-reviews.index');
+        $this->asAdmin($context['admin'])
+            ->get($reviewQueueRoute)
+            ->assertOk()
+            ->assertSee('Submission review queue')
+            ->assertSee('Find and organise submissions')
+            ->assertSee('mel-table-scroll', false)
+            ->assertSee('mel-mobile-list', false)
+            ->assertSee('name="portfolio_id"', false)
+            ->assertSee('name="dqa"', false)
+            ->assertSee('name="evidence"', false)
+            ->assertSee('name="sort"', false)
+            ->assertSee($workflow['formTitle'])
+            ->assertSee($context['firstMember']->name)
+            ->assertSee(route('budget.me.submission-reviews.show', $submission), false);
+
+        $this->asAdmin($context['admin'])
+            ->get($reviewQueueRoute.'?'.http_build_query([
+                'q' => Str::upper($context['indicator']->indicator_code),
+                'portfolio_id' => $context['portfolio']->id,
+                'status' => MeDataSubmission::STATUS_SUBMITTED,
+                'sort' => 'oldest',
+                'per_page' => 10,
+            ]))
+            ->assertOk()
+            ->assertSee($workflow['formTitle'])
+            ->assertSee('2 active filters')
+            ->assertDontSee('No submissions match this view');
+
+        $this->asAdmin($context['admin'])
+            ->get(route('budget.me.submission-reviews.show', $submission))
+            ->assertOk()
+            ->assertSee('Official submission review')
+            ->assertSee('Review decision')
+            ->assertSee('Only valid actions for this stage are available.')
+            ->assertSee('value="start_review"', false)
+            ->assertSee('value="return"', false)
+            ->assertSee('value="reject"', false)
+            ->assertDontSee('value="verify"', false)
+            ->assertDontSee('value="approve"', false)
+            ->assertSee('Review history');
 
         $registerRoute = route('budget.me.rebuild.data-entry');
         $this->asAdmin($context['admin'])
@@ -1169,6 +1343,9 @@ class MeDataEntryWorkflowSmoke
             ->assertSee('>Template / period</th>', false)
             ->assertSee('>Submitted / status</th>', false)
             ->assertSee('>Review</th>', false)
+            ->assertSee('me-data-table-region', false)
+            ->assertSee('Open review')
+            ->assertSee(route('budget.me.submission-reviews.show', $submission), false)
             ->assertSee('<small>Portfolio</small>', false)
             ->assertSee('<small>Indicator</small>', false)
             ->assertSee('Search submissions')
@@ -1234,6 +1411,321 @@ class MeDataEntryWorkflowSmoke
             ->assertSee('Try a different participant, indicator, template, period, portfolio or status.')
             ->assertSee('aria-label="Clear filters"', false)
             ->assertDontSee($workflow['formTitle']);
+
+        $dqaRunsBeforeInvalidTransition = MeDataSubmissionReview::query()
+            ->where('submission_id', $submission->id)
+            ->where('action', 'dqa_evaluated')
+            ->count();
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.submission-reviews.decide', $submission), [
+                'action' => 'verify',
+                'comments' => 'This invalid transition must not be accepted.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasErrors('action');
+        $this->assertSame(
+            MeDataSubmission::STATUS_SUBMITTED,
+            $submission->fresh()->effectiveStatus(),
+            'An invalid review transition changed the submission status.'
+        );
+        $this->assertSame(
+            $dqaRunsBeforeInvalidTransition,
+            MeDataSubmissionReview::query()->where('submission_id', $submission->id)->where('action', 'dqa_evaluated')->count(),
+            'An invalid review transition reran DQA or wrote a misleading audit event.'
+        );
+        $this->flushSession();
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.submission-reviews.decide', $submission), [
+                'action' => 'start_review',
+                'comments' => 'Initial completeness and evidence screening started.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $submission->refresh();
+        $this->assertSame(MeDataSubmission::STATUS_UNDER_REVIEW, $submission->effectiveStatus(), 'Start review did not advance the submission.');
+        $this->assertSame(1, MeDataSubmissionReview::query()->where('submission_id', $submission->id)->where('action', 'start_review')->count(), 'Start review was not written to immutable history.');
+        $this->flushSession();
+
+        $finding = MeDataQualityFinding::query()->create([
+            'submission_id' => $submission->id,
+            'rule_code' => 'smoke_reviewer_check',
+            'severity' => 'warning',
+            'message' => 'Temporary finding used to verify resolution controls.',
+            'status' => 'open',
+        ]);
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.submission-reviews.dqa.resolve', [$submission, $finding]), [
+                'resolution_notes' => 'The supporting source was checked and reconciled.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertSame('resolved', $finding->fresh()->status, 'The DQA resolution was not stored.');
+        $this->flushSession();
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.submission-reviews.dqa.resolve', [$submission, $finding]), [
+                'resolution_notes' => 'A duplicate resolution must be refused.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasErrors('resolution_notes');
+        $this->flushSession();
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.submission-reviews.decide', $submission), [
+                'action' => 'return',
+                'comments' => '',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasErrors('comments');
+        $this->assertSame(MeDataSubmission::STATUS_UNDER_REVIEW, $submission->fresh()->effectiveStatus(), 'A return without required comments changed the workflow.');
+        $this->flushSession();
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.submission-reviews.decide', $submission), [
+                'action' => 'verify',
+                'comments' => 'Reported values and Means of Verification checked.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertSame(MeDataSubmission::STATUS_VERIFIED, $submission->fresh()->effectiveStatus(), 'Verification did not advance the workflow.');
+        $this->flushSession();
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.submission-reviews.decide', $submission), [
+                'action' => 'approve',
+                'comments' => 'Approved for official consolidation.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $submission->refresh();
+        $this->assertSame(MeDataSubmission::STATUS_APPROVED, $submission->effectiveStatus(), 'Approval did not finalise the workflow.');
+        $this->assertSame(
+            3,
+            MeDataSubmissionReview::query()
+                ->where('submission_id', $submission->id)
+                ->whereIn('action', ['start_review', 'verify', 'approve'])
+                ->count(),
+            'Review lifecycle history is incomplete.'
+        );
+        $this->assertTrue(
+            MeDataSubmissionReview::query()
+                ->where('submission_id', $submission->id)
+                ->where('action', 'dqa_evaluated')
+                ->count() >= 3,
+            'Review decisions did not retain their DQA evaluation history.'
+        );
+        $this->assertTrue($submission->indicatorResults()->where('review_status', 'approved')->exists(), 'Approved submission results were not approved.');
+
+        $approvedDqaRunCount = MeDataSubmissionReview::query()
+            ->where('submission_id', $submission->id)
+            ->where('action', 'dqa_evaluated')
+            ->count();
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.rebuild.data-quality.evaluate', $submission))
+            ->assertRedirect()
+            ->assertSessionHasErrors('submission');
+        $this->assertSame(
+            $approvedDqaRunCount,
+            MeDataSubmissionReview::query()->where('submission_id', $submission->id)->where('action', 'dqa_evaluated')->count(),
+            'A final-approved submission accepted an unauthorised DQA rerun.'
+        );
+        $this->flushSession();
+
+        $this->asAdmin($context['admin'])
+            ->get(route('budget.me.submission-reviews.show', $submission))
+            ->assertOk()
+            ->assertSee('No further review decision is available')
+            ->assertSee('Approved')
+            ->assertDontSee('value="start_review"', false)
+            ->assertDontSee('value="verify"', false)
+            ->assertDontSee('value="approve"', false);
+    }
+
+    private function assertReportingNotificationCentre(array $context, array $workflow): void
+    {
+        $token = Str::upper(Str::random(10));
+        $admin = $context['admin'];
+        $submission = MeDataSubmission::query()
+            ->where('assignment_id', $workflow['assignment']->id)
+            ->firstOrFail();
+        $internalUrl = route('budget.me.submission-reviews.show', $submission);
+
+        $admin->notify(new MeReportingNotification([
+            'title' => 'Urgent notification centre smoke '.$token,
+            'message' => 'A controlled deadline notification must be searchable and actionable.',
+            'severity' => 'danger',
+            'category' => 'deadline',
+            'event' => 'deadline_smoke_'.$token,
+            'url' => $internalUrl,
+        ]));
+        $primary = $admin->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->where('data', 'like', '%'.$token.'%')
+            ->latest()
+            ->firstOrFail();
+
+        $indexRoute = route('budget.me.reporting-notifications.index');
+        $this->asAdmin($admin)
+            ->get($indexRoute)
+            ->assertOk()
+            ->assertSee('Reporting notification centre')
+            ->assertSee('Search and filter')
+            ->assertSee('Personal notification inbox')
+            ->assertSee('notification-bulk-form', false)
+            ->assertSee('name="category"', false)
+            ->assertSee('name="severity"', false)
+            ->assertSee('name="notification_ids[]"', false)
+            ->assertSee($token);
+
+        $this->asAdmin($admin)
+            ->get($indexRoute.'?'.http_build_query([
+                'q' => strtolower($token),
+                'state' => 'unread',
+                'category' => 'deadline',
+                'severity' => 'danger',
+                'sort' => 'oldest',
+                'per_page' => 10,
+            ]))
+            ->assertOk()
+            ->assertSee($token)
+            ->assertSee('3 active filters')
+            ->assertDontSee('No notifications match this view');
+
+        $this->asAdmin($admin)
+            ->get($indexRoute.'?'.http_build_query([
+                'q' => $token,
+                'category' => 'mov_validation',
+            ]))
+            ->assertOk()
+            ->assertSee('No notifications match this view')
+            ->assertDontSee('Urgent notification centre smoke '.$token);
+
+        $primary->markAsRead();
+        $this->asAdmin($admin)
+            ->postWithCsrf(route('budget.me.reporting-notifications.unread', $primary->id))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertTrue($primary->fresh()->read_at === null, 'Mark unread did not clear the read timestamp.');
+        $this->flushSession();
+
+        $admin->notify(new MeReportingNotification([
+            'title' => 'Secondary notification centre smoke '.$token,
+            'message' => 'A second controlled item verifies bulk state changes.',
+            'severity' => 'info',
+            'category' => 'me_submission',
+            'url' => $internalUrl,
+        ]));
+        $secondary = $admin->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->where('data', 'like', '%Secondary notification centre smoke '.$token.'%')
+            ->latest()
+            ->firstOrFail();
+
+        $this->asAdmin($admin)
+            ->postWithCsrf(route('budget.me.reporting-notifications.bulk'), [
+                'notification_ids' => [$primary->id, $secondary->id],
+                'action' => 'mark_read',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertTrue((bool) $primary->fresh()->read_at && (bool) $secondary->fresh()->read_at, 'Bulk mark read did not update every selected notification.');
+        $this->flushSession();
+
+        $this->asAdmin($admin)
+            ->postWithCsrf(route('budget.me.reporting-notifications.bulk'), [
+                'notification_ids' => [$primary->id, $secondary->id],
+                'action' => 'mark_unread',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertTrue($primary->fresh()->read_at === null && $secondary->fresh()->read_at === null, 'Bulk mark unread did not update every selected notification.');
+        $this->flushSession();
+
+        $this->asAdmin($admin)
+            ->postWithCsrf(route('budget.me.reporting-notifications.read', $primary->id))
+            ->assertRedirect($internalUrl);
+        $this->assertTrue((bool) $primary->fresh()->read_at, 'Opening an internal notification did not mark it as read.');
+
+        $admin->notify(new MeReportingNotification([
+            'title' => 'Unsafe notification link smoke '.$token,
+            'message' => 'This external destination must be refused.',
+            'severity' => 'warning',
+            'category' => 'corrective_action',
+            'url' => 'https://malicious.example/phishing',
+        ]));
+        $unsafe = $admin->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->where('data', 'like', '%Unsafe notification link smoke '.$token.'%')
+            ->latest()
+            ->firstOrFail();
+        $this->asAdmin($admin)
+            ->postWithCsrf(route('budget.me.reporting-notifications.read', $unsafe->id))
+            ->assertRedirect($indexRoute)
+            ->assertSessionHas('success');
+        $this->assertTrue((bool) $unsafe->fresh()->read_at, 'An unsafe-link notification was not marked as read.');
+        $this->flushSession();
+
+        $context['firstUser']->notify(new MeReportingNotification([
+            'title' => 'Private Think Tank notification '.$token,
+            'message' => 'Another account must not access this notification.',
+            'severity' => 'info',
+            'category' => 'reporting_period',
+        ]));
+        $foreign = $context['firstUser']->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->where('data', 'like', '%Private Think Tank notification '.$token.'%')
+            ->latest()
+            ->firstOrFail();
+        $this->asAdmin($admin)
+            ->postWithCsrf(route('budget.me.reporting-notifications.read', $foreign->id))
+            ->assertNotFound();
+
+        $this->asAdmin($admin)
+            ->postWithCsrf(route('budget.me.reporting-notifications.read-all'))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+        $this->assertSame(
+            0,
+            $admin->unreadNotifications()->where('type', MeReportingNotification::class)->count(),
+            'Mark all read left unread M&E reporting notifications behind.'
+        );
+        $this->flushSession();
+
+        $service = app(MeReportingNotificationService::class);
+        $dedupeEvent = 'notification_dedupe_smoke_'.strtolower($token);
+        $payload = [
+            'title' => 'Deduplicated reminder '.$token,
+            'message' => 'This daily reminder must only be generated once.',
+            'severity' => 'warning',
+            'category' => 'deadline',
+            'admin_url' => $internalUrl,
+            'portal_url' => route('think-tank.me-data.show', $workflow['assignment']),
+        ];
+        $service->reminder($submission, $dedupeEvent, $payload, collect([$admin]));
+        $service->reminder($submission, $dedupeEvent, $payload, collect([$admin]));
+        $this->assertSame(
+            1,
+            $admin->notifications()->where('type', MeReportingNotification::class)->where('data', 'like', '%'.$dedupeEvent.'%')->count(),
+            'A daily reminder was duplicated for the same user, subject and event.'
+        );
+        $adminReminder = $admin->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->where('data', 'like', '%'.$dedupeEvent.'%')
+            ->firstOrFail();
+        $this->assertSame($internalUrl, data_get($adminReminder->data, 'url'), 'A Secretariat recipient received the Think Tank portal URL.');
+
+        $portalEvent = $dedupeEvent.'_portal';
+        $service->reminder($submission, $portalEvent, $payload, collect([$context['firstUser']]));
+        $portalReminder = $context['firstUser']->notifications()
+            ->where('type', MeReportingNotification::class)
+            ->where('data', 'like', '%'.$portalEvent.'%')
+            ->firstOrFail();
+        $this->assertSame(
+            route('think-tank.me-data.show', $workflow['assignment']),
+            data_get($portalReminder->data, 'url'),
+            'A Think Tank recipient received the Secretariat URL.'
+        );
     }
 
     private function assertEveryAnswerTypeWorks(array $context): void
@@ -1308,6 +1800,8 @@ class MeDataEntryWorkflowSmoke
             'period_start' => now()->startOfMonth()->toDateString(),
             'period_end' => now()->endOfMonth()->toDateString(),
             'status' => MeReportingPeriod::STATUS_ACTIVE,
+            'reporting_year' => now()->year,
+            'lifecycle_status' => MeReportingPeriod::LIFECYCLE_OPEN,
             'created_by' => $context['admin']->id,
             'updated_by' => $context['admin']->id,
         ]);
@@ -1432,6 +1926,8 @@ class MeDataEntryWorkflowSmoke
             'period_start' => now()->startOfMonth()->toDateString(),
             'period_end' => now()->endOfMonth()->toDateString(),
             'status' => MeReportingPeriod::STATUS_ACTIVE,
+            'reporting_year' => now()->year,
+            'lifecycle_status' => MeReportingPeriod::LIFECYCLE_OPEN,
             'created_by' => $context['admin']->id,
             'updated_by' => $context['admin']->id,
         ]);

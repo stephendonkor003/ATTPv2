@@ -17,6 +17,7 @@ class MePerformanceReportIndicatorResult extends BaseModel
         'annual_target',
         'life_of_programme_target',
         'actual_value',
+        'actual_text',
         'rollup_numerator',
         'rollup_denominator',
         'cumulative_year_result',

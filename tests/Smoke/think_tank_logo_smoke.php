@@ -66,6 +66,7 @@ class ThinkTankLogoSmoke
             $this->assertThinkTankAdminUploadAndReplacement($context);
             $this->assertCrossMemberProtection($context);
             $this->assertSystemAdminUpload($context);
+            $this->assertPortalCustomization($context);
 
             echo "THINK_TANK_LOGO_OK\n";
         } finally {
@@ -81,9 +82,18 @@ class ThinkTankLogoSmoke
             Schema::hasColumn('attp_consortium_think_tanks', 'logo_path'),
             'The think-tank logo_path column is not migrated.'
         );
+        $this->assertTrue(
+            Schema::hasColumn('attp_consortium_think_tanks', 'portal_branding'),
+            'The think-tank portal_branding column is not migrated.'
+        );
+        $this->assertTrue(
+            Schema::hasColumn('users', 'think_tank_portal_preferences'),
+            'The personal portal preferences column is not migrated.'
+        );
 
         foreach ([
             'think-tank.branding.logo.update',
+            'think-tank.preferences.update',
             'think-tanks-admin.logo.update',
             ...self::PRIMARY_NAV_ROUTES,
         ] as $routeName) {
@@ -348,6 +358,49 @@ class ThinkTankLogoSmoke
         $this->assertPortalBranding($context['systemAdmin'], $context['otherMember'], false);
     }
 
+    /**
+     * @param  array{member: ConsortiumThinkTank, thinkTankAdmin: User, officers: array<string, User>}  $context
+     */
+    private function assertPortalCustomization(array $context): void
+    {
+        $officer = $context['officers'][User::THINK_TANK_ACCESS_PROCUREMENT];
+
+        $this->asUser($officer)
+            ->from(route('think-tank.dashboard'))
+            ->put(route('think-tank.preferences.update'), [
+                'theme_mode' => 'dark',
+                'accent_color' => '#7c3aed',
+                'sidebar_mode' => 'compact',
+                'dashboard_widgets' => ['deadlines', 'filters'],
+            ])
+            ->assertRedirect(route('think-tank.dashboard'))
+            ->assertSessionHasNoErrors();
+
+        $preferences = $officer->refresh()->resolvedThinkTankPortalPreferences();
+        $this->assertTrue($preferences['theme_mode'] === 'dark', 'Dark-mode preference was not persisted.');
+        $this->assertTrue($preferences['accent_color'] === '#7c3aed', 'Personal accent colour was not persisted.');
+        $this->assertTrue($preferences['sidebar_mode'] === 'compact', 'Compact sidebar preference was not persisted.');
+        $this->assertTrue($preferences['dashboard_widgets'] === ['deadlines', 'filters'], 'Dashboard widget selection was not persisted.');
+
+        $html = $this->asUser($officer)->get(route('think-tank.dashboard'))->assertOk()->getContent();
+        $this->assertTrue(str_contains($html, 'data-sidebar-mode="compact"'), 'The saved compact sidebar is not rendered.');
+        $this->assertTrue(str_contains($html, '--tt-personal-accent: #7c3aed'), 'The saved personal colour is not rendered.');
+        $this->assertTrue(str_contains($html, 'Customize workspace'), 'The dashboard customization studio is missing.');
+
+        $this->asUser($context['thinkTankAdmin'])
+            ->from(route('think-tank.dashboard'))
+            ->put(route('think-tank.branding.logo.update'), [
+                'primary_color' => '#4338ca',
+                'accent_color' => '#f97316',
+            ])
+            ->assertRedirect(route('think-tank.dashboard'))
+            ->assertSessionHasNoErrors();
+
+        $branding = $context['member']->refresh()->resolvedPortalBranding();
+        $this->assertTrue($branding['primary_color'] === '#4338ca', 'Shared primary brand colour was not persisted.');
+        $this->assertTrue($branding['accent_color'] === '#f97316', 'Shared highlight colour was not persisted.');
+    }
+
     private function assertPortalBranding(
         User $user,
         ConsortiumThinkTank $member,
@@ -358,9 +411,22 @@ class ThinkTankLogoSmoke
             ->assertOk();
         $html = $response->getContent();
 
-        foreach (['data-tt-au-logo', 'data-tt-member-logo', 'data-tt-member-watermark'] as $hook) {
+        foreach (['data-tt-attp-logo', 'data-tt-au-logo', 'data-tt-member-logo', 'data-tt-member-watermark'] as $hook) {
             $this->assertTrue(str_contains($html, $hook), "Portal branding hook [{$hook}] is missing.");
         }
+        $portalCss = file_get_contents(public_path('think-tank-portal/assets/css/portal.css')) ?: '';
+        $this->assertTrue(
+            substr_count($html, 'data-tt-institutional-background') >= 2
+                && str_contains($portalCss, '.tt-sidebar')
+                && ! str_contains($portalCss, 'au-headquarters.jpg'),
+            'The portal sidebar and header are not using the clean institutional shell.'
+        );
+        $this->assertTrue(
+            str_contains($portalCss, '--tt-brand: #075c7a;')
+                && str_contains($portalCss, 'width: 100%;')
+                && ! str_contains($portalCss, '--tt-page: #cfe7e1;'),
+            'The portal must retain the full-screen ATTP blue shell without the old mint frame.'
+        );
 
         $logoUrl = e((string) $member->logo_url);
         $this->assertTrue(
@@ -377,11 +443,12 @@ class ThinkTankLogoSmoke
         );
 
         $navigation = $this->portalNavigation($html);
-        preg_match_all('/<a\b/i', $navigation, $navigationLinks);
-        $this->assertTrue(
-            count($navigationLinks[0]) === count(self::PRIMARY_NAV_ROUTES),
-            'Logo branding changed the five-area primary navigation.'
-        );
+        foreach (['Dashboard', 'Procurement', 'Monitoring & Evaluation', 'Reporting', 'Audit Trails', 'Users'] as $groupLabel) {
+            $this->assertTrue(
+                str_contains($navigation, '<summary title="'.e($groupLabel).'">'),
+                "Logo branding removed the [{$groupLabel}] navigation group."
+            );
+        }
 
         foreach (self::PRIMARY_NAV_ROUTES as $routeName) {
             $parameters = $user->isAdmin() || $user->isSuperAdmin()
