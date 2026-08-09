@@ -443,6 +443,37 @@ class MeDataEntryWorkflowSmoke
             'Collection was assigned to the wrong think tank.'
         );
 
+        $period->update([
+            'status' => MeReportingPeriod::STATUS_DRAFT,
+            'lifecycle_status' => MeReportingPeriod::LIFECYCLE_PLANNED,
+        ]);
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.data-entry.collections.publish', $collection))
+            ->assertRedirect()
+            ->assertSessionHasErrors('collection');
+        $this->assertSame(MeDataCollection::STATUS_DRAFT, $collection->fresh()->status, 'An inactive reporting period did not block publication.');
+        $this->flushSession();
+
+        $this->asAdmin($context['admin'])
+            ->get(route('budget.me.rebuild.data-entry', ['tab' => 'collections']))
+            ->assertOk()
+            ->assertSee('Fix reporting period')
+            ->assertSee('data-fix-period-modal', false)
+            ->assertSee('Save and open period')
+            ->assertSee(route('budget.me.data-entry.collections.reporting-period.fix', $collection), false);
+
+        $this->asAdmin($context['admin'])
+            ->postWithCsrf(route('budget.me.data-entry.collections.reporting-period.fix', $collection), [
+                'fix_reporting_period_collection_id' => $collection->id,
+                'fix_submission_opens_at' => $opensAt,
+                'fix_submission_deadline' => $dueAt,
+                'fix_review_deadline' => $closesAt,
+            ])
+            ->assertRedirect(route('budget.me.rebuild.data-entry', ['tab' => 'collections']));
+        $period->refresh();
+        $this->assertSame(MeReportingPeriod::STATUS_ACTIVE, $period->status, 'The reporting-period modal did not activate the linked period.');
+        $this->assertSame(MeReportingPeriod::LIFECYCLE_OPEN, $period->lifecycle_status, 'The reporting-period modal did not open the linked period.');
+
         $this->asAdmin($context['admin'])
             ->postWithCsrf(route('budget.me.data-entry.collections.publish', $collection))
             ->assertRedirect(route('budget.me.rebuild.data-entry', ['tab' => 'collections']));

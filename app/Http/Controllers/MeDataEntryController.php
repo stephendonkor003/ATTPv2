@@ -346,7 +346,7 @@ class MeDataEntryController extends Controller
                     'form.indicator:id,indicator_code,name,unit_id',
                     'form.indicator.unit:id,name,symbol',
                     'form.portfolio:id,name',
-                    'reportingPeriod:id,portfolio_id,code,label,period_start,period_end,status',
+                    'reportingPeriod:id,portfolio_id,code,label,period_type,period_start,period_end,status,reporting_year,submission_opens_at,submission_deadline,review_deadline,lifecycle_status',
                     'assignments.thinkTank:id,name,country,status',
                     'assignments.submission:id,assignment_id,status,workflow_status,submitted_at,updated_at',
                 ])
@@ -817,6 +817,53 @@ class MeDataEntryController extends Controller
         }
 
         return $this->redirectToTab('collections', $message);
+    }
+
+    public function fixCollectionReportingPeriod(Request $request, MeDataCollection $collection): RedirectResponse
+    {
+        $this->assertCollectionInScope($request, $collection);
+        $period = $collection->reportingPeriod()->firstOrFail();
+        $this->assertPeriodInScope($request, $period);
+
+        $submissionDeadlineRules = ['nullable', 'date', 'after:now'];
+        if ($request->filled('fix_submission_opens_at')) {
+            $submissionDeadlineRules[] = 'after_or_equal:fix_submission_opens_at';
+        }
+        $reviewDeadlineRules = ['nullable', 'date'];
+        if ($request->filled('fix_submission_deadline')) {
+            $reviewDeadlineRules[] = 'after_or_equal:fix_submission_deadline';
+        }
+
+        $validated = $request->validate([
+            'fix_reporting_period_collection_id' => ['required', 'uuid', Rule::in([(string) $collection->id])],
+            'fix_submission_opens_at' => ['nullable', 'date'],
+            'fix_submission_deadline' => $submissionDeadlineRules,
+            'fix_review_deadline' => $reviewDeadlineRules,
+            'fix_period_code' => ['nullable', 'string', 'max:50'],
+            'fix_period_label' => ['nullable', 'string', 'max:150'],
+            'fix_period_coverage' => ['nullable', 'string', 'max:100'],
+        ], [
+            'fix_submission_deadline.after' => 'Choose a future submission deadline, or leave it blank for no period-level deadline.',
+            'fix_submission_deadline.after_or_equal' => 'The submission deadline must be after the submission opening time.',
+            'fix_review_deadline.after_or_equal' => 'The review deadline must be after the submission deadline.',
+        ]);
+
+        DB::transaction(function () use ($period, $validated, $request): void {
+            $lockedPeriod = MeReportingPeriod::query()->lockForUpdate()->findOrFail($period->id);
+            $lockedPeriod->update([
+                'status' => MeReportingPeriod::STATUS_ACTIVE,
+                'lifecycle_status' => MeReportingPeriod::LIFECYCLE_OPEN,
+                'submission_opens_at' => $validated['fix_submission_opens_at'] ?? null,
+                'submission_deadline' => $validated['fix_submission_deadline'] ?? null,
+                'review_deadline' => $validated['fix_review_deadline'] ?? null,
+                'updated_by' => $request->user()->id,
+            ]);
+        });
+
+        return $this->redirectToTab(
+            'collections',
+            'Reporting period '.$period->code.' is now open. You can retry Publish / Send to Think Tanks.'
+        );
     }
 
     private function scopedFormQuery(Request $request, ?string $portfolioId = null)

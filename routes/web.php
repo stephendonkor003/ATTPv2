@@ -1462,6 +1462,7 @@ Route::middleware(['auth', 'not.funding.partner'])
 
                 Route::post('collections', 'storeCollection')->name('collections.store');
                 Route::put('collections/{collection}', 'updateCollection')->name('collections.update');
+                Route::post('collections/{collection}/fix-reporting-period', 'fixCollectionReportingPeriod')->name('collections.reporting-period.fix');
                 Route::post('collections/{collection}/publish', 'publishCollection')->name('collections.publish');
                 Route::post('collections/{collection}/close', 'closeCollection')->name('collections.close');
             });

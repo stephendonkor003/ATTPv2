@@ -988,6 +988,114 @@
             color: #8d5807;
         }
 
+        .me-data-entry .me-period-fix-modal .modal-content {
+            overflow: hidden;
+            border: 0;
+            border-radius: 1rem;
+            box-shadow: 0 24px 70px rgba(7, 56, 43, .24);
+        }
+
+        .me-data-entry .me-period-fix-modal .modal-header {
+            align-items: flex-start;
+            padding: 1rem 1.1rem;
+            border-bottom: 1px solid var(--me-border);
+            background: linear-gradient(135deg, #f3fbf7, #eef7fa);
+        }
+
+        .me-data-entry .me-period-fix-title {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: .7rem;
+            align-items: start;
+            min-width: 0;
+        }
+
+        .me-data-entry .me-period-fix-title > span {
+            display: grid;
+            width: 2.35rem;
+            height: 2.35rem;
+            place-items: center;
+            border-radius: .65rem;
+            background: #fff2dc;
+            color: #94600c;
+        }
+
+        .me-data-entry .me-period-fix-title h2 {
+            margin: 0;
+            color: var(--me-green-950);
+            font-size: 1rem;
+            font-weight: 850;
+        }
+
+        .me-data-entry .me-period-fix-title p {
+            margin: .2rem 0 0;
+            color: var(--me-muted);
+            font-size: .72rem;
+            line-height: 1.5;
+        }
+
+        .me-data-entry .me-period-fix-summary {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .65rem;
+            margin-bottom: 1rem;
+        }
+
+        .me-data-entry .me-period-fix-fact {
+            min-width: 0;
+            padding: .7rem;
+            border: 1px solid var(--me-border);
+            border-radius: .7rem;
+            background: #f8fbfa;
+        }
+
+        .me-data-entry .me-period-fix-fact small,
+        .me-data-entry .me-period-fix-fact strong {
+            display: block;
+            overflow-wrap: anywhere;
+        }
+
+        .me-data-entry .me-period-fix-fact small {
+            margin-bottom: .2rem;
+            color: var(--me-muted);
+            font-size: .61rem;
+            font-weight: 800;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .me-data-entry .me-period-fix-fact strong {
+            color: var(--me-ink);
+            font-size: .73rem;
+        }
+
+        .me-data-entry .me-period-fix-note {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: .6rem;
+            align-items: start;
+            margin-top: 1rem;
+            padding: .75rem;
+            border: 1px solid #cfe3d8;
+            border-radius: .7rem;
+            background: var(--me-green-100);
+            color: #245c48;
+            font-size: .7rem;
+            line-height: 1.5;
+        }
+
+        .me-data-entry .me-period-fix-modal .modal-footer {
+            padding: .8rem 1.1rem;
+            border-top: 1px solid var(--me-border);
+            background: #fbfdfc;
+        }
+
+        @media (max-width: 700px) {
+            .me-data-entry .me-period-fix-summary {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
         .me-data-entry .me-workflow-number {
             width: 1.85rem;
             height: 1.85rem;
@@ -3144,6 +3252,23 @@
                                                         <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'submissions', 'q' => $collection->form?->code]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-file-text" aria-hidden="true"></i> Submissions</a>
                                                     @endif
                                                     @if ($collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm {{ $collection->reportingPeriod?->isActive() ? 'btn-outline-warning' : 'btn-warning' }}"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#me-fix-reporting-period-modal"
+                                                            data-fix-reporting-period
+                                                            data-action="{{ route('budget.me.data-entry.collections.reporting-period.fix', $collection) }}"
+                                                            data-collection-id="{{ $collection->id }}"
+                                                            data-period-code="{{ $collection->reportingPeriod?->code }}"
+                                                            data-period-label="{{ $collection->reportingPeriod?->label }}"
+                                                            data-period-coverage="{{ $collection->reportingPeriod?->period_start?->format('d M Y') }} — {{ $collection->reportingPeriod?->period_end?->format('d M Y') }}"
+                                                            data-period-status="{{ str($collection->reportingPeriod?->status ?: 'Unavailable')->headline() }}"
+                                                            data-period-lifecycle="{{ str($collection->reportingPeriod?->lifecycle_status ?: 'Unavailable')->headline() }}"
+                                                            data-submission-opens="{{ $collection->reportingPeriod?->submission_opens_at?->format('Y-m-d\TH:i') }}"
+                                                            data-submission-deadline="{{ $collection->reportingPeriod?->submission_deadline?->format('Y-m-d\TH:i') }}"
+                                                            data-review-deadline="{{ $collection->reportingPeriod?->review_deadline?->format('Y-m-d\TH:i') }}"
+                                                        ><i class="feather-calendar" aria-hidden="true"></i> Fix reporting period</button>
                                                         <form method="POST" action="{{ route('budget.me.data-entry.collections.publish', $collection) }}" data-confirm="{{ $collection->status === \App\Models\MeDataCollection::STATUS_DRAFT ? 'Publish this collection and notify every assigned think tank? The linked form will appear in their M&E portal.' : 'Send this open collection to assigned think tanks again? Accounts already notified today will not receive a duplicate.' }}">
                                                             @csrf
                                                             <button type="submit" class="btn btn-sm btn-success"><i class="feather-send" aria-hidden="true"></i> Publish / Send to Think Tanks</button>
@@ -3187,6 +3312,23 @@
                                             <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'submissions', 'q' => $collection->form?->code]) }}" class="btn btn-sm btn-outline-primary"><i class="feather-file-text me-1" aria-hidden="true"></i>Submissions</a>
                                         @endif
                                         @if ($collection->status !== \App\Models\MeDataCollection::STATUS_CLOSED)
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm {{ $collection->reportingPeriod?->isActive() ? 'btn-outline-warning' : 'btn-warning' }}"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#me-fix-reporting-period-modal"
+                                                data-fix-reporting-period
+                                                data-action="{{ route('budget.me.data-entry.collections.reporting-period.fix', $collection) }}"
+                                                data-collection-id="{{ $collection->id }}"
+                                                data-period-code="{{ $collection->reportingPeriod?->code }}"
+                                                data-period-label="{{ $collection->reportingPeriod?->label }}"
+                                                data-period-coverage="{{ $collection->reportingPeriod?->period_start?->format('d M Y') }} — {{ $collection->reportingPeriod?->period_end?->format('d M Y') }}"
+                                                data-period-status="{{ str($collection->reportingPeriod?->status ?: 'Unavailable')->headline() }}"
+                                                data-period-lifecycle="{{ str($collection->reportingPeriod?->lifecycle_status ?: 'Unavailable')->headline() }}"
+                                                data-submission-opens="{{ $collection->reportingPeriod?->submission_opens_at?->format('Y-m-d\TH:i') }}"
+                                                data-submission-deadline="{{ $collection->reportingPeriod?->submission_deadline?->format('Y-m-d\TH:i') }}"
+                                                data-review-deadline="{{ $collection->reportingPeriod?->review_deadline?->format('Y-m-d\TH:i') }}"
+                                            ><i class="feather-calendar me-1" aria-hidden="true"></i>Fix reporting period</button>
                                             <form method="POST" action="{{ route('budget.me.data-entry.collections.publish', $collection) }}" data-confirm="{{ $collection->status === \App\Models\MeDataCollection::STATUS_DRAFT ? 'Publish this collection and notify every assigned think tank? The linked form will appear in their M&E portal.' : 'Send this open collection to assigned think tanks again? Accounts already notified today will not receive a duplicate.' }}">
                                                 @csrf
                                                 <button type="submit" class="btn btn-sm btn-success"><i class="feather-send me-1" aria-hidden="true"></i>Publish / Send to Think Tanks</button>
@@ -3207,6 +3349,93 @@
                 @endif
             </section>
         </div>
+
+        @if ($canManage && $tab === 'collections' && ! $showPeriodForm && ! $showCollectionForm)
+            @php
+                $fixPeriodCollectionId = (string) old('fix_reporting_period_collection_id', '');
+                $fixPeriodHasErrors = collect([
+                    'fix_reporting_period_collection_id',
+                    'fix_submission_opens_at',
+                    'fix_submission_deadline',
+                    'fix_review_deadline',
+                ])->contains(fn (string $field): bool => $errors->has($field));
+            @endphp
+            <div
+                class="modal fade me-period-fix-modal"
+                id="me-fix-reporting-period-modal"
+                tabindex="-1"
+                aria-labelledby="me-fix-reporting-period-title"
+                aria-hidden="true"
+                data-fix-period-modal
+                data-auto-open="{{ $fixPeriodCollectionId !== '' && $fixPeriodHasErrors ? 'true' : 'false' }}"
+            >
+                <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <form
+                            method="POST"
+                            action="{{ $fixPeriodCollectionId !== '' ? route('budget.me.data-entry.collections.reporting-period.fix', $fixPeriodCollectionId) : '#' }}"
+                            data-fix-period-form
+                        >
+                            @csrf
+                            <input type="hidden" name="fix_reporting_period_collection_id" value="{{ $fixPeriodCollectionId }}" data-fix-period-collection-id>
+                            <input type="hidden" name="fix_period_code" value="{{ old('fix_period_code') }}" data-fix-period-code-input>
+                            <input type="hidden" name="fix_period_label" value="{{ old('fix_period_label') }}" data-fix-period-label-input>
+                            <input type="hidden" name="fix_period_coverage" value="{{ old('fix_period_coverage') }}" data-fix-period-coverage-input>
+
+                            <div class="modal-header">
+                                <div class="me-period-fix-title">
+                                    <span><i class="feather-calendar" aria-hidden="true"></i></span>
+                                    <div>
+                                        <h2 class="modal-title" id="me-fix-reporting-period-title">Fix reporting period</h2>
+                                        <p>Correct the submission window and open the linked period without leaving Data Collections.</p>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+
+                            <div class="modal-body p-3 p-md-4">
+                                <div class="me-period-fix-summary" aria-label="Linked reporting period">
+                                    <div class="me-period-fix-fact"><small>Reporting period</small><strong data-fix-period-identity>{{ trim(old('fix_period_code').' — '.old('fix_period_label'), ' —') ?: 'Select a collection' }}</strong></div>
+                                    <div class="me-period-fix-fact"><small>Coverage dates</small><strong data-fix-period-coverage>{{ old('fix_period_coverage') ?: 'Not available' }}</strong></div>
+                                    <div class="me-period-fix-fact"><small>Current state</small><strong data-fix-period-state>Will be changed to Active / Open</strong></div>
+                                </div>
+
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="fix-submission-opens">Submission opens</label>
+                                        <input type="datetime-local" id="fix-submission-opens" name="fix_submission_opens_at" class="form-control @error('fix_submission_opens_at') is-invalid @enderror" value="{{ old('fix_submission_opens_at') }}" data-fix-submission-opens>
+                                        <span class="me-field-help">Leave blank to allow submissions immediately after publishing.</span>
+                                        @error('fix_submission_opens_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="fix-submission-deadline">Submission deadline</label>
+                                        <input type="datetime-local" id="fix-submission-deadline" name="fix_submission_deadline" class="form-control @error('fix_submission_deadline') is-invalid @enderror" value="{{ old('fix_submission_deadline') }}" data-fix-submission-deadline>
+                                        <span class="me-field-help">Use a future deadline, or leave blank if the collection dates control access.</span>
+                                        @error('fix_submission_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="fix-review-deadline">Review deadline</label>
+                                        <input type="datetime-local" id="fix-review-deadline" name="fix_review_deadline" class="form-control @error('fix_review_deadline') is-invalid @enderror" value="{{ old('fix_review_deadline') }}" data-fix-review-deadline>
+                                        <span class="me-field-help">Optional deadline for the ATTP review team.</span>
+                                        @error('fix_review_deadline')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                </div>
+
+                                <div class="me-period-fix-note">
+                                    <i class="feather-info" aria-hidden="true"></i>
+                                    <div><strong class="d-block mb-1">What saving will do</strong>The system will set this reporting period to <strong>Active / Open</strong>. It will not send the collection automatically; use <strong>Publish / Send to Think Tanks</strong> after this modal closes.</div>
+                                </div>
+                            </div>
+
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-success"><i class="feather-unlock me-1" aria-hidden="true"></i>Save and open period</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endif
 
         @if ($canManage && $showFormBuilder && !($formLocked ?? false))
             <template id="data-entry-field-template">
@@ -3389,6 +3618,41 @@
                     }
                 });
             });
+
+            const fixPeriodModal = document.querySelector('[data-fix-period-modal]');
+            if (fixPeriodModal && fixPeriodModal.dataset.initialized !== 'true') {
+                fixPeriodModal.dataset.initialized = 'true';
+                const fixPeriodForm = fixPeriodModal.querySelector('[data-fix-period-form]');
+                const setText = (selector, value, fallback) => {
+                    const target = fixPeriodModal.querySelector(selector);
+                    if (target) target.textContent = value || fallback;
+                };
+                const setValue = (selector, value) => {
+                    const target = fixPeriodModal.querySelector(selector);
+                    if (target) target.value = value || '';
+                };
+
+                fixPeriodModal.addEventListener('show.bs.modal', (event) => {
+                    const trigger = event.relatedTarget?.closest?.('[data-fix-reporting-period]');
+                    if (!trigger || !fixPeriodForm) return;
+
+                    fixPeriodForm.action = trigger.dataset.action || '#';
+                    setValue('[data-fix-period-collection-id]', trigger.dataset.collectionId);
+                    setValue('[data-fix-period-code-input]', trigger.dataset.periodCode);
+                    setValue('[data-fix-period-label-input]', trigger.dataset.periodLabel);
+                    setValue('[data-fix-period-coverage-input]', trigger.dataset.periodCoverage);
+                    setValue('[data-fix-submission-opens]', trigger.dataset.submissionOpens);
+                    setValue('[data-fix-submission-deadline]', trigger.dataset.submissionDeadline);
+                    setValue('[data-fix-review-deadline]', trigger.dataset.reviewDeadline);
+                    setText('[data-fix-period-identity]', [trigger.dataset.periodCode, trigger.dataset.periodLabel].filter(Boolean).join(' — '), 'Reporting period unavailable');
+                    setText('[data-fix-period-coverage]', trigger.dataset.periodCoverage, 'Coverage dates unavailable');
+                    setText('[data-fix-period-state]', [trigger.dataset.periodStatus, trigger.dataset.periodLifecycle].filter(Boolean).join(' / '), 'State unavailable');
+                });
+
+                if (fixPeriodModal.dataset.autoOpen === 'true' && window.bootstrap?.Modal) {
+                    window.requestAnimationFrame(() => window.bootstrap.Modal.getOrCreateInstance(fixPeriodModal).show());
+                }
+            }
 
             const firstInvalid = document.querySelector('.me-data-entry .is-invalid');
             if (firstInvalid) {
