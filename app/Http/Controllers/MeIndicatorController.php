@@ -607,6 +607,7 @@ class MeIndicatorController extends Controller
             'baseline_value' => 'required|numeric',
             'annual_target' => 'required|numeric',
             'target_value' => 'required|numeric',
+            'extra_target' => ['nullable', 'numeric', 'gte:target_value'],
             'aggregation_method' => [
                 'required',
                 Rule::in(array_keys(Indicator::AGGREGATION_METHODS)),
@@ -1044,6 +1045,9 @@ class MeIndicatorController extends Controller
             'baseline_value' => $validated['baseline_value'],
             'annual_target' => $validated['annual_target'],
             'life_of_programme_target' => $validated['target_value'],
+            'extra_target' => array_key_exists('extra_target', $validated)
+                ? ($validated['extra_target'] === '' ? null : $validated['extra_target'])
+                : $indicator?->extra_target,
             'aggregation_method' => $validated['aggregation_method'],
             'organization_rollup_method' => $validated['organization_rollup_method'],
             'responsible_user_id' => $validated['responsible_user_id'],

@@ -32,6 +32,9 @@ it('provides a filterable non-overlapping indicator DataTable with the approved 
         ->not->toContain('Cross-think-tank consolidation')
         ->not->toContain('name="aggregation_method"')
         ->not->toContain('name="organization_rollup_method"')
+        ->toContain('Extra target')
+        ->toContain('name="extra_target"')
+        ->toContain('(optional)')
         ->and($styles)
         ->toContain('table-layout: fixed !important')
         ->toContain('overflow-wrap: anywhere')
@@ -41,6 +44,7 @@ it('provides a filterable non-overlapping indicator DataTable with the approved 
         ->toContain('normalizeIndicatorInput($request, $indicator)')
         ->toContain("\$indicator?->aggregation_method ?: 'sum'")
         ->toContain("\$indicator?->organization_rollup_method ?: 'sum'")
+        ->toContain("'extra_target' => ['nullable', 'numeric', 'gte:target_value']")
         ->toContain('->latest()')
         ->toContain('->get();');
 });

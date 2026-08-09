@@ -206,6 +206,9 @@ class MeDataEntryController extends Controller
                     'projectComponent:id,project_id,name,governance_node_id',
                     'projectComponent.governanceNode:id,name,code',
                     'responsiblePerson:id,name,email',
+                    'sections:id,form_id,section_key,name,description,background_color,sort_order',
+                    'sections.fields:id,form_id,section_id,label,help_text,field_type,options,validation,unit_label,is_required,sort_order',
+                    'fields:id,form_id,section_id,label,help_text,field_type,options,validation,unit_label,is_required,sort_order',
                 ])
                 ->withCount([
                     'fields',

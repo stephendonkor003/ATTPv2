@@ -1105,6 +1105,334 @@
             background: #fbfdfc;
         }
 
+        body.me-form-preview-open {
+            overflow: hidden;
+        }
+
+        .me-data-entry .me-form-preview-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1090;
+            display: none;
+            place-items: center;
+            padding: 1rem;
+            background: rgba(4, 31, 39, .66);
+        }
+
+        .me-data-entry .me-form-preview-modal.is-open {
+            display: grid;
+        }
+
+        .me-data-entry .me-form-preview-dialog {
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+            width: min(1180px, 96vw);
+            max-height: 94vh;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, .35);
+            border-radius: 1.15rem;
+            background: #f3f7f5;
+            box-shadow: 0 32px 90px rgba(3, 28, 35, .38);
+        }
+
+        .me-data-entry .me-form-preview-header {
+            position: relative;
+            overflow: hidden;
+            padding: 1.15rem 1.25rem;
+            color: #fff;
+            background: linear-gradient(125deg, #063f31, #0b7656);
+        }
+
+        .me-data-entry .me-form-preview-header::after {
+            position: absolute;
+            top: -70px;
+            right: -35px;
+            width: 190px;
+            height: 190px;
+            border: 28px solid rgba(255, 255, 255, .075);
+            border-radius: 50%;
+            content: "";
+        }
+
+        .me-data-entry .me-form-preview-header-main {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .me-data-entry .me-form-preview-eyebrow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .4rem;
+            align-items: center;
+            margin-bottom: .35rem;
+            color: rgba(255, 255, 255, .72);
+            font-size: .65rem;
+            font-weight: 800;
+            letter-spacing: .055em;
+            text-transform: uppercase;
+        }
+
+        .me-data-entry .me-form-preview-header h2 {
+            margin: 0;
+            color: #fff;
+            font-size: 1.15rem;
+            font-weight: 850;
+        }
+
+        .me-data-entry .me-form-preview-header p {
+            max-width: 760px;
+            margin: .35rem 0 0;
+            color: rgba(255, 255, 255, .76);
+            font-size: .74rem;
+            line-height: 1.5;
+        }
+
+        .me-data-entry .me-form-preview-close {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            flex: 0 0 auto;
+            width: 2.25rem;
+            height: 2.25rem;
+            place-items: center;
+            border: 1px solid rgba(255, 255, 255, .25);
+            border-radius: .65rem;
+            color: #fff;
+            background: rgba(255, 255, 255, .12);
+        }
+
+        .me-data-entry .me-form-preview-meta {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: .5rem;
+            margin-top: .9rem;
+        }
+
+        .me-data-entry .me-form-preview-meta div {
+            min-width: 0;
+            padding: .55rem .65rem;
+            border: 1px solid rgba(255, 255, 255, .14);
+            border-radius: .6rem;
+            background: rgba(0, 0, 0, .08);
+        }
+
+        .me-data-entry .me-form-preview-meta small,
+        .me-data-entry .me-form-preview-meta strong {
+            display: block;
+            overflow-wrap: anywhere;
+        }
+
+        .me-data-entry .me-form-preview-meta small {
+            color: rgba(255, 255, 255, .58);
+            font-size: .55rem;
+            font-weight: 800;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .me-data-entry .me-form-preview-meta strong {
+            margin-top: .12rem;
+            color: #fff;
+            font-size: .68rem;
+        }
+
+        .me-data-entry .me-form-preview-body {
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .me-data-entry .me-form-preview-canvas {
+            width: min(900px, 100%);
+            margin: 0 auto;
+            overflow: hidden;
+            border: 1px solid #dce8e3;
+            border-radius: .9rem;
+            background: #fff;
+            box-shadow: 0 12px 30px rgba(18, 58, 46, .08);
+        }
+
+        .me-data-entry .me-form-preview-intro {
+            padding: 1rem 1.1rem;
+            border-bottom: 1px solid #e0ebe6;
+            background: #fbfdfc;
+        }
+
+        .me-data-entry .me-form-preview-intro h3 {
+            margin: 0;
+            color: var(--me-green-950);
+            font-size: .9rem;
+            font-weight: 850;
+        }
+
+        .me-data-entry .me-form-preview-intro p {
+            margin: .3rem 0 0;
+            color: var(--me-muted);
+            font-size: .7rem;
+            line-height: 1.55;
+        }
+
+        .me-data-entry .me-form-preview-sections {
+            display: grid;
+            gap: .85rem;
+            padding: 1rem;
+        }
+
+        .me-data-entry .me-preview-section {
+            overflow: hidden;
+            border: 1px solid #dce7e2;
+            border-radius: .8rem;
+            background: #fff;
+        }
+
+        .me-data-entry .me-preview-section-head {
+            padding: .8rem .9rem;
+            border-bottom: 1px solid #dce7e2;
+            background: var(--preview-section-color, #eff6ff);
+        }
+
+        .me-data-entry .me-preview-section-head h4 {
+            margin: 0;
+            color: var(--me-ink);
+            font-size: .8rem;
+            font-weight: 850;
+        }
+
+        .me-data-entry .me-preview-section-head p {
+            margin: .2rem 0 0;
+            color: #566c63;
+            font-size: .65rem;
+            line-height: 1.45;
+        }
+
+        .me-data-entry .me-preview-fields {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .75rem;
+            padding: .9rem;
+        }
+
+        .me-data-entry .me-preview-field {
+            min-width: 0;
+        }
+
+        .me-data-entry .me-preview-field.is-wide {
+            grid-column: 1 / -1;
+        }
+
+        .me-data-entry .me-preview-label {
+            display: block;
+            margin-bottom: .32rem;
+            color: var(--me-ink);
+            font-size: .68rem;
+            font-weight: 800;
+        }
+
+        .me-data-entry .me-preview-label em {
+            color: #c0392b;
+            font-style: normal;
+        }
+
+        .me-data-entry .me-preview-control {
+            min-height: 2.4rem;
+            padding: .58rem .65rem;
+            border: 1px solid #d4e0da;
+            border-radius: .58rem;
+            color: #819089;
+            background: #fbfdfc;
+            font-size: .68rem;
+        }
+
+        .me-data-entry .me-preview-control.is-textarea {
+            min-height: 5rem;
+        }
+
+        .me-data-entry .me-preview-choice-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .45rem;
+        }
+
+        .me-data-entry .me-preview-choice {
+            display: inline-flex;
+            gap: .35rem;
+            align-items: center;
+            padding: .4rem .5rem;
+            border: 1px solid #dde7e2;
+            border-radius: .5rem;
+            color: #65776f;
+            background: #fbfdfc;
+            font-size: .64rem;
+        }
+
+        .me-data-entry .me-preview-choice::before {
+            width: .72rem;
+            height: .72rem;
+            border: 1px solid #aebdb6;
+            border-radius: .18rem;
+            content: "";
+        }
+
+        .me-data-entry .me-preview-help {
+            display: block;
+            margin-top: .28rem;
+            color: var(--me-muted);
+            font-size: .6rem;
+            line-height: 1.4;
+        }
+
+        .me-data-entry .me-form-preview-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: .8rem 1rem;
+            border-top: 1px solid #dce7e2;
+            background: #fff;
+        }
+
+        .me-data-entry .me-form-preview-footer-note {
+            color: var(--me-muted);
+            font-size: .65rem;
+        }
+
+        .me-data-entry .me-form-preview-footer-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+        }
+
+        @media (max-width: 760px) {
+            .me-data-entry .me-form-preview-modal {
+                padding: .4rem;
+            }
+
+            .me-data-entry .me-form-preview-dialog {
+                width: 100%;
+                max-height: 98vh;
+                border-radius: .8rem;
+            }
+
+            .me-data-entry .me-form-preview-meta,
+            .me-data-entry .me-preview-fields {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .me-data-entry .me-preview-field.is-wide {
+                grid-column: auto;
+            }
+
+            .me-data-entry .me-form-preview-footer {
+                align-items: stretch;
+                flex-direction: column;
+            }
+        }
+
         @media (max-width: 700px) {
             .me-data-entry .me-period-fix-summary {
                 grid-template-columns: minmax(0, 1fr);
@@ -2822,6 +3150,71 @@
                     @endif
 
                     @if ($tab === 'forms')
+                    @php
+                        $formPreviewProfiles = $forms->getCollection()->mapWithKeys(function ($form) use ($canManage): array {
+                            $fieldProfile = function ($field): array {
+                                $options = collect($field->options ?? [])->map(function ($option): string {
+                                    if (is_array($option)) {
+                                        return (string) ($option['label'] ?? $option['value'] ?? '');
+                                    }
+
+                                    return trim((string) $option);
+                                })->filter()->values()->all();
+
+                                return [
+                                    'id' => (string) $field->id,
+                                    'label' => $field->label,
+                                    'help' => $field->help_text,
+                                    'type' => $field->field_type,
+                                    'type_label' => str($field->field_type)->replace('_', ' ')->headline()->toString(),
+                                    'unit' => $field->unit_label,
+                                    'required' => (bool) $field->is_required,
+                                    'options' => $options,
+                                ];
+                            };
+                            $sections = $form->sections->map(function ($section) use ($fieldProfile): array {
+                                return [
+                                    'name' => $section->name,
+                                    'description' => $section->description,
+                                    'color' => $section->background_color ?: '#EFF6FF',
+                                    'fields' => $section->fields->map($fieldProfile)->values()->all(),
+                                ];
+                            })->values();
+                            $assignedFieldIds = $form->sections->flatMap->fields->pluck('id');
+                            $orphanFields = $form->fields
+                                ->reject(fn ($field) => $assignedFieldIds->contains($field->id))
+                                ->map($fieldProfile)
+                                ->values();
+                            if ($orphanFields->isNotEmpty()) {
+                                $sections->push([
+                                    'name' => $sections->isEmpty() ? 'General information' : 'Additional questions',
+                                    'description' => 'Complete the following questions using the most accurate information available.',
+                                    'color' => '#F8FAFC',
+                                    'fields' => $orphanFields->all(),
+                                ]);
+                            }
+
+                            return [(string) $form->id => [
+                                'code' => $form->code,
+                                'title' => $form->title,
+                                'description' => $form->description,
+                                'instructions' => $form->instructions,
+                                'status' => str($form->status)->headline()->toString(),
+                                'version' => $form->version,
+                                'portfolio' => $form->portfolio?->name ?: 'Portfolio unavailable',
+                                'component' => $form->projectComponent?->name ?: 'Component not linked',
+                                'indicator' => $form->indicator
+                                    ? trim(($form->indicator->indicator_code ?: 'No code').' — '.$form->indicator->name)
+                                    : 'No indicator linked',
+                                'responsible' => $form->responsiblePerson?->name ?: 'Not assigned',
+                                'sections' => $sections->all(),
+                                'field_count' => (int) $form->fields_count,
+                                'edit_url' => $canManage && $form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED
+                                    ? route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]).'#data-entry-workspace'
+                                    : null,
+                            ]];
+                        });
+                    @endphp
                     <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable form template register" tabindex="0">
                         <table class="table me-register-table me-form-template-table align-middle">
                             <caption class="visually-hidden">Collection form templates</caption>
@@ -2888,6 +3281,9 @@
                                             <div class="me-record-meta">{{ number_format((int) $form->submitted_collections_count) }} collections with submissions</div>
                                         </td>
                                         <td>
+                                            <div class="me-row-actions justify-content-end mb-1">
+                                                <button type="button" class="btn btn-sm btn-outline-info" data-preview-form="{{ $form->id }}" aria-haspopup="dialog" aria-controls="me-form-preview-modal" aria-label="Preview {{ $form->title }}"><i class="feather-eye" aria-hidden="true"></i> Preview form</button>
+                                            </div>
                                             @if ($canManage)
                                                 <div class="me-row-actions justify-content-end">
                                                     @if ($form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
@@ -2942,6 +3338,9 @@
                                     <div class="me-mobile-fact"><small>Structure</small><strong>{{ $form->fields_count }} fields · v{{ $form->version }}</strong></div>
                                     <div class="me-mobile-fact"><small>Usage</small><strong>{{ $form->collections_count }} collections · {{ $form->performance_reports_count }} reports</strong></div>
                                 </div>
+                                <div class="me-row-actions justify-content-start mt-3">
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-preview-form="{{ $form->id }}" aria-haspopup="dialog" aria-controls="me-form-preview-modal"><i class="feather-eye me-1" aria-hidden="true"></i>Preview form</button>
+                                </div>
                                 @if ($canManage && $form->status !== \App\Models\MeDataEntryForm::STATUS_ARCHIVED)
                                     <div class="me-row-actions justify-content-start">
                                         <a href="{{ route('budget.me.rebuild.data-entry', ['tab' => 'forms', 'edit_form' => $form->id]) }}#data-entry-workspace" class="btn btn-sm btn-light border"><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit</a>
@@ -2955,6 +3354,53 @@
                                 @endif
                             </article>
                         @endforeach
+                    </div>
+
+                    <script type="application/json" data-form-preview-data>@json($formPreviewProfiles)</script>
+                    <div
+                        class="me-form-preview-modal"
+                        id="me-form-preview-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="me-form-preview-title"
+                        aria-hidden="true"
+                        tabindex="-1"
+                        data-form-preview-modal
+                    >
+                        <div class="me-form-preview-dialog">
+                            <header class="me-form-preview-header">
+                                <div class="me-form-preview-header-main">
+                                    <div>
+                                        <div class="me-form-preview-eyebrow"><span data-form-preview-code>FORM</span><span>Â·</span><span data-form-preview-status>Preview</span><span>Â·</span><span>Version <span data-form-preview-version>1</span></span></div>
+                                        <h2 id="me-form-preview-title" data-form-preview-title>Form preview</h2>
+                                        <p data-form-preview-description>Review how the reporting form will appear to respondents.</p>
+                                    </div>
+                                    <button type="button" class="me-form-preview-close" data-form-preview-close aria-label="Close form preview"><i class="feather-x" aria-hidden="true"></i></button>
+                                </div>
+                                <div class="me-form-preview-meta">
+                                    <div><small>Linked indicator</small><strong data-form-preview-indicator>Not linked</strong></div>
+                                    <div><small>Portfolio</small><strong data-form-preview-portfolio>Unavailable</strong></div>
+                                    <div><small>Project component</small><strong data-form-preview-component>Unavailable</strong></div>
+                                    <div><small>Responsible person</small><strong data-form-preview-responsible>Not assigned</strong></div>
+                                </div>
+                            </header>
+                            <div class="me-form-preview-body">
+                                <div class="me-form-preview-canvas">
+                                    <div class="me-form-preview-intro">
+                                        <h3>Instructions for the respondent</h3>
+                                        <p data-form-preview-instructions>Complete every required question and review the information before submitting.</p>
+                                    </div>
+                                    <div class="me-form-preview-sections" data-form-preview-sections></div>
+                                </div>
+                            </div>
+                            <footer class="me-form-preview-footer">
+                                <div class="me-form-preview-footer-note"><i class="feather-eye me-1" aria-hidden="true"></i>Preview only. No information entered here will be saved.</div>
+                                <div class="me-form-preview-footer-actions">
+                                    <a href="#" class="btn btn-outline-primary d-none" data-form-preview-edit><i class="feather-edit-2 me-1" aria-hidden="true"></i>Edit template</a>
+                                    <button type="button" class="btn btn-success" data-form-preview-close><i class="feather-check me-1" aria-hidden="true"></i>Close preview</button>
+                                </div>
+                            </footer>
+                        </div>
                     </div>
                 @elseif ($tab === 'reports')
                     <div class="table-responsive me-register-desktop me-data-table-region" role="region" aria-label="Scrollable performance report register" tabindex="0">
@@ -3719,6 +4165,202 @@
                 if (fixPeriodModal.dataset.autoOpen === 'true') {
                     window.requestAnimationFrame(() => openFixPeriodModal());
                 }
+            }
+
+            const formPreviewModal = document.querySelector('[data-form-preview-modal]');
+            if (formPreviewModal && formPreviewModal.dataset.initialized !== 'true') {
+                formPreviewModal.dataset.initialized = 'true';
+                const previewDataNode = document.querySelector('[data-form-preview-data]');
+                const previewSections = formPreviewModal.querySelector('[data-form-preview-sections]');
+                const previewEditLink = formPreviewModal.querySelector('[data-form-preview-edit]');
+                let previewProfiles = {};
+                let previewTrigger = null;
+                try {
+                    previewProfiles = JSON.parse(previewDataNode?.textContent || '{}');
+                } catch (error) {
+                    previewProfiles = {};
+                }
+
+                const setPreviewText = (selector, value, fallback = 'Not available') => {
+                    formPreviewModal.querySelectorAll(selector).forEach((element) => {
+                        element.textContent = value || fallback;
+                    });
+                };
+
+                const createPreviewChoices = (options) => {
+                    const list = document.createElement('div');
+                    list.className = 'me-preview-choice-list';
+                    (options.length ? options : ['Option 1', 'Option 2']).forEach((option) => {
+                        const choice = document.createElement('span');
+                        choice.className = 'me-preview-choice';
+                        choice.textContent = option;
+                        list.appendChild(choice);
+                    });
+                    return list;
+                };
+
+                const createPreviewControl = (field) => {
+                    const type = field.type || 'text';
+                    const options = Array.isArray(field.options) ? field.options : [];
+                    if (['radio', 'checkbox', 'yes_no'].includes(type)) {
+                        return createPreviewChoices(type === 'yes_no' ? ['Yes', 'No'] : options);
+                    }
+                    if (['rating', 'scale'].includes(type)) {
+                        return createPreviewChoices(options.length ? options : ['1', '2', '3', '4', '5']);
+                    }
+
+                    const control = document.createElement('div');
+                    control.className = 'me-preview-control';
+                    if (type === 'textarea') {
+                        control.classList.add('is-textarea');
+                        control.textContent = 'Enter a detailed response...';
+                    } else if (['select', 'multiselect'].includes(type)) {
+                        control.textContent = options.length
+                            ? `Select ${type === 'multiselect' ? 'one or more' : 'an option'}: ${options.join(', ')}`
+                            : 'Select an option';
+                    } else if (['file', 'image'].includes(type)) {
+                        control.textContent = type === 'image' ? 'Choose image file' : 'Choose supporting file';
+                    } else {
+                        const placeholders = {
+                            integer: 'Enter a whole number',
+                            number: 'Enter a number',
+                            percentage: 'Enter percentage',
+                            currency: 'Enter amount',
+                            email: 'name@example.org',
+                            phone: 'Enter telephone number',
+                            url: 'https://',
+                            date: 'Select date',
+                            time: 'Select time',
+                            datetime: 'Select date and time',
+                            month: 'Select month',
+                            year: 'Enter year',
+                        };
+                        control.textContent = placeholders[type] || 'Enter response';
+                    }
+                    return control;
+                };
+
+                const renderPreviewSections = (sections) => {
+                    if (!previewSections) return;
+                    previewSections.replaceChildren();
+                    (sections || []).forEach((section, sectionIndex) => {
+                        const article = document.createElement('section');
+                        article.className = 'me-preview-section';
+                        const color = /^#[0-9a-f]{6}$/i.test(section.color || '') ? section.color : '#EFF6FF';
+                        article.style.setProperty('--preview-section-color', color);
+
+                        const heading = document.createElement('header');
+                        heading.className = 'me-preview-section-head';
+                        const title = document.createElement('h4');
+                        title.textContent = `${sectionIndex + 1}. ${section.name || 'Untitled section'}`;
+                        const description = document.createElement('p');
+                        description.textContent = section.description || 'Complete the questions in this section.';
+                        heading.append(title, description);
+
+                        const fields = document.createElement('div');
+                        fields.className = 'me-preview-fields';
+                        (section.fields || []).forEach((field, fieldIndex) => {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'me-preview-field';
+                            if (['textarea', 'radio', 'checkbox', 'multiselect', 'file', 'image'].includes(field.type)) {
+                                wrapper.classList.add('is-wide');
+                            }
+                            const label = document.createElement('label');
+                            label.className = 'me-preview-label';
+                            label.append(`${fieldIndex + 1}. ${field.label || 'Untitled question'}`);
+                            if (field.required) {
+                                const required = document.createElement('em');
+                                required.textContent = ' *';
+                                label.appendChild(required);
+                            }
+                            if (field.unit) {
+                                const unit = document.createElement('span');
+                                unit.className = 'text-muted fw-normal';
+                                unit.textContent = ` (${field.unit})`;
+                                label.appendChild(unit);
+                            }
+                            wrapper.append(label, createPreviewControl(field));
+                            if (field.help) {
+                                const help = document.createElement('small');
+                                help.className = 'me-preview-help';
+                                help.textContent = field.help;
+                                wrapper.appendChild(help);
+                            }
+                            fields.appendChild(wrapper);
+                        });
+
+                        if (!(section.fields || []).length) {
+                            const empty = document.createElement('div');
+                            empty.className = 'text-muted small p-3';
+                            empty.textContent = 'No questions have been added to this section.';
+                            fields.appendChild(empty);
+                        }
+                        article.append(heading, fields);
+                        previewSections.appendChild(article);
+                    });
+
+                    if (!(sections || []).length) {
+                        const empty = document.createElement('div');
+                        empty.className = 'alert alert-warning mb-0';
+                        empty.textContent = 'This template has no sections or questions to preview yet.';
+                        previewSections.appendChild(empty);
+                    }
+                };
+
+                const populateFormPreview = (profile) => {
+                    setPreviewText('[data-form-preview-code]', profile.code, 'FORM');
+                    setPreviewText('[data-form-preview-status]', profile.status, 'Draft');
+                    setPreviewText('[data-form-preview-version]', profile.version, '1');
+                    setPreviewText('[data-form-preview-title]', profile.title, 'Form preview');
+                    setPreviewText('[data-form-preview-description]', profile.description, 'Review how this reporting form will appear to respondents.');
+                    setPreviewText('[data-form-preview-indicator]', profile.indicator, 'No indicator linked');
+                    setPreviewText('[data-form-preview-portfolio]', profile.portfolio);
+                    setPreviewText('[data-form-preview-component]', profile.component);
+                    setPreviewText('[data-form-preview-responsible]', profile.responsible, 'Not assigned');
+                    setPreviewText('[data-form-preview-instructions]', profile.instructions, 'Complete every required question and review the information before submitting.');
+                    renderPreviewSections(profile.sections || []);
+
+                    if (previewEditLink) {
+                        previewEditLink.classList.toggle('d-none', !profile.edit_url);
+                        previewEditLink.href = profile.edit_url || '#';
+                    }
+                };
+
+                const openFormPreview = (trigger) => {
+                    const profile = previewProfiles[trigger.dataset.previewForm];
+                    if (!profile) return;
+                    previewTrigger = trigger;
+                    populateFormPreview(profile);
+                    formPreviewModal.classList.add('is-open');
+                    formPreviewModal.setAttribute('aria-hidden', 'false');
+                    document.body.classList.add('me-form-preview-open');
+                    window.requestAnimationFrame(() => formPreviewModal.querySelector('[data-form-preview-close]')?.focus({ preventScroll: true }));
+                };
+
+                const closeFormPreview = () => {
+                    formPreviewModal.classList.remove('is-open');
+                    formPreviewModal.setAttribute('aria-hidden', 'true');
+                    document.body.classList.remove('me-form-preview-open');
+                    previewTrigger?.focus({ preventScroll: true });
+                };
+
+                document.querySelectorAll('[data-preview-form]').forEach((trigger) => {
+                    if (trigger.dataset.previewInitialized === 'true') return;
+                    trigger.dataset.previewInitialized = 'true';
+                    trigger.addEventListener('click', () => openFormPreview(trigger));
+                });
+                formPreviewModal.querySelectorAll('[data-form-preview-close]').forEach((button) => {
+                    button.addEventListener('click', closeFormPreview);
+                });
+                previewEditLink?.addEventListener('click', closeFormPreview);
+                formPreviewModal.addEventListener('mousedown', (event) => {
+                    if (event.target === formPreviewModal) closeFormPreview();
+                });
+                formPreviewModal.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Escape') return;
+                    event.preventDefault();
+                    closeFormPreview();
+                });
             }
 
             const firstInvalid = document.querySelector('.me-data-entry .is-invalid');

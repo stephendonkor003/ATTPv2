@@ -271,7 +271,7 @@
             <div class="me-form-section">
                 <h3 class="me-form-section-title">3. Measurement plan</h3>
                 <div class="row g-3">
-                    <div class="col-xl-3 col-lg-6">
+                    <div class="col-xl col-lg-6">
                         <div class="me-field-label-row">
                             <label class="form-label" for="indicator-unit">Unit of measurement <span class="text-danger">*</span></label>
                             <a
@@ -312,7 +312,7 @@
                         ></small>
                     </div>
 
-                    <div class="col-xl-3 col-lg-6">
+                    <div class="col-xl col-lg-6">
                         <label class="form-label" for="indicator-baseline">Baseline <span class="text-danger">*</span></label>
                         <input
                             type="number"
@@ -327,7 +327,7 @@
                         @error('baseline_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-xl-3 col-lg-6">
+                    <div class="col-xl col-lg-6">
                         <label class="form-label" for="indicator-annual-target">Annual target <span class="text-danger">*</span></label>
                         <input
                             type="number"
@@ -342,7 +342,7 @@
                         @error('annual_target')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-xl-3 col-lg-6">
+                    <div class="col-xl col-lg-6">
                         <label class="form-label" for="indicator-target">Life-of-programme target <span class="text-danger">*</span></label>
                         <input
                             type="number"
@@ -355,6 +355,22 @@
                             required
                         >
                         @error('target_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-xl col-lg-6">
+                        <label class="form-label" for="indicator-extra-target">Extra target <span class="text-muted fw-normal">(optional)</span></label>
+                        <input
+                            type="number"
+                            id="indicator-extra-target"
+                            name="extra_target"
+                            class="form-control @error('extra_target') is-invalid @enderror"
+                            value="{{ old('extra_target', $editingIndicator->extra_target ?? '') }}"
+                            step="any"
+                            placeholder="Optional stretch target"
+                            aria-describedby="indicator-extra-target-help"
+                        >
+                        @error('extra_target')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <small class="me-field-help" id="indicator-extra-target-help">Use only when delivery may intentionally exceed the programme target. Enter the total stretch target, not only the additional amount.</small>
                     </div>
 
                 </div>

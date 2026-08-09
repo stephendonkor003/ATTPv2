@@ -213,6 +213,12 @@
                                     <span class="me-muted">Target</span>
                                     <span class="me-metric-value">{{ $formatMetric($setupTarget?->target_value) }}</span>
                                 </div>
+                                @if ($indicator->extra_target !== null)
+                                    <div class="me-metric-line">
+                                        <span class="me-muted">Extra target</span>
+                                        <span class="me-metric-value">{{ $formatMetric($indicator->extra_target) }}</span>
+                                    </div>
+                                @endif
                                 <span class="me-chip"><i class="feather-hash"></i>{{ $unitLabel }}</span>
                             </td>
                             <td class="me-reporting-cell">
@@ -350,6 +356,12 @@
                             <small>Target</small>
                             <strong>{{ $formatMetric($setupTarget?->target_value) }} {{ $unitLabel }}</strong>
                         </div>
+                        @if ($indicator->extra_target !== null)
+                            <div class="me-mobile-fact">
+                                <small>Extra target</small>
+                                <strong>{{ $formatMetric($indicator->extra_target) }} {{ $unitLabel }}</strong>
+                            </div>
+                        @endif
                         <div class="me-mobile-fact">
                             <small>Frequency</small>
                             <strong>{{ $indicator->frequency?->indicatorCadenceLabel() ?: 'Not set' }}</strong>

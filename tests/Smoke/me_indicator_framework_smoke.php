@@ -108,6 +108,7 @@ $basePayload = [
     'unit_id' => $unit->id,
     'baseline_value' => 12.5,
     'target_value' => 25,
+    'extra_target' => 40,
     'frequency_of_reporting_id' => $frequency->id,
     'data_collection_method' => 'Household survey and administrative data extract',
     'results_level' => 'pdo',
@@ -401,6 +402,7 @@ try {
     }
     if ($indicator->definitions !== $basePayload['definition']
         || $indicator->data_collection_method !== $basePayload['data_collection_method']
+        || (float) $indicator->extra_target !== 40.0
         || (string) $indicator->project_component_id !== (string) $component->id
         || (string) $indicator->means_of_verification_id !== (string) $evidence->id
         || $indicator->results_level !== 'pdo') {
@@ -543,6 +545,7 @@ try {
     }
     if ($indicator->methodology !== $updatePayload['data_collection_method']
         || $indicator->data_collection_method !== $updatePayload['data_collection_method']
+        || (float) $indicator->extra_target !== 40.0
         || $indicator->results_level !== 'intermediate_results'
         || $indicator->notes !== $basePayload['notes']
         || $indicator->baseline_year !== $basePayload['baseline_year']
@@ -710,6 +713,7 @@ try {
         'Results level',
         'Definition',
         'Unit of measurement',
+        'Extra target',
         'Required disaggregation',
         'ATTP priority theme',
         'Baseline',
