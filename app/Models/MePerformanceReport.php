@@ -70,6 +70,7 @@ class MePerformanceReport extends BaseModel
         'reporting_quarter',
         'reporting_period_type',
         'reporting_period_label',
+        'reporting_scope',
         'status',
         'key_achievements',
         'variance_explanation',
@@ -102,6 +103,7 @@ class MePerformanceReport extends BaseModel
 
     protected $casts = [
         'reporting_year' => 'integer',
+        'reporting_scope' => 'array',
         'submitted_at' => 'datetime',
         'reviewed_at' => 'datetime',
         'verified_at' => 'datetime',

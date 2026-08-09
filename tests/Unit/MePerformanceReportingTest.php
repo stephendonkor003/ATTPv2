@@ -118,6 +118,9 @@ it('renders every requested report section and component linkage control', funct
     $lifecycleActions = file_get_contents(
         dirname(__DIR__, 2).'/resources/views/me/performance-reports/partials/lifecycle-actions.blade.php'
     );
+    $reportInsights = file_get_contents(
+        dirname(__DIR__, 2).'/resources/views/me/performance-reports/partials/report-insights.blade.php'
+    );
 
     expect($templateRegister)
         ->toContain('Project Component')
@@ -128,6 +131,12 @@ it('renders every requested report section and component linkage control', funct
         ->toContain('name="reporting_period_type"')
         ->toContain('name="reporting_period_label"')
         ->toContain('name="reporting_year"')
+        ->toContain('Reporter disaggregation selection')
+        ->toContain('Indicator measurement plan')
+        ->toContain('name="reporting_scope[country]"')
+        ->toContain('name="reporting_scope[priority_theme]"')
+        ->toContain('name="reporting_scope[gender]"')
+        ->toContain('data-indicator-plan-body')
         ->toContain('Create Report')
         ->toContain('Responsible Directorate');
 
@@ -151,8 +160,16 @@ it('renders every requested report section and component linkage control', funct
     expect($edit)
         ->toContain("route('budget.me.rebuild.knowledge-repository'")
         ->toContain('name="documents[]"')
+        ->toContain("partials.report-insights")
         ->toContain('sectionCompletion')
         ->toContain('Lifecycle history');
+
+    expect($reportInsights)
+        ->toContain('Indicator reporting dashboard')
+        ->toContain('Period target-progress graph')
+        ->toContain('Disaggregation graphs')
+        ->toContain('Indicator reference and result table')
+        ->toContain('Reporter scope:');
 
     expect($completionSummary)
         ->toContain('Mandatory section check')

@@ -690,6 +690,8 @@
 
             @include('me.performance-reports.partials.completion-summary')
 
+            @include('me.performance-reports.partials.report-insights')
+
             <form method="POST" action="{{ route('budget.me.performance-reports.update', $report) }}" enctype="multipart/form-data" id="performance-report-form">
                 @csrf
                 @method('PUT')

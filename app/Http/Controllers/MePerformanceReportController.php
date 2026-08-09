@@ -55,8 +55,12 @@ class MePerformanceReportController extends Controller
                 'portfolio:id,name',
                 'projectComponent:id,project_id,name,governance_node_id',
                 'projectComponent.governanceNode:id,name,code',
-                'indicators:id,indicator_code,name,frequency_of_reporting_id',
+                'indicators:id,indicator_code,name,definitions,results_level,value_type,baseline_value,annual_target,life_of_programme_target,frequency_of_reporting_id,unit_id,data_collection_method,means_of_verification_folder_id,requires_evidence',
                 'indicators.frequency:id,name,code,interval_unit,interval_value,frequency_in_days',
+                'indicators.unit:id,name,symbol',
+                'indicators.disaggregationRequirements.dimension:id,code,name,dimension_group,sort_order',
+                'indicators.meansOfVerificationFolder:id,name',
+                'indicators.meansOfVerificationFolder.documents:id,folder_id',
             ])
             ->orderBy('title')
             ->get();
@@ -66,6 +70,7 @@ class MePerformanceReportController extends Controller
             'periodTypes' => MePerformanceReport::REPORTING_PERIOD_TYPES,
             'periodLabels' => MePerformanceReport::PERIOD_LABELS,
             'defaultYear' => (int) now()->year,
+            'reportingTaxonomy' => $this->reportingTaxonomy(),
         ]);
     }
 
@@ -77,6 +82,14 @@ class MePerformanceReportController extends Controller
             'reporting_period_type' => ['required', Rule::in(array_keys(MePerformanceReport::REPORTING_PERIOD_TYPES))],
             'reporting_period_label' => ['required', 'string', 'max:40'],
             'reporting_year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'reporting_scope' => ['nullable', 'array'],
+            'reporting_scope.geographic_scope' => ['nullable', Rule::in(array_keys(MeIndicatorAchievement::GEOGRAPHIC_SCOPES))],
+            'reporting_scope.country' => ['nullable', 'string', 'max:120'],
+            'reporting_scope.rec' => ['nullable', Rule::in(array_keys(MeIndicatorAchievement::RECS))],
+            'reporting_scope.priority_theme' => ['nullable', Rule::in(array_keys(MeIndicatorAchievement::PRIORITY_THEMES))],
+            'reporting_scope.gender' => ['nullable', Rule::in(array_keys(MeIndicatorAchievement::GENDERS))],
+            'reporting_scope.age_group' => ['nullable', Rule::in(array_keys(MeIndicatorAchievement::AGE_GROUPS))],
+            'reporting_scope.stakeholder_category' => ['nullable', Rule::in(array_keys(MeIndicatorAchievement::STAKEHOLDER_CATEGORIES))],
         ]);
         $this->assertValidPeriodSelection($validated['reporting_period_type'], $validated['reporting_period_label']);
 
@@ -105,7 +118,8 @@ class MePerformanceReportController extends Controller
             (int) $validated['reporting_year'],
             (string) $validated['reporting_period_type'],
             (string) $validated['reporting_period_label'],
-            $request
+            $request,
+            reportingScope: $this->cleanReportingScope($validated['reporting_scope'] ?? [])
         );
 
         return redirect()
@@ -122,7 +136,7 @@ class MePerformanceReportController extends Controller
             'projectComponent:id,project_id,name,governance_node_id',
             'responsibleDirectorate:id,name,code',
             'reportingPeriod:id,label,period_start,period_end',
-            'indicatorResults.indicator:id,indicator_code,name,unit_id,means_of_verification_id,means_of_verification_folder_id,frequency_of_reporting_id,data_collection_method,organization_rollup_method',
+            'indicatorResults.indicator:id,indicator_code,name,definitions,results_level,value_type,baseline_value,annual_target,life_of_programme_target,unit_id,means_of_verification_id,means_of_verification_folder_id,frequency_of_reporting_id,data_collection_method,organization_rollup_method,requires_evidence',
             'indicatorResults.indicator.unit:id,name,symbol',
             'indicatorResults.indicator.meansOfVerification:id,title,file_path,external_url',
             'indicatorResults.indicator.meansOfVerificationFolder:id,portfolio_id,name',
@@ -151,19 +165,8 @@ class MePerformanceReportController extends Controller
             'sectionCompletion' => $sectionCompletion,
             'submissionReady' => collect($sectionCompletion)
                 ->every(fn (array $section): bool => $section['status'] === 'complete'),
-            'achievementTaxonomy' => [
-                'geographic_scopes' => MeIndicatorAchievement::GEOGRAPHIC_SCOPES,
-                'recs' => MeIndicatorAchievement::RECS,
-                'institution_types' => MeIndicatorAchievement::INSTITUTION_TYPES,
-                'priority_themes' => MeIndicatorAchievement::PRIORITY_THEMES,
-                'genders' => MeIndicatorAchievement::GENDERS,
-                'age_groups' => MeIndicatorAchievement::AGE_GROUPS,
-                'stakeholder_categories' => MeIndicatorAchievement::STAKEHOLDER_CATEGORIES,
-                'countries' => MeDisaggregationDimension::query()
-                    ->where('code', 'country')
-                    ->with(['options' => fn ($query) => $query->where('is_active', true)])
-                    ->first()?->options?->pluck('name', 'name')->all() ?? [],
-            ],
+            'achievementTaxonomy' => $this->reportingTaxonomy(),
+            'reportAnalytics' => $this->reportAnalytics($report),
             'activeThinkTanks' => ConsortiumThinkTank::query()
                 ->where('status', 'active')
                 ->orderBy('name')
@@ -619,7 +622,8 @@ class MePerformanceReportController extends Controller
         string $periodLabel,
         Request $request,
         ?ConsortiumThinkTank $member = null,
-        ?MeDataCollectionAssignment $assignment = null
+        ?MeDataCollectionAssignment $assignment = null,
+        array $reportingScope = []
     ): MePerformanceReport {
         $form->loadMissing([
             'projectComponent:id,project_id,name,governance_node_id',
@@ -691,7 +695,8 @@ class MePerformanceReportController extends Controller
             $dueIndicators,
             $request,
             $member,
-            $assignment
+            $assignment,
+            $reportingScope
         ): MePerformanceReport {
             $report = MePerformanceReport::query()->create([
                 'form_id' => $form->id,
@@ -705,6 +710,7 @@ class MePerformanceReportController extends Controller
                 'reporting_quarter' => $this->legacyQuarter($periodType, $periodLabel),
                 'reporting_period_type' => $periodType,
                 'reporting_period_label' => $periodLabel,
+                'reporting_scope' => $reportingScope ?: null,
                 'status' => MePerformanceReport::STATUS_DRAFT,
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
@@ -1137,5 +1143,99 @@ class MePerformanceReportController extends Controller
             'annual' => MeReportingPeriod::TYPE_YEAR,
             default => MeReportingPeriod::TYPE_CUSTOM,
         };
+    }
+
+    /** @return array<string, array<string, string>> */
+    private function reportingTaxonomy(): array
+    {
+        return [
+            'geographic_scopes' => MeIndicatorAchievement::GEOGRAPHIC_SCOPES,
+            'recs' => MeIndicatorAchievement::RECS,
+            'institution_types' => MeIndicatorAchievement::INSTITUTION_TYPES,
+            'priority_themes' => MeIndicatorAchievement::PRIORITY_THEMES,
+            'genders' => MeIndicatorAchievement::GENDERS,
+            'age_groups' => MeIndicatorAchievement::AGE_GROUPS,
+            'stakeholder_categories' => MeIndicatorAchievement::STAKEHOLDER_CATEGORIES,
+            'countries' => MeDisaggregationDimension::query()
+                ->where('code', 'country')
+                ->with(['options' => fn ($query) => $query->where('is_active', true)])
+                ->first()?->options?->pluck('name', 'name')->all() ?? [],
+        ];
+    }
+
+    /** @param array<string, mixed> $scope */
+    private function cleanReportingScope(array $scope): array
+    {
+        return collect($scope)
+            ->map(fn ($value) => is_scalar($value) ? trim((string) $value) : null)
+            ->filter(fn ($value) => filled($value))
+            ->all();
+    }
+
+    /** @return array<string, mixed> */
+    private function reportAnalytics(MePerformanceReport $report): array
+    {
+        $results = $report->indicatorResults;
+        $achievements = $results->flatMap->achievements;
+        $breakdowns = $achievements->flatMap->breakdowns;
+        $completeResults = $results->filter(function ($result): bool {
+            return $result->indicator?->value_type === 'milestone'
+                ? filled($result->actual_text)
+                : $result->actual_value !== null;
+        })->count();
+        $evidenceLinks = $achievements
+            ->flatMap->documentLinks
+            ->pluck('repository_item_id')
+            ->filter()
+            ->unique()
+            ->count();
+
+        $groupBreakdowns = function (string $field, array $labels) use ($breakdowns): array {
+            return $breakdowns
+                ->filter(fn ($breakdown) => filled($breakdown->{$field}))
+                ->groupBy($field)
+                ->map(fn ($rows, $value): array => [
+                    'key' => (string) $value,
+                    'label' => $labels[$value] ?? Str::headline((string) $value),
+                    'count' => (int) $rows->sum('beneficiary_count'),
+                ])
+                ->sortByDesc('count')
+                ->values()
+                ->all();
+        };
+
+        return [
+            'summary' => [
+                'indicators_due' => $results->count(),
+                'results_reported' => $completeResults,
+                'achievements' => $achievements->count(),
+                'beneficiaries' => (int) $breakdowns->sum('beneficiary_count'),
+                'evidence_items' => $report->documents->count() + $evidenceLinks,
+            ],
+            'progress' => $results->map(function ($result): array {
+                $progress = $result->progress_percent;
+                if ($progress === null && $result->actual_value !== null && (float) $result->target_value !== 0.0) {
+                    $progress = round(((float) $result->actual_value / (float) $result->target_value) * 100, 2);
+                }
+
+                return [
+                    'code' => $result->indicator?->indicator_code ?: 'Indicator',
+                    'name' => $result->indicator?->name ?: 'Linked indicator',
+                    'actual' => $result->indicator?->value_type === 'milestone'
+                        ? ($result->actual_text ?: 'Pending')
+                        : ($result->actual_value !== null ? number_format((float) $result->actual_value, 2) : 'Pending'),
+                    'target' => $result->target_value !== null ? number_format((float) $result->target_value, 2) : 'Not set',
+                    'progress' => $progress !== null ? (float) $progress : null,
+                    'bar_width' => $progress !== null ? max(0, min(100, (float) $progress)) : 0,
+                ];
+            })->values()->all(),
+            'disaggregation' => [
+                'gender' => $groupBreakdowns('gender', MeIndicatorAchievement::GENDERS),
+                'age_group' => $groupBreakdowns('age_group', MeIndicatorAchievement::AGE_GROUPS),
+                'stakeholder_category' => $groupBreakdowns('stakeholder_category', MeIndicatorAchievement::STAKEHOLDER_CATEGORIES),
+                'priority_theme' => $groupBreakdowns('priority_theme', MeIndicatorAchievement::PRIORITY_THEMES),
+                'country' => $groupBreakdowns('country', []),
+            ],
+        ];
     }
 }

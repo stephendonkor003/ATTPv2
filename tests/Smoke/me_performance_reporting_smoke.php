@@ -55,6 +55,10 @@ class MePerformanceReportingSmoke
         ] as $table) {
             $this->assertTrue(Schema::hasTable($table), "Required table [{$table}] is missing.");
         }
+        $this->assertTrue(
+            Schema::hasColumn('me_performance_reports', 'reporting_scope'),
+            'The saved reporter-disaggregation scope column is missing.'
+        );
 
         Storage::fake('local');
         DB::beginTransaction();
@@ -66,6 +70,8 @@ class MePerformanceReportingSmoke
             $this->get(route('budget.me.performance-reports.create'))
                 ->assertOk()
                 ->assertSee('Create a Performance Report')
+                ->assertSee('Reporter disaggregation selection')
+                ->assertSee('Indicator measurement plan')
                 ->assertSee($context['form']->title)
                 ->assertSee($context['component']->name);
 
@@ -73,6 +79,14 @@ class MePerformanceReportingSmoke
                 'form_id' => $context['form']->id,
                 'reporting_quarter' => $context['quarter'],
                 'reporting_year' => 2026,
+                'reporting_scope' => [
+                    'geographic_scope' => 'national',
+                    'country' => 'Ghana',
+                    'priority_theme' => 'regional_trade',
+                    'gender' => 'female',
+                    'age_group' => 'youth_below_35',
+                    'stakeholder_category' => 'government',
+                ],
             ])->assertRedirect();
 
             $report = MePerformanceReport::query()
@@ -95,6 +109,11 @@ class MePerformanceReportingSmoke
             );
             $this->assertSame(1, $report->indicatorResults->count(), 'The due indicator was not linked to the report.');
             $this->assertSame(
+                'Ghana',
+                $report->reporting_scope['country'] ?? null,
+                'The reporter-selected disaggregation scope was not saved.'
+            );
+            $this->assertSame(
                 125.0,
                 (float) $report->indicatorResults->first()->target_value,
                 'The approved indicator target was not copied into the report.'
@@ -109,6 +128,8 @@ class MePerformanceReportingSmoke
             $this->get(route('budget.me.performance-reports.edit', $report))
                 ->assertOk()
                 ->assertSee('Indicator results and progress against target')
+                ->assertSee('Indicator reporting dashboard')
+                ->assertSee('Indicator reference and result table')
                 ->assertSee('Means of Verification')
                 ->assertSee('Lessons learned')
                 ->assertSee('Mandatory section check')
