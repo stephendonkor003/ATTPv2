@@ -783,21 +783,55 @@ class MeDataEntryController extends Controller
 
             $this->assertCollectionCanBePublished($lockedCollection);
             $openedNow = $lockedCollection->isDraft();
+            $publishedAt = now();
 
-            if ($openedNow) {
-                $lockedCollection->update([
-                    'status' => MeDataCollection::STATUS_OPEN,
-                    'updated_by' => $request->user()->id,
-                ]);
+            // Publish / Send is an immediate portal action. A collection or
+            // reporting period configured to start later must not leave the
+            // newly published Think Tank form in reference-only mode.
+            $collectionUpdates = [
+                'status' => MeDataCollection::STATUS_OPEN,
+                'updated_by' => $request->user()->id,
+            ];
+            if (! $lockedCollection->opens_at || $lockedCollection->opens_at->isFuture()) {
+                $collectionUpdates['opens_at'] = $publishedAt;
+            }
+            $lockedCollection->update($collectionUpdates);
+
+            $period = MeReportingPeriod::query()
+                ->lockForUpdate()
+                ->findOrFail($lockedCollection->reporting_period_id);
+            $lockedCollection->setRelation('reportingPeriod', $period);
+            $periodUpdates = [
+                'status' => MeReportingPeriod::STATUS_ACTIVE,
+                'lifecycle_status' => MeReportingPeriod::LIFECYCLE_OPEN,
+                'updated_by' => $request->user()->id,
+            ];
+            if ($period->submission_opens_at?->isFuture()) {
+                $periodUpdates['submission_opens_at'] = $publishedAt;
             }
 
-            return $lockedCollection->fresh();
+            // The collection closing time is the respondent-facing boundary.
+            // Keep a period-level deadline from silently closing the same form
+            // earlier, which otherwise renders it read-only in the portal.
+            if ($period->submission_deadline
+                && $lockedCollection->closes_at
+                && $period->submission_deadline->isBefore($lockedCollection->closes_at)) {
+                $periodUpdates['submission_deadline'] = $lockedCollection->closes_at;
+
+                if ($period->review_deadline
+                    && $period->review_deadline->isBefore($lockedCollection->closes_at)) {
+                    $periodUpdates['review_deadline'] = $lockedCollection->closes_at;
+                }
+            }
+            $period->update($periodUpdates);
+
+            return $lockedCollection->fresh(['form', 'reportingPeriod', 'assignments']);
         });
 
         $delivery = $notifications->collectionPublished($publishedCollection);
         $message = $openedNow
-            ? 'Collection published in the think-tank portal.'
-            : 'Collection remains open in the think-tank portal.';
+            ? 'Collection published and opened for data submission in the think-tank portal.'
+            : 'Collection is open for data submission in the think-tank portal.';
 
         if ($delivery['sent'] > 0) {
             $message .= ' '.number_format($delivery['sent']).' new portal '

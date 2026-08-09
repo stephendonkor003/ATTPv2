@@ -412,7 +412,9 @@ class MeDataEntryWorkflowSmoke
         $this->assertTrue((bool) $period, 'Admin reporting-period route did not persist the period.');
         $this->assertSame(MeReportingPeriod::STATUS_ACTIVE, $period->status, 'Reporting period is not active.');
 
-        $opensAt = now()->subMinute()->format('Y-m-d H:i:s');
+        // A scheduled collection must become editable immediately when the
+        // administrator explicitly publishes/sends it to Think Tanks.
+        $opensAt = now()->addHour()->format('Y-m-d H:i:s');
         $dueAt = now()->addDay()->format('Y-m-d H:i:s');
         $closesAt = now()->addDays(2)->format('Y-m-d H:i:s');
         $this->asAdmin($context['admin'])
@@ -481,6 +483,15 @@ class MeDataEntryWorkflowSmoke
             MeDataCollection::STATUS_OPEN,
             $collection->fresh()->status,
             'Publishing did not expose the collection in the think-tank portal.'
+        );
+        $collection->refresh()->load('reportingPeriod');
+        $this->assertTrue(
+            $collection->isAcceptingSubmissions(),
+            'A newly published collection remained read-only because its opening time was not advanced.'
+        );
+        $this->assertTrue(
+            $collection->reportingPeriod->isOpenForSubmission(),
+            'A newly published collection remained read-only because its reporting-period window was not opened.'
         );
         $publicationNotification = $context['firstUser']->notifications()
             ->where('type', MeReportingNotification::class)

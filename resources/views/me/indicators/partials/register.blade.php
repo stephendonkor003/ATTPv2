@@ -215,7 +215,7 @@
                                 </div>
                                 @if ($indicator->extra_target !== null)
                                     <div class="me-metric-line">
-                                        <span class="me-muted">Extra target</span>
+                                        <span class="me-muted">Surplus target</span>
                                         <span class="me-metric-value">{{ $formatMetric($indicator->extra_target) }}</span>
                                     </div>
                                 @endif
@@ -358,7 +358,7 @@
                         </div>
                         @if ($indicator->extra_target !== null)
                             <div class="me-mobile-fact">
-                                <small>Extra target</small>
+                                <small>Surplus target</small>
                                 <strong>{{ $formatMetric($indicator->extra_target) }} {{ $unitLabel }}</strong>
                             </div>
                         @endif

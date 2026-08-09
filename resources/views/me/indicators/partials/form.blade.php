@@ -358,7 +358,7 @@
                     </div>
 
                     <div class="col-xl col-lg-6">
-                        <label class="form-label" for="indicator-extra-target">Extra target <span class="text-muted fw-normal">(optional)</span></label>
+                        <label class="form-label" for="indicator-extra-target">Surplus target <span class="text-muted fw-normal">(optional)</span></label>
                         <input
                             type="number"
                             id="indicator-extra-target"
@@ -366,11 +366,11 @@
                             class="form-control @error('extra_target') is-invalid @enderror"
                             value="{{ old('extra_target', $editingIndicator->extra_target ?? '') }}"
                             step="any"
-                            placeholder="Optional stretch target"
+                            placeholder="Optional surplus target"
                             aria-describedby="indicator-extra-target-help"
                         >
                         @error('extra_target')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        <small class="me-field-help" id="indicator-extra-target-help">Use only when delivery may intentionally exceed the programme target. Enter the total stretch target, not only the additional amount.</small>
+                        <small class="me-field-help" id="indicator-extra-target-help">Use only when delivery may intentionally exceed the programme target. Enter the total surplus target, not only the additional amount.</small>
                     </div>
 
                 </div>

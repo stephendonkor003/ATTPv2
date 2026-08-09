@@ -32,7 +32,7 @@ it('provides a filterable non-overlapping indicator DataTable with the approved 
         ->not->toContain('Cross-think-tank consolidation')
         ->not->toContain('name="aggregation_method"')
         ->not->toContain('name="organization_rollup_method"')
-        ->toContain('Extra target')
+        ->toContain('Surplus target')
         ->toContain('name="extra_target"')
         ->toContain('(optional)')
         ->and($styles)
