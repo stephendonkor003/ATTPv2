@@ -264,8 +264,6 @@ class MeIndicatorController extends Controller
             ?: $editingPrimarySourceValue;
         $editingTargetValue = $editingIndicator?->setupTarget?->target_value
             ?? $editingIndicator?->targets->sortByDesc('period_start')->first()?->target_value;
-        $aggregationMethods = Indicator::AGGREGATION_METHODS;
-        $organizationRollupMethods = Indicator::ORGANIZATION_ROLLUP_METHODS;
         $disaggregationDimensions = MeDisaggregationDimension::query()
             ->where('is_active', true)
             ->orderBy('sort_order')
@@ -283,8 +281,6 @@ class MeIndicatorController extends Controller
             'editingPrimarySourceValue',
             'editingDataCollectionMethod',
             'editingTargetValue',
-            'aggregationMethods',
-            'organizationRollupMethods',
             'users',
             'units',
             'frequencies',
@@ -591,7 +587,7 @@ class MeIndicatorController extends Controller
 
     protected function validateIndicator(Request $request, ?Indicator $indicator = null): array
     {
-        $this->normalizeIndicatorInput($request);
+        $this->normalizeIndicatorInput($request, $indicator);
 
         $validated = $request->validate([
             'indicator_code' => [
@@ -719,18 +715,18 @@ class MeIndicatorController extends Controller
      * Keep the new form contract small while accepting submissions from the
      * previous indicator editor during the transition.
      */
-    protected function normalizeIndicatorInput(Request $request): void
+    protected function normalizeIndicatorInput(Request $request, ?Indicator $indicator = null): void
     {
         if (! $request->exists('annual_target') && $request->exists('target_value')) {
             $request->merge(['annual_target' => $request->input('target_value')]);
         }
 
         if (! $request->exists('aggregation_method')) {
-            $request->merge(['aggregation_method' => 'sum']);
+            $request->merge(['aggregation_method' => $indicator?->aggregation_method ?: 'sum']);
         }
 
         if (! $request->exists('organization_rollup_method')) {
-            $request->merge(['organization_rollup_method' => 'sum']);
+            $request->merge(['organization_rollup_method' => $indicator?->organization_rollup_method ?: 'sum']);
         }
 
         if ($request->exists('indicator_code')) {

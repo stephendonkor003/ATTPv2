@@ -4,6 +4,7 @@ it('provides a filterable non-overlapping indicator DataTable with the approved 
     $root = dirname(__DIR__, 2);
     $register = file_get_contents($root.'/resources/views/me/indicators/partials/register.blade.php');
     $page = file_get_contents($root.'/resources/views/me/indicators/index.blade.php');
+    $form = file_get_contents($root.'/resources/views/me/indicators/partials/form.blade.php');
     $styles = file_get_contents($root.'/resources/views/me/indicators/partials/styles.blade.php');
     $controller = file_get_contents($root.'/app/Http/Controllers/MeIndicatorController.php');
 
@@ -26,12 +27,20 @@ it('provides a filterable non-overlapping indicator DataTable with the approved 
         ->toContain("targets: 4, orderable: false")
         ->toContain("document.addEventListener('submit'")
         ->toContain("event.target.closest('[data-disaggregation-open]')")
+        ->and($form)
+        ->not->toContain('Aggregation across reporting periods')
+        ->not->toContain('Cross-think-tank consolidation')
+        ->not->toContain('name="aggregation_method"')
+        ->not->toContain('name="organization_rollup_method"')
         ->and($styles)
         ->toContain('table-layout: fixed !important')
         ->toContain('overflow-wrap: anywhere')
         ->toContain('flex-wrap: wrap')
         ->toContain('.me-register-toolbar')
         ->and($controller)
+        ->toContain('normalizeIndicatorInput($request, $indicator)')
+        ->toContain("\$indicator?->aggregation_method ?: 'sum'")
+        ->toContain("\$indicator?->organization_rollup_method ?: 'sum'")
         ->toContain('->latest()')
         ->toContain('->get();');
 });

@@ -357,37 +357,6 @@
                         @error('target_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
 
-                    <div class="col-lg-6">
-                        <label class="form-label" for="indicator-aggregation-method">Aggregation across reporting periods <span class="text-danger">*</span></label>
-                        <select
-                            id="indicator-aggregation-method"
-                            name="aggregation_method"
-                            class="form-select @error('aggregation_method') is-invalid @enderror"
-                            required
-                        >
-                            @foreach ($aggregationMethods as $value => $label)
-                                <option value="{{ $value }}" @selected(old('aggregation_method', $editingIndicator->aggregation_method ?? 'sum') === $value)>{{ $label }}</option>
-                            @endforeach
-                        </select>
-                        @error('aggregation_method')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        <small class="text-muted">This is a calculation rule. Only “Sum” adds period values; percentages, ratios and other non-additive values must not be summed.</small>
-                    </div>
-
-                    <div class="col-lg-6">
-                        <label class="form-label" for="indicator-organization-rollup">Cross-think-tank consolidation <span class="text-danger">*</span></label>
-                        <select
-                            id="indicator-organization-rollup"
-                            name="organization_rollup_method"
-                            class="form-select @error('organization_rollup_method') is-invalid @enderror"
-                            required
-                        >
-                            @foreach ($organizationRollupMethods as $value => $label)
-                                <option value="{{ $value }}" @selected(old('organization_rollup_method', $editingIndicator->organization_rollup_method ?? 'sum') === $value)>{{ $label }}</option>
-                            @endforeach
-                        </select>
-                        @error('organization_rollup_method')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        <small class="text-muted">Controls how approved values from the 13 think tanks are combined. Rates and percentages should not normally use Sum.</small>
-                    </div>
                 </div>
             </div>
 

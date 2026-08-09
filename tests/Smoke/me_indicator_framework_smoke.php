@@ -710,7 +710,6 @@ try {
         'Results level',
         'Definition',
         'Unit of measurement',
-        'Aggregation across reporting periods',
         'Required disaggregation',
         'ATTP priority theme',
         'Baseline',
@@ -722,6 +721,16 @@ try {
     ] as $requiredLabel) {
         if (! str_contains($editHtml, $requiredLabel)) {
             throw new RuntimeException("The focused indicator form is missing {$requiredLabel}.");
+        }
+    }
+    foreach ([
+        'Aggregation across reporting periods',
+        'Cross-think-tank consolidation',
+        'name="aggregation_method"',
+        'name="organization_rollup_method"',
+    ] as $removedAggregationControl) {
+        if (str_contains($editHtml, $removedAggregationControl)) {
+            throw new RuntimeException("The focused indicator form still exposes {$removedAggregationControl}.");
         }
     }
     foreach ([
