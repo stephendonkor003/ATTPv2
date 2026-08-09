@@ -995,6 +995,21 @@
             box-shadow: 0 24px 70px rgba(7, 56, 43, .24);
         }
 
+        body.me-period-fix-open {
+            overflow: hidden;
+        }
+
+        .me-data-entry .me-period-fix-modal.is-open {
+            display: block !important;
+            overflow-x: hidden;
+            overflow-y: auto;
+            background: rgba(4, 31, 39, .58);
+        }
+
+        .me-data-entry .me-period-fix-modal.is-open .modal-dialog {
+            pointer-events: auto;
+        }
+
         .me-data-entry .me-period-fix-modal .modal-header {
             align-items: flex-start;
             padding: 1rem 1.1rem;
@@ -3255,8 +3270,6 @@
                                                         <button
                                                             type="button"
                                                             class="btn btn-sm {{ $collection->reportingPeriod?->isActive() ? 'btn-outline-warning' : 'btn-warning' }}"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#me-fix-reporting-period-modal"
                                                             data-fix-reporting-period
                                                             data-action="{{ route('budget.me.data-entry.collections.reporting-period.fix', $collection) }}"
                                                             data-collection-id="{{ $collection->id }}"
@@ -3315,8 +3328,6 @@
                                             <button
                                                 type="button"
                                                 class="btn btn-sm {{ $collection->reportingPeriod?->isActive() ? 'btn-outline-warning' : 'btn-warning' }}"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#me-fix-reporting-period-modal"
                                                 data-fix-reporting-period
                                                 data-action="{{ route('budget.me.data-entry.collections.reporting-period.fix', $collection) }}"
                                                 data-collection-id="{{ $collection->id }}"
@@ -3364,6 +3375,7 @@
                 class="modal fade me-period-fix-modal"
                 id="me-fix-reporting-period-modal"
                 tabindex="-1"
+                role="dialog"
                 aria-labelledby="me-fix-reporting-period-title"
                 aria-hidden="true"
                 data-fix-period-modal
@@ -3390,7 +3402,7 @@
                                         <p>Correct the submission window and open the linked period without leaving Data Collections.</p>
                                     </div>
                                 </div>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                <button type="button" class="btn-close" data-fix-period-close aria-label="Close"></button>
                             </div>
 
                             <div class="modal-body p-3 p-md-4">
@@ -3428,7 +3440,7 @@
                             </div>
 
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-light border" data-fix-period-close>Cancel</button>
                                 <button type="submit" class="btn btn-success"><i class="feather-unlock me-1" aria-hidden="true"></i>Save and open period</button>
                             </div>
                         </form>
@@ -3623,6 +3635,7 @@
             if (fixPeriodModal && fixPeriodModal.dataset.initialized !== 'true') {
                 fixPeriodModal.dataset.initialized = 'true';
                 const fixPeriodForm = fixPeriodModal.querySelector('[data-fix-period-form]');
+                let fixPeriodTrigger = null;
                 const setText = (selector, value, fallback) => {
                     const target = fixPeriodModal.querySelector(selector);
                     if (target) target.textContent = value || fallback;
@@ -3632,8 +3645,7 @@
                     if (target) target.value = value || '';
                 };
 
-                fixPeriodModal.addEventListener('show.bs.modal', (event) => {
-                    const trigger = event.relatedTarget?.closest?.('[data-fix-reporting-period]');
+                const populateFixPeriodModal = (trigger) => {
                     if (!trigger || !fixPeriodForm) return;
 
                     fixPeriodForm.action = trigger.dataset.action || '#';
@@ -3647,10 +3659,65 @@
                     setText('[data-fix-period-identity]', [trigger.dataset.periodCode, trigger.dataset.periodLabel].filter(Boolean).join(' — '), 'Reporting period unavailable');
                     setText('[data-fix-period-coverage]', trigger.dataset.periodCoverage, 'Coverage dates unavailable');
                     setText('[data-fix-period-state]', [trigger.dataset.periodStatus, trigger.dataset.periodLifecycle].filter(Boolean).join(' / '), 'State unavailable');
+                    fixPeriodForm.dataset.meFormDirty = 'false';
+                };
+
+                const openFixPeriodModal = (trigger = null) => {
+                    if (trigger) {
+                        fixPeriodTrigger = trigger;
+                        populateFixPeriodModal(trigger);
+                    }
+
+                    fixPeriodModal.classList.add('show', 'is-open');
+                    fixPeriodModal.style.display = 'block';
+                    fixPeriodModal.setAttribute('aria-hidden', 'false');
+                    fixPeriodModal.setAttribute('aria-modal', 'true');
+                    document.body.classList.add('me-period-fix-open');
+
+                    window.requestAnimationFrame(() => {
+                        const focusTarget = fixPeriodModal.querySelector('.is-invalid')
+                            || fixPeriodModal.querySelector('[data-fix-submission-opens]')
+                            || fixPeriodModal.querySelector('[data-fix-period-close]');
+                        focusTarget?.focus({ preventScroll: true });
+                    });
+                };
+
+                const closeFixPeriodModal = () => {
+                    fixPeriodModal.classList.remove('show', 'is-open');
+                    fixPeriodModal.style.removeProperty('display');
+                    fixPeriodModal.setAttribute('aria-hidden', 'true');
+                    fixPeriodModal.removeAttribute('aria-modal');
+                    document.body.classList.remove('me-period-fix-open');
+                    if (fixPeriodForm) fixPeriodForm.dataset.meFormDirty = 'false';
+                    fixPeriodTrigger?.focus({ preventScroll: true });
+                };
+
+                document.querySelectorAll('[data-fix-reporting-period]').forEach((trigger) => {
+                    if (trigger.dataset.fixPeriodInitialized === 'true') return;
+                    trigger.dataset.fixPeriodInitialized = 'true';
+                    trigger.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openFixPeriodModal(trigger);
+                    });
                 });
 
-                if (fixPeriodModal.dataset.autoOpen === 'true' && window.bootstrap?.Modal) {
-                    window.requestAnimationFrame(() => window.bootstrap.Modal.getOrCreateInstance(fixPeriodModal).show());
+                fixPeriodModal.querySelectorAll('[data-fix-period-close]').forEach((button) => {
+                    button.addEventListener('click', closeFixPeriodModal);
+                });
+
+                fixPeriodModal.addEventListener('mousedown', (event) => {
+                    if (event.target === fixPeriodModal) closeFixPeriodModal();
+                });
+
+                fixPeriodModal.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Escape') return;
+                    event.preventDefault();
+                    closeFixPeriodModal();
+                });
+
+                if (fixPeriodModal.dataset.autoOpen === 'true') {
+                    window.requestAnimationFrame(() => openFixPeriodModal());
                 }
             }
 
