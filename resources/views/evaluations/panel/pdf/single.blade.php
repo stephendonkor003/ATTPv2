@@ -41,6 +41,11 @@
             color: #fff;
         }
 
+        .average {
+            background: #f59e0b;
+            color: #111;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -81,14 +86,15 @@
 
     @php
         $evaluation = $submission->evaluation;
-        $isGoods = $evaluation->type === 'goods';
+        $isNumeric = $evaluation->usesNumericScoring();
+        $sectionOutline = \App\Support\EvaluationSectionHierarchy::flattened($evaluation);
     @endphp
 
     <div class="header">
         <h2>{{ $submission->procurement->title }}</h2>
 
         <strong>Evaluation:</strong> {{ $evaluation->name }} <br>
-        <strong>Type:</strong> {{ strtoupper($evaluation->type) }} <br>
+        <strong>Type:</strong> {{ $evaluation->typeLabel() }} <br>
         <strong>Evaluator:</strong> {{ $submission->evaluator->name }} <br>
         <strong>Submitted:</strong> {{ $submission->submitted_at->format('d M Y, H:i') }}
     </div>
@@ -104,16 +110,35 @@
     </p>
 
     {{-- ================= SECTIONS ================= --}}
-    @foreach ($evaluation->sections as $section)
+    @foreach ($sectionOutline as $node)
         @php
+            $section = $node['section'];
             $sectionScore = $submission->sectionScores->firstWhere('evaluation_section_id', $section->id);
+            $sectionSubtotal = $isNumeric
+                ? \App\Support\EvaluationSectionHierarchy::numericSubtotal($submission, $section)
+                : null;
+            $sectionDistribution = $isNumeric
+                ? []
+                : \App\Support\EvaluationSectionHierarchy::decisionDistribution($submission, $section);
         @endphp
 
-        <div class="section">
-            <h3>{{ $section->name }}</h3>
+        <div class="section" style="margin-left: {{ min($node['depth'] * 12, 36) }}px;">
+            <h3>{{ $node['number'] }}. {{ $section->name }} <small>({{ $node['label'] }})</small></h3>
+
+            @if ($section->show_subtotal && $isNumeric)
+                <p><strong>Sub-total:</strong> {{ number_format($sectionSubtotal, 2) }} / {{ number_format($section->subtotalMaxScore(), 2) }}</p>
+            @elseif ($section->show_subtotal)
+                <p><strong>Category distribution:</strong>
+                    @foreach ($sectionDistribution as $decision => $count)
+                        {{ $decision }}: {{ $count }}@if (! $loop->last) &middot; @endif
+                    @endforeach
+                </p>
+            @endif
 
             {{-- SERVICES --}}
-            @if (!$isGoods)
+            @if ($section->criteria->isEmpty())
+                <p>Grouping section; criteria appear in child sections.</p>
+            @elseif ($isNumeric)
                 <table>
                     <thead>
                         <tr>
@@ -136,7 +161,7 @@
                     </tbody>
                 </table>
 
-                {{-- GOODS --}}
+                {{-- CATEGORICAL DECISIONS --}}
             @else
                 <table>
                     <thead>
@@ -150,14 +175,19 @@
                         @foreach ($section->criteria as $criteria)
                             @php
                                 $cs = $submission->criteriaScores->firstWhere('evaluation_criteria_id', $criteria->id);
+                                $decisionLabel = $evaluation->decisionLabel($cs?->decision);
+                                $decisionClass = match ($decisionLabel) {
+                                    'Yes', 'Qualified' => 'yes',
+                                    'Average Qualified' => 'average',
+                                    'No', 'Not Qualified' => 'no',
+                                    default => '',
+                                };
                             @endphp
                             <tr>
                                 <td>{{ $criteria->name }}</td>
                                 <td align="center">
-                                    @if ($cs?->decision === 1)
-                                        <span class="badge yes">YES</span>
-                                    @elseif ($cs?->decision === 0)
-                                        <span class="badge no">NO</span>
+                                    @if ($decisionLabel)
+                                        <span class="badge {{ $decisionClass }}">{{ $decisionLabel }}</span>
                                     @else
                                         —
                                     @endif
@@ -169,18 +199,20 @@
                 </table>
             @endif
 
-            <div class="notes">
-                <strong>Strengths:</strong><br>
-                {{ $sectionScore->strengths ?? '—' }} <br><br>
+            @if ($section->criteria->isNotEmpty())
+                <div class="notes">
+                    <strong>Strengths:</strong><br>
+                    {{ $sectionScore->strengths ?? '—' }} <br><br>
 
-                <strong>Weaknesses:</strong><br>
-                {{ $sectionScore->weaknesses ?? '—' }}
-            </div>
+                    <strong>Weaknesses:</strong><br>
+                    {{ $sectionScore->weaknesses ?? '—' }}
+                </div>
+            @endif
         </div>
     @endforeach
 
     {{-- ================= OVERALL ================= --}}
-    @if (!$isGoods)
+    @if ($isNumeric)
         <div class="overall">
             Overall Score:
             {{ number_format($submission->overall_score, 2) }}

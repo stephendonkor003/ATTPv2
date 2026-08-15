@@ -27,7 +27,7 @@ class EvaluationCompleted extends Mailable
             'evaluator',
         ]);
 
-        $overallMax = $submission->evaluation?->type === 'services'
+        $overallMax = $submission->evaluation?->usesNumericScoring()
             ? $submission->evaluation->sections
                 ->flatMap(fn ($section) => $section->criteria)
                 ->sum('max_score')
@@ -38,11 +38,11 @@ class EvaluationCompleted extends Mailable
             'overallMax' => $overallMax,
         ]);
 
-        return $this->subject('Evaluation Submitted: ' . ($submission->applicant?->procurement_submission_code ?? 'Submission'))
+        return $this->subject('Evaluation Submitted: '.($submission->applicant?->procurement_submission_code ?? 'Submission'))
             ->view('emails.evaluations.completed', compact('submission', 'overallMax'))
             ->attachData(
                 $pdf->output(),
-                'evaluation-report-' . ($submission->applicant?->procurement_submission_code ?? $submission->id) . '.pdf',
+                'evaluation-report-'.($submission->applicant?->procurement_submission_code ?? $submission->id).'.pdf',
                 ['mime' => 'application/pdf']
             );
     }

@@ -50,7 +50,7 @@
                                         <option value="">Select Evaluation</option>
                                         @foreach ($selectableEvaluations as $eval)
                                             <option value="{{ $eval->id }}">
-                                                {{ $eval->name }}
+                                                {{ $eval->name }} ({{ $eval->typeLabel() }})
                                                 @if ($eval->portfolio)
                                                     - {{ $eval->portfolio->name }}
                                                 @endif
@@ -120,7 +120,12 @@
                                     @forelse ($procurement->evaluationAssignments as $assign)
                                         <tr>
                                             <td>{{ $assign->evaluator->name }}</td>
-                                            <td>{{ $assign->evaluation->name }}</td>
+                                            <td>
+                                                {{ $assign->evaluation->name }}
+                                                <span class="badge bg-{{ $assign->evaluation->typeColor() }} ms-1">
+                                                    {{ $assign->evaluation->typeLabel() }}
+                                                </span>
+                                            </td>
                                             <td>
                                                 @php
                                                     $statusMap = [

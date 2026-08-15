@@ -54,7 +54,7 @@
                             <th>Procurement</th>
                             <th>Total Evaluations</th>
                             <th>Evaluators</th>
-                            <th>Average Overall</th>
+                            <th>Average Numeric Score</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -63,7 +63,7 @@
                                 <td>{{ $stat['procurement']->title ?? 'N/A' }}</td>
                                 <td>{{ $stat['total'] }}</td>
                                 <td>{{ $stat['evaluators'] }}</td>
-                                <td>{{ number_format($stat['avg_overall'], 2) }}</td>
+                                <td>{{ $stat['avg_overall'] !== null ? number_format($stat['avg_overall'], 2) : 'N/A' }}</td>
                             </tr>
                         @empty
                             <tr>
@@ -83,7 +83,7 @@
                         <tr>
                             <th>Evaluator</th>
                             <th>Total Evaluations</th>
-                            <th>Average Overall</th>
+                            <th>Average Numeric Score</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -91,7 +91,7 @@
                             <tr>
                                 <td>{{ $name }}</td>
                                 <td>{{ $data['total'] }}</td>
-                                <td>{{ number_format($data['avg_overall'], 2) }}</td>
+                                <td>{{ $data['avg_overall'] !== null ? number_format($data['avg_overall'], 2) : 'N/A' }}</td>
                             </tr>
                         @empty
                             <tr>
@@ -114,7 +114,7 @@
                             <th>Applicant</th>
                             <th>Evaluation</th>
                             <th>Evaluator</th>
-                            <th>Overall Score</th>
+                            <th>Result</th>
                             <th>Submitted At</th>
                         </tr>
                     </thead>
@@ -126,7 +126,20 @@
                                 <td>{{ $submission->applicant?->submitter?->name ?? 'N/A' }}</td>
                                 <td>{{ $submission->evaluation?->name ?? 'N/A' }}</td>
                                 <td>{{ $submission->evaluator?->name ?? 'N/A' }}</td>
-                                <td>{{ number_format($submission->overall_score ?? 0, 2) }}</td>
+                                <td>
+                                    @if ($submission->evaluation?->usesNumericScoring())
+                                        {{ $submission->overall_score !== null ? number_format($submission->overall_score, 2) : 'N/A' }}
+                                    @else
+                                        @php
+                                            $decisionSummary = collect($submission->evaluation?->decisionOptions() ?? [])
+                                                ->map(function (string $label, int $decision) use ($submission) {
+                                                    return $submission->criteriaScores->where('decision', $decision)->count().' '.$label;
+                                                })
+                                                ->implode(' / ');
+                                        @endphp
+                                        {{ $decisionSummary ?: 'No decisions recorded' }}
+                                    @endif
+                                </td>
                                 <td>{{ $submission->submitted_at?->format('d M Y, H:i') ?? 'N/A' }}</td>
                             </tr>
                         @empty

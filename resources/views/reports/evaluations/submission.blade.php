@@ -4,16 +4,25 @@
 
 @section('content')
     @php
-        $isGoods = $submission->evaluation?->type === 'goods';
+        $evaluation = $submission->evaluation;
+        $isNumeric = $evaluation?->usesNumericScoring() ?? false;
         $applicantName = $submission->applicant?->display_name ?? 'Applicant';
         $submissionCode = $submission->applicant?->procurement_submission_code ?? 'N/A';
         $score = $submission->overall_score !== null ? (float) $submission->overall_score : null;
-        $scorePercent = (!$isGoods && $score !== null && $overallMax)
+        $scorePercent = ($isNumeric && $score !== null && $overallMax)
             ? min(100, round(($score / max($overallMax, 1)) * 100, 1))
             : null;
         $criteriaTotal = $submission->evaluation?->sections?->sum(fn ($section) => $section->criteria->count()) ?? 0;
-        $yesCount = $submission->criteriaScores->where('decision', 1)->count();
-        $noCount = $submission->criteriaScores->where('decision', 0)->count();
+        $sectionOutline = $evaluation
+            ? \App\Support\EvaluationSectionHierarchy::flattened($evaluation)
+            : collect();
+        $decisionSummary = collect($evaluation?->decisionOptions() ?? [])
+            ->map(function (string $label, int $decision) use ($submission) {
+                $count = $submission->criteriaScores->where('decision', $decision)->count();
+
+                return $count.' '.$label;
+            })
+            ->implode(' / ');
     @endphp
 
     <main class="nxl-container evaluation-submission-report">
@@ -45,14 +54,12 @@
                 <div class="overview-meta">
                     <span>{{ $submissionCode }}</span>
                     <span>{{ $submission->procurement?->reference_no ?? 'No reference' }}</span>
-                    <span>{{ ucfirst($submission->evaluation?->type ?? 'Evaluation') }}</span>
+                    <span>{{ $evaluation?->typeLabel() ?? 'Evaluation' }}</span>
                 </div>
             </div>
             <div class="overview-score">
-                <span>{{ $isGoods ? 'Decision Summary' : 'Overall Score' }}</span>
-                @if ($isGoods)
-                    <strong>{{ $yesCount }} Yes / {{ $noCount }} No</strong>
-                @else
+                <span>{{ $isNumeric ? 'Overall Score' : 'Decision Summary' }}</span>
+                @if ($isNumeric)
                     <strong>
                         {{ $score !== null ? number_format($score, 2) : '-' }}
                         @if ($overallMax)
@@ -64,6 +71,8 @@
                             <div style="width: {{ $scorePercent }}%"></div>
                         </div>
                     @endif
+                @else
+                    <strong>{{ $decisionSummary ?: 'No decisions recorded' }}</strong>
                 @endif
             </div>
         </section>
@@ -107,37 +116,51 @@
         </div>
 
         <section class="section-stack">
-            @forelse ($submission->evaluation->sections as $index => $section)
+            @forelse ($sectionOutline as $node)
                 @php
+                    $section = $node['section'];
                     $sectionScore = $submission->sectionScores->firstWhere('evaluation_section_id', $section->id);
-                    $sectionCriteriaScores = $section->criteria->map(fn ($criteria) => $submission->criteriaScores->firstWhere('evaluation_criteria_id', $criteria->id))->filter();
-                    $sectionTotal = $sectionCriteriaScores->sum('score');
-                    $sectionMax = $section->criteria->sum('max_score');
-                    $sectionPercent = (!$isGoods && $sectionMax > 0) ? min(100, round(($sectionTotal / $sectionMax) * 100, 1)) : null;
+                    $sectionTotal = $isNumeric
+                        ? \App\Support\EvaluationSectionHierarchy::numericSubtotal($submission, $section)
+                        : null;
+                    $sectionMax = $isNumeric ? $section->subtotalMaxScore() : null;
+                    $sectionPercent = ($isNumeric && $sectionMax > 0) ? min(100, round(($sectionTotal / $sectionMax) * 100, 1)) : null;
+                    $sectionDistribution = $isNumeric
+                        ? []
+                        : \App\Support\EvaluationSectionHierarchy::decisionDistribution($submission, $section);
                 @endphp
 
-                <article class="evaluation-section-card">
+                <article class="evaluation-section-card" style="margin-left: {{ min($node['depth'] * 18, 54) }}px">
                     <div class="section-card-head">
                         <div>
-                            <span class="report-eyebrow">Section {{ $index + 1 }}</span>
-                            <h5>{{ $section->name }}</h5>
+                            <span class="report-eyebrow">{{ $node['label'] }} {{ $node['number'] }}</span>
+                            <h5>{{ $node['number'] }}. {{ $section->name }}</h5>
                         </div>
-                        @if (!$isGoods)
+                        @if ($section->show_subtotal && $isNumeric)
                             <div class="section-score">
+                                <small>Sub-total</small>
                                 <span>{{ number_format($sectionTotal, 2) }}</span>
                                 <small>/ {{ number_format($sectionMax, 2) }}</small>
+                            </div>
+                        @elseif ($section->show_subtotal)
+                            <div class="d-flex flex-wrap gap-1 justify-content-end">
+                                @foreach ($sectionDistribution as $decision => $count)
+                                    <span class="decision-pill">{{ $decision }}: {{ $count }}</span>
+                                @endforeach
                             </div>
                         @endif
                     </div>
 
-                    @if (!$isGoods && $sectionPercent !== null)
+                    @if ($section->show_subtotal && $isNumeric && $sectionPercent !== null)
                         <div class="section-progress">
                             <div style="width: {{ $sectionPercent }}%"></div>
                         </div>
                     @endif
 
                     <div class="criteria-table-wrap">
-                        @if (!$isGoods)
+                        @if ($section->criteria->isEmpty())
+                            <div class="p-3 text-muted">Grouping section; criteria are organised in its child sections.</div>
+                        @elseif ($isNumeric)
                             <table class="table criteria-table">
                                 <thead>
                                     <tr>
@@ -172,14 +195,19 @@
                                     @foreach ($section->criteria as $criteria)
                                         @php
                                             $criteriaScore = $submission->criteriaScores->firstWhere('evaluation_criteria_id', $criteria->id);
+                                            $decisionLabel = $evaluation?->decisionLabel($criteriaScore?->decision);
+                                            $decisionClass = match ($decisionLabel) {
+                                                'Yes', 'Qualified' => 'decision-pill--yes',
+                                                'Average Qualified' => 'decision-pill--average',
+                                                'No', 'Not Qualified' => 'decision-pill--no',
+                                                default => '',
+                                            };
                                         @endphp
                                         <tr>
                                             <td>{{ $criteria->name }}</td>
                                             <td>
-                                                @if ($criteriaScore?->decision === 1)
-                                                    <span class="decision-pill decision-pill--yes">Yes</span>
-                                                @elseif ($criteriaScore?->decision === 0)
-                                                    <span class="decision-pill decision-pill--no">No</span>
+                                                @if ($decisionLabel)
+                                                    <span class="decision-pill {{ $decisionClass }}">{{ $decisionLabel }}</span>
                                                 @else
                                                     <span class="decision-pill">N/A</span>
                                                 @endif
@@ -192,16 +220,18 @@
                         @endif
                     </div>
 
-                    <div class="section-comments">
-                        <div>
-                            <span>Strengths</span>
-                            <p>{{ $sectionScore->strengths ?? 'N/A' }}</p>
+                    @if ($section->criteria->isNotEmpty())
+                        <div class="section-comments">
+                            <div>
+                                <span>Strengths</span>
+                                <p>{{ $sectionScore->strengths ?? 'N/A' }}</p>
+                            </div>
+                            <div>
+                                <span>Weaknesses</span>
+                                <p>{{ $sectionScore->weaknesses ?? 'N/A' }}</p>
+                            </div>
                         </div>
-                        <div>
-                            <span>Weaknesses</span>
-                            <p>{{ $sectionScore->weaknesses ?? 'N/A' }}</p>
-                        </div>
-                    </div>
+                    @endif
                 </article>
             @empty
                 <div class="empty-report">
@@ -476,6 +506,11 @@
         .decision-pill--no {
             background: #fee2e2;
             color: #991b1b;
+        }
+
+        .decision-pill--average {
+            background: #fef3c7;
+            color: #92400e;
         }
 
         .section-comments {

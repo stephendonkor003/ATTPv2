@@ -81,6 +81,22 @@
         </form>
     </div>
 
+    @php
+        $seededSections = $template->sections->map(function ($section) {
+            return [
+                'name' => $section->name,
+                'description' => $section->description,
+                'items' => $section->criteria->map(function ($criterion) {
+                    return [
+                        'name' => $criterion->name,
+                        'description' => $criterion->description,
+                        'is_mandatory' => $criterion->is_mandatory,
+                    ];
+                })->values(),
+            ];
+        })->values();
+    @endphp
+
     <script>
         const sectionsBuilder = document.getElementById('sectionsBuilder');
         const sectionsPayload = document.getElementById('sectionsPayload');
@@ -301,21 +317,7 @@
                 }
             }
 
-            const seededSections = @json(
-                $template->sections->map(function ($section) {
-                    return [
-                        'name' => $section->name,
-                        'description' => $section->description,
-                        'items' => $section->criteria->map(function ($criterion) {
-                            return [
-                                'name' => $criterion->name,
-                                'description' => $criterion->description,
-                                'is_mandatory' => $criterion->is_mandatory,
-                            ];
-                        })->values(),
-                    ];
-                })->values()
-            );
+            const seededSections = @json($seededSections);
 
             if (Array.isArray(seededSections) && seededSections.length) {
                 seededSections.forEach(section => buildSectionCard(section));

@@ -22,27 +22,33 @@ class EvaluationCriteriaController extends Controller
         $this->assertCriteriaEvaluationManageable($section->evaluation);
 
         if ($section->evaluation->status !== 'draft') {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'Cannot modify criteria once evaluation is active.',
+                ], 422);
+            }
+
             return back()->with('error', 'Cannot modify criteria once evaluation is active.');
         }
 
-        $isServices = $section->evaluation->type === 'services';
+        $isServices = $section->evaluation->usesNumericScoring();
         $bulkRows = $this->resolveBulkRows($request);
 
-        if (!empty($bulkRows)) {
+        if (! empty($bulkRows)) {
             $validated = Validator::make(
                 ['criteria' => $bulkRows],
                 [
-                    'criteria'                => 'required|array|min:1',
-                    'criteria.*.name'         => 'required|string|max:255',
-                    'criteria.*.description'  => 'nullable|string',
-                    'criteria.*.max_score'    => $isServices
+                    'criteria' => 'required|array|min:1',
+                    'criteria.*.name' => 'required|string|max:255',
+                    'criteria.*.description' => 'nullable|string',
+                    'criteria.*.max_score' => $isServices
                         ? 'required|numeric|min:1'
                         : 'nullable|numeric|min:0',
                 ],
                 [
-                    'criteria.required'             => 'Add at least one criteria row before saving.',
-                    'criteria.min'                  => 'Add at least one criteria row before saving.',
-                    'criteria.*.name.required'      => 'Each criteria row must have a name.',
+                    'criteria.required' => 'Add at least one criteria row before saving.',
+                    'criteria.min' => 'Add at least one criteria row before saving.',
+                    'criteria.*.name.required' => 'Each criteria row must have a name.',
                     'criteria.*.max_score.required' => 'Max score is required for services evaluation criteria.',
                 ]
             )->validate();
@@ -50,26 +56,26 @@ class EvaluationCriteriaController extends Controller
             $created = [];
             foreach ($validated['criteria'] as $row) {
                 $criteria = $section->criteria()->create([
-                    'name'        => trim((string) $row['name']),
+                    'name' => trim((string) $row['name']),
                     'description' => trim((string) ($row['description'] ?? '')) ?: null,
-                    'max_score'   => $isServices ? $row['max_score'] : null,
+                    'max_score' => $isServices ? $row['max_score'] : null,
                 ]);
 
                 $created[] = [
-                    'id'          => $criteria->id,
-                    'name'        => $criteria->name,
+                    'id' => $criteria->id,
+                    'name' => $criteria->name,
                     'description' => $criteria->description,
-                    'max_score'   => $criteria->max_score,
-                    'update_url'  => route('evals.cfg.crt.upd', $criteria),
-                    'delete_url'  => route('evals.cfg.crt.del', $criteria),
+                    'max_score' => $criteria->max_score,
+                    'update_url' => route('evals.cfg.crt.upd', $criteria),
+                    'delete_url' => route('evals.cfg.crt.del', $criteria),
                 ];
             }
 
-            $message = count($created) . ' criteria added successfully.';
+            $message = count($created).' criteria added successfully.';
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
-                    'success'  => true,
-                    'message'  => $message,
+                    'success' => true,
+                    'message' => $message,
                     'criteria' => $created,
                 ]);
             }
@@ -78,28 +84,28 @@ class EvaluationCriteriaController extends Controller
         }
 
         $validated = $request->validate([
-            'name'        => 'required|string|max:255',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'max_score'   => $isServices ? 'required|numeric|min:1' : 'nullable|numeric|min:0',
+            'max_score' => $isServices ? 'required|numeric|min:1' : 'nullable|numeric|min:0',
         ]);
 
         $criteria = $section->criteria()->create([
-            'name'        => trim((string) $validated['name']),
+            'name' => trim((string) $validated['name']),
             'description' => trim((string) ($validated['description'] ?? '')) ?: null,
-            'max_score'   => $isServices ? ($validated['max_score'] ?? null) : null,
+            'max_score' => $isServices ? ($validated['max_score'] ?? null) : null,
         ]);
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
-                'success'  => true,
-                'message'  => 'Evaluation criteria added successfully.',
+                'success' => true,
+                'message' => 'Evaluation criteria added successfully.',
                 'criteria' => [[
-                    'id'          => $criteria->id,
-                    'name'        => $criteria->name,
+                    'id' => $criteria->id,
+                    'name' => $criteria->name,
                     'description' => $criteria->description,
-                    'max_score'   => $criteria->max_score,
-                    'update_url'  => route('evals.cfg.crt.upd', $criteria),
-                    'delete_url'  => route('evals.cfg.crt.del', $criteria),
+                    'max_score' => $criteria->max_score,
+                    'update_url' => route('evals.cfg.crt.upd', $criteria),
+                    'delete_url' => route('evals.cfg.crt.del', $criteria),
                 ]],
             ]);
         }
@@ -115,34 +121,40 @@ class EvaluationCriteriaController extends Controller
         $this->assertCriteriaEvaluationManageable($criteria->section->evaluation);
 
         if ($criteria->section->evaluation->status !== 'draft') {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'Cannot modify criteria once evaluation is active.',
+                ], 422);
+            }
+
             return back()->with('error', 'Cannot modify criteria once evaluation is active.');
         }
 
-        $isServices = $criteria->section->evaluation->type === 'services';
+        $isServices = $criteria->section->evaluation->usesNumericScoring();
 
         $request->validate([
-            'name'        => 'required|string|max:255',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'max_score'   => $isServices ? 'required|numeric|min:1' : 'nullable|numeric|min:0',
+            'max_score' => $isServices ? 'required|numeric|min:1' : 'nullable|numeric|min:0',
         ]);
 
         $criteria->update(
             [
-                'name'        => trim((string) $request->name),
+                'name' => trim((string) $request->name),
                 'description' => trim((string) $request->description) ?: null,
-                'max_score'   => $isServices ? $request->max_score : null,
+                'max_score' => $isServices ? $request->max_score : null,
             ]
         );
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
-                'success'  => true,
-                'message'  => 'Criteria updated successfully.',
+                'success' => true,
+                'message' => 'Criteria updated successfully.',
                 'criteria' => [
-                    'id'          => $criteria->id,
-                    'name'        => $criteria->name,
+                    'id' => $criteria->id,
+                    'name' => $criteria->name,
                     'description' => $criteria->description,
-                    'max_score'   => $criteria->max_score,
+                    'max_score' => $criteria->max_score,
                 ],
             ]);
         }
@@ -158,6 +170,12 @@ class EvaluationCriteriaController extends Controller
         $this->assertCriteriaEvaluationManageable($criteria->section->evaluation);
 
         if ($criteria->section->evaluation->status !== 'draft') {
+            if (request()->expectsJson() || request()->ajax()) {
+                return response()->json([
+                    'message' => 'Cannot delete criteria once evaluation is active.',
+                ], 422);
+            }
+
             return back()->with('error', 'Cannot delete criteria once evaluation is active.');
         }
 
@@ -176,7 +194,7 @@ class EvaluationCriteriaController extends Controller
     private function assertCriteriaEvaluationManageable(Evaluation $evaluation): void
     {
         abort_unless(
-            in_array($evaluation->type, ['services', 'goods'], true)
+            in_array($evaluation->type, Evaluation::MANAGED_TYPES, true)
             && in_array($evaluation->status, ['draft', 'active', 'close'], true)
             && filled($evaluation->portfolio_id),
             404
@@ -205,7 +223,7 @@ class EvaluationCriteriaController extends Controller
                 ]);
             }
 
-            if (!is_array($decoded)) {
+            if (! is_array($decoded)) {
                 throw ValidationException::withMessages([
                     'criteria' => 'Unable to process criteria payload. Please refresh and try again.',
                 ]);
@@ -215,9 +233,9 @@ class EvaluationCriteriaController extends Controller
                 ->filter(fn ($row) => is_array($row))
                 ->map(function (array $row): array {
                     return [
-                        'name'        => trim((string) ($row['name'] ?? '')),
+                        'name' => trim((string) ($row['name'] ?? '')),
                         'description' => isset($row['description']) ? trim((string) $row['description']) : null,
-                        'max_score'   => $row['max_score'] ?? null,
+                        'max_score' => $row['max_score'] ?? null,
                     ];
                 })
                 ->filter(fn (array $row) => $row['name'] !== '' || ($row['description'] ?? '') !== '' || $row['max_score'] !== null)
@@ -226,7 +244,7 @@ class EvaluationCriteriaController extends Controller
         }
 
         $criteria = $request->input('criteria', []);
-        if (!is_array($criteria)) {
+        if (! is_array($criteria)) {
             return [];
         }
 
@@ -234,9 +252,9 @@ class EvaluationCriteriaController extends Controller
             ->filter(fn ($row) => is_array($row))
             ->map(function (array $row): array {
                 return [
-                    'name'        => trim((string) ($row['name'] ?? '')),
+                    'name' => trim((string) ($row['name'] ?? '')),
                     'description' => isset($row['description']) ? trim((string) $row['description']) : null,
-                    'max_score'   => $row['max_score'] ?? null,
+                    'max_score' => $row['max_score'] ?? null,
                 ];
             })
             ->filter(fn (array $row) => $row['name'] !== '' || ($row['description'] ?? '') !== '' || $row['max_score'] !== null)

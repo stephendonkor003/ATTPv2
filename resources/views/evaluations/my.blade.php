@@ -29,7 +29,7 @@
                     <li>Each applicant is evaluated independently</li>
                     <li>You may save drafts before final submission</li>
                     <li>Once submitted, an applicant's evaluation is locked</li>
-                    <li><em>Services evaluations use numeric scoring. Goods evaluations use Yes/No with comments.</em></li>
+                    <li><em>Services use numeric scores, Goods use Yes/No, and EOI evaluations use qualification categories.</em></li>
                 </ul>
             </div>
         </div>
@@ -37,9 +37,9 @@
         {{-- ================= ASSIGNMENTS ================= --}}
         @forelse ($assignments as $assignment)
             @php
-                $evalType = $assignment->evaluation->type ?? 'services';
-                $typeColor = $evalType === 'goods' ? 'warning' : 'primary';
-                $typeLabel = $evalType === 'goods' ? 'Goods' : 'Services';
+                $evaluation = $assignment->evaluation;
+                $typeColor = $evaluation?->typeColor() ?? 'secondary';
+                $typeLabel = $evaluation?->typeLabel() ?? 'Evaluation';
 
                 $assignmentSubmissions = $assignment->form_submission_id
                     ? $submissions->where('id', $assignment->form_submission_id)

@@ -224,6 +224,11 @@
             color: #991b1b;
         }
 
+        .badge-amber {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
         .section {
             border: 1px solid #dbe3eb;
             margin-bottom: 12px;
@@ -290,14 +295,23 @@
         $anonymised = $anonymised ?? false;
         $platformName = $platformName ?? 'Africa Think Tank Platform';
         $platformUrl = $platformUrl ?? rtrim(config('app.url') ?: url('/'), '/');
-        $isGoods = $submission->evaluation?->type === 'goods';
+        $evaluation = $submission->evaluation;
+        $isNumeric = $evaluation?->usesNumericScoring() ?? false;
+        $sectionOutline = $evaluation
+            ? \App\Support\EvaluationSectionHierarchy::flattened($evaluation)
+            : collect();
         $applicantName = $submission->applicant?->display_name ?? 'Applicant';
         $submissionCode = $submission->applicant?->procurement_submission_code ?? 'N/A';
         $evaluatorName = $submission->evaluator?->name ?? null;
         $displayEvaluatorName = $anonymised ? 'XXX' : ($evaluatorName ?? 'N/A');
         $score = $submission->overall_score !== null ? (float) $submission->overall_score : null;
-        $yesCount = $submission->criteriaScores->where('decision', 1)->count();
-        $noCount = $submission->criteriaScores->where('decision', 0)->count();
+        $decisionSummary = collect($evaluation?->decisionOptions() ?? [])
+            ->map(function (string $label, int $decision) use ($submission) {
+                $count = $submission->criteriaScores->where('decision', $decision)->count();
+
+                return $count.' '.$label;
+            })
+            ->implode(' / ');
         $modeLabel = $anonymised ? 'Anonymised Applicant' : 'Internal Report';
         $redact = function ($text) use ($anonymised, $evaluatorName) {
             if (! $anonymised || blank($text)) {
@@ -356,7 +370,7 @@
             </td>
             <td>
                 <span class="label">Evaluation Type</span>
-                <span class="badge badge-blue">{{ ucfirst($submission->evaluation?->type ?? 'N/A') }}</span>
+                <span class="badge badge-blue">{{ $evaluation?->typeLabel() ?? 'N/A' }}</span>
             </td>
             <td class="soft">
                 <span class="label">Submitted</span>
@@ -386,16 +400,16 @@
     <table class="score-table">
         <tr>
             <td>
-                <span class="label">{{ $isGoods ? 'Decision Summary' : 'Overall Score' }}</span>
-                @if ($isGoods)
-                    <span class="score-number">{{ $yesCount }} Yes / {{ $noCount }} No</span>
-                @else
+                <span class="label">{{ $isNumeric ? 'Overall Score' : 'Decision Summary' }}</span>
+                @if ($isNumeric)
                     <span class="score-number">
                         {{ $score !== null ? number_format($score, 2) : '-' }}
                         @if ($overallMax)
                             / {{ number_format($overallMax, 2) }}
                         @endif
                     </span>
+                @else
+                    <span class="score-number">{{ $decisionSummary ?: 'No decisions recorded' }}</span>
                 @endif
             </td>
             <td class="soft">
@@ -409,20 +423,37 @@
         </tr>
     </table>
 
-    @foreach ($submission->evaluation->sections as $index => $section)
+    @foreach ($sectionOutline as $node)
         @php
+            $section = $node['section'];
             $sectionScore = $submission->sectionScores->firstWhere('evaluation_section_id', $section->id);
-            $sectionCriteriaScores = $section->criteria->map(fn ($criteria) => $submission->criteriaScores->firstWhere('evaluation_criteria_id', $criteria->id))->filter();
-            $sectionTotal = $sectionCriteriaScores->sum('score');
-            $sectionMax = $section->criteria->sum('max_score');
+            $sectionTotal = $isNumeric
+                ? \App\Support\EvaluationSectionHierarchy::numericSubtotal($submission, $section)
+                : null;
+            $sectionMax = $isNumeric ? $section->subtotalMaxScore() : null;
+            $sectionDistribution = $isNumeric
+                ? []
+                : \App\Support\EvaluationSectionHierarchy::decisionDistribution($submission, $section);
         @endphp
 
-        <div class="section">
+        <div class="section" style="margin-left: {{ min($node['depth'] * 12, 36) }}px;">
             <div class="section-head">
-                <h3>Section {{ $index + 1 }}: {{ $section->name }}</h3>
+                <h3>{{ $node['label'] }} {{ $node['number'] }}: {{ $section->name }}</h3>
             </div>
             <div class="section-body">
-                @if (! $isGoods)
+                @if ($section->criteria->isEmpty())
+                    <p class="muted">Grouping section; criteria are organised in its child sections.</p>
+                    @if ($section->show_subtotal && $isNumeric)
+                        <p><strong>Sub-total (including child sections):</strong>
+                            {{ number_format($sectionTotal, 2) }} / {{ number_format($sectionMax, 2) }}</p>
+                    @elseif ($section->show_subtotal)
+                        <p><strong>Category distribution:</strong>
+                            @foreach ($sectionDistribution as $decision => $count)
+                                {{ $decision }}: {{ $count }}@if (! $loop->last) &middot; @endif
+                            @endforeach
+                        </p>
+                    @endif
+                @elseif ($isNumeric)
                     <table class="criteria-table">
                         <thead>
                             <tr>
@@ -442,11 +473,13 @@
                                     <td class="text-right">{{ number_format($criteriaScore->score ?? 0, 2) }}</td>
                                 </tr>
                             @endforeach
-                            <tr>
-                                <th>Section Total</th>
-                                <th class="text-right">{{ number_format($sectionMax, 2) }}</th>
-                                <th class="text-right">{{ number_format($sectionTotal, 2) }}</th>
-                            </tr>
+                            @if ($section->show_subtotal)
+                                <tr>
+                                    <th>Sub-total (including child sections)</th>
+                                    <th class="text-right">{{ number_format($sectionMax, 2) }}</th>
+                                    <th class="text-right">{{ number_format($sectionTotal, 2) }}</th>
+                                </tr>
+                            @endif
                         </tbody>
                     </table>
                 @else
@@ -462,14 +495,19 @@
                             @foreach ($section->criteria as $criteria)
                                 @php
                                     $criteriaScore = $submission->criteriaScores->firstWhere('evaluation_criteria_id', $criteria->id);
+                                    $decisionLabel = $evaluation?->decisionLabel($criteriaScore?->decision);
+                                    $decisionClass = match ($decisionLabel) {
+                                        'Yes', 'Qualified' => 'badge-green',
+                                        'Average Qualified' => 'badge-amber',
+                                        'No', 'Not Qualified' => 'badge-red',
+                                        default => 'badge-blue',
+                                    };
                                 @endphp
                                 <tr>
                                     <td>{{ $criteria->name }}</td>
                                     <td>
-                                        @if ($criteriaScore?->decision === 1)
-                                            <span class="badge badge-green">Yes</span>
-                                        @elseif ($criteriaScore?->decision === 0)
-                                            <span class="badge badge-red">No</span>
+                                        @if ($decisionLabel)
+                                            <span class="badge {{ $decisionClass }}">{{ $decisionLabel }}</span>
                                         @else
                                             N/A
                                         @endif
@@ -477,20 +515,32 @@
                                     <td class="comments">{{ $redact($criteriaScore->comment ?? 'N/A') }}</td>
                                 </tr>
                             @endforeach
+                            @if ($section->show_subtotal)
+                                <tr>
+                                    <th>Category distribution (including child sections)</th>
+                                    <th colspan="2">
+                                        @foreach ($sectionDistribution as $decision => $count)
+                                            {{ $decision }}: {{ $count }}@if (! $loop->last) &middot; @endif
+                                        @endforeach
+                                    </th>
+                                </tr>
+                            @endif
                         </tbody>
                     </table>
                 @endif
 
-                <table class="comment-table">
-                    <tr>
-                        <th>Strengths</th>
-                        <td class="comments">{{ $redact($sectionScore->strengths ?? 'N/A') }}</td>
-                    </tr>
-                    <tr>
-                        <th>Weaknesses</th>
-                        <td class="comments">{{ $redact($sectionScore->weaknesses ?? 'N/A') }}</td>
-                    </tr>
-                </table>
+                @if ($section->criteria->isNotEmpty())
+                    <table class="comment-table">
+                        <tr>
+                            <th>Strengths</th>
+                            <td class="comments">{{ $redact($sectionScore->strengths ?? 'N/A') }}</td>
+                        </tr>
+                        <tr>
+                            <th>Weaknesses</th>
+                            <td class="comments">{{ $redact($sectionScore->weaknesses ?? 'N/A') }}</td>
+                        </tr>
+                    </table>
+                @endif
             </div>
         </div>
     @endforeach

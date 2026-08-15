@@ -56,12 +56,12 @@
             <tr>
                 <th>Total Evaluations</th>
                 <th>Evaluators</th>
-                <th>Average Overall</th>
+                <th>Average Numeric Score</th>
             </tr>
             <tr>
                 <td>{{ $summary['total'] }}</td>
                 <td>{{ $summary['evaluators'] }}</td>
-                <td>{{ number_format($summary['avg_overall'], 2) }}</td>
+                <td>{{ $summary['avg_overall'] !== null ? number_format($summary['avg_overall'], 2) : 'N/A' }}</td>
             </tr>
         </table>
     </div>
@@ -72,13 +72,13 @@
             <tr>
                 <th>Evaluator</th>
                 <th>Total Evaluations</th>
-                <th>Average Overall</th>
+                <th>Average Numeric Score</th>
             </tr>
             @forelse ($evaluatorBreakdown as $name => $data)
                 <tr>
                     <td>{{ $name }}</td>
                     <td>{{ $data['total'] }}</td>
-                    <td>{{ number_format($data['avg_overall'], 2) }}</td>
+                    <td>{{ $data['avg_overall'] !== null ? number_format($data['avg_overall'], 2) : 'N/A' }}</td>
                 </tr>
             @empty
                 <tr>
@@ -103,13 +103,13 @@
             </tr>
             @forelse ($rankings as $row)
                 <tr>
-                    <td>#{{ $row['rank'] }}</td>
+                    <td>{{ $row['rank'] !== null ? '#'.$row['rank'] : 'Categorical' }}</td>
                     <td>{{ $row['submission']?->procurement_submission_code ?? 'N/A' }}</td>
                     <td>{{ $row['submission']?->submitter?->name ?? 'N/A' }}</td>
-                    <td>{{ number_format($row['average'], 2) }}</td>
-                    <td>{{ number_format($row['highest'], 2) }}</td>
-                    <td>{{ number_format($row['lowest'], 2) }}</td>
-                    <td>{{ number_format($row['spread'], 2) }}</td>
+                    <td>{{ $row['average'] !== null ? number_format($row['average'], 2) : 'N/A' }}</td>
+                    <td>{{ $row['highest'] !== null ? number_format($row['highest'], 2) : 'N/A' }}</td>
+                    <td>{{ $row['lowest'] !== null ? number_format($row['lowest'], 2) : 'N/A' }}</td>
+                    <td>{{ $row['spread'] !== null ? number_format($row['spread'], 2) : 'N/A' }}</td>
                     <td>{{ $row['evaluators'] }}</td>
                 </tr>
             @empty
@@ -122,25 +122,30 @@
 
     @foreach ($evaluationStats as $stat)
         <div class="section">
-            <h2>{{ $stat['evaluation']->name }} <span class="badge">{{ strtoupper($stat['type']) }}</span></h2>
+            <h2>{{ $stat['evaluation']->name }} <span class="badge">{{ $stat['evaluation']->typeLabel() }}</span></h2>
             <table>
                 <tr>
                     <th>Total Evaluations</th>
-                    <th>Average Overall</th>
+                    <th>Average Numeric Score</th>
                 </tr>
                 <tr>
                     <td>{{ $stat['total'] }}</td>
-                    <td>{{ number_format($stat['avg_overall'], 2) }}</td>
+                    <td>{{ $stat['avg_overall'] !== null ? number_format($stat['avg_overall'], 2) : 'Categorical decisions' }}</td>
                 </tr>
             </table>
 
             <table>
                 <tr>
                     <th>Criteria</th>
-                    @if ($stat['type'] === 'goods')
+                    @if ($stat['evaluation']->isGoods())
                         <th>Yes</th>
                         <th>No</th>
                         <th>Pass Rate</th>
+                    @elseif ($stat['evaluation']->isEoi())
+                        @foreach ($stat['evaluation']->decisionOptions() as $decisionLabel)
+                            <th>{{ $decisionLabel }}</th>
+                        @endforeach
+                        <th>Samples</th>
                     @else
                         <th>Max</th>
                         <th>Average Score</th>
@@ -150,10 +155,15 @@
                 @forelse ($stat['criteria_stats'] as $criteria)
                     <tr>
                         <td>{{ $criteria['name'] }}</td>
-                        @if ($stat['type'] === 'goods')
+                        @if ($stat['evaluation']->isGoods())
                             <td>{{ $criteria['yes'] }}</td>
                             <td>{{ $criteria['no'] }}</td>
                             <td>{{ $criteria['rate'] }}%</td>
+                        @elseif ($stat['evaluation']->isEoi())
+                            <td>{{ $criteria['qualified'] }}</td>
+                            <td>{{ $criteria['average_qualified'] }}</td>
+                            <td>{{ $criteria['not_qualified'] }}</td>
+                            <td>{{ $criteria['total'] }}</td>
                         @else
                             <td>{{ $criteria['max'] }}</td>
                             <td>{{ number_format($criteria['avg'], 2) }}</td>
@@ -162,7 +172,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="4">No criteria data available.</td>
+                        <td colspan="{{ $stat['evaluation']->isEoi() ? 5 : 4 }}">No criteria data available.</td>
                     </tr>
                 @endforelse
             </table>
@@ -177,7 +187,7 @@
                 <th>Applicant</th>
                 <th>Evaluation</th>
                 <th>Evaluator</th>
-                <th>Overall Score</th>
+                <th>Result</th>
                 <th>Submitted At</th>
             </tr>
             @forelse ($submissions as $submission)
@@ -186,7 +196,20 @@
                     <td>{{ $submission->applicant?->submitter?->name ?? 'N/A' }}</td>
                     <td>{{ $submission->evaluation?->name ?? 'N/A' }}</td>
                     <td>{{ $submission->evaluator?->name ?? 'N/A' }}</td>
-                    <td>{{ number_format($submission->overall_score ?? 0, 2) }}</td>
+                    <td>
+                        @if ($submission->evaluation?->usesNumericScoring())
+                            {{ $submission->overall_score !== null ? number_format($submission->overall_score, 2) : 'N/A' }}
+                        @else
+                            @php
+                                $decisionSummary = collect($submission->evaluation?->decisionOptions() ?? [])
+                                    ->map(function (string $label, int $decision) use ($submission) {
+                                        return $submission->criteriaScores->where('decision', $decision)->count().' '.$label;
+                                    })
+                                    ->implode(' / ');
+                            @endphp
+                            {{ $decisionSummary ?: 'No decisions recorded' }}
+                        @endif
+                    </td>
                     <td>{{ $submission->submitted_at?->format('Y-m-d H:i') ?? 'N/A' }}</td>
                 </tr>
             @empty

@@ -60,8 +60,8 @@
                                 ];
                                 $statusColor = $statusColors[$eval->status] ?? 'secondary';
 
-                                $typeColor = $eval->type === 'goods' ? 'warning' : 'primary';
-                                $typeLabel = $eval->type === 'goods' ? 'Goods' : 'Services';
+                                $typeColor = $eval->typeColor();
+                                $typeLabel = $eval->typeLabel();
                             @endphp
 
                             <tr>

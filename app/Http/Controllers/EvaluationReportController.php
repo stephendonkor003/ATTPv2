@@ -19,12 +19,12 @@ class EvaluationReportController extends Controller
         $procurements = $procurementQuery->get();
 
         $submissionQuery = EvaluationSubmission::with([
-                'procurement',
-                'applicant.submitter',
-                'applicant.values',
-                'evaluation',
-                'evaluator',
-            ])
+            'procurement',
+            'applicant.submitter',
+            'applicant.values',
+            'evaluation',
+            'evaluator',
+        ])
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at');
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
@@ -54,12 +54,14 @@ class EvaluationReportController extends Controller
     public function submissionPdf(EvaluationSubmission $submission)
     {
         $this->assertEvaluationSubmissionScope($submission);
+
         return $this->downloadSubmissionReport($submission);
     }
 
     public function submissionAnonymisedPdf(EvaluationSubmission $submission)
     {
         $this->assertEvaluationSubmissionScope($submission);
+
         return $this->downloadSubmissionReport($submission, true);
     }
 
@@ -90,7 +92,7 @@ class EvaluationReportController extends Controller
             'logoDataUri' => $this->logoDataUri(),
         ])->setPaper('a4', 'portrait');
 
-        return $pdf->download($prefix . trim($name . '-' . $code, '-') . '.pdf');
+        return $pdf->download($prefix.trim($name.'-'.$code, '-').'.pdf');
     }
 
     private function logoDataUri(): ?string
@@ -108,13 +110,13 @@ class EvaluationReportController extends Controller
         $this->assertEvaluationProcurementScope($procurement);
 
         $submissions = EvaluationSubmission::with([
-                'procurement',
-                'applicant.submitter',
-                'evaluation.sections.criteria',
-                'criteriaScores',
-                'sectionScores',
-                'evaluator',
-            ])
+            'procurement',
+            'applicant.submitter',
+            'evaluation.sections.criteria',
+            'criteriaScores',
+            'sectionScores',
+            'evaluator',
+        ])
             ->where('procurement_id', $procurement->id)
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at')
@@ -140,13 +142,13 @@ class EvaluationReportController extends Controller
         $this->assertEvaluationProcurementScope($procurement);
 
         $submissions = EvaluationSubmission::with([
-                'procurement',
-                'applicant.submitter',
-                'evaluation.sections.criteria',
-                'criteriaScores',
-                'sectionScores',
-                'evaluator',
-            ])
+            'procurement',
+            'applicant.submitter',
+            'evaluation.sections.criteria',
+            'criteriaScores',
+            'sectionScores',
+            'evaluator',
+        ])
             ->where('procurement_id', $procurement->id)
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at')
@@ -166,17 +168,18 @@ class EvaluationReportController extends Controller
             'evaluationStats'
         ));
 
-        return $pdf->download('evaluation-procurement-' . $procurement->id . '.pdf');
+        return $pdf->download('evaluation-procurement-'.$procurement->id.'.pdf');
     }
 
     public function consolidated()
     {
         $submissionQuery = EvaluationSubmission::with([
-                'procurement',
-                'applicant.submitter',
-                'evaluation',
-                'evaluator',
-            ])
+            'procurement',
+            'applicant.submitter',
+            'evaluation',
+            'criteriaScores',
+            'evaluator',
+        ])
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at');
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
@@ -197,11 +200,12 @@ class EvaluationReportController extends Controller
     public function consolidatedPdf()
     {
         $submissionQuery = EvaluationSubmission::with([
-                'procurement',
-                'applicant.submitter',
-                'evaluation',
-                'evaluator',
-            ])
+            'procurement',
+            'applicant.submitter',
+            'evaluation',
+            'criteriaScores',
+            'evaluator',
+        ])
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at');
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
@@ -277,7 +281,7 @@ class EvaluationReportController extends Controller
 
     private function overallMax(EvaluationSubmission $submission): ?float
     {
-        if ($submission->evaluation?->type !== 'services') {
+        if (! $submission->evaluation?->usesNumericScoring()) {
             return null;
         }
 
@@ -289,13 +293,13 @@ class EvaluationReportController extends Controller
         $total = $submissions->count();
         $procurements = $submissions->pluck('procurement_id')->unique()->count();
         $evaluators = $submissions->pluck('evaluator_id')->unique()->count();
-        $avgOverall = $submissions->whereNotNull('overall_score')->avg('overall_score');
+        $avgOverall = $this->numericOverallScores($submissions)->avg();
 
         return [
             'total' => $total,
             'procurements' => $procurements,
             'evaluators' => $evaluators,
-            'avg_overall' => $avgOverall ? round($avgOverall, 2) : 0,
+            'avg_overall' => $avgOverall !== null ? round($avgOverall, 2) : null,
         ];
     }
 
@@ -304,38 +308,44 @@ class EvaluationReportController extends Controller
         return $submissions
             ->groupBy(fn ($s) => $s->evaluator?->name ?? 'Unassigned')
             ->map(function ($group) {
-                $avg = $group->whereNotNull('overall_score')->avg('overall_score');
+                $avg = $this->numericOverallScores($group)->avg();
+
                 return [
                     'total' => $group->count(),
-                    'avg_overall' => $avg ? round($avg, 2) : 0,
+                    'avg_overall' => $avg !== null ? round($avg, 2) : null,
                 ];
             });
     }
 
     private function buildApplicantRankings($submissions)
     {
+        $rank = 0;
+
         return $submissions
             ->groupBy('form_submission_id')
             ->map(function ($group) {
-                $scores = $group->whereNotNull('overall_score')->pluck('overall_score');
-                $average = $scores->count() ? round($scores->avg(), 2) : 0;
-                $highest = $scores->count() ? round($scores->max(), 2) : 0;
-                $lowest = $scores->count() ? round($scores->min(), 2) : 0;
+                $scores = $this->numericOverallScores($group);
+                $average = $scores->isNotEmpty() ? round($scores->avg(), 2) : null;
+                $highest = $scores->isNotEmpty() ? round($scores->max(), 2) : null;
+                $lowest = $scores->isNotEmpty() ? round($scores->min(), 2) : null;
 
                 return [
                     'submission' => $group->first()->applicant,
                     'average' => $average,
                     'highest' => $highest,
                     'lowest' => $lowest,
-                    'spread' => round($highest - $lowest, 2),
+                    'spread' => $highest !== null && $lowest !== null
+                        ? round($highest - $lowest, 2)
+                        : null,
                     'evaluators' => $group->pluck('evaluator_id')->filter()->unique()->count(),
                     'evaluations' => $group->count(),
                 ];
             })
-            ->sortByDesc('average')
+            ->sortByDesc(fn ($row) => $row['average'] ?? -1)
             ->values()
-            ->map(function ($row, $index) {
-                $row['rank'] = $index + 1;
+            ->map(function ($row) use (&$rank) {
+                $row['rank'] = $row['average'] !== null ? ++$rank : null;
+
                 return $row;
             });
     }
@@ -346,13 +356,13 @@ class EvaluationReportController extends Controller
             ->groupBy('procurement_id')
             ->map(function ($group) {
                 $procurement = $group->first()->procurement;
-                $avg = $group->whereNotNull('overall_score')->avg('overall_score');
+                $avg = $this->numericOverallScores($group)->avg();
 
                 return [
                     'procurement' => $procurement,
                     'total' => $group->count(),
                     'evaluators' => $group->pluck('evaluator_id')->unique()->count(),
-                    'avg_overall' => $avg ? round($avg, 2) : 0,
+                    'avg_overall' => $avg !== null ? round($avg, 2) : null,
                 ];
             })
             ->values();
@@ -374,18 +384,40 @@ class EvaluationReportController extends Controller
                                 ->where('evaluation_criteria_id', $criterion->id);
                         });
 
-                        if ($evaluation->type === 'goods') {
-                            $yes = $scores->where('decision', 1)->count();
-                            $no = $scores->where('decision', 0)->count();
-                            $total = $yes + $no;
-                            $rate = $total > 0 ? round(($yes / $total) * 100, 1) : 0;
+                        if ($evaluation->usesCategoricalDecisions()) {
+                            $decisions = collect($evaluation->decisionOptions())
+                                ->map(function (string $label, int $decision) use ($scores) {
+                                    return [
+                                        'value' => $decision,
+                                        'label' => $label,
+                                        'count' => $scores->where('decision', $decision)->count(),
+                                    ];
+                                })
+                                ->values();
+                            $total = $decisions->sum('count');
+
+                            if ($evaluation->isGoods()) {
+                                $yes = (int) data_get($decisions->firstWhere('value', 1), 'count', 0);
+                                $no = (int) data_get($decisions->firstWhere('value', 0), 'count', 0);
+                                $rate = $total > 0 ? round(($yes / $total) * 100, 1) : 0;
+
+                                return [
+                                    'name' => $criterion->name,
+                                    'total' => $total,
+                                    'decisions' => $decisions->all(),
+                                    'yes' => $yes,
+                                    'no' => $no,
+                                    'rate' => $rate,
+                                ];
+                            }
 
                             return [
                                 'name' => $criterion->name,
                                 'total' => $total,
-                                'yes' => $yes,
-                                'no' => $no,
-                                'rate' => $rate,
+                                'decisions' => $decisions->all(),
+                                'qualified' => (int) data_get($decisions->firstWhere('value', 2), 'count', 0),
+                                'average_qualified' => (int) data_get($decisions->firstWhere('value', 1), 'count', 0),
+                                'not_qualified' => (int) data_get($decisions->firstWhere('value', 0), 'count', 0),
                             ];
                         }
 
@@ -399,16 +431,28 @@ class EvaluationReportController extends Controller
                         ];
                     });
 
-                $avgOverall = $group->whereNotNull('overall_score')->avg('overall_score');
+                $avgOverall = $evaluation->usesNumericScoring()
+                    ? $this->numericOverallScores($group)->avg()
+                    : null;
 
                 return [
                     'evaluation' => $evaluation,
                     'type' => $evaluation->type,
                     'total' => $group->count(),
-                    'avg_overall' => $avgOverall ? round($avgOverall, 2) : 0,
+                    'avg_overall' => $avgOverall !== null ? round($avgOverall, 2) : null,
                     'criteria_stats' => $criteriaStats,
                 ];
             })
+            ->values();
+    }
+
+    private function numericOverallScores($submissions)
+    {
+        return $submissions
+            ->filter(fn ($submission) => $submission->evaluation?->usesNumericScoring())
+            ->pluck('overall_score')
+            ->filter(fn ($score) => $score !== null)
+            ->map(fn ($score) => (float) $score)
             ->values();
     }
 }

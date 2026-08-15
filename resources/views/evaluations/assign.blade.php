@@ -28,7 +28,7 @@
                                 <option value="">Select evaluation</option>
                                 @foreach ($evaluations as $eval)
                                     <option value="{{ $eval->id }}">
-                                        {{ $eval->name }}
+                                        {{ $eval->name }} ({{ $eval->typeLabel() }})
                                     </option>
                                 @endforeach
                             </select>
@@ -88,7 +88,12 @@
                                     <div class="fw-medium">{{ $a->evaluator->name }}</div>
                                     <small class="text-muted">{{ $a->evaluator->email }}</small>
                                 </td>
-                                <td>{{ $a->evaluation->name }}</td>
+                                <td>
+                                    {{ $a->evaluation->name }}
+                                    <span class="badge bg-{{ $a->evaluation->typeColor() }} ms-1">
+                                        {{ $a->evaluation->typeLabel() }}
+                                    </span>
+                                </td>
                                 <td class="text-center">
                                     <span class="badge bg-{{ $statusColors[$a->status] ?? 'secondary' }} px-3 py-1">
                                         {{ ucfirst($a->status) }}

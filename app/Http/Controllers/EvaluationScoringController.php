@@ -24,6 +24,11 @@ class EvaluationScoringController extends Controller
         $submission = EvaluationSubmission::with(['procurement', 'evaluation'])
             ->findOrFail($request->submission_id);
         $this->assertScoringSubmissionAccessible($submission);
+        abort_unless(
+            $this->submissionIsMutable($submission),
+            403,
+            'Submitted evaluations cannot be modified.'
+        );
 
         $criteria = EvaluationCriteria::with('section.evaluation')
             ->findOrFail($request->evaluation_criteria_id);
@@ -31,11 +36,21 @@ class EvaluationScoringController extends Controller
 
         $evaluation = $criteria->section->evaluation;
 
-        if ($evaluation->type === 'goods') {
+        if ($evaluation->usesCategoricalDecisions()) {
             $request->validate([
-                'decision' => 'required|boolean',
+                'decision' => 'required|integer',
                 'comment' => 'required|string',
             ]);
+
+            $decision = (int) $request->decision;
+            abort_unless(
+                array_key_exists($decision, $evaluation->decisionOptions()),
+                422,
+                'Invalid decision value.'
+            );
+
+            $comment = trim((string) $request->comment);
+            abort_if($comment === '', 422, 'Comment is required.');
 
             EvaluationCriteriaScore::updateOrCreate(
                 [
@@ -43,8 +58,8 @@ class EvaluationScoringController extends Controller
                     'evaluation_criteria_id' => $criteria->id,
                 ],
                 [
-                    'decision' => (int) $request->decision,
-                    'comment' => $request->comment,
+                    'decision' => $decision,
+                    'comment' => $comment,
                     'score' => null,
                 ]
             );
@@ -56,6 +71,8 @@ class EvaluationScoringController extends Controller
 
             return response()->json(['success' => true]);
         }
+
+        abort_unless($evaluation->usesNumericScoring(), 422, 'Unsupported evaluation type.');
 
         $request->validate([
             'score' => 'required|numeric|min:0',
@@ -100,6 +117,11 @@ class EvaluationScoringController extends Controller
         $submission = EvaluationSubmission::with(['procurement', 'evaluation'])
             ->findOrFail($request->submission_id);
         $this->assertScoringSubmissionAccessible($submission);
+        abort_unless(
+            $this->submissionIsMutable($submission),
+            403,
+            'Submitted evaluations cannot be modified.'
+        );
 
         $section = EvaluationSection::with('evaluation')
             ->findOrFail($request->evaluation_section_id);
@@ -135,6 +157,11 @@ class EvaluationScoringController extends Controller
             $user->can('evaluations.view_all') || (string) $submission->evaluator_id === (string) $user->id,
             403
         );
+    }
+
+    private function submissionIsMutable(EvaluationSubmission $submission): bool
+    {
+        return ! $submission->isSubmitted();
     }
 
     private function assertCriteriaBelongsToSubmissionEvaluation(

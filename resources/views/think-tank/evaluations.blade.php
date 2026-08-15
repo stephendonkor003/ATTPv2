@@ -19,7 +19,7 @@
         <section class="tte-guidance">
             <span><i class="feather-info" aria-hidden="true"></i></span>
             <div><strong>Evaluation guidance</strong><p>Evaluate each application independently. Draft scores can be saved, but a submitted evaluation is locked unless it is formally returned for rework.</p></div>
-            <div class="tte-guidance-tags"><span>Services: numeric scoring</span><span>Goods: Yes / No assessment</span></div>
+            <div class="tte-guidance-tags"><span>Services: numeric scoring</span><span>Goods: Yes / No assessment</span><span>EOI: qualification category</span></div>
         </section>
 
         <section class="tte-worklist" aria-labelledby="tte-worklist-title">
@@ -36,7 +36,7 @@
                             : $submissions->where('procurement_id', $assignment->procurement_id);
                         $evaluationType = Str::lower((string) ($assignment->evaluation?->type ?: 'services'));
                         $phase = $assignment->evaluation?->evaluation_phase
-                            ?: $assignment->evaluation?->type
+                            ?: $assignment->evaluation?->typeLabel()
                             ?: 'Evaluation';
                         $plan = $assignment->procurement?->thinkTankPlanningItem?->plan;
                         $completeForAssignment = $assignmentSubmissions->filter(function ($application) use ($evaluationSubmissions, $assignment): bool {
@@ -46,7 +46,7 @@
                     @endphp
                     <article class="tte-assignment">
                         <header class="tte-assignment-head">
-                            <span class="tte-assignment-icon"><i class="{{ $evaluationType === 'goods' ? 'feather-package' : 'feather-award' }}" aria-hidden="true"></i></span>
+                            <span class="tte-assignment-icon"><i class="{{ $evaluationType === 'goods' ? 'feather-package' : ($evaluationType === 'eoi' ? 'feather-user-check' : 'feather-award') }}" aria-hidden="true"></i></span>
                             <div class="tte-assignment-title">
                                 <div class="tte-assignment-labels">
                                     <span>{{ Str::headline($phase) }}</span>

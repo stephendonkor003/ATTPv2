@@ -21,11 +21,11 @@ class EvaluationAssignmentController extends Controller
     public function hub()
     {
         $procurementQuery = Procurement::with([
-                'evaluationAssignments.evaluator',
-                'evaluationAssignments.evaluation.portfolio:id,name',
-                'evaluationAssignments.submission',
-                'submissions',
-            ])
+            'evaluationAssignments.evaluator',
+            'evaluationAssignments.evaluation.portfolio:id,name',
+            'evaluationAssignments.submission',
+            'submissions',
+        ])
             ->orderBy('created_at', 'desc');
 
         if ($this->userHasAssignedPortfolioScope()) {
@@ -37,7 +37,7 @@ class EvaluationAssignmentController extends Controller
         $evaluationQuery = Evaluation::query()
             ->with('portfolio:id,name')
             ->where('status', 'active')
-            ->whereIn('type', ['services', 'goods'])
+            ->whereIn('type', Evaluation::MANAGED_TYPES)
             ->whereNotNull('portfolio_id')
             ->where('is_portfolio_custom', true)
             ->orderBy('name');
@@ -87,7 +87,7 @@ class EvaluationAssignmentController extends Controller
         $evaluation = Evaluation::query()
             ->whereKey($validated['evaluation_id'])
             ->where('status', 'active')
-            ->whereIn('type', ['services', 'goods'])
+            ->whereIn('type', Evaluation::MANAGED_TYPES)
             ->whereNotNull('portfolio_id')
             ->where('is_portfolio_custom', true)
             ->firstOrFail();

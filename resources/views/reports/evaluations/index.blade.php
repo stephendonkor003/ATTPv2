@@ -44,7 +44,7 @@
                 <strong>{{ number_format($evaluatorCount) }}</strong>
             </div>
             <div class="report-kpi report-kpi--score">
-                <span>Average Score</span>
+                <span>Average Numeric Score</span>
                 <strong>{{ $averageScore !== null ? number_format($averageScore, 2) : '-' }}</strong>
             </div>
         </div>
@@ -130,7 +130,9 @@
                             $submissionCode = $submission->applicant?->procurement_submission_code ?? 'No code';
                             $procurementTitle = $submission->procurement?->title ?? 'N/A';
                             $evaluatorName = $submission->evaluator?->name ?? 'Unassigned evaluator';
-                            $score = $submission->overall_score !== null ? number_format($submission->overall_score, 2) : 'No score';
+                            $result = $submission->evaluation?->usesNumericScoring()
+                                ? (($submission->overall_score !== null ? number_format($submission->overall_score, 2) : 'No').' score')
+                                : (($submission->evaluation?->typeLabel() ?? 'Categorical').' decisions');
                             $submittedAt = optional($submission->submitted_at)->format('d M Y') ?? 'No date';
                         @endphp
                         <option
@@ -139,7 +141,7 @@
                             data-code="{{ $submissionCode }}"
                             data-procurement="{{ $procurementTitle }}"
                             data-evaluator="{{ $evaluatorName }}"
-                            data-score="{{ $score }}"
+                            data-result="{{ $result }}"
                             data-submitted="{{ $submittedAt }}"
                         >
                             {{ $applicantName }} - {{ $submissionCode }} - {{ $procurementTitle }}
@@ -486,7 +488,7 @@
                     submissionPreview,
                     selected.dataset.code || 'Submission',
                     selected.dataset.name || selected.textContent.trim(),
-                    `${selected.dataset.procurement || '-'} | ${selected.dataset.evaluator || '-'} | ${selected.dataset.score || '-'} | ${selected.dataset.submitted || '-'}`
+                    `${selected.dataset.procurement || '-'} | ${selected.dataset.evaluator || '-'} | ${selected.dataset.result || '-'} | ${selected.dataset.submitted || '-'}`
                 );
                 setButtonState(submissionView, submissionPdf, `${submissionBaseUrl}/${value}`);
             });

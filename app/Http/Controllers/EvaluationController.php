@@ -8,6 +8,7 @@ use App\Models\Sector;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class EvaluationController extends Controller
@@ -38,12 +39,12 @@ class EvaluationController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'type' => 'required|in:services,goods',
+            'description' => 'nullable|string|max:1000',
+            'type' => ['required', Rule::in(Evaluation::MANAGED_TYPES)],
             'portfolio_id' => 'required|exists:myb_sectors,id',
         ]);
 
-        Evaluation::create([
+        $evaluation = Evaluation::create([
             'name' => $request->name,
             'description' => $request->description,
             'type' => $request->type,
@@ -54,8 +55,8 @@ class EvaluationController extends Controller
         ]);
 
         return redirect()
-            ->route('evals.cfg.index')
-            ->with('success', 'Evaluation created successfully.');
+            ->route('evals.cfg.show', $evaluation)
+            ->with('success', 'Evaluation created. Add sections and criteria to complete the template.');
     }
 
     public function show(Evaluation $evaluation)
@@ -95,8 +96,15 @@ class EvaluationController extends Controller
         $this->assertEvaluationTemplateManageable($evaluation);
 
         $evaluation->load([
-            'sections' => fn ($query) => $query->orderBy('created_at'),
-            'sections.criteria' => fn ($query) => $query->orderBy('created_at'),
+            'portfolio:id,name',
+            'creator:id,name,email',
+            'sections' => fn ($query) => $query
+                ->orderBy('sort_order')
+                ->orderBy('created_at')
+                ->orderBy('id'),
+            'sections.criteria' => fn ($query) => $query
+                ->orderBy('created_at')
+                ->orderBy('id'),
         ]);
 
         $sectionTotals = $evaluation->sections->mapWithKeys(function ($section) {
@@ -104,11 +112,19 @@ class EvaluationController extends Controller
         });
 
         $overallTotal = (float) $sectionTotals->sum();
+        $reportGeneratedAt = now(config('app.timezone', 'UTC'));
+        $generatedBy = auth()->user();
+        $documentReference = 'ATTP-EVAL-'
+            .Str::upper(Str::substr((string) $evaluation->getKey(), 0, 8))
+            .'-'.$reportGeneratedAt->format('Ymd');
 
         $pdf = Pdf::loadView('evaluations.pdf.template', compact(
             'evaluation',
             'sectionTotals',
-            'overallTotal'
+            'overallTotal',
+            'reportGeneratedAt',
+            'generatedBy',
+            'documentReference'
         ))->setPaper('a4', 'portrait');
 
         $safeName = Str::slug($evaluation->name ?: 'evaluation-template');
@@ -119,6 +135,7 @@ class EvaluationController extends Controller
     public function edit(Evaluation $evaluation)
     {
         $this->assertEvaluationTemplateManageable($evaluation);
+        $evaluation->load('sections.criteria');
 
         return view('evaluations.edit', array_merge(
             compact('evaluation'),
@@ -152,7 +169,7 @@ class EvaluationController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:1000',
             'portfolio_id' => 'required|exists:myb_sectors,id',
         ]);
 
@@ -167,8 +184,8 @@ class EvaluationController extends Controller
         ]);
 
         return redirect()
-            ->route('evals.cfg.index')
-            ->with('success', 'Evaluation updated successfully.');
+            ->route('evals.cfg.show', $evaluation)
+            ->with('success', 'Evaluation details updated successfully.');
     }
 
     public function destroy(Evaluation $evaluation)
@@ -189,7 +206,7 @@ class EvaluationController extends Controller
     private function evaluationTemplateQuery()
     {
         return Evaluation::query()
-            ->whereIn('type', ['services', 'goods'])
+            ->whereIn('type', Evaluation::MANAGED_TYPES)
             ->whereIn('status', ['draft', 'active', 'close'])
             ->whereNotNull('portfolio_id')
             ->where('is_portfolio_custom', true);
@@ -205,7 +222,7 @@ class EvaluationController extends Controller
     private function assertEvaluationTemplateManageable(Evaluation $evaluation): void
     {
         abort_unless(
-            in_array($evaluation->type, ['services', 'goods'], true)
+            in_array($evaluation->type, Evaluation::MANAGED_TYPES, true)
             && in_array($evaluation->status, ['draft', 'active', 'close'], true)
             && filled($evaluation->portfolio_id),
             404

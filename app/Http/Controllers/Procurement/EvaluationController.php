@@ -28,7 +28,7 @@ class EvaluationController extends Controller
 
         $evaluationsQuery = Evaluation::query()
             ->where('status', 'active')
-            ->whereIn('type', ['services', 'goods'])
+            ->whereIn('type', Evaluation::MANAGED_TYPES)
             ->whereNotNull('portfolio_id')
             ->where('is_portfolio_custom', true)
             ->orderBy('name');
@@ -69,7 +69,7 @@ class EvaluationController extends Controller
         $evaluation = Evaluation::query()
             ->whereKey($request->evaluation_id)
             ->where('status', 'active')
-            ->whereIn('type', ['services', 'goods'])
+            ->whereIn('type', Evaluation::MANAGED_TYPES)
             ->whereNotNull('portfolio_id')
             ->where('is_portfolio_custom', true)
             ->firstOrFail();

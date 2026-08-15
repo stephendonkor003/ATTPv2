@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class EvaluationSectionScore extends BaseModel
@@ -27,26 +26,39 @@ class EvaluationSectionScore extends BaseModel
         return $this->belongsTo(EvaluationSection::class, 'evaluation_section_id');
     }
 
- public function recalculateSectionScore()
-{
-    // Goods evaluations do NOT aggregate numeric scores
-    if ($this->submission->evaluation->type === 'goods') {
-        return;
+    public function recalculateSectionScore()
+    {
+        $affectedSections = collect([$this->section])
+            ->merge($this->section->ancestors());
+
+        // Categorical evaluations do not aggregate numeric scores.
+        if (! $this->submission->evaluation->usesNumericScoring()) {
+            self::query()
+                ->where('submission_id', $this->submission_id)
+                ->whereIn('evaluation_section_id', $affectedSections->pluck('id'))
+                ->update(['section_score' => null]);
+
+            return;
+        }
+
+        foreach ($affectedSections as $section) {
+            $criteriaTotal = EvaluationCriteriaScore::query()
+                ->where('submission_id', $this->submission_id)
+                ->whereIn(
+                    'evaluation_criteria_id',
+                    $section->subtreeCriteria()->pluck('id')
+                )
+                ->sum('score');
+
+            self::query()->updateOrCreate(
+                [
+                    'submission_id' => $this->submission_id,
+                    'evaluation_section_id' => $section->id,
+                ],
+                ['section_score' => round($criteriaTotal, 2)]
+            );
+        }
+
+        $this->submission->recalculateTotals();
     }
-
-    $criteriaTotal = \App\Models\EvaluationCriteriaScore::where('submission_id', $this->submission_id)
-        ->whereIn(
-            'evaluation_criteria_id',
-            $this->section->criteria->pluck('id')
-        )
-        ->sum('score');
-
-    $this->update([
-        'section_score' => round($criteriaTotal, 2)
-    ]);
-
-    $this->submission->recalculateTotals();
-}
-
-
 }

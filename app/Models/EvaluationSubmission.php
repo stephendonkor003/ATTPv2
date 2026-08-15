@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\BaseModel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class EvaluationSubmission extends BaseModel
@@ -109,19 +108,19 @@ class EvaluationSubmission extends BaseModel
      * Source of truth = criteria scores
      */
     public function recalculateTotals(): void
-{
-    if ($this->evaluation->type === 'goods') {
-        $this->forceFill(['overall_score' => null])->saveQuietly();
-        return;
+    {
+        if (! $this->evaluation->usesNumericScoring()) {
+            $this->forceFill(['overall_score' => null])->saveQuietly();
+
+            return;
+        }
+
+        $overall = $this->criteriaScores()->sum('score');
+
+        $this->forceFill([
+            'overall_score' => round($overall, 2),
+        ])->saveQuietly();
     }
-
-    $overall = $this->criteriaScores()->sum('score');
-
-    $this->forceFill([
-        'overall_score' => round($overall, 2),
-    ])->saveQuietly();
-}
-
 
     /* =====================================================
      | STATE HELPERS

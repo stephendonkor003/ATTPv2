@@ -65,6 +65,11 @@
             color: #fff;
         }
 
+        .average {
+            background: #f59e0b;
+            color: #111;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -132,7 +137,8 @@
     @foreach ($submissions as $submission)
         @php
             $evaluation = $submission->evaluation;
-            $isGoods = $evaluation->type === 'goods';
+            $isNumeric = $evaluation->usesNumericScoring();
+            $sectionOutline = \App\Support\EvaluationSectionHierarchy::flattened($evaluation);
         @endphp
 
         <div class="submission">
@@ -149,7 +155,7 @@
                     {{ $evaluation->name }} <br>
 
                     <strong>Type:</strong>
-                    {{ strtoupper($evaluation->type) }}
+                    {{ $evaluation->typeLabel() }}
                 </div>
             </div>
 
@@ -166,16 +172,35 @@
                     </div>
 
                     {{-- ================= SECTIONS ================= --}}
-                    @foreach ($evaluation->sections as $section)
+                    @foreach ($sectionOutline as $node)
                         @php
+                            $section = $node['section'];
                             $sectionScore = $eval->sectionScores->firstWhere('evaluation_section_id', $section->id);
+                            $sectionSubtotal = $isNumeric
+                                ? \App\Support\EvaluationSectionHierarchy::numericSubtotal($eval, $section)
+                                : null;
+                            $sectionDistribution = $isNumeric
+                                ? []
+                                : \App\Support\EvaluationSectionHierarchy::decisionDistribution($eval, $section);
                         @endphp
 
-                        <div class="section">
-                            <h4>{{ $section->name }}</h4>
+                        <div class="section" style="margin-left: {{ min($node['depth'] * 12, 36) }}px;">
+                            <h4>{{ $node['number'] }}. {{ $section->name }} <small>({{ $node['label'] }})</small></h4>
+
+                            @if ($section->show_subtotal && $isNumeric)
+                                <p><strong>Sub-total:</strong> {{ number_format($sectionSubtotal, 2) }} / {{ number_format($section->subtotalMaxScore(), 2) }}</p>
+                            @elseif ($section->show_subtotal)
+                                <p><strong>Category distribution:</strong>
+                                    @foreach ($sectionDistribution as $decision => $count)
+                                        {{ $decision }}: {{ $count }}@if (! $loop->last) &middot; @endif
+                                    @endforeach
+                                </p>
+                            @endif
 
                             {{-- SERVICES --}}
-                            @if (!$isGoods)
+                            @if ($section->criteria->isEmpty())
+                                <p>Grouping section; criteria appear in child sections.</p>
+                            @elseif ($isNumeric)
                                 <table>
                                     <thead>
                                         <tr>
@@ -201,7 +226,7 @@
                                     </tbody>
                                 </table>
 
-                                {{-- GOODS --}}
+                                {{-- CATEGORICAL DECISIONS --}}
                             @else
                                 <table>
                                     <thead>
@@ -218,14 +243,19 @@
                                                     'evaluation_criteria_id',
                                                     $criteria->id,
                                                 );
+                                                $decisionLabel = $evaluation->decisionLabel($cs?->decision);
+                                                $decisionClass = match ($decisionLabel) {
+                                                    'Yes', 'Qualified' => 'yes',
+                                                    'Average Qualified' => 'average',
+                                                    'No', 'Not Qualified' => 'no',
+                                                    default => '',
+                                                };
                                             @endphp
                                             <tr>
                                                 <td>{{ $criteria->name }}</td>
                                                 <td align="center">
-                                                    @if ($cs?->decision === 1)
-                                                        <span class="badge yes">YES</span>
-                                                    @elseif ($cs?->decision === 0)
-                                                        <span class="badge no">NO</span>
+                                                    @if ($decisionLabel)
+                                                        <span class="badge {{ $decisionClass }}">{{ $decisionLabel }}</span>
                                                     @else
                                                         —
                                                     @endif
@@ -237,19 +267,21 @@
                                 </table>
                             @endif
 
-                            {{-- SECTION NOTES --}}
-                            <div class="notes">
-                                <strong>Strengths:</strong><br>
-                                {{ $sectionScore->strengths ?? '—' }} <br><br>
+                            @if ($section->criteria->isNotEmpty())
+                                {{-- Notes are only collected for directly assessable sections. --}}
+                                <div class="notes">
+                                    <strong>Strengths:</strong><br>
+                                    {{ $sectionScore->strengths ?? '—' }} <br><br>
 
-                                <strong>Weaknesses:</strong><br>
-                                {{ $sectionScore->weaknesses ?? '—' }}
-                            </div>
+                                    <strong>Weaknesses:</strong><br>
+                                    {{ $sectionScore->weaknesses ?? '—' }}
+                                </div>
+                            @endif
                         </div>
                     @endforeach
 
                     {{-- OVERALL --}}
-                    @if (!$isGoods)
+                    @if ($isNumeric)
                         <div class="overall">
                             Overall Score:
                             {{ number_format($eval->overall_score, 2) }}
