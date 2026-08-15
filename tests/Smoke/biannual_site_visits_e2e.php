@@ -219,6 +219,10 @@ class BiAnnualSiteVisitsSmoke
                 ->assertSee('Edit as new version')
                 ->assertSee('id="add-team-members-modal"', false)
                 ->assertSee('id="manage-team-modal"', false)
+                ->assertSee('Create monitoring-team member')
+                ->assertSee('id="additional_member_name"', false)
+                ->assertSee('id="additional_member_email"', false)
+                ->assertSee('id="additional_member_specialism"', false)
                 ->assertSee('Add selected members')
                 ->assertSee('Save team changes')
                 ->assertSee($ordinaryStaff->email)
@@ -770,6 +774,218 @@ class BiAnnualSiteVisitsSmoke
                     && $mail->isLeader
             );
 
+            $memberIdsBeforeAdd = $inlineVisit->siteVisit->group->members
+                ->pluck('user_id')
+                ->map('strval')
+                ->values();
+            $duplicateNewEmail = 'biannual-duplicate-member-'.Str::lower(Str::random(6)).'@example.test';
+            $accountMailCountBeforeInvalidAdd = Mail::queued(UserAccountCreated::class)->count();
+            $assignmentMailCountBeforeInvalidAdd = Mail::queued(
+                BiAnnualSiteVisitCreatedMail::class,
+                fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
+            )->count();
+            $this->postWithCsrf(
+                route('biannual-site-visits.team-members.store', $inlineVisit),
+                [
+                    '_team_visit_id' => $inlineVisit->id,
+                    'team_members' => ['new:duplicate_one', 'new:duplicate_two'],
+                    'team_specialisms' => [
+                        'new:duplicate_one' => 'Procurement Specialist',
+                        'new:duplicate_two' => 'M&E Officer',
+                    ],
+                    'new_team_members' => [
+                        'duplicate_one' => [
+                            'name' => 'Duplicate Member One',
+                            'email' => $duplicateNewEmail,
+                        ],
+                        'duplicate_two' => [
+                            'name' => 'Duplicate Member Two',
+                            'email' => Str::upper($duplicateNewEmail),
+                        ],
+                    ],
+                ]
+            )->assertSessionHasErrors(['new_team_members']);
+            $this->get(route('biannual-site-visits.index'))
+                ->assertOk()
+                ->assertSee('id="team-member-server-errors"', false)
+                ->assertSee('These members could not be added:')
+                ->assertSee('Duplicate Member One')
+                ->assertSee('Duplicate Member Two');
+            $this->assertTrue(
+                ! User::query()->whereRaw('LOWER(email) = ?', [$duplicateNewEmail])->exists()
+                    && $inlineVisit->siteVisit->group->members()->count() === $memberIdsBeforeAdd->count(),
+                'Duplicate new-member emails created a partial account or membership.'
+            );
+            $this->assertSame(
+                $accountMailCountBeforeInvalidAdd,
+                Mail::queued(UserAccountCreated::class)->count(),
+                'A rejected duplicate new member queued an account email.'
+            );
+            $this->assertSame(
+                $assignmentMailCountBeforeInvalidAdd,
+                Mail::queued(
+                    BiAnnualSiteVisitCreatedMail::class,
+                    fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
+                )->count(),
+                'A rejected duplicate new member queued an assignment email.'
+            );
+
+            $existingAdditionalMember = $additionalMembers->first();
+            $additionalAccountEmails = [
+                'biannual-add-member-one-'.Str::lower(Str::random(6)).'@example.test',
+                'biannual-add-member-two-'.Str::lower(Str::random(6)).'@example.test',
+            ];
+            $this->postWithCsrf(
+                route('biannual-site-visits.team-members.store', $inlineVisit),
+                [
+                    '_team_visit_id' => $inlineVisit->id,
+                    'team_members' => [
+                        $existingAdditionalMember->id,
+                        'new:add_member_one',
+                        'new:add_member_two',
+                    ],
+                    'team_specialisms' => [
+                        $existingAdditionalMember->id => 'M&E Officer',
+                        'new:add_member_one' => 'Procurement Specialist',
+                        'new:add_member_two' => 'Climate Resilience Specialist',
+                    ],
+                    'new_team_members' => [
+                        'add_member_one' => [
+                            'name' => 'Bi-Annual Added Member One',
+                            'email' => $additionalAccountEmails[0],
+                        ],
+                        'add_member_two' => [
+                            'name' => 'Bi-Annual Added Member Two',
+                            'email' => $additionalAccountEmails[1],
+                        ],
+                    ],
+                ]
+            )
+                ->assertRedirect(route('biannual-site-visits.index'))
+                ->assertSessionHas(
+                    'success',
+                    fn ($message): bool => str_contains((string) $message, '3 monitoring-team members')
+                );
+
+            $createdAdditionalMembers = collect($additionalAccountEmails)
+                ->map(fn (string $email): User => User::query()->where('email', $email)->firstOrFail());
+            $inlineVisit->refresh()->load('siteVisit.group.members');
+            $memberIdsAfterAdd = $inlineVisit->siteVisit->group->members
+                ->pluck('user_id')
+                ->map('strval')
+                ->values();
+            $addedMemberIds = collect([$existingAdditionalMember])
+                ->concat($createdAdditionalMembers)
+                ->pluck('id')
+                ->map('strval')
+                ->values();
+
+            foreach ($addedMemberIds as $addedMemberId) {
+                $this->assertSame(
+                    1,
+                    $inlineVisit->siteVisit->group->members
+                        ->where('user_id', $addedMemberId)
+                        ->count(),
+                    'An added monitoring-team member was missing or duplicated.'
+                );
+            }
+            $this->assertSame(
+                $memberIdsBeforeAdd->count() + 3,
+                $memberIdsAfterAdd->count(),
+                'Adding members replaced an existing monitoring-team member.'
+            );
+            foreach ($memberIdsBeforeAdd as $originalMemberId) {
+                $this->assertTrue(
+                    $memberIdsAfterAdd->contains($originalMemberId),
+                    'Adding members removed an original monitoring-team member.'
+                );
+            }
+            $this->assertSame(
+                (string) $inlineStaff->id,
+                (string) $inlineVisit->siteVisit->group->leader_id,
+                'Adding monitoring-team members changed the existing team leader.'
+            );
+            $this->assertTrue(
+                $existingAdditionalMember->permissions()
+                    ->where('permissions.name', 'biannual_site_visits.respond')
+                    ->exists(),
+                'The existing account added to the team did not receive the direct response permission.'
+            );
+
+            $addedSpecialisms = (array) data_get($inlineVisit->settings, 'team_specialisms', []);
+            $this->assertSame(
+                'M&E Officer',
+                $addedSpecialisms[(string) $existingAdditionalMember->id] ?? null,
+                'The existing added member specialism was not stored.'
+            );
+            $this->assertSame(
+                'Procurement Specialist',
+                $addedSpecialisms[(string) $createdAdditionalMembers->get(0)->id] ?? null,
+                'The first new member specialism was not mapped to the created account.'
+            );
+            $this->assertSame(
+                'Climate Resilience Specialist',
+                $addedSpecialisms[(string) $createdAdditionalMembers->get(1)->id] ?? null,
+                'The second new member specialism was not mapped to the created account.'
+            );
+
+            foreach ($createdAdditionalMembers as $createdMember) {
+                $createdMember->unsetRelations();
+                $this->assertTrue(
+                    $createdMember->user_type === 'staff'
+                        && $createdMember->governance_node_id === $admin->governance_node_id
+                        && $createdMember->must_change_password
+                        && ! $createdMember->is_disabled
+                        && ! $createdMember->is_blacklisted,
+                    'An additional monitoring-team account was provisioned with incorrect account settings.'
+                );
+                $this->assertTrue(
+                    $createdMember->can('biannual_site_visits.respond')
+                        && ! $createdMember->can('biannual_site_visits.submit'),
+                    'An additional monitoring-team account received incorrect visit permissions.'
+                );
+
+                $accountMail = Mail::queued(
+                    UserAccountCreated::class,
+                    fn (UserAccountCreated $mail): bool => (string) $mail->user->id === (string) $createdMember->id
+                )->first();
+                $this->assertTrue(
+                    $accountMail
+                        && $accountMail->hasTo($createdMember->email)
+                        && Hash::check($accountMail->plainPassword, $createdMember->password),
+                    'An additional monitoring-team account did not receive valid temporary login details.'
+                );
+                Mail::assertQueued(
+                    BiAnnualSiteVisitCreatedMail::class,
+                    fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
+                        && (string) $mail->recipient->id === (string) $createdMember->id
+                        && ! $mail->isLeader
+                );
+            }
+            Mail::assertQueued(
+                BiAnnualSiteVisitCreatedMail::class,
+                fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
+                    && (string) $mail->recipient->id === (string) $existingAdditionalMember->id
+                    && ! $mail->isLeader
+            );
+            $this->assertSame(
+                2,
+                Mail::queued(
+                    UserAccountCreated::class,
+                    fn (UserAccountCreated $mail): bool => $createdAdditionalMembers
+                        ->contains(fn (User $member): bool => (string) $member->id === (string) $mail->user->id)
+                )->count(),
+                'The add-members action did not queue exactly one account email for each new member.'
+            );
+            $this->assertSame(
+                5,
+                Mail::queued(
+                    BiAnnualSiteVisitCreatedMail::class,
+                    fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
+                )->count(),
+                'Adding members re-notified the original team or missed a new assignment notification.'
+            );
+
             $firstQuestion = BiAnnualSiteVisitQuestion::query()
                 ->where('template_id', $inlineVisit->template_id)
                 ->orderBy('sort_order')
@@ -880,12 +1096,23 @@ class BiAnnualSiteVisitsSmoke
             ])->assertStatus(422);
             $this->postWithCsrf(route('biannual-site-visits.submit', $inlineVisit))
                 ->assertStatus(422);
+            $inactiveNewMemberEmail = 'biannual-inactive-member-'.Str::lower(Str::random(6)).'@example.test';
             $this->postWithCsrf(route('biannual-site-visits.team-members.store', $inlineVisit), [
-                'team_members' => [$additionalMembers->first()->id],
+                'team_members' => ['new:inactive_member'],
                 'team_specialisms' => [
-                    $additionalMembers->first()->id => 'M&E Officer',
+                    'new:inactive_member' => 'M&E Officer',
+                ],
+                'new_team_members' => [
+                    'inactive_member' => [
+                        'name' => 'Blocked Inactive Member',
+                        'email' => $inactiveNewMemberEmail,
+                    ],
                 ],
             ])->assertStatus(422);
+            $this->assertTrue(
+                ! User::query()->where('email', $inactiveNewMemberEmail)->exists(),
+                'An inactive visit created a monitoring-team account before rejecting the mutation.'
+            );
             $this->putWithCsrf(route('biannual-site-visits.team.update', $inlineVisit), [
                 'group_leader_id' => $inlineStaff->id,
                 'team_specialisms' => [

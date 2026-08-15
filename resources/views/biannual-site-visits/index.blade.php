@@ -520,7 +520,7 @@
                             <span class="basv-modal-kicker">Monitoring team assignment</span>
                             <h2 class="modal-title" id="add-team-members-title">Add team members</h2>
                             <div class="basv-modal-meta" id="team-assignment-reference">
-                                Select one or more active staff accounts.
+                                Select existing accounts or create additional monitoring-team members.
                             </div>
                         </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"
@@ -528,19 +528,77 @@
                     </div>
 
                     <div class="modal-body">
+                        @if (old('_team_visit_id') && $errors->any())
+                            <div class="basv-alert danger mb-3" id="team-member-server-errors"
+                                role="alert" tabindex="-1">
+                                <strong>These members could not be added:</strong>
+                                <ul class="mb-0 mt-2">
+                                    @foreach ($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
                         <div class="basv-team-modal-toolbar">
                             <div class="basv-member-search">
                                 <i class="feather-search" aria-hidden="true"></i>
-                                <label class="visually-hidden" for="team-member-search">Search staff</label>
+                                <label class="visually-hidden" for="team-member-search">Search monitoring-team members</label>
                                 <input type="search" class="form-control" id="team-member-search"
-                                    placeholder="Search by name, email, or system role">
+                                    placeholder="Search by name or email">
                             </div>
-                            <span class="basv-selection-count" id="team-selection-count">0 selected</span>
+                            <span class="basv-selection-count" id="team-selection-count"
+                                aria-live="polite" aria-atomic="true">0 selected</span>
                         </div>
 
                         <div class="basv-assignment-note">
                             <i class="feather-mail" aria-hidden="true"></i>
-                            <span>Each newly assigned member will receive a queued email with the visit details and a link to open the assignment.</span>
+                            <span>Each member receives the visit assignment by email. New members also receive temporary login details.</span>
+                        </div>
+
+                        <div class="d-flex flex-wrap justify-content-end gap-2 mb-3">
+                            <button type="button" class="basv-btn basv-btn-primary" id="show-additional-member-form"
+                                aria-expanded="false" aria-controls="additional-member-panel">
+                                <i class="feather-user-plus" aria-hidden="true"></i>
+                                Create monitoring-team member
+                            </button>
+                        </div>
+
+                        <div class="basv-new-staff mb-3" id="additional-member-panel" hidden>
+                            <div>
+                                <strong>Create a member without leaving this visit</strong>
+                                <div class="basv-help">
+                                    A limited monitoring-team account will be created when you save. The member will receive temporary login details and the visit assignment by email.
+                                </div>
+                            </div>
+                            <div class="basv-form-grid mt-3">
+                                <div>
+                                    <label class="form-label" for="additional_member_name">Full name</label>
+                                    <input class="form-control" id="additional_member_name" maxlength="255"
+                                        autocomplete="name" placeholder="Member's full name">
+                                </div>
+                                <div>
+                                    <label class="form-label" for="additional_member_email">Email address</label>
+                                    <input class="form-control" id="additional_member_email" type="email"
+                                        maxlength="255" autocomplete="email" placeholder="name@example.org">
+                                </div>
+                                <div>
+                                    <label class="form-label" for="additional_member_specialism">Specialist role</label>
+                                    <input class="form-control" id="additional_member_specialism"
+                                        list="biannual-specialist-role-options" maxlength="255" autocomplete="off"
+                                        placeholder="Choose or enter a role">
+                                </div>
+                            </div>
+                            <div class="basv-help text-danger" id="additional-member-error" role="alert" hidden></div>
+                            <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
+                                <button type="button" class="basv-btn basv-btn-ghost"
+                                    id="cancel-additional-member">Cancel</button>
+                                <button type="button" class="basv-btn basv-btn-primary"
+                                    id="add-additional-member-to-selection">
+                                    <i class="feather-user-check" aria-hidden="true"></i>
+                                    Add member to selection
+                                </button>
+                            </div>
                         </div>
 
                         <div class="basv-member-options" id="team-member-options">
@@ -553,7 +611,8 @@
                                     ]));
                                 @endphp
                                 <div class="basv-member-option" data-member-option
-                                    data-search="{{ $staffSearch }}" data-user-id="{{ $staff->id }}">
+                                    data-search="{{ $staffSearch }}" data-user-id="{{ $staff->id }}"
+                                    data-email="{{ \Illuminate\Support\Str::lower($staff->email) }}">
                                     <label class="basv-member-identity" for="team-member-{{ $staff->id }}">
                                         <input class="form-check-input" type="checkbox"
                                             name="team_members[]" value="{{ $staff->id }}"
@@ -578,18 +637,18 @@
                                     </div>
                                 </div>
                             @empty
-                                <div class="basv-member-empty">
+                                <div class="basv-member-empty" data-no-staff-accounts>
                                     <i class="feather-user-x"></i>
                                     <strong>No active staff accounts are available</strong>
-                                    <span>Activate a staff account with a valid email before assigning the team.</span>
+                                    <span>Create a monitoring-team member above to continue.</span>
                                 </div>
                             @endforelse
                         </div>
 
                         <div class="basv-member-empty" id="team-member-no-results" hidden>
                             <i class="feather-search"></i>
-                            <strong>No available staff match this search</strong>
-                            <span>Try a different name, email, or role.</span>
+                            <strong data-no-results-title>No available members match this search</strong>
+                            <span data-no-results-help>Try a different name or email.</span>
                         </div>
                     </div>
 
@@ -678,10 +737,24 @@
                 const countLabel = document.getElementById('team-selection-count');
                 const saveButton = document.getElementById('save-team-members');
                 const noResults = document.getElementById('team-member-no-results');
-                const options = [...document.querySelectorAll('[data-member-option]')];
+                const noResultsTitle = noResults.querySelector('[data-no-results-title]');
+                const noResultsHelp = noResults.querySelector('[data-no-results-help]');
+                const serverErrors = document.getElementById('team-member-server-errors');
+                const optionsContainer = document.getElementById('team-member-options');
+                const noStaffAccounts = document.querySelector('[data-no-staff-accounts]');
+                const additionalMemberPanel = document.getElementById('additional-member-panel');
+                const showAdditionalMemberButton = document.getElementById('show-additional-member-form');
+                const cancelAdditionalMemberButton = document.getElementById('cancel-additional-member');
+                const addAdditionalMemberButton = document.getElementById('add-additional-member-to-selection');
+                const additionalMemberName = document.getElementById('additional_member_name');
+                const additionalMemberEmail = document.getElementById('additional_member_email');
+                const additionalMemberSpecialism = document.getElementById('additional_member_specialism');
+                const additionalMemberError = document.getElementById('additional-member-error');
+                let options = [...document.querySelectorAll('[data-member-option]')];
                 const triggers = [...document.querySelectorAll('[data-add-team-members]')];
+                let pendingMemberCounter = 0;
 
-                if (!modalElement || !form) return;
+                if (!modalElement || !form || !optionsContainer) return;
 
                 const updateSelection = () => {
                     const selected = options.filter(option => {
@@ -696,6 +769,16 @@
                     saveButton.disabled = selected.length === 0 || !allHaveRoles;
                 };
 
+                const refreshNoStaffState = () => {
+                    if (!noStaffAccounts) return;
+
+                    const hasPendingMembers = options.some(option =>
+                        option.dataset.pendingMemberOption === '1'
+                    );
+                    const hasSearch = Boolean((searchInput.value || '').trim());
+                    noStaffAccounts.hidden = hasPendingMembers || hasSearch;
+                };
+
                 const filterOptions = () => {
                     const query = (searchInput.value || '').trim().toLowerCase();
                     let visible = 0;
@@ -707,10 +790,213 @@
                         if (available && matches) visible += 1;
                     });
 
-                    noResults.hidden = visible > 0;
+                    refreshNoStaffState();
+                    noResultsTitle.textContent = query
+                        ? 'No available members match this search'
+                        : 'All existing accounts are already assigned';
+                    noResultsHelp.textContent = query
+                        ? 'Try a different name or email.'
+                        : 'Create an additional monitoring-team member above to continue.';
+                    noResults.hidden = visible > 0 || (noStaffAccounts && !noStaffAccounts.hidden);
                 };
 
-                const configureModal = trigger => {
+                const setAdditionalMemberPanel = (open, restoreFocus = false) => {
+                    additionalMemberPanel.hidden = !open;
+                    showAdditionalMemberButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    additionalMemberError.hidden = true;
+                    additionalMemberError.textContent = '';
+
+                    if (open) {
+                        additionalMemberName.focus();
+                        return;
+                    }
+
+                    additionalMemberName.value = '';
+                    additionalMemberEmail.value = '';
+                    additionalMemberSpecialism.value = '';
+                    if (restoreFocus) showAdditionalMemberButton.focus();
+                };
+
+                const showAdditionalMemberError = (message, field) => {
+                    additionalMemberError.textContent = message;
+                    additionalMemberError.hidden = false;
+                    field?.focus();
+                };
+
+                const bindOption = option => {
+                    const checkbox = option.querySelector('[data-team-member-checkbox]');
+                    const specialism = option.querySelector('[data-team-specialism]');
+
+                    checkbox?.addEventListener('change', () => {
+                        specialism.disabled = !checkbox.checked;
+                        specialism.required = checkbox.checked;
+                        if (!checkbox.checked) specialism.value = '';
+                        updateSelection();
+                    });
+                    specialism?.addEventListener('input', updateSelection);
+                };
+
+                const addPendingMemberOption = (key, member, specialism = '', selected = true) => {
+                    const referenceId = `new:${key}`;
+                    const existingOption = options.find(option =>
+                        String(option.dataset.userId) === referenceId
+                    );
+                    if (existingOption) return existingOption;
+
+                    const option = document.createElement('div');
+                    option.className = 'basv-member-option';
+                    option.dataset.memberOption = '';
+                    option.dataset.pendingMemberOption = '1';
+                    option.dataset.userId = referenceId;
+                    option.dataset.email = member.email;
+                    option.dataset.search = `${member.name} ${member.email} ${specialism} new monitoring team member`
+                        .toLowerCase();
+
+                    const identity = document.createElement('label');
+                    identity.className = 'basv-member-identity';
+                    identity.htmlFor = `team-member-${key}`;
+
+                    const checkbox = document.createElement('input');
+                    checkbox.className = 'form-check-input';
+                    checkbox.type = 'checkbox';
+                    checkbox.name = 'team_members[]';
+                    checkbox.value = referenceId;
+                    checkbox.id = `team-member-${key}`;
+                    checkbox.dataset.teamMemberCheckbox = '';
+                    checkbox.checked = selected;
+
+                    const avatar = document.createElement('span');
+                    avatar.className = 'basv-member-avatar';
+                    avatar.textContent = (member.name || 'M').charAt(0).toUpperCase();
+
+                    const details = document.createElement('span');
+                    const memberName = document.createElement('strong');
+                    memberName.textContent = member.name;
+                    const memberEmail = document.createElement('small');
+                    memberEmail.textContent = member.email;
+                    const accountType = document.createElement('small');
+                    accountType.textContent = 'New monitoring-team account';
+                    details.append(memberName, memberEmail, accountType);
+                    identity.append(checkbox, avatar, details);
+
+                    const roleContainer = document.createElement('div');
+                    roleContainer.className = 'd-flex align-items-center gap-2';
+                    const roleLabel = document.createElement('label');
+                    roleLabel.className = 'visually-hidden';
+                    roleLabel.htmlFor = `team-specialism-${key}`;
+                    roleLabel.textContent = `Specialist role for ${member.name}`;
+
+                    const roleInput = document.createElement('input');
+                    roleInput.className = 'form-control';
+                    roleInput.name = `team_specialisms[${referenceId}]`;
+                    roleInput.id = `team-specialism-${key}`;
+                    roleInput.setAttribute('list', 'biannual-specialist-role-options');
+                    roleInput.maxLength = 255;
+                    roleInput.autocomplete = 'off';
+                    roleInput.placeholder = 'Choose or enter a role';
+                    roleInput.dataset.teamSpecialism = '';
+                    roleInput.value = specialism;
+                    roleInput.disabled = !selected;
+                    roleInput.required = selected;
+
+                    const removeButton = document.createElement('button');
+                    removeButton.type = 'button';
+                    removeButton.className = 'basv-team-remove';
+                    removeButton.title = `Remove ${member.name}`;
+                    removeButton.setAttribute('aria-label', `Remove new member ${member.name}`);
+                    const removeMark = document.createElement('span');
+                    removeMark.setAttribute('aria-hidden', 'true');
+                    removeMark.textContent = '\u00d7';
+                    const removeText = document.createElement('span');
+                    removeText.className = 'visually-hidden';
+                    removeText.textContent = 'Remove';
+                    removeButton.append(removeMark, removeText);
+                    roleContainer.append(roleLabel, roleInput, removeButton);
+
+                    const submittedDetails = document.createElement('span');
+                    submittedDetails.hidden = true;
+                    const nameInput = document.createElement('input');
+                    nameInput.type = 'hidden';
+                    nameInput.name = `new_team_members[${key}][name]`;
+                    nameInput.value = member.name;
+                    const emailInput = document.createElement('input');
+                    emailInput.type = 'hidden';
+                    emailInput.name = `new_team_members[${key}][email]`;
+                    emailInput.value = member.email;
+                    submittedDetails.append(nameInput, emailInput);
+
+                    option.append(identity, roleContainer, submittedDetails);
+                    optionsContainer.append(option);
+                    options.push(option);
+                    bindOption(option);
+                    removeButton.addEventListener('click', () => {
+                        option.remove();
+                        options = options.filter(candidate => candidate !== option);
+                        filterOptions();
+                        updateSelection();
+                        showAdditionalMemberButton.focus();
+                    });
+
+                    return option;
+                };
+
+                const clearPendingMemberOptions = () => {
+                    options
+                        .filter(option => option.dataset.pendingMemberOption === '1')
+                        .forEach(option => option.remove());
+                    options = options.filter(option => option.dataset.pendingMemberOption !== '1');
+                };
+
+                const addAdditionalMember = () => {
+                    const member = {
+                        name: additionalMemberName.value.trim(),
+                        email: additionalMemberEmail.value.trim().toLowerCase(),
+                    };
+                    const specialism = additionalMemberSpecialism.value.trim();
+
+                    if (!member.name) {
+                        showAdditionalMemberError('Enter the member\'s full name.', additionalMemberName);
+                        return;
+                    }
+
+                    if (!member.email || !additionalMemberEmail.checkValidity()) {
+                        showAdditionalMemberError('Enter a valid member email address.', additionalMemberEmail);
+                        return;
+                    }
+
+                    if (!specialism) {
+                        showAdditionalMemberError(
+                            'Choose or enter the member\'s specialist role.',
+                            additionalMemberSpecialism
+                        );
+                        return;
+                    }
+
+                    const emailAlreadyExists = options.some(option =>
+                        String(option.dataset.email || '').toLowerCase() === member.email
+                    );
+                    if (emailAlreadyExists) {
+                        showAdditionalMemberError(
+                            'This email is already listed. Select the existing account instead.',
+                            additionalMemberEmail
+                        );
+                        return;
+                    }
+
+                    pendingMemberCounter += 1;
+                    const key = `member_${Date.now().toString(36)}_${pendingMemberCounter.toString(36)}`;
+                    const pendingOption = addPendingMemberOption(key, member, specialism);
+                    searchInput.value = '';
+                    setAdditionalMemberPanel(false);
+                    filterOptions();
+                    updateSelection();
+                    window.requestAnimationFrame(() => {
+                        pendingOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                        pendingOption.querySelector('[data-team-member-checkbox]')?.focus();
+                    });
+                };
+
+                const configureModal = (trigger, restoreErrors = false) => {
                     let existingMembers = [];
                     try {
                         existingMembers = JSON.parse(trigger.dataset.existingMembers || '[]').map(String);
@@ -724,6 +1010,10 @@
                     title.textContent = `Add members · ${trigger.dataset.visitTitle}`;
                     reference.textContent = trigger.dataset.visitReference;
                     searchInput.value = '';
+                    saveButton.removeAttribute('aria-busy');
+                    if (serverErrors) serverErrors.hidden = !restoreErrors;
+                    clearPendingMemberOptions();
+                    setAdditionalMemberPanel(false);
 
                     options.forEach(option => {
                         const checkbox = option.querySelector('[data-team-member-checkbox]');
@@ -743,34 +1033,60 @@
                     updateSelection();
                 };
 
-                options.forEach(option => {
-                    const checkbox = option.querySelector('[data-team-member-checkbox]');
-                    const specialism = option.querySelector('[data-team-specialism]');
-
-                    checkbox?.addEventListener('change', () => {
-                        specialism.disabled = !checkbox.checked;
-                        specialism.required = checkbox.checked;
-                        if (!checkbox.checked) specialism.value = '';
-                        updateSelection();
-                    });
-                    specialism?.addEventListener('input', updateSelection);
-                });
+                options.forEach(bindOption);
 
                 triggers.forEach(trigger => {
                     trigger.addEventListener('click', () => configureModal(trigger));
                 });
                 searchInput.addEventListener('input', filterOptions);
+                showAdditionalMemberButton.addEventListener('click', () =>
+                    setAdditionalMemberPanel(additionalMemberPanel.hidden)
+                );
+                cancelAdditionalMemberButton.addEventListener('click', () =>
+                    setAdditionalMemberPanel(false, true)
+                );
+                addAdditionalMemberButton.addEventListener('click', addAdditionalMember);
+                form.addEventListener('submit', () => {
+                    saveButton.disabled = true;
+                    saveButton.setAttribute('aria-busy', 'true');
+                });
+                [additionalMemberName, additionalMemberEmail, additionalMemberSpecialism].forEach(field => {
+                    field.addEventListener('keydown', event => {
+                        if (event.key !== 'Enter') return;
+                        event.preventDefault();
+                        addAdditionalMember();
+                    });
+                });
 
-                modalElement.addEventListener('shown.bs.modal', () => searchInput.focus());
+                modalElement.addEventListener('shown.bs.modal', () =>
+                    (serverErrors && !serverErrors.hidden ? serverErrors : searchInput).focus()
+                );
 
                 const failedVisitId = @json((string) old('_team_visit_id'));
                 const oldSelected = @json(array_values((array) old('team_members', [])));
                 const oldSpecialisms = @json((array) old('team_specialisms', []));
+                const oldNewMembers = @json((array) old('new_team_members', []));
 
                 if (failedVisitId) {
                     const trigger = triggers.find(item => item.dataset.visitId === failedVisitId);
                     if (trigger) {
-                        configureModal(trigger);
+                        configureModal(trigger, true);
+
+                        Object.entries(oldNewMembers).forEach(([key, member]) => {
+                            const normalizedMember = {
+                                name: String(member?.name || '').trim(),
+                                email: String(member?.email || '').trim().toLowerCase(),
+                            };
+                            if (!normalizedMember.name || !normalizedMember.email) return;
+
+                            const referenceId = `new:${key}`;
+                            addPendingMemberOption(
+                                key,
+                                normalizedMember,
+                                oldSpecialisms[referenceId] || '',
+                                false
+                            );
+                        });
 
                         oldSelected.map(String).forEach(userId => {
                             const option = options.find(item => String(item.dataset.userId) === userId);
@@ -784,6 +1100,7 @@
                             specialism.value = oldSpecialisms[userId] || '';
                         });
 
+                        filterOptions();
                         updateSelection();
                         window.bootstrap?.Modal.getOrCreateInstance(modalElement).show();
                     }

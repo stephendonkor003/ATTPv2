@@ -675,27 +675,34 @@ class BiAnnualSiteVisitController extends Controller
 
         $validated = $request->validate([
             'team_members' => ['required', 'array', 'min:1'],
-            'team_members.*' => ['required', 'uuid', 'distinct'],
+            'team_members.*' => ['required', 'string', 'max:80', 'distinct'],
             'team_specialisms' => ['required', 'array'],
             'team_specialisms.*' => ['required', 'string', 'max:255'],
+            'new_team_members' => ['nullable', 'array'],
+            'new_team_members.*.name' => ['required', 'string', 'max:255'],
+            'new_team_members.*.email' => ['required', 'email:rfc', 'max:255'],
         ], [
-            'team_members.required' => 'Select at least one staff member to add.',
-            'team_members.min' => 'Select at least one staff member to add.',
-            'team_members.*.distinct' => 'Each staff member may only be selected once.',
+            'team_members.required' => 'Select or create at least one monitoring-team member to add.',
+            'team_members.min' => 'Select or create at least one monitoring-team member to add.',
+            'team_members.*.distinct' => 'Each monitoring-team member may only be selected once.',
         ]);
 
-        $memberIds = collect($validated['team_members'])
-            ->map(fn ($id): string => (string) $id)
-            ->unique()
-            ->values();
+        $teamReferences = collect($validated['team_members'])
+            ->map(fn ($reference): string => (string) $reference)
+            ->values()
+            ->all();
+        [$existingMemberIds, $newMemberInputs] = $this->resolveTeamReferences(
+            $teamReferences,
+            (array) ($validated['new_team_members'] ?? [])
+        );
         $group = $visit->siteVisit?->group;
 
         abort_unless($group, 422, 'This visit does not have a monitoring team.');
 
-        $existingMemberIds = $group->members
+        $assignedMemberIds = $group->members
             ->pluck('user_id')
             ->map(fn ($id): string => (string) $id);
-        $alreadyAssigned = $memberIds->intersect($existingMemberIds);
+        $alreadyAssigned = collect($existingMemberIds)->intersect($assignedMemberIds);
 
         if ($alreadyAssigned->isNotEmpty()) {
             throw ValidationException::withMessages([
@@ -703,30 +710,12 @@ class BiAnnualSiteVisitController extends Controller
             ]);
         }
 
-        $members = $this->activeInternalStaffQuery()
-            ->whereIn('id', $memberIds)
-            ->get();
-
-        if ($members->count() !== $memberIds->count()) {
-            throw ValidationException::withMessages([
-                'team_members' => 'Every selected monitoring-team member must have an active internal staff account.',
-            ]);
-        }
-
-        if ($members->contains(
-            fn (User $member): bool => ! filter_var($member->email, FILTER_VALIDATE_EMAIL)
-        )) {
-            throw ValidationException::withMessages([
-                'team_members' => 'Every monitoring-team member must have a valid email address so the assignment notification can be delivered.',
-            ]);
-        }
-
         $specialisms = collect($validated['team_specialisms'] ?? [])
             ->map(fn ($specialism): string => trim((string) $specialism));
-        foreach ($memberIds as $memberId) {
-            if (! filled($specialisms->get($memberId))) {
+        foreach ($teamReferences as $reference) {
+            if (! filled($specialisms->get($reference))) {
                 throw ValidationException::withMessages([
-                    "team_specialisms.{$memberId}" => 'Enter a specialist role for every new team member.',
+                    "team_specialisms.{$reference}" => 'Enter a specialist role for every new team member.',
                 ]);
             }
         }
@@ -741,15 +730,16 @@ class BiAnnualSiteVisitController extends Controller
             ]);
         }
 
-        DB::transaction(function () use (
+        [$resolvedMemberIds, $newAccounts] = DB::transaction(function () use (
             $visit,
             $group,
-            $members,
-            $memberIds,
+            $existingMemberIds,
+            $newMemberInputs,
+            $teamReferences,
             $specialisms,
             $respondPermissionId,
             $request
-        ): void {
+        ): array {
             $lockedProfile = BiAnnualSiteVisitProfile::query()
                 ->whereKey($visit->id)
                 ->lockForUpdate()
@@ -767,10 +757,43 @@ class BiAnnualSiteVisitController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $concurrentlyAssigned = SiteVisitGroupMember::query()
-                ->where('group_id', $group->id)
-                ->whereIn('user_id', $memberIds)
-                ->exists();
+            $existingMembers = $this->activeInternalStaffQuery()
+                ->whereIn('id', $existingMemberIds)
+                ->lockForUpdate()
+                ->get();
+
+            if ($existingMembers->count() !== count($existingMemberIds)) {
+                throw ValidationException::withMessages([
+                    'team_members' => 'Every selected monitoring-team member must have an active internal staff account.',
+                ]);
+            }
+
+            if ($existingMembers->contains(
+                fn (User $member): bool => ! filter_var($member->email, FILTER_VALIDATE_EMAIL)
+            )) {
+                throw ValidationException::withMessages([
+                    'team_members' => 'Every monitoring-team member must have a valid email address so the assignment notification can be delivered.',
+                ]);
+            }
+
+            $newEmails = collect($newMemberInputs)->pluck('email')->values();
+            if (
+                $newEmails->isNotEmpty()
+                && User::query()
+                    ->whereIn(DB::raw('LOWER(email)'), $newEmails->all())
+                    ->lockForUpdate()
+                    ->exists()
+            ) {
+                throw ValidationException::withMessages([
+                    'new_team_members' => 'A new member email already belongs to an account. Select that person from the active staff list instead.',
+                ]);
+            }
+
+            $concurrentlyAssigned = $existingMemberIds !== []
+                && SiteVisitGroupMember::query()
+                    ->where('group_id', $group->id)
+                    ->whereIn('user_id', $existingMemberIds)
+                    ->exists();
 
             if ($concurrentlyAssigned) {
                 throw ValidationException::withMessages([
@@ -778,7 +801,40 @@ class BiAnnualSiteVisitController extends Controller
                 ]);
             }
 
-            foreach ($members as $member) {
+            $usersByReference = $existingMembers->keyBy(
+                fn (User $member): string => (string) $member->id
+            );
+            $newAccounts = [];
+
+            foreach ($newMemberInputs as $key => $input) {
+                $temporaryPassword = Str::password(12);
+                $member = User::create([
+                    'name' => $input['name'],
+                    'email' => $input['email'],
+                    'password' => Hash::make($temporaryPassword),
+                    'user_type' => 'staff',
+                    'governance_node_id' => $request->user()->governance_node_id,
+                    'must_change_password' => true,
+                    'is_disabled' => false,
+                    'is_blacklisted' => false,
+                ]);
+
+                $usersByReference->put('new:'.$key, $member);
+                $newAccounts[] = [
+                    'user' => $member,
+                    'temporary_password' => $temporaryPassword,
+                ];
+            }
+
+            $resolvedMemberIds = collect($teamReferences)
+                ->map(fn (string $reference): string => (string) $usersByReference
+                    ->get($reference)
+                    ->id)
+                ->values();
+
+            foreach ($teamReferences as $reference) {
+                /** @var User $member */
+                $member = $usersByReference->get($reference);
                 SiteVisitGroupMember::create([
                     'group_id' => $group->id,
                     'user_id' => $member->id,
@@ -791,8 +847,10 @@ class BiAnnualSiteVisitController extends Controller
             $settings = (array) $lockedProfile->settings;
             $storedSpecialisms = (array) data_get($settings, 'team_specialisms', []);
 
-            foreach ($memberIds as $memberId) {
-                $storedSpecialisms[$memberId] = $specialisms->get($memberId);
+            foreach ($teamReferences as $reference) {
+                /** @var User $member */
+                $member = $usersByReference->get($reference);
+                $storedSpecialisms[(string) $member->id] = $specialisms->get($reference);
             }
 
             data_set($settings, 'team_specialisms', $storedSpecialisms);
@@ -800,7 +858,19 @@ class BiAnnualSiteVisitController extends Controller
                 'settings' => $settings,
                 'updated_by' => $request->user()->id,
             ])->save();
+
+            return [$resolvedMemberIds, $newAccounts];
         });
+
+        foreach ($newAccounts as $account) {
+            $accountMail = (new UserAccountCreated(
+                $account['user'],
+                $account['temporary_password']
+            ))
+                ->afterCommit();
+
+            Mail::to($account['user'])->queue($accountMail);
+        }
 
         $visit->load([
             'siteVisit.group.leader',
@@ -809,7 +879,7 @@ class BiAnnualSiteVisitController extends Controller
             'template',
         ]);
         $recipients = $visit->siteVisit->group->members
-            ->whereIn('user_id', $memberIds)
+            ->whereIn('user_id', $resolvedMemberIds)
             ->map(fn (SiteVisitGroupMember $member) => $member->user);
         $this->queueVisitAssignmentEmails($visit, $recipients);
 
@@ -819,8 +889,8 @@ class BiAnnualSiteVisitController extends Controller
                 'success',
                 trans_choice(
                     '{1} :count monitoring-team member was added and their assignment email was queued.|[2,*] :count monitoring-team members were added and their assignment emails were queued.',
-                    $memberIds->count(),
-                    ['count' => $memberIds->count()]
+                    $resolvedMemberIds->count(),
+                    ['count' => $resolvedMemberIds->count()]
                 )
             );
     }
@@ -2504,6 +2574,14 @@ class BiAnnualSiteVisitController extends Controller
                 'name' => trim((string) ($submittedNewMembers[$key]['name'] ?? '')),
                 'email' => Str::lower(trim((string) ($submittedNewMembers[$key]['email'] ?? ''))),
             ];
+        }
+
+        if (collect($newMemberInputs)->contains(
+            fn (array $member): bool => $member['name'] === ''
+        )) {
+            throw ValidationException::withMessages([
+                'new_team_members' => 'Enter a full name for every new monitoring-team member.',
+            ]);
         }
 
         $emailGroups = collect($newMemberInputs)

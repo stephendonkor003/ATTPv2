@@ -67,3 +67,43 @@ it('shows schedule edit and reversible deactivation controls in the visit experi
         ->toContain('Save schedule changes')
         ->toContain("route('biannual-site-visits.update', \$visit)");
 });
+
+it('creates additional monitoring-team accounts from the add members modal', function () {
+    $root = dirname(__DIR__, 2);
+    $index = file_get_contents($root.'/resources/views/biannual-site-visits/index.blade.php');
+    $controller = file_get_contents($root.'/app/Http/Controllers/BiAnnualSiteVisitController.php');
+    $actionStart = strpos($controller, 'public function addTeamMembers(');
+    $actionEnd = strpos($controller, 'public function updateTeam(', $actionStart);
+
+    expect($actionStart)->not->toBeFalse()
+        ->and($actionEnd)->not->toBeFalse();
+
+    $addMembersAction = substr($controller, $actionStart, $actionEnd - $actionStart);
+
+    expect($index)
+        ->toContain('id="show-additional-member-form"')
+        ->toContain('Create monitoring-team member')
+        ->toContain('id="additional_member_name"')
+        ->toContain('id="additional_member_email"')
+        ->toContain('id="additional_member_specialism"')
+        ->toContain('id="team-member-server-errors"')
+        ->toContain('aria-live="polite"')
+        ->toContain('new_team_members[${key}][name]')
+        ->toContain('new_team_members[${key}][email]')
+        ->toContain('removeButton.addEventListener')
+        ->toContain('options = options.filter(candidate => candidate !== option)')
+        ->toContain("saveButton.setAttribute('aria-busy', 'true')")
+        ->toContain('Object.entries(oldNewMembers)')
+        ->and($addMembersAction)
+        ->toContain("'team_members.*' => ['required', 'string', 'max:80', 'distinct']")
+        ->toContain("'new_team_members.*.name' => ['required', 'string', 'max:255']")
+        ->toContain("'new_team_members.*.email' => ['required', 'email:rfc', 'max:255']")
+        ->toContain('$this->resolveTeamReferences(')
+        ->toContain('Str::password(12)')
+        ->toContain("'must_change_password' => true")
+        ->toContain("->whereIn(DB::raw('LOWER(email)'), \$newEmails->all())")
+        ->toContain('->lockForUpdate()')
+        ->toContain('$storedSpecialisms[(string) $member->id]')
+        ->toContain('new UserAccountCreated(')
+        ->not->toContain("'team_members.*' => ['required', 'uuid'");
+});
