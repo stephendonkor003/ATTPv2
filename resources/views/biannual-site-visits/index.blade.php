@@ -74,6 +74,146 @@
             gap: .45rem;
         }
 
+        #add-team-members-modal .basv-member-picker-dialog {
+            width: calc(100vw - 2rem);
+            max-width: 1480px;
+            margin: 1rem auto;
+        }
+
+        #add-team-members-modal .modal-content {
+            height: calc(100vh - 2rem);
+            max-height: 920px;
+        }
+
+        #add-team-members-modal .modal-body {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        #add-team-members-modal .basv-member-directory {
+            display: flex;
+            flex: 1 1 440px;
+            flex-direction: column;
+            min-height: 320px;
+            overflow: hidden;
+            border: 1px solid #d7e4df;
+            border-radius: .9rem;
+            background: #f5f9f7;
+        }
+
+        #add-team-members-modal .basv-member-directory-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: .8rem 1rem;
+            border-bottom: 1px solid #d7e4df;
+            background: #fff;
+        }
+
+        #add-team-members-modal .basv-member-directory-head strong,
+        #add-team-members-modal .basv-member-directory-head span {
+            display: block;
+        }
+
+        #add-team-members-modal .basv-member-directory-head strong {
+            color: #203d35;
+            font-size: .8rem;
+            font-weight: 850;
+        }
+
+        #add-team-members-modal .basv-member-directory-head span {
+            margin-top: .12rem;
+            color: #687b75;
+            font-size: .66rem;
+        }
+
+        #add-team-members-modal .basv-directory-count {
+            flex: 0 0 auto;
+            padding: .4rem .7rem;
+            border-radius: 999px;
+            background: #e8f5f1;
+            color: #075446;
+            font-size: .68rem;
+            font-weight: 850;
+            white-space: nowrap;
+        }
+
+        #add-team-members-modal .basv-member-directory-scroll {
+            flex: 1 1 auto;
+            min-height: 0;
+            padding: .75rem;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        #add-team-members-modal .basv-member-options {
+            grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
+        }
+
+        #add-team-members-modal .basv-member-option {
+            grid-template-columns: minmax(0, 1fr);
+            align-content: start;
+        }
+
+        #add-team-members-modal .basv-member-option.is-assigned {
+            border-color: #c9d4d0;
+            background: #f1f4f3;
+        }
+
+        #add-team-members-modal .basv-member-role-control {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        #add-team-members-modal .basv-member-role-control .form-control {
+            min-width: 0;
+        }
+
+        #add-team-members-modal .basv-account-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .3rem;
+            margin-top: .3rem;
+        }
+
+        #add-team-members-modal .basv-account-badge {
+            display: inline-flex;
+            align-items: center;
+            width: max-content;
+            padding: .18rem .42rem;
+            border-radius: 999px;
+            background: #edf2f0;
+            color: #536761;
+            font-size: .56rem;
+            font-weight: 850;
+            line-height: 1.2;
+        }
+
+        #add-team-members-modal .basv-account-badge.is-active {
+            background: #e7f7ef;
+            color: #147348;
+        }
+
+        #add-team-members-modal .basv-account-badge.is-disabled,
+        #add-team-members-modal .basv-account-badge.is-deactivated {
+            background: #fff2d6;
+            color: #8a5a09;
+        }
+
+        #add-team-members-modal .basv-account-badge.is-blacklisted {
+            background: #fdeaea;
+            color: #a33838;
+        }
+
+        #add-team-members-modal .basv-account-badge.is-assigned-badge {
+            background: #e5e9e7;
+            color: #43554f;
+        }
+
         @media (max-width: 1199.98px) {
             .basv-page .basv-stats.basv-stats-five {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -88,6 +228,24 @@
 
             .basv-page .basv-template-ready-actions {
                 justify-content: flex-start;
+            }
+
+            #add-team-members-modal .basv-member-picker-dialog {
+                width: calc(100vw - 1rem);
+                margin: .5rem auto;
+            }
+
+            #add-team-members-modal .modal-content {
+                height: calc(100vh - 1rem);
+            }
+
+            #add-team-members-modal .basv-member-options {
+                grid-template-columns: 1fr;
+            }
+
+            #add-team-members-modal .basv-member-directory-head {
+                align-items: flex-start;
+                flex-direction: column;
             }
         }
     </style>
@@ -506,7 +664,7 @@
     @if ($canManageTeams)
         <div class="modal fade basv-team-modal" id="add-team-members-modal" tabindex="-1"
             aria-labelledby="add-team-members-title" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-dialog modal-xl modal-dialog-centered basv-member-picker-dialog">
                 <form method="POST" action="#" class="modal-content basv-page" id="add-team-members-form">
                     @csrf
                     <input type="hidden" name="_team_visit_id" id="team-assignment-visit-id"
@@ -520,7 +678,7 @@
                             <span class="basv-modal-kicker">Monitoring team assignment</span>
                             <h2 class="modal-title" id="add-team-members-title">Add team members</h2>
                             <div class="basv-modal-meta" id="team-assignment-reference">
-                                Select existing accounts or create additional monitoring-team members.
+                                Browse every system user account or create an additional monitoring-team member.
                             </div>
                         </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"
@@ -545,15 +703,16 @@
                                 <i class="feather-search" aria-hidden="true"></i>
                                 <label class="visually-hidden" for="team-member-search">Search monitoring-team members</label>
                                 <input type="search" class="form-control" id="team-member-search"
-                                    placeholder="Search by name or email">
+                                    aria-controls="team-member-options"
+                                    placeholder="Live search by name, email, role, account type, or status">
                             </div>
                             <span class="basv-selection-count" id="team-selection-count"
                                 aria-live="polite" aria-atomic="true">0 selected</span>
                         </div>
 
                         <div class="basv-assignment-note">
-                            <i class="feather-mail" aria-hidden="true"></i>
-                            <span>Each member receives the visit assignment by email. New members also receive temporary login details.</span>
+                            <i class="feather-info" aria-hidden="true"></i>
+                            <span>All system accounts are included regardless of type or account status. Assignment does not reactivate or otherwise change an account.</span>
                         </div>
 
                         <div class="d-flex flex-wrap justify-content-end gap-2 mb-3">
@@ -601,54 +760,105 @@
                             </div>
                         </div>
 
-                        <div class="basv-member-options" id="team-member-options">
-                            @forelse ($teamAssignableUsers as $staff)
-                                @php
-                                    $staffSearch = \Illuminate\Support\Str::lower(implode(' ', [
-                                        $staff->name,
-                                        $staff->email,
-                                        $staff->role?->name,
-                                    ]));
-                                @endphp
-                                <div class="basv-member-option" data-member-option
-                                    data-search="{{ $staffSearch }}" data-user-id="{{ $staff->id }}"
-                                    data-email="{{ \Illuminate\Support\Str::lower($staff->email) }}">
-                                    <label class="basv-member-identity" for="team-member-{{ $staff->id }}">
-                                        <input class="form-check-input" type="checkbox"
-                                            name="team_members[]" value="{{ $staff->id }}"
-                                            id="team-member-{{ $staff->id }}" data-team-member-checkbox>
-                                        <span class="basv-member-avatar">
-                                            {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($staff->name ?: 'S', 0, 1)) }}
-                                        </span>
-                                        <span>
-                                            <strong>{{ $staff->name }}</strong>
-                                            <small>{{ $staff->email }}</small>
-                                            <small>{{ $staff->role?->name ?: 'Staff account' }}</small>
-                                        </span>
-                                    </label>
-                                    <div>
-                                        <label class="visually-hidden"
-                                            for="team-specialism-{{ $staff->id }}">Specialist role for {{ $staff->name }}</label>
-                                        <input class="form-control" name="team_specialisms[{{ $staff->id }}]"
-                                            id="team-specialism-{{ $staff->id }}"
-                                            list="biannual-specialist-role-options" maxlength="255"
-                                            autocomplete="off" placeholder="Choose or enter a role"
-                                            data-team-specialism disabled>
-                                    </div>
+                        <div class="basv-member-directory">
+                            <div class="basv-member-directory-head">
+                                <div>
+                                    <strong>Complete system user directory</strong>
+                                    <span>Active and inactive accounts—including disabled, deactivated, blacklisted, and every account type—are shown.</span>
                                 </div>
-                            @empty
-                                <div class="basv-member-empty" data-no-staff-accounts>
-                                    <i class="feather-user-x"></i>
-                                    <strong>No active staff accounts are available</strong>
-                                    <span>Create a monitoring-team member above to continue.</span>
+                                <div class="basv-directory-count" id="team-directory-count"
+                                    aria-live="polite" aria-atomic="true">
+                                    {{ number_format($teamAssignableUsers->count()) }} of
+                                    {{ number_format($teamAssignableUsers->count()) }} accounts shown
                                 </div>
-                            @endforelse
-                        </div>
+                            </div>
+                            <div class="basv-member-directory-scroll">
+                                <div class="basv-member-options" id="team-member-options">
+                                    @forelse ($teamAssignableUsers as $staff)
+                                        @php
+                                            $staffName = trim((string) $staff->name) ?: 'Unnamed account';
+                                            $staffEmail = trim((string) $staff->email) ?: 'No email address';
+                                            $staffRole = trim((string) $staff->role?->name) ?: 'No system role';
+                                            $staffType = \Illuminate\Support\Str::headline(
+                                                trim((string) $staff->user_type) ?: 'Unspecified account'
+                                            );
+                                            if ($staff->is_disabled) {
+                                                if ($staff->disabled_until?->isFuture()) {
+                                                    $staffStatus = 'Temporarily disabled';
+                                                    $staffStatusClass = 'is-disabled';
+                                                } elseif ($staff->disabled_until) {
+                                                    $staffStatus = 'Disabled (block expired)';
+                                                    $staffStatusClass = 'is-disabled';
+                                                } else {
+                                                    $staffStatus = 'Deactivated';
+                                                    $staffStatusClass = 'is-deactivated';
+                                                }
+                                            } else {
+                                                $staffStatus = 'Active';
+                                                $staffStatusClass = 'is-active';
+                                            }
+                                            $staffSearch = \Illuminate\Support\Str::lower(implode(' ', [
+                                                $staffName,
+                                                $staffEmail,
+                                                $staffRole,
+                                                $staffType,
+                                                $staffStatus,
+                                                $staff->is_disabled ? 'inactive disabled' : '',
+                                                $staff->is_blacklisted ? 'blacklisted' : '',
+                                            ]));
+                                        @endphp
+                                        <div class="basv-member-option" data-member-option
+                                            data-search="{{ $staffSearch }}" data-user-id="{{ $staff->id }}"
+                                            data-email="{{ \Illuminate\Support\Str::lower((string) $staff->email) }}"
+                                            data-account-type="{{ \Illuminate\Support\Str::lower($staffType) }}"
+                                            data-account-status="{{ \Illuminate\Support\Str::lower($staffStatus) }}">
+                                            <label class="basv-member-identity" for="team-member-{{ $staff->id }}">
+                                                <input class="form-check-input" type="checkbox"
+                                                    name="team_members[]" value="{{ $staff->id }}"
+                                                    id="team-member-{{ $staff->id }}" data-team-member-checkbox>
+                                                <span class="basv-member-avatar">
+                                                    {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($staffName, 0, 1)) }}
+                                                </span>
+                                                <span>
+                                                    <strong>{{ $staffName }}</strong>
+                                                    <small>{{ $staffEmail }}</small>
+                                                    <small>{{ $staffRole }}</small>
+                                                    <span class="basv-account-badges">
+                                                        <span class="basv-account-badge">{{ $staffType }}</span>
+                                                        <span class="basv-account-badge {{ $staffStatusClass }}">{{ $staffStatus }}</span>
+                                                        @if ($staff->is_blacklisted)
+                                                            <span class="basv-account-badge is-blacklisted">Blacklisted</span>
+                                                        @endif
+                                                        <span class="basv-account-badge is-assigned-badge"
+                                                            data-assigned-label hidden>Already assigned</span>
+                                                    </span>
+                                                </span>
+                                            </label>
+                                            <div class="basv-member-role-control">
+                                                <label class="visually-hidden"
+                                                    for="team-specialism-{{ $staff->id }}">Specialist role for {{ $staffName }}</label>
+                                                <input class="form-control" name="team_specialisms[{{ $staff->id }}]"
+                                                    id="team-specialism-{{ $staff->id }}"
+                                                    list="biannual-specialist-role-options" maxlength="255"
+                                                    autocomplete="off" placeholder="Choose or enter a specialist role"
+                                                    data-team-specialism disabled>
+                                            </div>
+                                        </div>
+                                    @empty
+                                        <div class="basv-member-empty" data-no-staff-accounts>
+                                            <i class="feather-user-x"></i>
+                                            <strong>No user accounts exist yet</strong>
+                                            <span>Create a monitoring-team member above to continue.</span>
+                                        </div>
+                                    @endforelse
+                                </div>
 
-                        <div class="basv-member-empty" id="team-member-no-results" hidden>
-                            <i class="feather-search"></i>
-                            <strong data-no-results-title>No available members match this search</strong>
-                            <span data-no-results-help>Try a different name or email.</span>
+                                <div class="basv-member-empty" id="team-member-no-results" hidden>
+                                    <i class="feather-search"></i>
+                                    <strong data-no-results-title>No user accounts match this search</strong>
+                                    <span data-no-results-help>Try a name, email, role, account type, or status.</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -737,8 +947,7 @@
                 const countLabel = document.getElementById('team-selection-count');
                 const saveButton = document.getElementById('save-team-members');
                 const noResults = document.getElementById('team-member-no-results');
-                const noResultsTitle = noResults.querySelector('[data-no-results-title]');
-                const noResultsHelp = noResults.querySelector('[data-no-results-help]');
+                const directoryCount = document.getElementById('team-directory-count');
                 const serverErrors = document.getElementById('team-member-server-errors');
                 const optionsContainer = document.getElementById('team-member-options');
                 const noStaffAccounts = document.querySelector('[data-no-staff-accounts]');
@@ -784,19 +993,13 @@
                     let visible = 0;
 
                     options.forEach(option => {
-                        const available = option.dataset.unavailable !== '1';
                         const matches = !query || option.dataset.search.includes(query);
-                        option.hidden = !available || !matches;
-                        if (available && matches) visible += 1;
+                        option.hidden = !matches;
+                        if (matches) visible += 1;
                     });
 
                     refreshNoStaffState();
-                    noResultsTitle.textContent = query
-                        ? 'No available members match this search'
-                        : 'All existing accounts are already assigned';
-                    noResultsHelp.textContent = query
-                        ? 'Try a different name or email.'
-                        : 'Create an additional monitoring-team member above to continue.';
+                    directoryCount.textContent = `${visible.toLocaleString()} of ${options.length.toLocaleString()} accounts shown`;
                     noResults.hidden = visible > 0 || (noStaffAccounts && !noStaffAccounts.hidden);
                 };
 
@@ -876,11 +1079,20 @@
                     memberEmail.textContent = member.email;
                     const accountType = document.createElement('small');
                     accountType.textContent = 'New monitoring-team account';
-                    details.append(memberName, memberEmail, accountType);
+                    const accountBadges = document.createElement('span');
+                    accountBadges.className = 'basv-account-badges';
+                    const typeBadge = document.createElement('span');
+                    typeBadge.className = 'basv-account-badge';
+                    typeBadge.textContent = 'Staff';
+                    const statusBadge = document.createElement('span');
+                    statusBadge.className = 'basv-account-badge is-active';
+                    statusBadge.textContent = 'New account';
+                    accountBadges.append(typeBadge, statusBadge);
+                    details.append(memberName, memberEmail, accountType, accountBadges);
                     identity.append(checkbox, avatar, details);
 
                     const roleContainer = document.createElement('div');
-                    roleContainer.className = 'd-flex align-items-center gap-2';
+                    roleContainer.className = 'basv-member-role-control';
                     const roleLabel = document.createElement('label');
                     roleLabel.className = 'visually-hidden';
                     roleLabel.htmlFor = `team-specialism-${key}`;
@@ -1018,10 +1230,12 @@
                     options.forEach(option => {
                         const checkbox = option.querySelector('[data-team-member-checkbox]');
                         const specialism = option.querySelector('[data-team-specialism]');
+                        const assignedLabel = option.querySelector('[data-assigned-label]');
                         const isAssigned = assigned.has(String(option.dataset.userId));
 
                         option.dataset.unavailable = isAssigned ? '1' : '0';
                         option.classList.toggle('is-assigned', isAssigned);
+                        if (assignedLabel) assignedLabel.hidden = !isAssigned;
                         checkbox.checked = false;
                         checkbox.disabled = isAssigned;
                         specialism.value = '';

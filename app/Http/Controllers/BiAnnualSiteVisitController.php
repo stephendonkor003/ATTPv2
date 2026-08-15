@@ -145,12 +145,20 @@ class BiAnnualSiteVisitController extends Controller
                 ->get()
             : collect();
         $teamAssignableUsers = $canManageTeams
-            ? $this->activeInternalStaffQuery()
+            ? User::query()
                 ->with('role')
                 ->orderBy('name')
-                ->get(['id', 'name', 'email', 'role_id'])
-                ->filter(fn (User $staff): bool => filter_var($staff->email, FILTER_VALIDATE_EMAIL))
-                ->values()
+                ->orderBy('email')
+                ->get([
+                    'id',
+                    'name',
+                    'email',
+                    'role_id',
+                    'user_type',
+                    'is_disabled',
+                    'disabled_until',
+                    'is_blacklisted',
+                ])
             : collect();
         $specialistRoles = $canManageTeams
             ? $this->specialistRoles()
@@ -757,22 +765,14 @@ class BiAnnualSiteVisitController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $existingMembers = $this->activeInternalStaffQuery()
+            $existingMembers = User::query()
                 ->whereIn('id', $existingMemberIds)
                 ->lockForUpdate()
                 ->get();
 
             if ($existingMembers->count() !== count($existingMemberIds)) {
                 throw ValidationException::withMessages([
-                    'team_members' => 'Every selected monitoring-team member must have an active internal staff account.',
-                ]);
-            }
-
-            if ($existingMembers->contains(
-                fn (User $member): bool => ! filter_var($member->email, FILTER_VALIDATE_EMAIL)
-            )) {
-                throw ValidationException::withMessages([
-                    'team_members' => 'Every monitoring-team member must have a valid email address so the assignment notification can be delivered.',
+                    'team_members' => 'Every selected monitoring-team member must reference an existing user account.',
                 ]);
             }
 
@@ -785,7 +785,7 @@ class BiAnnualSiteVisitController extends Controller
                     ->exists()
             ) {
                 throw ValidationException::withMessages([
-                    'new_team_members' => 'A new member email already belongs to an account. Select that person from the active staff list instead.',
+                    'new_team_members' => 'A new member email already belongs to an account. Select that person from the user directory instead.',
                 ]);
             }
 
@@ -888,7 +888,7 @@ class BiAnnualSiteVisitController extends Controller
             ->with(
                 'success',
                 trans_choice(
-                    '{1} :count monitoring-team member was added and their assignment email was queued.|[2,*] :count monitoring-team members were added and their assignment emails were queued.',
+                    '{1} :count monitoring-team member was added.|[2,*] :count monitoring-team members were added.',
                     $resolvedMemberIds->count(),
                     ['count' => $resolvedMemberIds->count()]
                 )
@@ -1388,7 +1388,7 @@ class BiAnnualSiteVisitController extends Controller
 
             if (! $this->hasValidMonitoringTeam($visit)) {
                 throw ValidationException::withMessages([
-                    'team' => 'The monitoring team must contain at least one distinct, active, authorized internal member and a selected lead before submission.',
+                    'team' => 'The monitoring team may contain any system accounts, but it must retain an active internal lead with submission access before submission.',
                 ]);
             }
 
@@ -2423,36 +2423,18 @@ class BiAnnualSiteVisitController extends Controller
         $members = User::query()
             ->with(['role.permissions', 'permissions'])
             ->whereIn('id', $memberIds)
-            ->where(fn (Builder $query) => $query
-                ->whereNull('is_disabled')
-                ->orWhere('is_disabled', false))
-            ->where(fn (Builder $query) => $query
-                ->whereNull('is_blacklisted')
-                ->orWhere('is_blacklisted', false))
-            ->where(fn (Builder $query) => $query
-                ->whereNull('user_type')
-                ->orWhereNotIn('user_type', [
-                    'funding_partner',
-                    'vendor',
-                    'think_tank',
-                    'applicant',
-                    'member_state',
-                ]))
             ->get();
 
-        if (
-            $members->count() !== $memberIds->count()
-            || $members->contains(
-                fn (User $user): bool => ! $user->can('biannual_site_visits.respond')
-                    && ! $user->can('biannual_site_visits.approve')
-            )
-        ) {
+        if ($members->count() !== $memberIds->count()) {
             return false;
         }
 
-        $leader = $members->first(
-            fn (User $user): bool => (string) $user->id === (string) $group->leader_id
-        );
+        // Ordinary members may be any persisted system account. Leadership remains
+        // an active internal responsibility because this account submits the visit.
+        $leader = $this->activeInternalStaffQuery()
+            ->with(['role.permissions', 'permissions'])
+            ->whereKey($group->leader_id)
+            ->first();
 
         return $leader
             && (
@@ -2551,7 +2533,7 @@ class BiAnnualSiteVisitController extends Controller
             if (! Str::startsWith($reference, 'new:')) {
                 if (! Str::isUuid($reference)) {
                     throw ValidationException::withMessages([
-                        "team_members.{$index}" => 'Select a valid active staff account.',
+                        "team_members.{$index}" => 'Select a valid system user account.',
                     ]);
                 }
 
@@ -2604,7 +2586,7 @@ class BiAnnualSiteVisitController extends Controller
                 ->exists()
         ) {
             throw ValidationException::withMessages([
-                'new_team_members' => 'A new staff email already belongs to an account. Select that person from the active staff list instead.',
+                'new_team_members' => 'A new member email already belongs to an account. Select that person from the user directory instead.',
             ]);
         }
 

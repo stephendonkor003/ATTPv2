@@ -3,6 +3,7 @@
 // This end-to-end script renders several large PDFs in one long-lived PHP process.
 ini_set('memory_limit', '512M');
 
+use App\Http\Controllers\BiAnnualSiteVisitController;
 use App\Mail\BiAnnualSiteVisitCreatedMail;
 use App\Mail\UserAccountCreated;
 use App\Models\BiAnnualSiteVisitProfile;
@@ -188,6 +189,76 @@ class BiAnnualSiteVisitsSmoke
                 'is_disabled' => true,
                 'is_blacklisted' => false,
             ]);
+            $temporarilyDisabledEvaluator = User::create([
+                'name' => 'Bi-Annual Temporarily Disabled Evaluator',
+                'email' => 'biannual-temp-disabled-'.Str::lower(Str::random(6)).'@example.test',
+                'password' => Hash::make('Password123!'),
+                'user_type' => 'evaluator',
+                'role_id' => null,
+                'must_change_password' => false,
+                'is_disabled' => true,
+                'disabled_until' => now()->addDays(7),
+                'is_blacklisted' => false,
+            ]);
+            $blacklistedVendor = User::create([
+                'name' => 'Bi-Annual Blacklisted Vendor',
+                'email' => 'biannual-blacklisted-vendor-'.Str::lower(Str::random(6)).'@example.test',
+                'password' => Hash::make('Password123!'),
+                'user_type' => 'vendor',
+                'role_id' => null,
+                'must_change_password' => false,
+                'is_disabled' => false,
+                'is_blacklisted' => true,
+            ]);
+            $fundingPartnerAccount = User::create([
+                'name' => 'Bi-Annual Funding Partner Account',
+                'email' => 'biannual-funding-partner-'.Str::lower(Str::random(6)).'@example.test',
+                'password' => Hash::make('Password123!'),
+                'user_type' => 'funding_partner',
+                'role_id' => null,
+                'must_change_password' => false,
+                'is_disabled' => false,
+                'is_blacklisted' => false,
+            ]);
+            $deactivatedThinkTankAccount = User::create([
+                'name' => 'Bi-Annual Deactivated Think Tank Account',
+                'email' => 'biannual-deactivated-think-tank-'.Str::lower(Str::random(6)).'@example.test',
+                'password' => Hash::make('Password123!'),
+                'user_type' => 'think_tank',
+                'role_id' => null,
+                'must_change_password' => false,
+                'is_disabled' => true,
+                'is_blacklisted' => false,
+            ]);
+            $applicantWithoutEmail = User::create([
+                'name' => 'Bi-Annual Applicant Without Email',
+                'email' => null,
+                'password' => Hash::make('Password123!'),
+                'user_type' => 'applicant',
+                'role_id' => null,
+                'must_change_password' => false,
+                'is_disabled' => false,
+                'is_blacklisted' => false,
+            ]);
+            $memberStateAccount = User::create([
+                'name' => 'Bi-Annual Member State Account',
+                'email' => 'biannual-member-state-'.Str::lower(Str::random(6)).'@example.test',
+                'password' => Hash::make('Password123!'),
+                'user_type' => 'member_state',
+                'role_id' => null,
+                'must_change_password' => false,
+                'is_disabled' => false,
+                'is_blacklisted' => false,
+            ]);
+            $unrestrictedDirectoryUsers = collect([
+                $disabledStaff,
+                $temporarilyDisabledEvaluator,
+                $blacklistedVendor,
+                $fundingPartnerAccount,
+                $deactivatedThinkTankAccount,
+                $applicantWithoutEmail,
+                $memberStateAccount,
+            ]);
             $leader = $team->first();
             $visitTeam = $team->take(2)->push($ordinaryStaff)->values();
             $this->assertSameScoreRatingRoundTrip(
@@ -205,7 +276,7 @@ class BiAnnualSiteVisitsSmoke
                 ->assertSee('Bi-Annual Site Visits')
                 ->assertSee('Questionnaire Builder');
 
-            $this->asUser($admin)
+            $directoryResponse = $this->asUser($admin)
                 ->get(route('biannual-site-visits.index'))
                 ->assertOk()
                 ->assertSee('Bi-Annual Site Visits')
@@ -218,7 +289,11 @@ class BiAnnualSiteVisitsSmoke
                 ->assertSee('Edit &amp; update', false)
                 ->assertSee('Edit as new version')
                 ->assertSee('id="add-team-members-modal"', false)
+                ->assertSee('modal-dialog modal-xl modal-dialog-centered basv-member-picker-dialog', false)
                 ->assertSee('id="manage-team-modal"', false)
+                ->assertSee('Complete system user directory')
+                ->assertSee('id="team-member-search"', false)
+                ->assertSee('id="team-directory-count"', false)
                 ->assertSee('Create monitoring-team member')
                 ->assertSee('id="additional_member_name"', false)
                 ->assertSee('id="additional_member_email"', false)
@@ -226,8 +301,16 @@ class BiAnnualSiteVisitsSmoke
                 ->assertSee('Add selected members')
                 ->assertSee('Save team changes')
                 ->assertSee($ordinaryStaff->email)
+                ->assertSee('Temporarily disabled')
+                ->assertSee('Blacklisted')
+                ->assertSee('Deactivated')
+                ->assertSee('No email address')
                 ->assertSee('assets/images/attp-logo.jpeg')
                 ->assertDontSee('Operations & Oversight');
+
+            foreach ($unrestrictedDirectoryUsers as $directoryUser) {
+                $directoryResponse->assertSee('data-user-id="'.$directoryUser->id.'"', false);
+            }
 
             $this->asUser($admin)
                 ->get(route('biannual-site-visits.create'))
@@ -984,6 +1067,107 @@ class BiAnnualSiteVisitsSmoke
                     fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
                 )->count(),
                 'Adding members re-notified the original team or missed a new assignment notification.'
+            );
+
+            $directoryMemberIds = $unrestrictedDirectoryUsers
+                ->pluck('id')
+                ->map('strval')
+                ->values();
+            $directorySpecialisms = $directoryMemberIds
+                ->mapWithKeys(fn (string $memberId, int $index): array => [
+                    $memberId => 'Directory Specialist '.($index + 1),
+                ]);
+            $directoryAccountState = $unrestrictedDirectoryUsers
+                ->mapWithKeys(fn (User $member): array => [
+                    (string) $member->id => [
+                        'user_type' => $member->user_type,
+                        'is_disabled' => (bool) $member->is_disabled,
+                        'disabled_until' => $member->disabled_until?->toDateTimeString(),
+                        'is_blacklisted' => (bool) $member->is_blacklisted,
+                    ],
+                ]);
+            $teamCountBeforeDirectoryAdd = $inlineVisit->siteVisit->group->members()->count();
+
+            $this->postWithCsrf(
+                route('biannual-site-visits.team-members.store', $inlineVisit),
+                [
+                    '_team_visit_id' => $inlineVisit->id,
+                    'team_members' => $directoryMemberIds->all(),
+                    'team_specialisms' => $directorySpecialisms->all(),
+                ]
+            )
+                ->assertRedirect(route('biannual-site-visits.index'))
+                ->assertSessionHas(
+                    'success',
+                    fn ($message): bool => str_contains(
+                        (string) $message,
+                        $directoryMemberIds->count().' monitoring-team members were added'
+                    )
+                );
+
+            $inlineVisit->refresh()->load('siteVisit.group.members');
+            $this->assertSame(
+                $teamCountBeforeDirectoryAdd + $directoryMemberIds->count(),
+                $inlineVisit->siteVisit->group->members->count(),
+                'One or more unrestricted directory accounts were not assigned.'
+            );
+            $storedDirectorySpecialisms = (array) data_get($inlineVisit->settings, 'team_specialisms', []);
+
+            foreach ($unrestrictedDirectoryUsers as $directoryUser) {
+                $directoryUser->refresh();
+                $directoryUserId = (string) $directoryUser->id;
+                $this->assertSame(
+                    1,
+                    $inlineVisit->siteVisit->group->members
+                        ->where('user_id', $directoryUserId)
+                        ->count(),
+                    'A disabled, deactivated, blacklisted, or external account was not assigned exactly once.'
+                );
+                $this->assertSame(
+                    $directorySpecialisms->get($directoryUserId),
+                    $storedDirectorySpecialisms[$directoryUserId] ?? null,
+                    'A directory account specialism was not stored under its user ID.'
+                );
+                $this->assertSame(
+                    $directoryAccountState->get($directoryUserId),
+                    [
+                        'user_type' => $directoryUser->user_type,
+                        'is_disabled' => (bool) $directoryUser->is_disabled,
+                        'disabled_until' => $directoryUser->disabled_until?->toDateTimeString(),
+                        'is_blacklisted' => (bool) $directoryUser->is_blacklisted,
+                    ],
+                    'Assigning a directory account changed its type or activation state.'
+                );
+                $this->assertTrue(
+                    $directoryUser->permissions()
+                        ->where('permissions.name', 'biannual_site_visits.respond')
+                        ->exists(),
+                    'An unrestricted directory account did not receive the direct response permission.'
+                );
+
+                if (filter_var($directoryUser->email, FILTER_VALIDATE_EMAIL)) {
+                    Mail::assertQueued(
+                        BiAnnualSiteVisitCreatedMail::class,
+                        fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
+                            && (string) $mail->recipient->id === $directoryUserId
+                    );
+                } else {
+                    Mail::assertNotQueued(
+                        BiAnnualSiteVisitCreatedMail::class,
+                        fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $inlineVisit->id
+                            && (string) $mail->recipient->id === $directoryUserId
+                    );
+                }
+            }
+
+            $teamValidation = new ReflectionMethod(
+                BiAnnualSiteVisitController::class,
+                'hasValidMonitoringTeam'
+            );
+            $teamValidation->setAccessible(true);
+            $this->assertTrue(
+                $teamValidation->invoke(app(BiAnnualSiteVisitController::class), $inlineVisit),
+                'Disabled, deactivated, blacklisted, or external members invalidated the visit team.'
             );
 
             $firstQuestion = BiAnnualSiteVisitQuestion::query()
