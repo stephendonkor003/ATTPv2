@@ -131,6 +131,19 @@
                                                     Activate
                                                 </button>
                                             </form>
+
+                                            <form method="POST" action="{{ route('evals.cfg.delete', $eval) }}"
+                                                class="d-inline" data-evaluation-delete
+                                                data-confirm="Delete this draft evaluation form and all of its sections and questions? This action cannot be undone."
+                                                onsubmit="return confirm(this.dataset.confirm);">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                    title="Delete evaluation form"
+                                                    aria-label="Delete evaluation form {{ $eval->name }}">
+                                                    <i class="feather-trash-2 me-1" aria-hidden="true"></i> Delete
+                                                </button>
+                                            </form>
                                         @elseif ($eval->status === 'active')
                                             <form method="POST" action="{{ route('evals.cfg.update', $eval) }}" class="d-inline">
                                                 @csrf

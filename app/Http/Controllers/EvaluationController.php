@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Evaluation;
+use App\Models\EvaluationSubmission;
+use App\Models\ReworkRequest;
 use App\Models\Sector;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -196,11 +199,36 @@ class EvaluationController extends Controller
             return back()->with('error', 'Only draft evaluations can be deleted.');
         }
 
-        $evaluation->delete();
+        if ($this->evaluationHasRecordedUse($evaluation)) {
+            return back()->with('error', 'This evaluation form is already linked to evaluation records and cannot be deleted.');
+        }
+
+        DB::transaction(function () use ($evaluation): void {
+            // Delete models one at a time so EvaluationSection's recursive
+            // cleanup removes nested sections, criteria, and score rows.
+            $evaluation->rootSections()->get()->each(
+                fn ($section) => $section->delete()
+            );
+
+            $evaluation->delete();
+        });
 
         return redirect()
             ->route('evals.cfg.index')
             ->with('success', 'Evaluation deleted successfully.');
+    }
+
+    private function evaluationHasRecordedUse(Evaluation $evaluation): bool
+    {
+        return filled($evaluation->procurement_id)
+            || $evaluation->assignments()->exists()
+            || $evaluation->procurements()->exists()
+            || EvaluationSubmission::query()
+                ->where('evaluation_id', $evaluation->getKey())
+                ->exists()
+            || ReworkRequest::query()
+                ->where('evaluation_id', $evaluation->getKey())
+                ->exists();
     }
 
     private function evaluationTemplateQuery()

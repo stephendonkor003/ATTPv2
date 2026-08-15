@@ -255,11 +255,12 @@
                                 <input type="hidden" name="show_subtotal" value="0">
                                 <div class="form-check form-switch subtotal-switch">
                                     <input class="form-check-input" type="checkbox" role="switch" name="show_subtotal" value="1"
-                                        id="root-section-subtotal" {{ $rootFormHasErrors && old('show_subtotal') ? 'checked' : '' }}>
+                                        id="root-section-subtotal" data-subtotal-toggle aria-describedby="root-section-subtotal-help"
+                                        {{ $rootFormHasErrors && old('show_subtotal') ? 'checked' : '' }}>
                                     <label class="form-check-label" for="root-section-subtotal">
                                         {{ $isServices ? 'Show a subtotal after this section' : 'Show a category summary after this section' }}
                                     </label>
-                                    <span>
+                                    <span id="root-section-subtotal-help">
                                         {{ $isServices
                                             ? 'The subtotal rolls up maximum points from this section and every nested child.'
                                             : 'The summary rolls up decision counts from this section and its children without turning categories into scores.' }}
@@ -440,11 +441,16 @@
         .node-meta { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; flex-wrap: wrap; max-width: 310px; }
         .meta-pill, .subtotal-pill { display: inline-flex; align-items: center; gap: .28rem; padding: .3rem .46rem; border: 1px solid #e7eaf0; border-radius: 7px; color: #667085; background: #fafbfc; font-size: .63rem; white-space: nowrap; }
         .meta-divider { color: #c0c6d0; }
+        .subtotal-control { display: inline-flex; align-items: center; gap: .25rem; }
         .subtotal-pill.is-enabled { color: #176b43; border-color: #ccebdc; background: #eefaf4; }
         .subtotal-pill.is-disabled { color: #8a94a4; background: #f7f8fa; }
+        .subtotal-edit-btn { display: inline-flex; align-items: center; gap: .2rem; min-height: 27px; padding: .28rem .42rem; color: var(--builder-primary); border: 1px solid #d7e0fb; border-radius: 7px; background: #f6f8ff; font-size: .61rem; font-weight: 700; line-height: 1; white-space: nowrap; }
+        .subtotal-edit-btn:hover { color: #fff; border-color: var(--builder-primary); background: var(--builder-primary); }
+        .subtotal-edit-btn:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(49,87,213,.18); }
         .node-actions { display: flex; align-items: center; gap: .35rem; }
         .node-actions .btn { white-space: nowrap; }
-        .node-actions .dropdown form { margin: 0; }
+        .node-actions form { margin: 0; }
+        .node-delete-form { display: inline-flex; }
         .btn-primary-soft { color: var(--section-deep, var(--builder-primary)); border-color: color-mix(in srgb, var(--tier-color) 22%, white); background: var(--section-soft, #eef2ff); }
         .btn-primary-soft:hover { color: #fff; border-color: var(--tier-color); background: var(--tier-color); }
         .btn-icon { display: inline-grid; width: 31px; height: 31px; padding: 0; place-items: center; }
@@ -653,7 +659,7 @@
                 }
             }
 
-            function setPanel(id, open) {
+            function setPanel(id, open, focusTargetId = null) {
                 const panel = document.getElementById(id);
                 if (!panel) return;
                 panel.classList.toggle('d-none', !open);
@@ -661,7 +667,13 @@
                 if (open) {
                     const node = panel.closest('[data-section-node]');
                     if (node) setNodeCollapsed(node, false);
-                    window.requestAnimationFrame(() => panel.querySelector('input:not([type="hidden"])')?.focus());
+                    window.requestAnimationFrame(() => {
+                        const requestedTarget = focusTargetId ? document.getElementById(focusTargetId) : null;
+                        const focusTarget = requestedTarget && panel.contains(requestedTarget)
+                            ? requestedTarget
+                            : panel.querySelector('input:not([type="hidden"])');
+                        focusTarget?.focus();
+                    });
                 }
             }
 
@@ -802,7 +814,7 @@
 
             builder.addEventListener('click', async event => {
                 const toggle = event.target.closest('[data-toggle-panel]');
-                if (toggle) { const id = toggle.dataset.togglePanel; const panel = document.getElementById(id); setPanel(id, panel?.classList.contains('d-none') ?? true); return; }
+                if (toggle) { const id = toggle.dataset.togglePanel; const panel = document.getElementById(id); setPanel(id, panel?.classList.contains('d-none') ?? true, toggle.dataset.panelFocus || null); return; }
                 const closer = event.target.closest('[data-close-panel]');
                 if (closer) { setPanel(closer.dataset.closePanel, false); return; }
                 const collapse = event.target.closest('[data-collapse-node]');

@@ -21,6 +21,11 @@
     $subtreeHeight = (int) $subtreeHeights->get((string) $section->id, 1);
     $subtreeCriteriaCount = (int) $subtreeCriteriaCounts->get((string) $section->id, $criteria->count());
     $displayLevelLabel = $levelLabels[$level];
+    $summarySettingLabel = $isServices ? 'Subtotal' : 'Category summary';
+    $deleteTargetLabel = Str::lower($displayLevelLabel);
+    $deleteConfirmation = 'Delete this ' . $deleteTargetLabel
+        . ($children->isNotEmpty() ? ' and all of its child sections' : '')
+        . '? This cannot be undone.';
     $siblingCount = $level === 1
         ? $rootSections->count()
         : $sectionsByParent->get((string) $section->parent_section_id, collect())->count();
@@ -72,21 +77,35 @@
                         {{ $children->count() }} {{ Str::plural('child', $children->count()) }}
                     </span>
                 @endif
-                @if ($showSubtotal)
-                    @if ($isServices)
-                        <span class="subtotal-pill is-enabled" title="Includes criteria in this section and all children">
-                            Subtotal <strong data-node-subtotal>{{ number_format($subtreeTotal, 2) }}</strong>
-                        </span>
+                <div class="subtotal-control" data-subtotal-setting>
+                    @if ($showSubtotal)
+                        @if ($isServices)
+                            <span class="subtotal-pill is-enabled" title="Includes criteria in this section and all children">
+                                Subtotal <strong data-node-subtotal>{{ number_format($subtreeTotal, 2) }}</strong>
+                            </span>
+                        @else
+                            <span class="subtotal-pill is-enabled" title="A category-count summary will appear for this section">
+                                Category summary on
+                            </span>
+                        @endif
                     @else
-                        <span class="subtotal-pill is-enabled" title="A category-count summary will appear for this section">
-                            Category summary on
+                        <span class="subtotal-pill is-disabled" title="{{ $summarySettingLabel }} display is disabled for this section">
+                            {{ $isServices ? 'Subtotal' : 'Summary' }} off
                         </span>
                     @endif
-                @else
-                    <span class="subtotal-pill is-disabled" title="{{ $isServices ? 'Subtotal' : 'Category summary' }} display is disabled for this section">
-                        {{ $isServices ? 'Subtotal' : 'Summary' }} off
-                    </span>
-                @endif
+                    @if ($canEdit)
+                        <button type="button" class="subtotal-edit-btn" data-edit-subtotal
+                            data-toggle-panel="{{ $editFormId }}"
+                            data-panel-focus="edit-subtotal-{{ $section->id }}"
+                            aria-controls="{{ $editFormId }}"
+                            aria-expanded="{{ $editFormHasErrors ? 'true' : 'false' }}"
+                            aria-label="Edit {{ Str::lower($summarySettingLabel) }} for {{ $displayLevelLabel }} {{ $section->name }}; currently {{ $showSubtotal ? 'on' : 'off' }}"
+                            title="Edit {{ Str::lower($summarySettingLabel) }} setting">
+                            <i class="feather-edit-2" aria-hidden="true"></i>
+                            <span>Edit {{ $isServices ? 'subtotal' : 'summary' }}</span>
+                        </button>
+                    @endif
+                </div>
             </div>
 
             @if ($canEdit)
@@ -103,6 +122,20 @@
                         <i class="feather-list" aria-hidden="true"></i>
                         <span>Questions</span>
                     </button>
+                    @if ($level > 1)
+                        <form method="POST" action="{{ route('evals.cfg.sec.del', $section) }}"
+                            class="node-delete-form" data-ajax-delete data-delete-kind="section"
+                            data-confirm="{{ $deleteConfirmation }}">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn btn-sm btn-outline-danger" type="submit"
+                                title="Delete {{ $displayLevelLabel }}"
+                                aria-label="Delete {{ $displayLevelLabel }} {{ $section->name }}">
+                                <i class="feather-trash-2" aria-hidden="true"></i>
+                                <span>Delete</span>
+                            </button>
+                        </form>
+                    @endif
                     <div class="dropdown">
                         <button class="btn btn-sm btn-icon btn-outline-secondary" type="button" data-bs-toggle="dropdown"
                             aria-expanded="false" aria-label="More actions for {{ $section->name }}">
@@ -129,18 +162,20 @@
                                     </button>
                                 </li>
                             @endif
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <form method="POST" action="{{ route('evals.cfg.sec.del', $section) }}"
-                                    data-ajax-delete data-delete-kind="section"
-                                    data-confirm="Delete this section{{ $children->isNotEmpty() ? ' and all of its child sections' : '' }}? This cannot be undone.">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button class="dropdown-item text-danger" type="submit">
-                                        <i class="feather-trash-2 me-2" aria-hidden="true"></i>Delete section
-                                    </button>
-                                </form>
-                            </li>
+                            @if ($level === 1)
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <form method="POST" action="{{ route('evals.cfg.sec.del', $section) }}"
+                                        data-ajax-delete data-delete-kind="section"
+                                        data-confirm="{{ $deleteConfirmation }}">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button class="dropdown-item text-danger" type="submit">
+                                            <i class="feather-trash-2 me-2" aria-hidden="true"></i>Delete {{ $displayLevelLabel }}
+                                        </button>
+                                    </form>
+                                </li>
+                            @endif
                         </ul>
                     </div>
                 </div>
@@ -188,11 +223,13 @@
                                 <input type="hidden" name="show_subtotal" value="0">
                                 <div class="form-check form-switch subtotal-switch">
                                     <input class="form-check-input" type="checkbox" role="switch" name="show_subtotal" value="1"
-                                        id="child-subtotal-{{ $section->id }}" {{ $childFormHasErrors && old('show_subtotal') ? 'checked' : '' }}>
+                                        id="child-subtotal-{{ $section->id }}" data-subtotal-toggle
+                                        aria-describedby="child-subtotal-help-{{ $section->id }}"
+                                        {{ $childFormHasErrors && old('show_subtotal') ? 'checked' : '' }}>
                                     <label class="form-check-label" for="child-subtotal-{{ $section->id }}">
                                         {{ $isServices ? 'Show a subtotal' : 'Show a category summary' }} after this {{ Str::lower($nextLevelLabel) }}
                                     </label>
-                                    <span>
+                                    <span id="child-subtotal-help-{{ $section->id }}">
                                         {{ $isServices
                                             ? 'Includes its own maximum points and every child below it.'
                                             : 'Shows category counts for its own criteria and every child below it; it does not create a numeric score.' }}
@@ -273,12 +310,13 @@
                                 <input type="hidden" name="show_subtotal" value="0">
                                 <div class="form-check form-switch subtotal-switch">
                                     <input class="form-check-input" type="checkbox" role="switch" name="show_subtotal" value="1"
-                                        id="edit-subtotal-{{ $section->id }}"
+                                        id="edit-subtotal-{{ $section->id }}" data-subtotal-toggle
+                                        aria-describedby="edit-subtotal-help-{{ $section->id }}"
                                         {{ ($editFormHasErrors ? old('show_subtotal') : $showSubtotal) ? 'checked' : '' }}>
                                     <label class="form-check-label" for="edit-subtotal-{{ $section->id }}">
                                         {{ $isServices ? 'Show subtotal for this section' : 'Show category summary for this section' }}
                                     </label>
-                                    <span>
+                                    <span id="edit-subtotal-help-{{ $section->id }}">
                                         {{ $isServices
                                             ? 'Its subtotal includes maximum points in every nested child.'
                                             : 'The summary groups evaluator decisions by category without calculating a score.' }}
