@@ -182,6 +182,13 @@
                             </a>
                         @endcanany
                         @can('biannual_site_visits.templates.manage')
+                            <form method="POST"
+                                action="{{ route('biannual-site-visits.templates.editable-draft', $defaultTemplate) }}">
+                                @csrf
+                                <button type="submit" class="basv-btn basv-btn-ghost">
+                                    <i class="feather-edit-2"></i> Edit questionnaire
+                                </button>
+                            </form>
                             <a href="{{ route('biannual-site-visits.templates.index') }}"
                                 class="basv-btn basv-btn-ghost">
                                 <i class="feather-sliders"></i> Template library
@@ -192,6 +199,82 @@
                                 <i class="feather-calendar"></i> Schedule with this template
                             </a>
                         @endcan
+                    </div>
+                </section>
+            @endif
+
+            @if ($canManageTemplates && $questionnaireTemplates->isNotEmpty())
+                <section class="basv-card" aria-labelledby="questionnaire-templates-title">
+                    <div class="basv-card-head">
+                        <div>
+                            <h2 id="questionnaire-templates-title">
+                                <i class="feather-file-text me-2"></i>Questionnaire templates
+                            </h2>
+                            <div class="basv-help">Edit drafts directly. Each published or archived version opens or creates its own editable draft.</div>
+                        </div>
+                        <a href="{{ route('biannual-site-visits.templates.index') }}" class="basv-btn basv-btn-ghost">
+                            Full template library <i class="feather-arrow-right"></i>
+                        </a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="basv-table">
+                            <thead>
+                                <tr>
+                                    <th>Template</th>
+                                    <th>Version</th>
+                                    <th>Structure</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($questionnaireTemplates as $questionnaireTemplate)
+                                    <tr>
+                                        <td>
+                                            <strong class="basv-record-title">{{ $questionnaireTemplate->name }}</strong>
+                                            <span class="basv-record-meta">{{ $questionnaireTemplate->code }}</span>
+                                        </td>
+                                        <td>
+                                            <strong>v{{ $questionnaireTemplate->version }}</strong>
+                                            @if ($questionnaireTemplate->is_default)
+                                                <span class="basv-record-meta">Default</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <strong>{{ number_format($questionnaireTemplate->sections_count) }} sections</strong>
+                                            <span class="basv-record-meta">{{ number_format($questionnaireTemplate->questions_count) }} questions</span>
+                                        </td>
+                                        <td>
+                                            <span class="basv-badge {{ $questionnaireTemplate->status }}">
+                                                {{ ucfirst($questionnaireTemplate->status) }}
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="basv-register-actions">
+                                                <a href="{{ route('biannual-site-visits.templates.preview', $questionnaireTemplate) }}"
+                                                    class="basv-btn basv-btn-ghost">
+                                                    <i class="feather-eye"></i> Preview
+                                                </a>
+                                                @if ($questionnaireTemplate->isDraft())
+                                                    <a href="{{ route('biannual-site-visits.templates.edit', $questionnaireTemplate) }}"
+                                                        class="basv-btn basv-btn-primary">
+                                                        <i class="feather-edit-2"></i> Edit &amp; update
+                                                    </a>
+                                                @else
+                                                    <form method="POST"
+                                                        action="{{ route('biannual-site-visits.templates.editable-draft', $questionnaireTemplate) }}">
+                                                        @csrf
+                                                        <button type="submit" class="basv-btn basv-btn-primary">
+                                                            <i class="feather-edit-2"></i> Edit as new version
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
                     </div>
                 </section>
             @endif

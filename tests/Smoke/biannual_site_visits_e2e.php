@@ -90,6 +90,72 @@ class BiAnnualSiteVisitsSmoke
                 'The customizable questionnaire could not be published.'
             );
 
+            $publishedUpdatedAt = $customTemplate->updated_at?->toIso8601String();
+            $publishedSectionCount = $customTemplate->sections()->count();
+            $publishedQuestionCount = $customTemplate->questions()->count();
+            $familyCountBeforeEdit = BiAnnualSiteVisitTemplate::query()
+                ->where('code', $customTemplate->code)
+                ->count();
+
+            $this->postWithCsrf(
+                route('biannual-site-visits.templates.editable-draft', $customTemplate)
+            )->assertRedirect();
+
+            $editableTemplate = BiAnnualSiteVisitTemplate::query()
+                ->where('code', $customTemplate->code)
+                ->draft()
+                ->orderByDesc('version')
+                ->firstOrFail();
+            $this->assertSame(
+                $customTemplate->version + 1,
+                $editableTemplate->version,
+                'Editing a published questionnaire did not create the next draft version.'
+            );
+            $this->assertSame(
+                $publishedSectionCount,
+                $editableTemplate->sections()->count(),
+                'The editable version did not retain every section.'
+            );
+            $this->assertSame(
+                $publishedQuestionCount,
+                $editableTemplate->questions()->count(),
+                'The editable version did not retain every question.'
+            );
+            $this->assertSame(
+                'derived_template',
+                data_get($editableTemplate->settings, 'source.type'),
+                'The editable version retained misleading original-source provenance.'
+            );
+            $this->assertSame(
+                (string) $customTemplate->id,
+                data_get($editableTemplate->settings, 'source.derived_from_template_id'),
+                'The editable version did not record its source template.'
+            );
+
+            $customTemplate->refresh();
+            $this->assertSame(
+                BiAnnualSiteVisitTemplate::STATUS_PUBLISHED,
+                $customTemplate->status,
+                'Creating an editable version changed the published source status.'
+            );
+            $this->assertSame(
+                $publishedUpdatedAt,
+                $customTemplate->updated_at?->toIso8601String(),
+                'Creating an editable version mutated the published source.'
+            );
+
+            $this->postWithCsrf(
+                route('biannual-site-visits.templates.editable-draft', $customTemplate)
+            )->assertRedirect(route('biannual-site-visits.templates.edit', $editableTemplate));
+            $this->postWithCsrf(
+                route('biannual-site-visits.templates.editable-draft', $editableTemplate)
+            )->assertRedirect(route('biannual-site-visits.templates.edit', $editableTemplate));
+            $this->assertSame(
+                $familyCountBeforeEdit + 1,
+                BiAnnualSiteVisitTemplate::query()->where('code', $customTemplate->code)->count(),
+                'Repeated Edit clicks created duplicate draft versions.'
+            );
+
             $monitoringRole = Role::query()
                 ->where('name', 'Monitoring and Evaluation Manager')
                 ->firstOrFail();
@@ -148,6 +214,9 @@ class BiAnnualSiteVisitsSmoke
                 ->assertSee($template->name)
                 ->assertSee(number_format($expectedQuestionCount).' questions')
                 ->assertSee(route('biannual-site-visits.templates.preview', $template), false)
+                ->assertSee('Questionnaire templates')
+                ->assertSee('Edit &amp; update', false)
+                ->assertSee('Edit as new version')
                 ->assertSee('id="add-team-members-modal"', false)
                 ->assertSee('id="manage-team-modal"', false)
                 ->assertSee('Add selected members')

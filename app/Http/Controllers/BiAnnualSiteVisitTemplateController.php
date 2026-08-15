@@ -265,14 +265,28 @@ class BiAnnualSiteVisitTemplateController extends Controller
         }
 
         DB::transaction(function () use ($template, $validated, $structure, $request): void {
-            $template->update([
+            $lockedTemplate = BiAnnualSiteVisitTemplate::query()
+                ->whereKey($template->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless(
+                $lockedTemplate->isDraft(),
+                422,
+                'Published questionnaire versions are immutable.'
+            );
+
+            $lockedTemplate->update([
                 'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
                 'instructions' => $validated['instructions'] ?? null,
                 'updated_by' => $request->user()->id,
             ]);
 
-            $this->templates->replaceStructure($template, $structure, $request->user()->id);
+            $this->templates->replaceStructure(
+                $lockedTemplate,
+                $structure,
+                $request->user()->id
+            );
         });
 
         return back()->with('success', 'Questionnaire draft saved.');
@@ -285,25 +299,38 @@ class BiAnnualSiteVisitTemplateController extends Controller
         $this->authorizeManage($request->user());
         abort_unless($template->isDraft(), 422, 'This questionnaire version is already locked.');
 
-        $template->loadCount(['sections', 'questions']);
-        if ($template->sections_count < 1 || $template->questions_count < 1) {
-            throw ValidationException::withMessages([
-                'template' => 'Add at least one section, topic, and question before publishing.',
-            ]);
-        }
-
         DB::transaction(function () use ($template, $request): void {
-            $shouldBeDefault = $template->is_default
+            BiAnnualSiteVisitTemplate::query()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+            $lockedTemplate = BiAnnualSiteVisitTemplate::query()
+                ->whereKey($template->id)
+                ->firstOrFail();
+            abort_unless(
+                $lockedTemplate->isDraft(),
+                422,
+                'This questionnaire version is already locked.'
+            );
+
+            $lockedTemplate->loadCount(['sections', 'questions']);
+            if ($lockedTemplate->sections_count < 1 || $lockedTemplate->questions_count < 1) {
+                throw ValidationException::withMessages([
+                    'template' => 'Add at least one section, topic, and question before publishing.',
+                ]);
+            }
+
+            $shouldBeDefault = $lockedTemplate->is_default
                 || BiAnnualSiteVisitTemplate::query()
                     ->published()
-                    ->where('code', $template->code)
+                    ->where('code', $lockedTemplate->code)
                     ->where('is_default', true)
                     ->exists()
                 || ! BiAnnualSiteVisitTemplate::query()->published()->where('is_default', true)->exists();
 
             BiAnnualSiteVisitTemplate::query()
-                ->where('code', $template->code)
-                ->where('id', '!=', $template->id)
+                ->where('code', $lockedTemplate->code)
+                ->where('id', '!=', $lockedTemplate->id)
                 ->where('status', BiAnnualSiteVisitTemplate::STATUS_PUBLISHED)
                 ->update([
                     'status' => BiAnnualSiteVisitTemplate::STATUS_ARCHIVED,
@@ -315,7 +342,7 @@ class BiAnnualSiteVisitTemplateController extends Controller
                 BiAnnualSiteVisitTemplate::query()->update(['is_default' => false]);
             }
 
-            $template->update([
+            $lockedTemplate->update([
                 'status' => BiAnnualSiteVisitTemplate::STATUS_PUBLISHED,
                 'is_default' => $shouldBeDefault,
                 'published_by' => $request->user()->id,
@@ -329,24 +356,102 @@ class BiAnnualSiteVisitTemplateController extends Controller
             ->with('success', "Version {$template->version} published and locked.");
     }
 
+    public function editableDraft(
+        Request $request,
+        BiAnnualSiteVisitTemplate $template
+    ): RedirectResponse {
+        $this->authorizeManage($request->user());
+
+        if ($template->isDraft()) {
+            return redirect()
+                ->route('biannual-site-visits.templates.edit', $template)
+                ->with('success', "Version {$template->version} is ready for editing and updates.");
+        }
+
+        [$draft, $created] = DB::transaction(function () use ($template, $request): array {
+            BiAnnualSiteVisitTemplate::query()
+                ->forCode($template->code)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+
+            $existingDraft = BiAnnualSiteVisitTemplate::query()
+                ->forCode($template->code)
+                ->draft()
+                ->where(
+                    'settings->source->derived_from_template_id',
+                    (string) $template->id
+                )
+                ->latestVersion()
+                ->first();
+
+            if ($existingDraft) {
+                return [$existingDraft, false];
+            }
+
+            $source = BiAnnualSiteVisitTemplate::query()
+                ->whereKey($template->id)
+                ->firstOrFail();
+            $structure = $this->templates->builderStructure($source);
+            $copy = BiAnnualSiteVisitTemplate::create([
+                'code' => $source->code,
+                'version' => BiAnnualSiteVisitTemplate::nextVersionForCode($source->code),
+                'name' => $source->name,
+                'description' => $source->description,
+                'instructions' => $source->instructions,
+                'status' => BiAnnualSiteVisitTemplate::STATUS_DRAFT,
+                'is_default' => false,
+                'settings' => $this->derivedSettings($source),
+                'visibility' => $source->visibility,
+                'created_by' => $request->user()->id,
+                'updated_by' => $request->user()->id,
+            ]);
+
+            $this->templates->replaceStructure(
+                $copy,
+                $structure,
+                $request->user()->id
+            );
+
+            return [$copy, true];
+        });
+
+        return redirect()
+            ->route('biannual-site-visits.templates.edit', $draft)
+            ->with(
+                'success',
+                $created
+                    ? "Editable version {$draft->version} created from version {$template->version}."
+                    : "Existing editable version {$draft->version} opened."
+            );
+    }
+
     public function duplicate(
         Request $request,
         BiAnnualSiteVisitTemplate $template
     ): RedirectResponse {
         $this->authorizeManage($request->user());
 
-        $structure = $this->templates->builderStructure($template);
-        $copy = DB::transaction(function () use ($template, $structure, $request) {
+        $copy = DB::transaction(function () use ($template, $request) {
+            BiAnnualSiteVisitTemplate::query()
+                ->forCode($template->code)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+            $source = BiAnnualSiteVisitTemplate::query()
+                ->whereKey($template->id)
+                ->firstOrFail();
+            $structure = $this->templates->builderStructure($source);
             $copy = BiAnnualSiteVisitTemplate::create([
-                'code' => $template->code,
-                'version' => BiAnnualSiteVisitTemplate::nextVersionForCode($template->code),
-                'name' => $template->name,
-                'description' => $template->description,
-                'instructions' => $template->instructions,
+                'code' => $source->code,
+                'version' => BiAnnualSiteVisitTemplate::nextVersionForCode($source->code),
+                'name' => $source->name,
+                'description' => $source->description,
+                'instructions' => $source->instructions,
                 'status' => BiAnnualSiteVisitTemplate::STATUS_DRAFT,
                 'is_default' => false,
-                'settings' => $template->settings,
-                'visibility' => $template->visibility,
+                'settings' => $this->derivedSettings($source),
+                'visibility' => $source->visibility,
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
@@ -359,6 +464,26 @@ class BiAnnualSiteVisitTemplateController extends Controller
         return redirect()
             ->route('biannual-site-visits.templates.edit', $copy)
             ->with('success', "Editable version {$copy->version} created from version {$template->version}.");
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function derivedSettings(BiAnnualSiteVisitTemplate $source): array
+    {
+        $settings = (array) $source->settings;
+        $originalSource = data_get($settings, 'source');
+        data_set($settings, 'source', [
+            'type' => 'derived_template',
+            'derived_from_template_id' => (string) $source->id,
+            'derived_from_code' => (string) $source->code,
+            'derived_from_version' => (int) $source->version,
+            'derived_from_status' => (string) $source->status,
+            'derived_at' => now()->toIso8601String(),
+            'original_source' => is_array($originalSource) ? $originalSource : null,
+        ]);
+
+        return $settings;
     }
 
     private function authorizeManage(?User $user): void

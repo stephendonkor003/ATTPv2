@@ -66,6 +66,7 @@ class BiAnnualSiteVisitController extends Controller
             'biannual_site_visits.submit',
             'biannual_site_visits.approve',
             'biannual_site_visits.export',
+            'biannual_site_visits.templates.manage',
         ]);
         $base = BiAnnualSiteVisitProfile::query()
             ->with([
@@ -128,12 +129,21 @@ class BiAnnualSiteVisitController extends Controller
 
         $canManageTeams = $user->can('biannual_site_visits.create');
         $canManageVisits = $canManageTeams;
+        $canManageTemplates = $user->can('biannual_site_visits.templates.manage');
         $defaultTemplate = BiAnnualSiteVisitTemplate::query()
             ->published()
             ->withCount(['sections', 'questions'])
             ->orderByDesc('is_default')
             ->orderByDesc('version')
             ->first();
+        $questionnaireTemplates = $canManageTemplates
+            ? BiAnnualSiteVisitTemplate::query()
+                ->withCount(['sections', 'questions'])
+                ->orderByDesc('is_default')
+                ->orderBy('name')
+                ->orderByDesc('version')
+                ->get()
+            : collect();
         $teamAssignableUsers = $canManageTeams
             ? $this->activeInternalStaffQuery()
                 ->with('role')
@@ -154,7 +164,9 @@ class BiAnnualSiteVisitController extends Controller
                 'stats',
                 'canManageTeams',
                 'canManageVisits',
+                'canManageTemplates',
                 'defaultTemplate',
+                'questionnaireTemplates',
                 'teamAssignableUsers',
                 'specialistRoles'
             )

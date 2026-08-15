@@ -2932,6 +2932,8 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('templates.update');
         Route::post('/templates/{template}/publish', [BiAnnualSiteVisitTemplateController::class, 'publish'])
             ->name('templates.publish');
+        Route::post('/templates/{template}/editable-draft', [BiAnnualSiteVisitTemplateController::class, 'editableDraft'])
+            ->name('templates.editable-draft');
         Route::post('/templates/{template}/duplicate', [BiAnnualSiteVisitTemplateController::class, 'duplicate'])
             ->name('templates.duplicate');
 

@@ -539,7 +539,7 @@
                                                 @if ($template->status === 'draft')
                                                     <a class="basv-btn basv-btn-ghost"
                                                         href="{{ route('biannual-site-visits.templates.edit', $template) }}">
-                                                        <i class="feather-edit-2"></i> Build
+                                                        <i class="feather-edit-2"></i> Edit &amp; update
                                                     </a>
                                                     <form method="POST"
                                                         action="{{ route('biannual-site-visits.templates.publish', $template) }}"
@@ -550,15 +550,15 @@
                                                         </button>
                                                     </form>
                                                 @endif
-                                                <form method="POST"
-                                                    action="{{ route('biannual-site-visits.templates.duplicate', $template) }}">
-                                                    @csrf
-                                                    <button class="basv-btn basv-btn-ghost" type="submit"
-                                                        title="Create an editable next version"
-                                                        aria-label="Duplicate {{ $template->name }} version {{ $template->version }}">
-                                                        <i class="feather-copy"></i>
-                                                    </button>
-                                                </form>
+                                                @if ($template->status !== 'draft')
+                                                    <form method="POST"
+                                                        action="{{ route('biannual-site-visits.templates.editable-draft', $template) }}">
+                                                        @csrf
+                                                        <button class="basv-btn basv-btn-ghost" type="submit">
+                                                            <i class="feather-edit-2"></i> Edit as new version
+                                                        </button>
+                                                    </form>
+                                                @endif
                                             </div>
                                         </td>
                                     </tr>
