@@ -67,11 +67,17 @@ class BiAnnualSiteVisitsSmoke
                 ->withStructure()
                 ->orderByDesc('is_default')
                 ->first();
+            $questionnaireDefinition = require database_path('data/biannual_monitoring_questionnaire.php');
+            $expectedQuestionCount = (int) data_get($questionnaireDefinition, 'counts.questions');
 
             $this->assertTrue((bool) $thinkTank, 'An active Think Tank is required.');
             $this->assertTrue((bool) $template, 'The default Bi-Annual questionnaire was not seeded.');
             $this->assertSame(7, $template->sections->count(), 'Default section count is incorrect.');
-            $this->assertSame(142, $template->questions()->count(), 'Default question count is incorrect.');
+            $this->assertSame(
+                $expectedQuestionCount,
+                $template->questions()->count(),
+                'Default question count is incorrect.'
+            );
             $customTemplate = $this->assertCustomBuilderRoundTrip($admin);
             $this->asUser($admin);
             $this->postWithCsrf(
@@ -138,6 +144,10 @@ class BiAnnualSiteVisitsSmoke
                 ->assertOk()
                 ->assertSee('Bi-Annual Site Visits')
                 ->assertSee('Questionnaire Builder')
+                ->assertSee('Default questionnaire ready')
+                ->assertSee($template->name)
+                ->assertSee(number_format($expectedQuestionCount).' questions')
+                ->assertSee(route('biannual-site-visits.templates.preview', $template), false)
                 ->assertSee('id="add-team-members-modal"', false)
                 ->assertSee('id="manage-team-modal"', false)
                 ->assertSee('Add selected members')
@@ -226,7 +236,7 @@ class BiAnnualSiteVisitsSmoke
                 ->get(route('biannual-site-visits.templates.index'))
                 ->assertOk()
                 ->assertSee('Questionnaire Templates')
-                ->assertSee('142 questions')
+                ->assertSee($expectedQuestionCount.' questions')
                 ->assertSee('id="template-preview-modal"', false)
                 ->assertSee('data-template-preview', false)
                 ->assertSee('Download PDF')
@@ -326,7 +336,7 @@ class BiAnnualSiteVisitsSmoke
                 'Selecting an active staff member did not grant questionnaire response access.'
             );
             $this->assertSame(
-                142,
+                $expectedQuestionCount,
                 collect($visit->questionnaire_snapshot['sections'])
                     ->sum(fn (array $section) => collect($section['topics'])
                         ->sum(fn (array $topic) => count($topic['questions']))),
@@ -437,7 +447,11 @@ class BiAnnualSiteVisitsSmoke
             ])->assertRedirect();
 
             $visit->refresh()->load('answers');
-            $this->assertSame(142, $visit->answers->count(), 'Not all questionnaire responses were persisted.');
+            $this->assertSame(
+                $expectedQuestionCount,
+                $visit->answers->count(),
+                'Not all questionnaire responses were persisted.'
+            );
             $this->assertSame(
                 0,
                 $visit->answers->whereNull('question_id')->count(),
@@ -582,17 +596,16 @@ class BiAnnualSiteVisitsSmoke
                 ->get(route('biannual-site-visits.index'))
                 ->assertOk()
                 ->assertSee($visit->reference_number)
-                ->assertSee('Add members')
-                ->assertSee(
+                ->assertDontSee(
                     route('biannual-site-visits.team-members.store', $visit),
                     false
                 )
-                ->assertSee(
+                ->assertDontSee(
                     route('biannual-site-visits.team.update', $visit),
                     false
                 )
-                ->assertSee('Choose or enter a role')
-                ->assertSee('data-managed-specialism', false);
+                ->assertDontSee(route('biannual-site-visits.edit', $visit), false)
+                ->assertDontSee(route('biannual-site-visits.deactivate', $visit), false);
 
             $this->postWithCsrf(
                 route('biannual-site-visits.team-members.store', $visit),
@@ -605,151 +618,29 @@ class BiAnnualSiteVisitsSmoke
                     ],
                 ]
             )
-                ->assertRedirect(route('biannual-site-visits.index'))
-                ->assertSessionHas('success');
-
-            $visit->refresh()->load('siteVisit.group.members');
-            $this->assertSame(
-                $visitTeam->count() + $additionalMembers->count(),
-                $visit->siteVisit->group->members->count(),
-                'The register could not add multiple monitoring-team members.'
-            );
-            $this->assertSame(
-                'M&E Officer',
-                data_get(
-                    $visit->settings,
-                    'team_specialisms.'.$additionalMembers->get(0)->id
-                ),
-                'The added member specialist role was not stored.'
-            );
-
-            foreach ($additionalMembers as $additionalMember) {
-                $additionalMember->unsetRelations();
-                $this->assertTrue(
-                    $additionalMember->can('biannual_site_visits.respond'),
-                    'An added team member did not receive questionnaire response access.'
-                );
-                Mail::assertQueued(
-                    BiAnnualSiteVisitCreatedMail::class,
-                    fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $visit->id
-                        && (string) $mail->recipient->id === (string) $additionalMember->id
-                        && $mail->hasTo($additionalMember->email)
-                        && $mail->queue === null
-                );
-            }
-
-            $visitMailAfterAdd = Mail::queued(
-                BiAnnualSiteVisitCreatedMail::class,
-                fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $visit->id
-            );
-            $this->assertSame(
-                $visitTeam->count() + $additionalMembers->count(),
-                $visitMailAfterAdd->count(),
-                'Adding team members did not queue exactly one assignment email per new member.'
-            );
-
-            $this->postWithCsrf(
-                route('biannual-site-visits.team-members.store', $visit),
-                [
-                    '_team_visit_id' => $visit->id,
-                    'team_members' => [$additionalMembers->first()->id],
-                    'team_specialisms' => [
-                        $additionalMembers->first()->id => 'M&E Officer',
-                    ],
-                ]
-            )->assertSessionHasErrors(['team_members']);
-            $this->assertSame(
-                $visitTeam->count() + $additionalMembers->count(),
-                $visit->siteVisit->group->members()->count(),
-                'A duplicate register assignment created a repeated team member.'
-            );
+                ->assertStatus(422);
 
             $this->putWithCsrf(
                 route('biannual-site-visits.team.update', $visit),
                 [
                     '_team_manage_visit_id' => $visit->id,
                     'group_leader_id' => $leader->id,
-                    'remove_members' => [$leader->id],
-                ]
-            )->assertSessionHasErrors(['group_leader_id']);
-            $this->assertSame(
-                (string) $leader->id,
-                (string) $visit->siteVisit->group()->firstOrFail()->leader_id,
-                'The current leader was removed without a valid replacement.'
-            );
-
-            $removedMember = $visitTeam->get(1);
-            $newLeader = $additionalMembers->first();
-            $this->putWithCsrf(
-                route('biannual-site-visits.team.update', $visit),
-                [
-                    '_team_manage_visit_id' => $visit->id,
-                    'group_leader_id' => $newLeader->id,
-                    'remove_members' => [$removedMember->id],
                     'team_specialisms' => [
-                        $newLeader->id => 'Lead Climate Resilience Specialist',
+                        $leader->id => 'Changed after approval',
                     ],
                 ]
-            )
-                ->assertRedirect(route('biannual-site-visits.index'))
-                ->assertSessionHas('success');
+            )->assertStatus(422);
+            $this->get(route('biannual-site-visits.edit', $visit))->assertStatus(422);
+            $this->patchWithCsrf(route('biannual-site-visits.deactivate', $visit), [
+                'deactivation_reason' => 'Finalized records must remain immutable.',
+            ])->assertStatus(422);
 
-            $visit->refresh()->load('siteVisit.group.members');
             $this->assertSame(
-                (string) $newLeader->id,
-                (string) $visit->siteVisit->group->leader_id,
-                'The selected replacement team leader was not saved.'
+                $visitTeam->count(),
+                $visit->siteVisit->group->members()->count(),
+                'A finalized visit allowed its monitoring team to change.'
             );
-            $this->assertTrue(
-                ! $visit->siteVisit->group->members
-                    ->contains(fn ($member): bool => (string) $member->user_id === (string) $removedMember->id),
-                'A member marked for removal remains assigned to the visit.'
-            );
-            $this->assertSame(
-                'leader',
-                $visit->siteVisit->group->members
-                    ->firstWhere('user_id', $newLeader->id)
-                    ?->role,
-                'The replacement leader group role was not synchronized.'
-            );
-            $this->assertSame(
-                'member',
-                $visit->siteVisit->group->members
-                    ->firstWhere('user_id', $leader->id)
-                    ?->role,
-                'The former leader was not returned to a regular member role.'
-            );
-            $this->assertSame(
-                null,
-                data_get($visit->settings, 'team_specialisms.'.$removedMember->id),
-                'The removed member specialist role was retained in the visit settings.'
-            );
-            $this->assertSame(
-                'Lead Climate Resilience Specialist',
-                data_get($visit->settings, 'team_specialisms.'.$newLeader->id),
-                'An existing team member specialist role could not be edited.'
-            );
-            $newLeader->unsetRelations();
-            $this->assertTrue(
-                $newLeader->can('biannual_site_visits.submit'),
-                'The replacement leader did not receive submission access.'
-            );
-            Mail::assertQueued(
-                BiAnnualSiteVisitCreatedMail::class,
-                fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $visit->id
-                    && (string) $mail->recipient->id === (string) $newLeader->id
-                    && $mail->isLeader
-                    && $mail->hasTo($newLeader->email)
-                    && $mail->queue === null
-            );
-            $this->assertSame(
-                $visitTeam->count() + $additionalMembers->count() + 1,
-                Mail::queued(
-                    BiAnnualSiteVisitCreatedMail::class,
-                    fn (BiAnnualSiteVisitCreatedMail $mail): bool => (string) $mail->visit->id === (string) $visit->id
-                )->count(),
-                'Changing the team leader did not queue exactly one leadership notification.'
-            );
+            $this->assertTrue((bool) $visit->fresh()->is_active, 'A finalized visit was deactivated.');
 
             $newStaffEmail = 'biannual-inline-staff-'.Str::lower(Str::random(6)).'@example.test';
             $newStaffReference = 'new:smoke_inline_staff';
@@ -809,6 +700,173 @@ class BiAnnualSiteVisitsSmoke
                     && (string) $mail->recipient->id === (string) $inlineStaff->id
                     && $mail->isLeader
             );
+
+            $firstQuestion = BiAnnualSiteVisitQuestion::query()
+                ->where('template_id', $inlineVisit->template_id)
+                ->orderBy('sort_order')
+                ->firstOrFail();
+            $this->asUser($admin)
+                ->putWithCsrf(route('biannual-site-visits.answers.update', $inlineVisit), [
+                    'answers' => [
+                        $firstQuestion->question_key => [
+                            'score' => 2,
+                            'strength' => 'Draft response retained through lifecycle changes.',
+                            'weakness' => '',
+                            'evidence_notes' => 'Lifecycle smoke evidence.',
+                            'not_applicable_reason' => '',
+                        ],
+                    ],
+                ])
+                ->assertRedirect();
+
+            $inlineVisit->refresh()->load('siteVisit.group.members');
+            $teamBeforeLifecycle = $inlineVisit->siteVisit->group->members
+                ->pluck('user_id')
+                ->map('strval')
+                ->sort()
+                ->values()
+                ->all();
+            $answerCountBeforeLifecycle = $inlineVisit->answers()->count();
+            $this->assertSame(1, $answerCountBeforeLifecycle, 'The lifecycle draft response was not saved.');
+
+            $updatedInlineTitle = $inlineTitle.' Updated';
+            $updatedInlineGroup = 'Updated Inline Staff Monitoring Team';
+            $this->putWithCsrf(route('biannual-site-visits.update', $inlineVisit), [
+                'title' => $updatedInlineTitle,
+                'location' => 'Updated Lifecycle Test Office',
+                'starts_on' => '2096-03-12',
+                'ends_on' => '2096-03-14',
+                'objectives' => 'Verify reversible schedule lifecycle management.',
+                'group_name' => $updatedInlineGroup,
+            ])->assertRedirect(route('biannual-site-visits.show', $inlineVisit));
+
+            $inlineVisit->refresh()->load('siteVisit.group');
+            $this->assertSame($updatedInlineTitle, $inlineVisit->title, 'The draft schedule title was not updated.');
+            $this->assertSame('2096-03-12', $inlineVisit->starts_on->toDateString(), 'The draft schedule start date was not updated.');
+            $this->assertSame('2096-03-12', $inlineVisit->siteVisit->visit_date->toDateString(), 'The base site visit date did not follow the edited schedule.');
+            $this->assertSame($updatedInlineGroup, $inlineVisit->siteVisit->group->group_name, 'The monitoring-team name was not updated.');
+            $this->assertSame(
+                $answerCountBeforeLifecycle,
+                $inlineVisit->answers()->count(),
+                'Editing the schedule removed questionnaire responses.'
+            );
+            $this->get(route('biannual-site-visits.edit', $inlineVisit))
+                ->assertOk()
+                ->assertSee($updatedInlineTitle)
+                ->assertSee($updatedInlineGroup);
+
+            $deactivationReason = 'Visit rescheduled outside the current monitoring plan.';
+            $this->patchWithCsrf(route('biannual-site-visits.deactivate', $inlineVisit), [
+                '_deactivate_visit_id' => $inlineVisit->id,
+                'deactivation_reason' => $deactivationReason,
+            ])->assertRedirect(route('biannual-site-visits.index', ['lifecycle' => 'inactive']));
+
+            $inlineVisit->refresh()->load('siteVisit.group.members');
+            $this->assertSame(false, (bool) $inlineVisit->is_active, 'The draft visit was not deactivated.');
+            $this->assertSame('draft', $inlineVisit->siteVisit->status, 'Deactivation overwrote the workflow state.');
+            $this->assertSame($deactivationReason, $inlineVisit->deactivation_reason, 'The deactivation reason was not stored.');
+            $this->assertTrue((bool) $inlineVisit->deactivated_at, 'The deactivation timestamp was not stored.');
+            $this->assertSame((string) $admin->id, (string) $inlineVisit->deactivated_by, 'The deactivation actor was not stored.');
+            $this->assertSame(
+                $answerCountBeforeLifecycle,
+                $inlineVisit->answers()->count(),
+                'Deactivation removed questionnaire responses.'
+            );
+            $this->assertSame(
+                $teamBeforeLifecycle,
+                $inlineVisit->siteVisit->group->members
+                    ->pluck('user_id')
+                    ->map('strval')
+                    ->sort()
+                    ->values()
+                    ->all(),
+                'Deactivation changed the monitoring team.'
+            );
+
+            $this->get(route('biannual-site-visits.show', $inlineVisit))
+                ->assertOk()
+                ->assertSee('This scheduled visit is inactive and read-only.')
+                ->assertSee($deactivationReason)
+                ->assertDontSee('Save draft');
+            $this->get(route('biannual-site-visits.index'))
+                ->assertOk()
+                ->assertDontSee($inlineVisit->reference_number);
+            $this->get(route('biannual-site-visits.index', ['lifecycle' => 'inactive']))
+                ->assertOk()
+                ->assertSee($inlineVisit->reference_number)
+                ->assertSee(route('biannual-site-visits.reactivate', $inlineVisit), false);
+
+            $this->putWithCsrf(route('biannual-site-visits.update', $inlineVisit), [
+                'title' => 'Forbidden inactive edit',
+                'location' => 'Inactive office',
+                'starts_on' => '2096-03-12',
+                'ends_on' => '2096-03-14',
+                'objectives' => null,
+                'group_name' => $updatedInlineGroup,
+            ])->assertStatus(422);
+            $this->putWithCsrf(route('biannual-site-visits.answers.update', $inlineVisit), [
+                'answers' => [
+                    $firstQuestion->question_key => ['score' => 3],
+                ],
+            ])->assertStatus(422);
+            $this->postWithCsrf(route('biannual-site-visits.submit', $inlineVisit))
+                ->assertStatus(422);
+            $this->postWithCsrf(route('biannual-site-visits.team-members.store', $inlineVisit), [
+                'team_members' => [$additionalMembers->first()->id],
+                'team_specialisms' => [
+                    $additionalMembers->first()->id => 'M&E Officer',
+                ],
+            ])->assertStatus(422);
+            $this->putWithCsrf(route('biannual-site-visits.team.update', $inlineVisit), [
+                'group_leader_id' => $inlineStaff->id,
+                'team_specialisms' => [
+                    $inlineStaff->id => 'World Bank Representative',
+                ],
+            ])->assertStatus(422);
+
+            $inlineVisit->refresh();
+            $this->assertSame($updatedInlineTitle, $inlineVisit->title, 'An inactive schedule accepted an update.');
+            $this->assertSame(
+                $answerCountBeforeLifecycle,
+                $inlineVisit->answers()->count(),
+                'An inactive questionnaire mutation changed stored responses.'
+            );
+
+            $this->patchWithCsrf(route('biannual-site-visits.reactivate', $inlineVisit))
+                ->assertRedirect(route('biannual-site-visits.show', $inlineVisit));
+
+            $inlineVisit->refresh()->load('siteVisit.group.members');
+            $this->assertSame(true, (bool) $inlineVisit->is_active, 'The draft visit was not reactivated.');
+            $this->assertSame('draft', $inlineVisit->siteVisit->status, 'Reactivation overwrote the workflow state.');
+            $this->assertTrue((bool) $inlineVisit->reactivated_at, 'The reactivation timestamp was not stored.');
+            $this->assertSame((string) $admin->id, (string) $inlineVisit->reactivated_by, 'The reactivation actor was not stored.');
+            $this->assertSame(
+                $answerCountBeforeLifecycle,
+                $inlineVisit->answers()->count(),
+                'Reactivation removed questionnaire responses.'
+            );
+            $this->assertSame(
+                $teamBeforeLifecycle,
+                $inlineVisit->siteVisit->group->members
+                    ->pluck('user_id')
+                    ->map('strval')
+                    ->sort()
+                    ->values()
+                    ->all(),
+                'Reactivation changed the monitoring team.'
+            );
+            $lifecycleActions = collect(data_get($inlineVisit->settings, 'lifecycle_history', []))
+                ->pluck('action')
+                ->all();
+            foreach (['schedule_updated', 'deactivated', 'reactivated'] as $expectedAction) {
+                $this->assertTrue(
+                    in_array($expectedAction, $lifecycleActions, true),
+                    "The {$expectedAction} lifecycle event was not recorded."
+                );
+            }
+            $this->get(route('biannual-site-visits.edit', $inlineVisit))
+                ->assertOk()
+                ->assertSee($updatedInlineTitle);
 
             echo "BIANNUAL_SITE_VISITS_E2E_OK\n";
         } finally {
@@ -1190,6 +1248,14 @@ class BiAnnualSiteVisitsSmoke
 
         return $this->withSession(['_token' => $token])
             ->put($uri, ['_token' => $token, ...$data]);
+    }
+
+    private function patchWithCsrf(string $uri, array $data = [])
+    {
+        $token = Str::random(40);
+
+        return $this->withSession(['_token' => $token])
+            ->patch($uri, ['_token' => $token, ...$data]);
     }
 
     private function assertTrue(bool $condition, string $message): void

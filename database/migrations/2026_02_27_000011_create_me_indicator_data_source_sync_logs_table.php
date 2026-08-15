@@ -21,6 +21,7 @@ return new class extends Migration
             $table->uuid('synced_by')->nullable();
             $table->json('meta')->nullable();
             $table->timestamps();
+            
 
             $table->index(['indicator_id', 'synced_at']);
             $table->index('status');

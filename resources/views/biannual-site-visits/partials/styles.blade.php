@@ -283,6 +283,11 @@
         color: #925d08;
     }
 
+    .basv-page .basv-badge.inactive {
+        background: #f8e4e4;
+        color: #973b3b;
+    }
+
     .basv-page .basv-badge.draft,
     .basv-page .basv-badge.in_progress {
         background: #eef2f7;

@@ -15,6 +15,8 @@ class BiAnnualSiteVisitProfile extends BaseModel
 
     public const SECOND_HALF = 2;
 
+    public const MUTABLE_WORKFLOW_STATUSES = ['draft', 'returned', 'in_progress'];
+
     protected $table = 'biannual_site_visit_profiles';
 
     protected $fillable = [
@@ -36,6 +38,12 @@ class BiAnnualSiteVisitProfile extends BaseModel
         'completion_percentage',
         'score_percentage',
         'notes',
+        'is_active',
+        'deactivated_at',
+        'deactivated_by',
+        'deactivation_reason',
+        'reactivated_at',
+        'reactivated_by',
         'created_by',
         'updated_by',
         'submitted_by',
@@ -55,6 +63,9 @@ class BiAnnualSiteVisitProfile extends BaseModel
         'visibility_snapshot' => 'array',
         'completion_percentage' => 'decimal:2',
         'score_percentage' => 'decimal:2',
+        'is_active' => 'boolean',
+        'deactivated_at' => 'datetime',
+        'reactivated_at' => 'datetime',
         'submitted_at' => 'datetime',
         'reviewed_at' => 'datetime',
     ];
@@ -116,6 +127,35 @@ class BiAnnualSiteVisitProfile extends BaseModel
     public function reviewedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function deactivatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'deactivated_by');
+    }
+
+    public function reactivatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reactivated_by');
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeInactive(Builder $query): Builder
+    {
+        return $query->where('is_active', false);
+    }
+
+    public function hasMutableWorkflowStatus(): bool
+    {
+        return in_array(
+            (string) $this->siteVisit?->status,
+            self::MUTABLE_WORKFLOW_STATUSES,
+            true
+        );
     }
 
     public function scopeForThinkTank(Builder $query, string $thinkTankId): Builder

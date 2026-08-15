@@ -191,7 +191,7 @@ class BiannualQuestionnaireImportService
             $sections[$currentSectionIndex]['topics'][$currentTopicIndex]['source_rows']['end'] = $row;
         }
 
-        $this->validateStructure($sections);
+        $structureWarnings = $this->validateStructure($sections);
 
         $sectionOrder = 0;
         $topicOrder = 0;
@@ -281,6 +281,7 @@ class BiannualQuestionnaireImportService
                 'file' => $sourceFile,
                 'sheet' => $worksheet->getTitle(),
                 'header_row' => $header['row'],
+                'warnings' => $structureWarnings,
                 'headers' => array_map(
                     static fn (array $column): array => [
                         'column' => $column['column'],
@@ -388,14 +389,47 @@ class BiannualQuestionnaireImportService
     {
         $highestColumn = Coordinate::columnIndexFromString($worksheet->getHighestDataColumn());
 
+        // Prefer an explicit document heading over the administrative fields
+        // that commonly sit immediately above the questionnaire header (for
+        // example Think Tank name, consortium name, and reporting date).
+        for ($row = 1; $row < $headerRow; $row++) {
+            for ($column = 1; $column <= $highestColumn; $column++) {
+                $value = $this->cellText($worksheet, $column, $row);
+                $normalized = $this->normalizeForMatching($value);
+
+                if (
+                    $value !== ''
+                    && (
+                        str_contains($normalized, 'questionnaire')
+                        || (
+                            str_contains($normalized, 'monitoring')
+                            && str_contains($normalized, 'tool')
+                        )
+                    )
+                ) {
+                    return $value;
+                }
+            }
+        }
+
+        $administrativeLabels = [
+            'name of think tank',
+            'corresponding name of consortia',
+            'corresponding name of consortium',
+            'reporting date',
+            'reporing date',
+        ];
+
         for ($row = $headerRow - 1; $row >= 1; $row--) {
             for ($column = 1; $column <= $highestColumn; $column++) {
                 $value = $this->cellText($worksheet, $column, $row);
+                $normalized = $this->normalizeForMatching($value);
 
                 if (
                     $value !== ''
                     && preg_match('/^-?\d+\s*=\s*.+$/u', $value) !== 1
-                    && $this->normalizeForMatching($value) !== 'ranking'
+                    && $normalized !== 'ranking'
+                    && ! in_array($normalized, $administrativeLabels, true)
                 ) {
                     return $value;
                 }
@@ -495,8 +529,10 @@ class BiannualQuestionnaireImportService
     /**
      * @param  list<array<string, mixed>>  $sections
      */
-    private function validateStructure(array $sections): void
+    private function validateStructure(array $sections): array
     {
+        $warnings = [];
+
         if ($sections === []) {
             throw new UnexpectedValueException('The workbook contains no "Part n:" sections.');
         }
@@ -552,9 +588,13 @@ class BiannualQuestionnaireImportService
 
                     [$start, $end] = Coordinate::rangeBoundaries($mergeRange);
 
+                    $mergeStartRow = (int) $start[1];
+                    $mergeEndRow = (int) $end[1];
+
                     if (
-                        (int) $start[1] !== $expectedStartRow
-                        || (int) $end[1] !== $expectedEndRow
+                        $mergeStartRow !== $expectedStartRow
+                        || $mergeEndRow > $expectedEndRow
+                        || $mergeEndRow < ($expectedEndRow - 1)
                     ) {
                         throw new UnexpectedValueException(
                             "Merged {$mergeType} range '{$mergeRange}' for topic "
@@ -562,9 +602,17 @@ class BiannualQuestionnaireImportService
                             ."{$expectedStartRow}-{$expectedEndRow}."
                         );
                     }
+
+                    if ($mergeEndRow < $expectedEndRow) {
+                        $warnings[] = "Merged {$mergeType} range '{$mergeRange}' for topic "
+                            ."'{$topic['title']}' stops at row {$mergeEndRow}; the question "
+                            ."on row {$expectedEndRow} remains attached to this topic.";
+                    }
                 }
             }
         }
+
+        return $warnings;
     }
 
     private function mergedRangeForCell(Worksheet $worksheet, string $coordinate): ?string

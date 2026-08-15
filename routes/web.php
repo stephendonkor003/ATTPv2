@@ -2940,6 +2940,12 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::get('/reports/submitted/pdf', [BiAnnualSiteVisitController::class, 'submittedReportPdf'])
             ->name('reports.submitted.pdf');
 
+        Route::get('/{visit}/edit', [BiAnnualSiteVisitController::class, 'edit'])->name('edit');
+        Route::put('/{visit}', [BiAnnualSiteVisitController::class, 'update'])->name('update');
+        Route::patch('/{visit}/deactivate', [BiAnnualSiteVisitController::class, 'deactivate'])
+            ->name('deactivate');
+        Route::patch('/{visit}/reactivate', [BiAnnualSiteVisitController::class, 'reactivate'])
+            ->name('reactivate');
         Route::get('/{visit}', [BiAnnualSiteVisitController::class, 'show'])->name('show');
         Route::post('/{visit}/team-members', [BiAnnualSiteVisitController::class, 'addTeamMembers'])
             ->name('team-members.store');

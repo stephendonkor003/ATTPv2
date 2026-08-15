@@ -90,18 +90,27 @@ class BiAnnualSiteVisitController extends Controller
             'active' => (clone $statsBase)->whereHas(
                 'siteVisit',
                 fn (Builder $query) => $query->whereIn('status', ['draft', 'returned', 'in_progress'])
-            )->count(),
+            )->where('is_active', true)->count(),
+            'inactive' => (clone $statsBase)->where('is_active', false)->count(),
             'submitted' => (clone $statsBase)->whereHas(
                 'siteVisit',
                 fn (Builder $query) => $query->where('status', 'submitted')
-            )->count(),
+            )->where('is_active', true)->count(),
             'approved' => (clone $statsBase)->whereHas(
                 'siteVisit',
                 fn (Builder $query) => $query->where('status', 'approved')
-            )->count(),
+            )->where('is_active', true)->count(),
         ];
 
         $visits = $base
+            ->when(
+                ! $request->filled('lifecycle') || $request->string('lifecycle')->value() === 'active',
+                fn (Builder $query) => $query->where('is_active', true)
+            )
+            ->when(
+                $request->string('lifecycle')->value() === 'inactive',
+                fn (Builder $query) => $query->where('is_active', false)
+            )
             ->when($request->filled('status'), function (Builder $query) use ($request): void {
                 $query->whereHas(
                     'siteVisit',
@@ -118,6 +127,13 @@ class BiAnnualSiteVisitController extends Controller
             ->paginate(20);
 
         $canManageTeams = $user->can('biannual_site_visits.create');
+        $canManageVisits = $canManageTeams;
+        $defaultTemplate = BiAnnualSiteVisitTemplate::query()
+            ->published()
+            ->withCount(['sections', 'questions'])
+            ->orderByDesc('is_default')
+            ->orderByDesc('version')
+            ->first();
         $teamAssignableUsers = $canManageTeams
             ? $this->activeInternalStaffQuery()
                 ->with('role')
@@ -137,6 +153,8 @@ class BiAnnualSiteVisitController extends Controller
                 'years',
                 'stats',
                 'canManageTeams',
+                'canManageVisits',
+                'defaultTemplate',
                 'teamAssignableUsers',
                 'specialistRoles'
             )
@@ -419,6 +437,7 @@ class BiAnnualSiteVisitController extends Controller
                     'portfolio' => $portfolioSnapshot,
                 ],
                 'visibility_snapshot' => $template->visibility,
+                'is_active' => true,
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
@@ -454,6 +473,185 @@ class BiAnnualSiteVisitController extends Controller
             ->with('success', 'Bi-Annual Site Visit scheduled with the selected monitoring team.');
     }
 
+    public function edit(
+        Request $request,
+        BiAnnualSiteVisitProfile $visit
+    ): View {
+        $this->authorizePermission($request->user(), 'biannual_site_visits.create');
+        $this->loadVisit($visit);
+        $this->assertBiAnnualProfileInScope($visit, $request->user());
+        $this->assertScheduleMutable($visit);
+
+        return view('biannual-site-visits.edit', compact('visit'));
+    }
+
+    public function update(
+        Request $request,
+        BiAnnualSiteVisitProfile $visit
+    ): RedirectResponse {
+        $this->authorizePermission($request->user(), 'biannual_site_visits.create');
+        $this->loadVisit($visit);
+        $this->assertBiAnnualProfileInScope($visit, $request->user());
+        $this->assertScheduleMutable($visit);
+
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'starts_on' => ['required', 'date'],
+            'ends_on' => ['required', 'date', 'after_or_equal:starts_on'],
+            'objectives' => ['nullable', 'string', 'max:10000'],
+            'group_name' => ['required', 'string', 'max:255'],
+        ]);
+
+        DB::transaction(function () use ($visit, $validated, $request): void {
+            $lockedProfile = BiAnnualSiteVisitProfile::query()
+                ->whereKey($visit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedSiteVisit = SiteVisit::query()
+                ->whereKey($lockedProfile->site_visit_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedProfile->setRelation('siteVisit', $lockedSiteVisit);
+            $this->assertScheduleMutable($lockedProfile);
+
+            $lockedGroup = SiteVisitGroup::query()
+                ->where('site_visit_id', $lockedSiteVisit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $before = [
+                'title' => $lockedProfile->title,
+                'location' => $lockedProfile->location,
+                'starts_on' => optional($lockedProfile->starts_on)->toDateString(),
+                'ends_on' => optional($lockedProfile->ends_on)->toDateString(),
+                'objectives' => $lockedProfile->objectives,
+                'group_name' => $lockedGroup->group_name,
+            ];
+            $after = Arr::only($validated, array_keys($before));
+            $settings = $this->appendLifecycleEvent(
+                (array) $lockedProfile->settings,
+                'schedule_updated',
+                $request->user(),
+                ['before' => $before, 'after' => $after]
+            );
+
+            $lockedProfile->update([
+                'title' => $validated['title'],
+                'location' => $validated['location'] ?? null,
+                'starts_on' => $validated['starts_on'],
+                'ends_on' => $validated['ends_on'],
+                'objectives' => $validated['objectives'] ?? null,
+                'settings' => $settings,
+                'updated_by' => $request->user()->id,
+            ]);
+            $lockedSiteVisit->update(['visit_date' => $validated['starts_on']]);
+            $lockedGroup->update(['group_name' => $validated['group_name']]);
+        });
+
+        return redirect()
+            ->route('biannual-site-visits.show', $visit)
+            ->with('success', 'The site visit schedule was updated. Questionnaire responses were preserved.');
+    }
+
+    public function deactivate(
+        Request $request,
+        BiAnnualSiteVisitProfile $visit
+    ): RedirectResponse {
+        $this->authorizePermission($request->user(), 'biannual_site_visits.create');
+        $this->loadVisit($visit);
+        $this->assertBiAnnualProfileInScope($visit, $request->user());
+
+        $validated = $request->validate([
+            'deactivation_reason' => ['required', 'string', 'max:1000'],
+        ], [
+            'deactivation_reason.required' => 'Explain why this scheduled visit is being deactivated.',
+        ]);
+
+        DB::transaction(function () use ($visit, $validated, $request): void {
+            $lockedProfile = BiAnnualSiteVisitProfile::query()
+                ->whereKey($visit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedSiteVisit = SiteVisit::query()
+                ->whereKey($lockedProfile->site_visit_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedProfile->setRelation('siteVisit', $lockedSiteVisit);
+            $this->assertScheduleMutable($lockedProfile);
+
+            $reason = trim((string) $validated['deactivation_reason']);
+            $settings = $this->appendLifecycleEvent(
+                (array) $lockedProfile->settings,
+                'deactivated',
+                $request->user(),
+                [
+                    'reason' => $reason,
+                    'workflow_status' => $lockedSiteVisit->status,
+                ]
+            );
+
+            $lockedProfile->update([
+                'is_active' => false,
+                'deactivated_at' => now(),
+                'deactivated_by' => $request->user()->id,
+                'deactivation_reason' => $reason,
+                'settings' => $settings,
+                'updated_by' => $request->user()->id,
+            ]);
+        });
+
+        return redirect()
+            ->route('biannual-site-visits.index', ['lifecycle' => 'inactive'])
+            ->with('success', 'The scheduled visit was deactivated without deleting its questionnaire or history.');
+    }
+
+    public function reactivate(
+        Request $request,
+        BiAnnualSiteVisitProfile $visit
+    ): RedirectResponse {
+        $this->authorizePermission($request->user(), 'biannual_site_visits.create');
+        $this->loadVisit($visit);
+        $this->assertBiAnnualProfileInScope($visit, $request->user());
+
+        DB::transaction(function () use ($visit, $request): void {
+            $lockedProfile = BiAnnualSiteVisitProfile::query()
+                ->whereKey($visit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedSiteVisit = SiteVisit::query()
+                ->whereKey($lockedProfile->site_visit_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedProfile->setRelation('siteVisit', $lockedSiteVisit);
+
+            abort_if($lockedProfile->is_active, 422, 'This site visit is already active.');
+            abort_unless(
+                $lockedProfile->hasMutableWorkflowStatus(),
+                422,
+                'A finalized site visit cannot be reactivated for editing.'
+            );
+
+            $settings = $this->appendLifecycleEvent(
+                (array) $lockedProfile->settings,
+                'reactivated',
+                $request->user(),
+                ['workflow_status' => $lockedSiteVisit->status]
+            );
+
+            $lockedProfile->update([
+                'is_active' => true,
+                'reactivated_at' => now(),
+                'reactivated_by' => $request->user()->id,
+                'settings' => $settings,
+                'updated_by' => $request->user()->id,
+            ]);
+        });
+
+        return redirect()
+            ->route('biannual-site-visits.show', $visit)
+            ->with('success', 'The scheduled visit was reactivated with its previous responses intact.');
+    }
+
     public function addTeamMembers(
         Request $request,
         BiAnnualSiteVisitProfile $visit
@@ -461,6 +659,7 @@ class BiAnnualSiteVisitController extends Controller
         $this->authorizePermission($request->user(), 'biannual_site_visits.create');
         $this->loadVisit($visit);
         $this->assertBiAnnualProfileInScope($visit, $request->user());
+        $this->assertScheduleMutable($visit);
 
         $validated = $request->validate([
             'team_members' => ['required', 'array', 'min:1'],
@@ -539,8 +738,20 @@ class BiAnnualSiteVisitController extends Controller
             $respondPermissionId,
             $request
         ): void {
+            $lockedProfile = BiAnnualSiteVisitProfile::query()
+                ->whereKey($visit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedSiteVisit = SiteVisit::query()
+                ->whereKey($lockedProfile->site_visit_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedProfile->setRelation('siteVisit', $lockedSiteVisit);
+            $this->assertScheduleMutable($lockedProfile);
+
             SiteVisitGroup::query()
                 ->whereKey($group->id)
+                ->where('site_visit_id', $lockedSiteVisit->id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -565,7 +776,7 @@ class BiAnnualSiteVisitController extends Controller
                 $member->permissions()->syncWithoutDetaching([(string) $respondPermissionId]);
             }
 
-            $settings = (array) $visit->settings;
+            $settings = (array) $lockedProfile->settings;
             $storedSpecialisms = (array) data_get($settings, 'team_specialisms', []);
 
             foreach ($memberIds as $memberId) {
@@ -573,7 +784,7 @@ class BiAnnualSiteVisitController extends Controller
             }
 
             data_set($settings, 'team_specialisms', $storedSpecialisms);
-            $visit->forceFill([
+            $lockedProfile->forceFill([
                 'settings' => $settings,
                 'updated_by' => $request->user()->id,
             ])->save();
@@ -609,6 +820,7 @@ class BiAnnualSiteVisitController extends Controller
         $this->authorizePermission($request->user(), 'biannual_site_visits.create');
         $this->loadVisit($visit);
         $this->assertBiAnnualProfileInScope($visit, $request->user());
+        $this->assertScheduleMutable($visit);
 
         $validated = $request->validate([
             'group_leader_id' => ['required', 'uuid'],
@@ -704,8 +916,20 @@ class BiAnnualSiteVisitController extends Controller
             $submittedSpecialisms,
             $request
         ): void {
+            $lockedProfile = BiAnnualSiteVisitProfile::query()
+                ->whereKey($visit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedSiteVisit = SiteVisit::query()
+                ->whereKey($lockedProfile->site_visit_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedProfile->setRelation('siteVisit', $lockedSiteVisit);
+            $this->assertScheduleMutable($lockedProfile);
+
             $lockedGroup = SiteVisitGroup::query()
                 ->whereKey($group->id)
+                ->where('site_visit_id', $lockedSiteVisit->id)
                 ->lockForUpdate()
                 ->firstOrFail();
             $lockedMembers = SiteVisitGroupMember::query()
@@ -754,7 +978,7 @@ class BiAnnualSiteVisitController extends Controller
                 (string) $permissions['biannual_site_visits.submit'],
             ]);
 
-            $settings = (array) $visit->settings;
+            $settings = (array) $lockedProfile->settings;
             $storedSpecialisms = (array) data_get($settings, 'team_specialisms', []);
 
             foreach ($submittedSpecialisms as $memberId => $specialism) {
@@ -768,7 +992,7 @@ class BiAnnualSiteVisitController extends Controller
             }
 
             data_set($settings, 'team_specialisms', $storedSpecialisms);
-            $visit->forceFill([
+            $lockedProfile->forceFill([
                 'settings' => $settings,
                 'updated_by' => $request->user()->id,
             ])->save();
@@ -890,11 +1114,18 @@ class BiAnnualSiteVisitController extends Controller
             $rawQuestions,
             $canonicalQuestions
         ): void {
+            $visit = BiAnnualSiteVisitProfile::query()
+                ->whereKey($visit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
             $lockedSiteVisit = SiteVisit::query()
                 ->lockForUpdate()
                 ->findOrFail($visit->site_visit_id);
 
-            if (! in_array($lockedSiteVisit->status, ['draft', 'returned'], true)) {
+            if (
+                ! $visit->is_active
+                || ! in_array($lockedSiteVisit->status, ['draft', 'returned'], true)
+            ) {
                 throw ValidationException::withMessages([
                     'status' => 'This questionnaire became read-only before the draft could be saved.',
                 ]);
@@ -1054,6 +1285,10 @@ class BiAnnualSiteVisitController extends Controller
         $this->authorizeVisitSubmission($visit, $request->user());
 
         DB::transaction(function () use ($visit, $request): void {
+            $visit = BiAnnualSiteVisitProfile::query()
+                ->whereKey($visit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
             $lockedSiteVisit = SiteVisit::query()
                 ->with(['group.members.user'])
                 ->lockForUpdate()
@@ -1135,6 +1370,7 @@ class BiAnnualSiteVisitController extends Controller
         $this->authorizePermission($request->user(), 'biannual_site_visits.approve');
         $this->loadVisit($visit);
         $this->assertBiAnnualProfileInScope($visit, $request->user());
+        abort_unless($visit->is_active, 422, 'A deactivated site visit cannot be reviewed.');
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['approved', 'returned'])],
@@ -1147,6 +1383,11 @@ class BiAnnualSiteVisitController extends Controller
         ]);
 
         DB::transaction(function () use ($visit, $request, $validated): void {
+            $visit = BiAnnualSiteVisitProfile::query()
+                ->whereKey($visit->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless($visit->is_active, 422, 'A deactivated site visit cannot be reviewed.');
             $lockedSiteVisit = SiteVisit::query()
                 ->lockForUpdate()
                 ->findOrFail($visit->site_visit_id);
@@ -1610,6 +1851,7 @@ class BiAnnualSiteVisitController extends Controller
         ];
 
         $status = $visit->siteVisit->status;
+        $isActive = (bool) $visit->is_active;
         $isMember = $this->isTeamMember($visit, $user);
         $isLead = (string) $visit->siteVisit->group?->leader_id === (string) $user->id;
         $canOverride = $user->can('biannual_site_visits.approve');
@@ -1625,18 +1867,24 @@ class BiAnnualSiteVisitController extends Controller
             'completion' => $completion,
             'scores' => $scores,
             'visibleQuestionKeys' => $visibleQuestionKeys,
-            'canEdit' => in_array($status, ['draft', 'returned'], true)
+            'canEdit' => $isActive
+                && in_array($status, ['draft', 'returned'], true)
                 && (
                     ($isMember && $user->can('biannual_site_visits.respond'))
                     || $canOverride
                 ),
-            'canSubmit' => in_array($status, ['draft', 'returned'], true)
+            'canSubmit' => $isActive
+                && in_array($status, ['draft', 'returned'], true)
                 && (
                     ($isLead && $user->can('biannual_site_visits.submit'))
                     || $canOverride
                 ),
-            'canReview' => $status === 'submitted'
+            'canReview' => $isActive
+                && $status === 'submitted'
                 && $user->can('biannual_site_visits.approve'),
+            'canManageSchedule' => $isActive
+                && $visit->hasMutableWorkflowStatus()
+                && $user->can('biannual_site_visits.create'),
             'portfolioName' => $this->branding->portfolioNameForVisit($visit),
             'logoDataUri' => $this->branding->logoDataUri(),
         ];
@@ -1658,6 +1906,46 @@ class BiAnnualSiteVisitController extends Controller
                 && $visit->siteVisit->visit_type === BiAnnualSiteVisitProfile::VISIT_TYPE,
             404
         );
+    }
+
+    private function assertScheduleMutable(BiAnnualSiteVisitProfile $visit): void
+    {
+        abort_unless(
+            $visit->is_active,
+            422,
+            'This scheduled visit is inactive. Reactivate it before making changes.'
+        );
+        abort_unless(
+            $visit->hasMutableWorkflowStatus(),
+            422,
+            'Submitted and approved site visits are finalized and cannot be changed or deactivated.'
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $settings
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function appendLifecycleEvent(
+        array $settings,
+        string $action,
+        User $actor,
+        array $context = []
+    ): array {
+        $history = collect(data_get($settings, 'lifecycle_history', []))
+            ->filter(fn ($event): bool => is_array($event))
+            ->values()
+            ->all();
+        $history[] = array_merge([
+            'action' => $action,
+            'occurred_at' => now()->toIso8601String(),
+            'actor_id' => (string) $actor->id,
+            'actor_name' => (string) $actor->name,
+        ], $context);
+        data_set($settings, 'lifecycle_history', $history);
+
+        return $settings;
     }
 
     private function applyAccessScope(Builder $query, User $user): void
@@ -1711,6 +1999,12 @@ class BiAnnualSiteVisitController extends Controller
 
     private function authorizeVisitEditing(BiAnnualSiteVisitProfile $visit, User $user): void
     {
+        abort_unless(
+            $visit->is_active,
+            422,
+            'This site visit is deactivated. Reactivate it before editing responses.'
+        );
+
         if ($this->isTeamMember($visit, $user)) {
             abort_unless(
                 $user->can('biannual_site_visits.respond'),
@@ -1735,6 +2029,12 @@ class BiAnnualSiteVisitController extends Controller
 
     private function authorizeVisitSubmission(BiAnnualSiteVisitProfile $visit, User $user): void
     {
+        abort_unless(
+            $visit->is_active,
+            422,
+            'This site visit is deactivated. Reactivate it before submission.'
+        );
+
         if ((string) $visit->siteVisit->group?->leader_id === (string) $user->id) {
             abort_unless(
                 $user->can('biannual_site_visits.submit'),

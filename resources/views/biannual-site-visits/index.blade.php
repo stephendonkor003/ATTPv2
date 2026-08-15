@@ -5,6 +5,92 @@
 
 @push('styles')
     @include('biannual-site-visits.partials.styles')
+    <style>
+        .basv-page .basv-stats.basv-stats-five {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+
+        .basv-page .basv-inactive-row {
+            background: #fbfbfc;
+        }
+
+        .basv-page .basv-inactive-row > td:not(:last-child) {
+            opacity: .72;
+        }
+
+        .basv-page .basv-template-ready {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding: 1rem 1.1rem;
+            border: 1px solid #cfe2d7;
+            border-left: 4px solid #198754;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #f4fbf7 0%, #fff 72%);
+            box-shadow: 0 8px 24px rgba(24, 90, 58, .06);
+        }
+
+        .basv-page .basv-template-ready-main {
+            display: flex;
+            align-items: flex-start;
+            gap: .85rem;
+            min-width: 0;
+        }
+
+        .basv-page .basv-template-ready-icon {
+            display: grid;
+            flex: 0 0 42px;
+            width: 42px;
+            height: 42px;
+            place-items: center;
+            border-radius: 12px;
+            background: #198754;
+            color: #fff;
+            font-size: 1.05rem;
+        }
+
+        .basv-page .basv-template-ready h2 {
+            margin: .1rem 0 .25rem;
+            color: #183b2b;
+            font-size: 1rem;
+            font-weight: 800;
+        }
+
+        .basv-page .basv-template-ready-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem .75rem;
+            color: var(--basv-muted);
+            font-size: .78rem;
+            font-weight: 700;
+        }
+
+        .basv-page .basv-template-ready-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: .45rem;
+        }
+
+        @media (max-width: 1199.98px) {
+            .basv-page .basv-stats.basv-stats-five {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .basv-page .basv-template-ready {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .basv-page .basv-template-ready-actions {
+                justify-content: flex-start;
+            }
+        }
+    </style>
 @endpush
 
 @section('content')
@@ -51,7 +137,7 @@
                 </div>
             @endif
 
-            <div class="basv-stats">
+            <div class="basv-stats basv-stats-five">
                 <div class="basv-stat">
                     <span class="basv-stat-icon"><i class="feather-calendar"></i></span>
                     <div><strong>{{ number_format($stats['total'] ?? 0) }}</strong><span>Total visits</span></div>
@@ -68,15 +154,60 @@
                     <span class="basv-stat-icon"><i class="feather-check-circle"></i></span>
                     <div><strong>{{ number_format($stats['approved'] ?? 0) }}</strong><span>Approved</span></div>
                 </div>
+                <div class="basv-stat">
+                    <span class="basv-stat-icon"><i class="feather-slash"></i></span>
+                    <div><strong>{{ number_format($stats['inactive'] ?? 0) }}</strong><span>Deactivated</span></div>
+                </div>
             </div>
+
+            @if ($defaultTemplate)
+                <section class="basv-template-ready" aria-label="Default questionnaire">
+                    <div class="basv-template-ready-main">
+                        <span class="basv-template-ready-icon"><i class="feather-check-square"></i></span>
+                        <div>
+                            <span class="basv-eyebrow">Default questionnaire ready</span>
+                            <h2>{{ $defaultTemplate->name }} · v{{ $defaultTemplate->version }}</h2>
+                            <div class="basv-template-ready-meta">
+                                <span><i class="feather-layers me-1"></i>{{ number_format($defaultTemplate->sections_count) }} sections</span>
+                                <span><i class="feather-help-circle me-1"></i>{{ number_format($defaultTemplate->questions_count) }} questions</span>
+                                <span><i class="feather-lock me-1"></i>Published and ready to schedule</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="basv-template-ready-actions">
+                        @canany(['biannual_site_visits.create', 'biannual_site_visits.templates.manage'])
+                            <a href="{{ route('biannual-site-visits.templates.preview', $defaultTemplate) }}"
+                                class="basv-btn basv-btn-ghost">
+                                <i class="feather-eye"></i> Preview
+                            </a>
+                        @endcanany
+                        @can('biannual_site_visits.templates.manage')
+                            <a href="{{ route('biannual-site-visits.templates.index') }}"
+                                class="basv-btn basv-btn-ghost">
+                                <i class="feather-sliders"></i> Template library
+                            </a>
+                        @endcan
+                        @can('biannual_site_visits.create')
+                            <a href="{{ route('biannual-site-visits.create') }}" class="basv-btn basv-btn-primary">
+                                <i class="feather-calendar"></i> Schedule with this template
+                            </a>
+                        @endcan
+                    </div>
+                </section>
+            @endif
 
             <div class="basv-card">
                 <div class="basv-card-head">
                     <h2><i class="feather-map-pin me-2"></i>Monitoring visit register</h2>
                     <form method="GET" class="d-flex gap-2">
+                        <select name="lifecycle" class="form-select form-select-sm" onchange="this.form.submit()">
+                            @foreach (['active' => 'Active records', 'inactive' => 'Deactivated records', 'all' => 'All records'] as $value => $label)
+                                <option value="{{ $value }}" @selected(request('lifecycle', 'active') === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
                         <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
                             <option value="">All statuses</option>
-                            @foreach (['draft' => 'Draft', 'returned' => 'Returned', 'submitted' => 'Submitted', 'approved' => 'Approved'] as $value => $label)
+                            @foreach (['draft' => 'Draft', 'returned' => 'Returned', 'in_progress' => 'In progress', 'submitted' => 'Submitted', 'approved' => 'Approved'] as $value => $label)
                                 <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
                             @endforeach
                         </select>
@@ -94,7 +225,13 @@
                         <div class="basv-empty">
                             <i class="feather-map"></i>
                             <strong>No bi-annual visits found</strong>
-                            <div class="mt-1">Schedule the first H1 or H2 monitoring visit to begin.</div>
+                            <div class="mt-1">
+                                @if ($defaultTemplate)
+                                    The questionnaire is ready. Schedule the first H1 or H2 visit to create a visit record.
+                                @else
+                                    Publish a questionnaire, then schedule the first H1 or H2 monitoring visit.
+                                @endif
+                            </div>
                         </div>
                     @else
                         <table class="basv-table">
@@ -113,6 +250,12 @@
                                 @foreach ($visits as $visit)
                                     @php
                                         $status = $visit->siteVisit?->status ?: 'draft';
+                                        $isActive = (bool) $visit->is_active;
+                                        $isMutable = in_array(
+                                            $status,
+                                            \App\Models\BiAnnualSiteVisitProfile::MUTABLE_WORKFLOW_STATUSES,
+                                            true
+                                        );
                                         $progress = (float) ($visit->completion_percentage ?? 0);
                                         $teamSpecialisms = (array) data_get($visit->settings, 'team_specialisms', []);
                                         $teamRoster = $visit->siteVisit?->group?->members
@@ -126,7 +269,7 @@
                                             ])
                                             ->values() ?? collect();
                                     @endphp
-                                    <tr>
+                                    <tr @class(['basv-inactive-row' => ! $isActive])>
                                         <td>
                                             <a class="basv-record-title"
                                                 href="{{ route('biannual-site-visits.show', $visit) }}">
@@ -159,10 +302,44 @@
                                             </div>
                                             <div class="basv-progress"><span style="width: {{ min(100, $progress) }}%"></span></div>
                                         </td>
-                                        <td><span class="basv-badge {{ $status }}">{{ str_replace('_', ' ', $status) }}</span></td>
+                                        <td>
+                                            @if ($isActive)
+                                                <span class="basv-badge {{ $status }}">{{ str_replace('_', ' ', $status) }}</span>
+                                            @else
+                                                <span class="basv-badge inactive">Inactive</span>
+                                                <span class="basv-record-meta">Workflow: {{ str_replace('_', ' ', $status) }}</span>
+                                            @endif
+                                        </td>
                                         <td class="text-end">
                                             <div class="basv-register-actions">
-                                                @if ($canManageTeams)
+                                                @if ($canManageVisits && $isMutable)
+                                                    @if ($isActive)
+                                                        <a href="{{ route('biannual-site-visits.edit', $visit) }}"
+                                                            class="basv-btn basv-btn-ghost">
+                                                            <i class="feather-edit-3"></i> Edit
+                                                        </a>
+                                                        <button type="button" class="basv-btn basv-btn-danger"
+                                                            data-deactivate-visit
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#deactivate-visit-modal"
+                                                            data-action="{{ route('biannual-site-visits.deactivate', $visit) }}"
+                                                            data-visit-id="{{ $visit->id }}"
+                                                            data-visit-title="{{ $visit->title ?: 'Monitoring Site Visit' }}"
+                                                            data-visit-reference="{{ $visit->reference_number }}">
+                                                            <i class="feather-slash"></i> Deactivate
+                                                        </button>
+                                                    @else
+                                                        <form method="POST" action="{{ route('biannual-site-visits.reactivate', $visit) }}"
+                                                            onsubmit="return confirm('Reactivate this scheduled site visit with all previous responses?')">
+                                                            @csrf
+                                                            @method('PATCH')
+                                                            <button type="submit" class="basv-btn basv-btn-primary">
+                                                                <i class="feather-refresh-cw"></i> Reactivate
+                                                            </button>
+                                                        </form>
+                                                    @endif
+                                                @endif
+                                                @if ($canManageTeams && $isActive && $isMutable)
                                                     <button type="button" class="basv-btn basv-btn-primary"
                                                         data-add-team-members
                                                         data-bs-toggle="modal"
@@ -204,6 +381,44 @@
             </div>
         </div>
     </main>
+
+    @if ($canManageVisits)
+        <div class="modal fade basv-team-modal" id="deactivate-visit-modal" tabindex="-1"
+            aria-labelledby="deactivate-visit-title" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <form method="POST" action="#" class="modal-content basv-page" id="deactivate-visit-form">
+                    @csrf
+                    @method('PATCH')
+                    <input type="hidden" name="_deactivate_visit_id" id="deactivate-visit-id"
+                        value="{{ old('_deactivate_visit_id') }}">
+                    <div class="modal-header">
+                        <div class="basv-modal-heading-icon"><i class="feather-slash" aria-hidden="true"></i></div>
+                        <div class="flex-grow-1">
+                            <span class="basv-modal-kicker">Reversible lifecycle change</span>
+                            <h2 class="modal-title" id="deactivate-visit-title">Deactivate scheduled visit</h2>
+                            <div class="basv-modal-meta" id="deactivate-visit-reference"></div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="basv-assignment-note mb-3">
+                            <i class="feather-shield" aria-hidden="true"></i>
+                            <span>The visit will become read-only. Its team, questionnaire responses, and audit history will not be deleted.</span>
+                        </div>
+                        <label class="form-label" for="deactivation_reason">Reason for deactivation</label>
+                        <textarea class="form-control" id="deactivation_reason" name="deactivation_reason"
+                            maxlength="1000" required placeholder="Explain why this scheduled visit should no longer be active.">{{ old('deactivation_reason') }}</textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="basv-btn basv-btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="basv-btn basv-btn-danger">
+                            <i class="feather-slash"></i> Deactivate visit
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
 
     @if ($canManageTeams)
         <div class="modal fade basv-team-modal" id="add-team-members-modal" tabindex="-1"
@@ -659,6 +874,45 @@
 
                         updateManagedTeam();
                         window.bootstrap?.Modal.getOrCreateInstance(manageModalElement).show();
+                    }
+                }
+            });
+        </script>
+    @endpush
+@endif
+
+@if ($canManageVisits)
+    @push('scripts')
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const modal = document.getElementById('deactivate-visit-modal');
+                const form = document.getElementById('deactivate-visit-form');
+                const title = document.getElementById('deactivate-visit-title');
+                const reference = document.getElementById('deactivate-visit-reference');
+                const visitId = document.getElementById('deactivate-visit-id');
+                const reason = document.getElementById('deactivation_reason');
+                const triggers = [...document.querySelectorAll('[data-deactivate-visit]')];
+
+                if (!modal || !form) return;
+
+                const configure = trigger => {
+                    form.action = trigger.dataset.action;
+                    visitId.value = trigger.dataset.visitId || '';
+                    title.textContent = `Deactivate ${trigger.dataset.visitTitle}`;
+                    reference.textContent = trigger.dataset.visitReference || '';
+                };
+
+                triggers.forEach(trigger => {
+                    trigger.addEventListener('click', () => configure(trigger));
+                });
+                modal.addEventListener('shown.bs.modal', () => reason.focus());
+
+                const failedVisitId = @json((string) old('_deactivate_visit_id'));
+                if (failedVisitId) {
+                    const trigger = triggers.find(item => item.dataset.visitId === failedVisitId);
+                    if (trigger) {
+                        configure(trigger);
+                        window.bootstrap?.Modal.getOrCreateInstance(modal).show();
                     }
                 }
             });

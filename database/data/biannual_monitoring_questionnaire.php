@@ -6,7 +6,8 @@
 |--------------------------------------------------------------------------
 |
 | This bundled definition is the deployment-safe default derived from the
-| 2026-07-26 ATTP Monitoring Questionnaire workbook. It intentionally has no
+| attached "Copy of 2026-07-26_ATTP Monitoring Questionnaire" workbook. It
+| intentionally has no
 | model or seeder dependency, so a future seeder can require this file and
 | persist the normalized template through the application's own data layer.
 |
@@ -256,7 +257,7 @@ $sections = [
                 'description' => 'Availability, accessibility, and functionality of grievance handling systems',
                 'guidance' => null,
                 'questions' => [
-                    'Is a GRM in place?',
+                    'Is a GRM in place? ( if it is not yet in place, assesing readiness/ preparations might suffice?)',
                     'Is it accessible to stakeholders?',
                     'Are grievances properly recorded and resolved?',
                     'Does the GRM include SEA/SH-sensitive procedures?',
@@ -269,8 +270,9 @@ $sections = [
                 'guidance' => null,
                 'questions' => [
                     'Do research teams meet the minimum 50% female participation requirement?',
-                    'Are there targeted activities promoting gender inclusion?',
+                    'Are there targeted activities/ Intentianality towards promoting gender inclusion?',
                     'Is gender integrated into research design and outputs?',
+                    'Are there professinal female staffs engaged in leading reseach?',
                 ],
             ],
         ],
@@ -285,10 +287,13 @@ $sections = [
                 'guidance' => null,
                 'questions' => [
                     'Is there a functional results framework?',
+                    'If there are inplaced tracking tools/ format to track processes/ results ?',
                     'Are indicators regularly tracked?',
                     'Are M&E reports produced and used for decision-making?',
                     'Are KPIs tracked against PPA performance thresholds (e.g., 80%)?',
                     'Are Adaptive Action Plans prepared when performance drops below thresholds?',
+                    'Do you have dedicated MEL focal person?',
+                    'Are there planned learning and reflection sessions for learning exchanges?',
                 ],
             ],
             [
@@ -411,6 +416,13 @@ $sections = [
 
 $topicGlobalOrder = 0;
 $questionGlobalOrder = 0;
+$legacyQuestionOrder = 0;
+$newQuestionKeys = [
+    'Are there professinal female staffs engaged in leading reseach?' => 'question-143',
+    'If there are inplaced tracking tools/ format to track processes/ results ?' => 'question-144',
+    'Do you have dedicated MEL focal person?' => 'question-145',
+    'Are there planned learning and reflection sessions for learning exchanges?' => 'question-146',
+];
 
 foreach ($sections as $sectionIndex => &$section) {
     $section['key'] = sprintf('section-%02d', $sectionIndex + 1);
@@ -428,9 +440,11 @@ foreach ($sections as $sectionIndex => &$section) {
 
         foreach ($topic['questions'] as $questionIndex => $prompt) {
             $questionGlobalOrder++;
+            $questionKey = $newQuestionKeys[$prompt]
+                ?? sprintf('question-%03d', ++$legacyQuestionOrder);
             $topic['questions'][$questionIndex] = [
-                'key' => sprintf('question-%03d', $questionGlobalOrder),
-                'question_key' => sprintf('question-%03d', $questionGlobalOrder),
+                'key' => $questionKey,
+                'question_key' => $questionKey,
                 'order' => $questionIndex + 1,
                 'sort_order' => $questionIndex + 1,
                 'global_order' => $questionGlobalOrder,
@@ -445,63 +459,73 @@ foreach ($sections as $sectionIndex => &$section) {
 }
 unset($section);
 
+$ratingScale = [
+    'key' => 'rating-scale-0-3',
+    'minimum' => 0,
+    'maximum' => 3,
+    'options' => [
+        [
+            'value' => 0,
+            'label' => 'Not Applicable',
+            'description' => null,
+            'order' => 1,
+        ],
+        [
+            'value' => 1,
+            'label' => 'Weak',
+            'description' => 'major gaps / non-compliance',
+            'order' => 2,
+        ],
+        [
+            'value' => 2,
+            'label' => 'Average',
+            'description' => 'partial compliance, improvement needed',
+            'order' => 3,
+        ],
+        [
+            'value' => 3,
+            'label' => 'Strong',
+            'description' => 'fully compliant and effective',
+            'order' => 4,
+        ],
+    ],
+];
+$responseSchema = [
+    'type' => 'scored_finding',
+    'fields' => [
+        'strength' => [
+            'type' => 'long_text',
+            'required' => false,
+        ],
+        'weakness' => [
+            'type' => 'long_text',
+            'required' => false,
+        ],
+        'rating_code' => [
+            'type' => 'single_choice',
+            'required' => false,
+            'rating_scale' => 'rating-scale-0-3',
+        ],
+        'ranking_label' => [
+            'type' => 'derived',
+            'source' => 'rating_code',
+        ],
+    ],
+];
+$contentSha256 = hash('sha256', json_encode([
+    'key' => 'monitoring-evaluation-tool-per-think-tank',
+    'title' => 'Monitoring Evaluation Tool (Per Think Tank)',
+    'rating_scale' => $ratingScale,
+    'response_schema' => $responseSchema,
+    'sections' => $sections,
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
 return [
     'key' => 'monitoring-evaluation-tool-per-think-tank',
     'code' => 'monitoring-evaluation-tool-per-think-tank',
     'title' => 'Monitoring Evaluation Tool (Per Think Tank)',
-    'rating_scale' => [
-        'key' => 'rating-scale-0-3',
-        'minimum' => 0,
-        'maximum' => 3,
-        'options' => [
-            [
-                'value' => 0,
-                'label' => 'Not Applicable',
-                'description' => null,
-                'order' => 1,
-            ],
-            [
-                'value' => 1,
-                'label' => 'Weak',
-                'description' => 'major gaps / non-compliance',
-                'order' => 2,
-            ],
-            [
-                'value' => 2,
-                'label' => 'Average',
-                'description' => 'partial compliance, improvement needed',
-                'order' => 3,
-            ],
-            [
-                'value' => 3,
-                'label' => 'Strong',
-                'description' => 'fully compliant and effective',
-                'order' => 4,
-            ],
-        ],
-    ],
-    'response_schema' => [
-        'type' => 'scored_finding',
-        'fields' => [
-            'strength' => [
-                'type' => 'long_text',
-                'required' => false,
-            ],
-            'weakness' => [
-                'type' => 'long_text',
-                'required' => false,
-            ],
-            'rating_code' => [
-                'type' => 'single_choice',
-                'required' => false,
-                'rating_scale' => 'rating-scale-0-3',
-            ],
-            'ranking_label' => [
-                'type' => 'derived',
-                'source' => 'rating_code',
-            ],
-        ],
-    ],
+    'rating_scale' => $ratingScale,
+    'response_schema' => $responseSchema,
     'sections' => $sections,
     'counts' => [
         'sections' => count($sections),
@@ -510,6 +534,15 @@ return [
     ],
     'source' => [
         'type' => 'bundled_fixture',
-        'workbook' => '2026-07-26_ATTP Monitoring Questionnaire.xlsx',
+        'workbook' => 'Copy of 2026-07-26_ATTP Monitoring Questionnaire.xlsx',
+        'sheet' => 'Monitoring Checklist',
+        'revision' => '2026-08-15-attached-copy',
+        'sha256' => '56c06232d5da9f0800e6841d99e7215628224a1cba8eca8f6672f891603db223',
+        'content_sha256' => $contentSha256,
+        'size_bytes' => 24516,
+        'import_warnings' => [
+            "Merged topic range 'B113:B115' stops before the final Gender and Inclusion Compliance question on row 116.",
+            "Merged description range 'C113:C115' stops before the final Gender and Inclusion Compliance question on row 116.",
+        ],
     ],
 ];

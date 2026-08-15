@@ -134,12 +134,15 @@ it('accepts the imported workbook schema and model snapshot field names', functi
     $importedTemplate = require dirname(__DIR__, 2).'/database/data/biannual_monitoring_questionnaire.php';
     $snapshot = $questionnaire->buildSnapshot($importedTemplate);
     $questions = $questionnaire->flattenQuestions($snapshot);
+    $expectedQuestionCount = (int) $importedTemplate['counts']['questions'];
+
+    expect($expectedQuestionCount)->toBe(146);
 
     expect($snapshot['counts'])->toBe([
         'sections' => 7,
         'topics' => 30,
-        'questions' => 142,
-        'scored_questions' => 142,
+        'questions' => $expectedQuestionCount,
+        'scored_questions' => $expectedQuestionCount,
     ])
         ->and($questions[0]['key'])->toBe('question-001')
         ->and($questions[0]['label'])->toBe('Is the consortium structure consistent with the PPA?')

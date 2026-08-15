@@ -99,6 +99,20 @@
                         Questionnaire version {{ $visit->template_version }} is locked to this visit.</p>
                 </div>
                 <div class="basv-hero-actions">
+                    @if ($canManageSchedule)
+                        <a href="{{ route('biannual-site-visits.edit', $visit) }}" class="basv-btn basv-btn-light">
+                            <i class="feather-edit-3"></i> Edit schedule
+                        </a>
+                    @elseif (! $visit->is_active && $visit->hasMutableWorkflowStatus() && auth()->user()?->can('biannual_site_visits.create'))
+                        <form method="POST" action="{{ route('biannual-site-visits.reactivate', $visit) }}"
+                            onsubmit="return confirm('Reactivate this scheduled site visit with all previous responses?')">
+                            @csrf
+                            @method('PATCH')
+                            <button type="submit" class="basv-btn basv-btn-light">
+                                <i class="feather-refresh-cw"></i> Reactivate
+                            </button>
+                        </form>
+                    @endif
                     <a href="{{ route('biannual-site-visits.index') }}" class="basv-btn basv-btn-light">
                         <i class="feather-arrow-left"></i> Register
                     </a>
@@ -112,6 +126,16 @@
 
             @if (session('success'))
                 <div class="basv-alert success"><i class="feather-check-circle me-1"></i>{{ session('success') }}</div>
+            @endif
+            @if (! $visit->is_active)
+                <div class="basv-alert danger">
+                    <i class="feather-slash me-1"></i>
+                    <strong>This scheduled visit is inactive and read-only.</strong>
+                    @if ($visit->deactivation_reason)
+                        Reason: {{ $visit->deactivation_reason }}
+                    @endif
+                    Its questionnaire responses and audit history remain available.
+                </div>
             @endif
             @if ($errors->any())
                 <div class="basv-alert danger">
@@ -139,7 +163,10 @@
                 </div>
                 <div class="basv-stat">
                     <span class="basv-stat-icon"><i class="feather-activity"></i></span>
-                    <div><strong style="font-size:.88rem">{{ ucfirst(str_replace('_', ' ', $status)) }}</strong><span>Workflow status</span></div>
+                    <div>
+                        <strong style="font-size:.88rem">{{ $visit->is_active ? ucfirst(str_replace('_', ' ', $status)) : 'Inactive' }}</strong>
+                        <span>{{ $visit->is_active ? 'Workflow status' : 'Lifecycle status' }}</span>
+                    </div>
                 </div>
             </div>
 
