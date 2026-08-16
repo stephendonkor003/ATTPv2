@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
-use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
+use App\Models\Procurement;
 use App\Services\ProcurementSubmissionScreeningService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ProcurementSubmissionController extends Controller
 {
@@ -17,19 +19,53 @@ class ProcurementSubmissionController extends Controller
     /**
      * List all procurement submissions
      */
-    public function index(ProcurementSubmissionScreeningService $screeningService)
+    public function index(Request $request, ProcurementSubmissionScreeningService $screeningService)
     {
         $scopedNodeIds = $this->scopedNodeIds();
         if ($scopedNodeIds !== null && empty($scopedNodeIds)) {
             abort(403, 'You do not have access to submissions.');
         }
 
-        $submissions = $this->submissionsQuery($scopedNodeIds)
-            ->latest()
-            ->paginate(20);
+        $procurementGroups = $this->procurementGroupsQuery($scopedNodeIds)->get();
+        $overview = [
+            'procurements' => $procurementGroups->count(),
+            'submissions' => (int) $procurementGroups->sum('submissions_count'),
+            'screened' => (int) $procurementGroups->sum('screening_success_count'),
+            'needs_attention' => (int) $procurementGroups->sum(
+                fn (Procurement $procurement): int => max(
+                    0,
+                    (int) $procurement->submissions_count - (int) $procurement->screening_records_count
+                ) + (int) $procurement->screening_failed_count
+            ),
+        ];
+
+        $selectedProcurement = null;
+        $submissions = collect();
+        $statusDistribution = collect();
+
+        if ($request->filled('procurement_id')) {
+            $selectedProcurement = $this->resolveScopedProcurement(
+                (string) $request->query('procurement_id'),
+                $scopedNodeIds
+            );
+
+            $submissions = $this->submissionsQuery($scopedNodeIds)
+                ->where('procurement_id', $selectedProcurement->id)
+                ->orderByDesc('submitted_at')
+                ->orderByDesc('created_at')
+                ->get();
+
+            $statusDistribution = $submissions
+                ->countBy(fn (FormSubmission $submission): string => $submission->status ?: 'unknown')
+                ->sortDesc();
+        }
 
         return view('procurement.procuresubmissions.index', [
+            'procurementGroups' => $procurementGroups,
+            'selectedProcurement' => $selectedProcurement,
             'submissions' => $submissions,
+            'overview' => $overview,
+            'statusDistribution' => $statusDistribution,
             'screeningConfigured' => $screeningService->isConfigured(),
         ]);
     }
@@ -185,18 +221,28 @@ class ProcurementSubmissionController extends Controller
             return back()->with('error', 'International screening is not configured.');
         }
 
-        $submissions = FormSubmission::with(['values', 'submitter'])
-            ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
-                $query->whereHas('procurement', function ($proc) use ($scopedNodeIds) {
-                    $proc->whereIn('governance_node_id', $scopedNodeIds)
-                        ->whereNotNull('governance_node_id');
-                });
-            })
+        $selectedProcurement = $request->filled('procurement_id')
+            ? $this->resolveScopedProcurement((string) $request->input('procurement_id'), $scopedNodeIds)
+            : null;
+
+        $submissions = $this->applySubmissionScope(
+            FormSubmission::with(['values', 'submitter']),
+            $scopedNodeIds
+        )
+            ->when(
+                $selectedProcurement,
+                fn ($query) => $query->where('procurement_id', $selectedProcurement->id)
+            )
             ->latest()
             ->get();
 
         if ($submissions->isEmpty()) {
-            return back()->with('error', 'No submissions were available for international screening.');
+            return back()->with(
+                'error',
+                $selectedProcurement
+                    ? 'No submissions were available for this procurement.'
+                    : 'No submissions were available for international screening.'
+            );
         }
 
         $summary = $screeningService->screenSubmissions($submissions, $request->user(), 'bulk');
@@ -204,7 +250,8 @@ class ProcurementSubmissionController extends Controller
         return back()->with(
             'success',
             sprintf(
-                'International screening finished. %d checked, %d failed, %d skipped.',
+                'International screening%s finished. %d checked, %d failed, %d skipped.',
+                $selectedProcurement ? ' for '.$selectedProcurement->title : '',
                 $summary['checked'],
                 $summary['failed'],
                 $summary['skipped']
@@ -260,18 +307,70 @@ class ProcurementSubmissionController extends Controller
 
     private function submissionsQuery(?array $scopedNodeIds)
     {
-        return FormSubmission::with([
+        return $this->applySubmissionScope(FormSubmission::with([
             'procurement',
             'form',
+            'submitter',
             'screening',
             'values' => function ($query) {
                 $query->whereIn('field_key', ['official_name', 'official_email']);
             },
-        ])->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+        ]), $scopedNodeIds);
+    }
+
+    private function procurementGroupsQuery(?array $scopedNodeIds)
+    {
+        return $this->applyProcurementNodeScope(Procurement::query(), $scopedNodeIds)
+            ->whereHas('submissions')
+            ->withCount([
+                'submissions',
+                'submissions as screening_records_count' => fn ($query) => $query->whereHas('screening'),
+                'submissions as screening_success_count' => fn ($query) => $query->whereHas(
+                    'screening',
+                    fn ($screening) => $screening->where('request_status', 'success')
+                ),
+                'submissions as screening_failed_count' => fn ($query) => $query->whereHas(
+                    'screening',
+                    fn ($screening) => $screening->where('request_status', 'error')
+                ),
+                'submissions as fit_count' => fn ($query) => $query->whereHas(
+                    'screening',
+                    fn ($screening) => $screening->where('review_decision', 'fit')
+                ),
+                'submissions as not_fit_count' => fn ($query) => $query->whereHas(
+                    'screening',
+                    fn ($screening) => $screening->where('review_decision', 'not_fit')
+                ),
+            ])
+            ->withMax('submissions as latest_submission_at', 'submitted_at')
+            ->orderByDesc('latest_submission_at')
+            ->orderBy('title');
+    }
+
+    private function resolveScopedProcurement(string $procurementId, ?array $scopedNodeIds): Procurement
+    {
+        abort_unless(Str::isUuid($procurementId), 404);
+
+        return $this->procurementGroupsQuery($scopedNodeIds)
+            ->whereKey($procurementId)
+            ->firstOrFail();
+    }
+
+    private function applySubmissionScope($query, ?array $scopedNodeIds)
+    {
+        return $query->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
             $query->whereHas('procurement', function ($proc) use ($scopedNodeIds) {
                 $proc->whereIn('governance_node_id', $scopedNodeIds)
                     ->whereNotNull('governance_node_id');
             });
+        });
+    }
+
+    private function applyProcurementNodeScope($query, ?array $scopedNodeIds)
+    {
+        return $query->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
+            $query->whereIn('governance_node_id', $scopedNodeIds)
+                ->whereNotNull('governance_node_id');
         });
     }
 
