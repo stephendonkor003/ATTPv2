@@ -26,8 +26,8 @@ final class ExternalProcurementSubmissionsSeeder extends Seeder
         }
 
         $this->command?->info($dryRun
-            ? 'Preflighting external procurement submissions (no writes)...'
-            : 'Importing external procurement submissions...');
+            ? 'Preflighting authoritative external procurement synchronization (no writes)...'
+            : 'Synchronizing external procurement submissions...');
 
         $summary = app(ExternalProcurementSubmissionImporter::class)->import(
             self::PROCUREMENT_TITLE,
@@ -46,10 +46,15 @@ final class ExternalProcurementSubmissionsSeeder extends Seeder
         );
 
         if ($dryRun) {
-            $this->command?->warn('Dry-run complete. No users, submissions, values, audit rows, or files were created.');
+            $this->command?->warn('Dry-run complete. No users, submissions, values, audit rows, or files were created, changed, or removed.');
         } else {
-            $this->command?->info('External procurement submission import completed successfully.');
-            $this->command?->line('Source folders were preserved. Placeholder vendor accounts are disabled and no mail was sent.');
+            $this->command?->info('External procurement submission synchronization completed successfully.');
+            $this->command?->line('Changed importer-owned document sets were replaced, unchanged submissions were reused, source folders were preserved, and no mail was sent.');
+            if (($summary['failed_file_deletions'] ?? 0) > 0) {
+                $this->command?->warn(
+                    'Database reconciliation committed, but one or more obsolete packages could not be removed. Review the failed file deletion count.'
+                );
+            }
         }
     }
 

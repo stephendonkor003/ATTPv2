@@ -115,6 +115,46 @@ function externalProcurementImporterCaptureFailure(callable $callback): ?Throwab
     return null;
 }
 
+function externalProcurementImporterRemoveTemporaryArchive(string $path): void
+{
+    $temporaryRoot = realpath(sys_get_temp_dir());
+    $archivePath = realpath($path);
+
+    if ($archivePath === false) {
+        return;
+    }
+
+    $archiveName = basename($archivePath);
+    $hasExpectedName = str_starts_with($archiveName, 'attp-procurement-')
+        || (PHP_OS_FAMILY === 'Windows' && preg_match('/\Aatt[a-z0-9]+\.tmp\z/i', $archiveName) === 1);
+
+    if (
+        $temporaryRoot === false
+        || dirname($archivePath) !== $temporaryRoot
+        || ! $hasExpectedName
+    ) {
+        throw new LogicException("Refusing to remove unexpected temporary archive [{$path}].");
+    }
+
+    unlink($archivePath);
+}
+
+function externalProcurementImporterMethodSource(string $source, string $method): string
+{
+    $pattern = '/\b(?:public|protected|private) function\s+'.preg_quote($method, '/').'\s*\(/';
+    if (preg_match($pattern, $source, $match, PREG_OFFSET_CAPTURE) !== 1) {
+        throw new RuntimeException("Importer method [{$method}] was not found.");
+    }
+
+    $start = $match[0][1];
+    $nextPattern = '/\n    (?:public|protected|private) function\s+\w+\s*\(/';
+    $next = preg_match($nextPattern, $source, $nextMatch, PREG_OFFSET_CAPTURE, $start + 1) === 1
+        ? $nextMatch[0][1]
+        : strlen($source);
+
+    return substr($source, $start, $next - $start);
+}
+
 it('inspects one applicant folder into a deterministic PDF manifest', function () {
     $source = externalProcurementImporterFixtureDirectory();
     $relativePath = 'Expression of Interest.pdf';
@@ -225,6 +265,80 @@ it('uses the deterministic complete ZIP hash as a multi-file package identity', 
     }
 });
 
+it('packages every source PDF once with an exact deterministic ZIP manifest', function () {
+    if (! class_exists(ZipArchive::class)) {
+        $this->markTestSkipped('PHP ZIP support is required to inspect package contents.');
+    }
+
+    $source = externalProcurementImporterFixtureDirectory();
+    $archivePath = null;
+    $zip = new ZipArchive;
+    $zipIsOpen = false;
+
+    try {
+        externalProcurementImporterWritePdf(
+            $source.DIRECTORY_SEPARATOR.'Complete Applicant'.DIRECTORY_SEPARATOR.'Technical Proposal.pdf'
+        );
+        externalProcurementImporterWritePdf(
+            $source.DIRECTORY_SEPARATOR.'Complete Applicant'.DIRECTORY_SEPARATOR.'Financial Proposal.pdf'
+        );
+
+        $importer = new ExternalProcurementSubmissionImporter;
+        $manifest = $importer->inspectSource($source);
+        $applicant = externalProcurementImporterEntryBySlug($manifest, 'complete-applicant');
+        $buildArchive = new ReflectionMethod($importer, 'buildArchive');
+        $archivePath = $buildArchive->invoke($importer, $applicant);
+        $zipIsOpen = $zip->open($archivePath, ZipArchive::RDONLY) === true;
+
+        expect($zipIsOpen)->toBeTrue();
+
+        $entryNames = [];
+        for ($index = 0; $index < $zip->numFiles; $index++) {
+            $entryNames[] = $zip->getNameIndex($index);
+        }
+
+        $sourceFilesByPath = [];
+        foreach ($applicant['files'] as $file) {
+            $sourceFilesByPath[$file['relative_path']] = $file;
+        }
+
+        $packageManifest = json_decode(
+            $zip->getFromName('_external-import-manifest.json'),
+            true,
+            512,
+            JSON_THROW_ON_ERROR
+        );
+
+        expect($entryNames)->toBe([
+            'Financial Proposal.pdf',
+            'Technical Proposal.pdf',
+            '_external-import-manifest.json',
+        ])
+            ->and($zip->numFiles)->toBe(count($applicant['files']) + 1)
+            ->and(hash('sha256', $zip->getFromName('Financial Proposal.pdf')))
+            ->toBe($sourceFilesByPath['Financial Proposal.pdf']['sha256'])
+            ->and(hash('sha256', $zip->getFromName('Technical Proposal.pdf')))
+            ->toBe($sourceFilesByPath['Technical Proposal.pdf']['sha256'])
+            ->and($packageManifest)->toMatchArray([
+                'applicant' => 'Complete Applicant',
+                'email' => 'complete-applicant@africathinktank.africa',
+                'manifest_sha256' => $applicant['manifest_hash'],
+            ])
+            ->and(array_column($packageManifest['files'], 'path'))->toBe([
+                'Financial Proposal.pdf',
+                'Technical Proposal.pdf',
+            ]);
+    } finally {
+        if ($zipIsOpen) {
+            $zip->close();
+        }
+        if (is_string($archivePath)) {
+            externalProcurementImporterRemoveTemporaryArchive($archivePath);
+        }
+        externalProcurementImporterRemoveFixtureDirectory($source);
+    }
+});
+
 it('revalidates every multi-PDF source checksum before packaging', function () {
     if (! class_exists(ZipArchive::class)) {
         $this->markTestSkipped('PHP ZIP support is required to verify package revalidation.');
@@ -294,6 +408,59 @@ it('matches prior audit metadata exactly while ignoring associative key order', 
     expect($matchesExactly->invoke($importer, $expected, $sameWithReorderedKeys))->toBeTrue()
         ->and($matchesExactly->invoke($importer, $expected, $withUnexpectedKey))->toBeFalse()
         ->and($matchesExactly->invoke($importer, $expected, $withReorderedFileList))->toBeFalse();
+});
+
+it('uses stable submission identity and explicit ownership metadata across reruns', function () {
+    $source = externalProcurementImporterFixtureDirectory();
+
+    try {
+        externalProcurementImporterWritePdf(
+            $source.DIRECTORY_SEPARATOR.'Stable Applicant'.DIRECTORY_SEPARATOR.'Expression of Interest.pdf'
+        );
+
+        $importer = new ExternalProcurementSubmissionImporter;
+        $manifest = $importer->inspectSource($source);
+        $applicant = externalProcurementImporterEntryBySlug($manifest, 'stable-applicant');
+        $procurement = new Procurement;
+        $procurement->id = 'procurement-fixture';
+        $procurement->reference_no = 'REF-001';
+        $attachmentPlans = new ReflectionMethod($importer, 'attachmentPlans');
+        $plan = $attachmentPlans->invoke($importer, [$applicant], $procurement)[0];
+        $submissionCode = new ReflectionMethod($importer, 'submissionCode');
+        $auditMetadata = new ReflectionMethod($importer, 'auditMetadata');
+        $metadata = $auditMetadata->invoke(
+            $importer,
+            $procurement,
+            $plan,
+            $manifest['manifest_hash']
+        );
+        $expectedCode = 'PROC-EXT-'.strtoupper(substr(hash(
+            'sha256',
+            'procurement-fixture|stable-applicant@africathinktank.africa'
+        ), 0, 12));
+
+        expect(ExternalProcurementSubmissionImporter::OWNERSHIP_MARKER)
+            ->toBe('attp.external-procurement-submission-importer')
+            ->and($plan['submission_code'])->toBe($expectedCode)
+            ->and($submissionCode->invoke(
+                $importer,
+                $procurement,
+                '  STABLE-APPLICANT@AFRICATHINKTANK.AFRICA  '
+            ))->toBe($expectedCode)
+            ->and($metadata)->toMatchArray([
+                'import_version' => 2,
+                'managed_by' => ExternalProcurementSubmissionImporter::OWNERSHIP_MARKER,
+                'batch_manifest_sha256' => $manifest['manifest_hash'],
+                'applicant_manifest_sha256' => $applicant['manifest_hash'],
+                'placeholder_email' => 'stable-applicant@africathinktank.africa',
+                'storage_path' => $plan['storage_path'],
+                'package_sha256' => $plan['package_sha256'],
+                'packaged_as_zip' => false,
+            ])
+            ->and($metadata['source_files'])->toHaveCount(1);
+    } finally {
+        externalProcurementImporterRemoveFixtureDirectory($source);
+    }
 });
 
 it('rejects a one-byte file posing as a PDF with a useful diagnostic', function () {
@@ -371,6 +538,109 @@ it('rejects applicant folders that derive the same email slug', function () {
     }
 });
 
+it('reconciles only proven importer-owned records and keeps identical or unrelated rows intact', function () {
+    $service = file_get_contents(
+        dirname(__DIR__, 2).'/app/Services/ExternalProcurementSubmissionImporter.php'
+    );
+    $preflight = externalProcurementImporterMethodSource($service, 'preflightDatabaseState');
+    $validateManaged = externalProcurementImporterMethodSource($service, 'validateManagedImport');
+    $replaceable = externalProcurementImporterMethodSource($service, 'assertManagedSubmissionReplaceable');
+    $persist = externalProcurementImporterMethodSource($service, 'persist');
+
+    expect($service)
+        ->toContain("public const OWNERSHIP_MARKER = 'attp.external-procurement-submission-importer';")
+        ->toContain('private const IMPORT_VERSION = 2;')
+        ->toContain('private const LEGACY_IMPORT_VERSION = 1;')
+        ->toContain("'managed_by' => self::OWNERSHIP_MARKER")
+        ->and($validateManaged)
+        ->toContain("\$versionTwoKeys = [...\$legacyKeys, 'managed_by'];")
+        ->toContain('! in_array($version, [self::LEGACY_IMPORT_VERSION, self::IMPORT_VERSION], true)')
+        ->toContain("(\$metadata['managed_by'] ?? null) !== self::OWNERSHIP_MARKER")
+        ->toContain("throw new RuntimeException('External-import audit has invalid ownership metadata.')")
+        ->not->toContain('assertManagedSubmissionReplaceable(')
+        ->and($preflight)
+        ->toContain("->where('action', self::AUDIT_ACTION)")
+        ->toContain('$managed = $this->validateManagedImport(')
+        ->toContain('$stale = array_filter(')
+        ->toContain('$owned,')
+        ->toContain('fn (string $email): bool => ! isset($seenPlanEmails[$email])')
+        ->toContain("'unrelated_count' => \$targetSubmissions->count() - count(\$owned)")
+        ->toContain("throw new RuntimeException(\"Existing account is not owned by this import: {\$plan['email']}\")")
+        ->toContain('Submission code conflicts with a non-imported row:')
+        ->toContain('if ($unchanged)')
+        ->toContain("&& \$managed['values_match']")
+        ->toContain('$this->assertStoredPackage($plan, true);')
+        ->toContain('$unchangedCount++')
+        ->and(substr_count($preflight, 'assertManagedSubmissionReplaceable('))->toBe(2)
+        ->and($replaceable)
+        ->toContain('Imported submission has workflow state and cannot be replaced:')
+        ->toContain('Imported submission has additional audit activity:')
+        ->toContain('Imported submission has downstream workflow data in')
+        ->toContain("['evaluation_submissions', 'form_submission_id']")
+        ->toContain("['evaluation_criteria_scores', 'submission_id']")
+        ->toContain("['evaluation_section_scores', 'submission_id']")
+        ->toContain("['site_visits', 'form_submission_id']")
+        ->toContain("['procurement_submission_screenings', 'submission_id']")
+        ->toContain("'awarded_submission_id'")
+        ->and($persist)
+        ->toContain("\$managed = \$preflight['owned'][\$email] ?? null")
+        ->toContain("\$submission = \$managed['submission'];")
+        ->toContain("|| ! \$managed['values_match']")
+        ->toContain("\$counts['reused_submissions']++")
+        ->toContain('if (! $managed || $isChanged)')
+        ->toContain("->where('submission_id', \$submission->id)")
+        ->toContain('$audit->metadata = $expectedMetadata')
+        ->toContain("foreach (\$preflight['stale'] as \$managed)")
+        ->toContain('$audit->delete()')
+        ->toContain('$submission->delete()')
+        ->not->toContain('$user->delete()')
+        ->and(substr_count($persist, '$submission->delete()'))->toBe(1);
+});
+
+it('preflights before writes and removes obsolete managed packages only after commit', function () {
+    $service = file_get_contents(
+        dirname(__DIR__, 2).'/app/Services/ExternalProcurementSubmissionImporter.php'
+    );
+    $import = externalProcurementImporterMethodSource($service, 'import');
+    $persist = externalProcurementImporterMethodSource($service, 'persist');
+    $cleanup = externalProcurementImporterMethodSource($service, 'deleteObsoletePackages');
+    $firstPreflight = strpos($import, '$preflight = $this->preflightDatabaseState(');
+    $dryRunReturn = strpos($import, 'if ($dryRun)');
+    $lockedPreflight = strrpos($import, '$preflight = $this->preflightDatabaseState(');
+    $preparePackages = strpos($import, '$plan[\'package_sha256\'] = $this->prepareAttachment(');
+    $persistDatabase = strpos($import, '$counts = $this->persist(');
+    $markCommitted = strpos($import, '$databaseCommitted = true;');
+    $deleteObsolete = strpos($import, '$cleanup = $this->deleteObsoletePackages(');
+
+    expect($import)
+        ->toContain("'planned_replacements' => \$preflight['changed_count']")
+        ->toContain("'planned_unchanged' => \$preflight['unchanged_count']")
+        ->toContain("'planned_removals' => \$preflight['stale_count']")
+        ->toContain("'preserved_unrelated_submissions' => \$preflight['unrelated_count']")
+        ->toContain('$databaseCommitted = false;')
+        ->toContain('if (! $databaseCommitted)')
+        ->toContain('foreach (array_reverse($createdPaths) as $createdPath)')
+        ->not->toContain("\$disk->delete(\$preflight['obsolete_paths'])")
+        ->and(substr_count($import, '$this->preflightDatabaseState('))->toBe(2)
+        ->and($firstPreflight)->toBeLessThan($dryRunReturn)
+        ->and($dryRunReturn)->toBeLessThan($lockedPreflight)
+        ->and($lockedPreflight)->toBeLessThan($preparePackages)
+        ->and($preparePackages)->toBeLessThan($persistDatabase)
+        ->and($persistDatabase)->toBeLessThan($markCommitted)
+        ->and($markCommitted)->toBeLessThan($deleteObsolete)
+        ->and($persist)
+        ->toContain('DB::transaction(function () use (')
+        ->toContain('$this->preflightDatabaseState(')
+        ->toContain('$batchManifestHash,')
+        ->toContain('true')
+        ->and($cleanup)
+        ->toContain('$active = array_fill_keys($activePaths, true)')
+        ->toContain("preg_quote((string) \$procurement->id, '~')")
+        ->toContain('isset($active[$path]) || $this->storedPathIsReferenced($path)')
+        ->toContain('hash_equals($matches[1], $hash)')
+        ->toContain('$disk->delete($path)');
+});
+
 it('keeps the external import explicit, atomic, idempotent, archived, and private', function () {
     $root = dirname(__DIR__, 2);
     $service = file_get_contents($root.'/app/Services/ExternalProcurementSubmissionImporter.php');
@@ -402,14 +672,16 @@ it('keeps the external import explicit, atomic, idempotent, archived, and privat
         ->toContain("fopen(\$targetPath, 'xb')")
         ->toContain('assertStoredPackage($plan, true)')
         ->toContain('if ($audit->user_id !== null)')
-        ->toContain('metadataMatchesExactly($expectedMetadata, (array) $audit->metadata)')
-        ->toContain('$targetImportAudits = ProcurementAuditLog::query()')
-        ->toContain('$verifiedAuditIds->sort()->values()->all()')
-        ->toMatch('/\$targetImportAudits\s*=\s*ProcurementAuditLog::query\(\)\s*->where\(\'procurement_id\', \$procurement->id\)\s*->where\(\'action\', self::AUDIT_ACTION\)\s*->get\(\);/s')
+        ->toContain("metadataMatchesExactly(\$expectedMetadata, (array) \$managed['audit']->metadata)")
+        ->toContain('assertStoredManagedPackage($metadata)')
         ->toContain('hash_equals($expectedHash, (string) $storedHash)')
         ->toMatch('/Storage::disk\((?:[\'\"]local[\'\"]|\$this->[^)]+)\)/')
         ->and(substr_count($service, '$this->assertSourceFilesUnchanged($plan);'))->toBe(2)
-        ->and(substr_count($service, '$audit->user_id !== null'))->toBe(2)
+        ->and(substr_count($service, '$audit->user_id !== null'))->toBe(1)
+        ->and(substr_count(
+            $service,
+            'if (is_link($absolutePath) || ! is_file($absolutePath) || ! is_readable($absolutePath))'
+        ))->toBe(2)
         ->and($seeder)
         ->toContain('ExternalProcurementSubmissionImporter')
         ->toContain('EXTERNAL_PROCUREMENT_IMPORT_DRY_RUN')

@@ -22,7 +22,7 @@ Do not add loose files at the source root, ZIP files, or non-PDF documents. The 
 ## Imported accounts and documents
 
 - The seeder generates `Str::slug(<folder name>)@africathinktank.africa`; for example, a folder named `Example Firm` produces `example-firm@africathinktank.africa`. A folder whose slug cannot fit a valid email address is rejected instead of being silently changed.
-- There is deliberately no numeric suffix or silent fallback. An empty or duplicate folder slug or duplicate derived email aborts the complete import. An existing email is reusable only when its user, deterministic submission, exact values, package checksum, and import audit prove that it came from an earlier identical run; every other user or discussion-participant collision aborts before writes.
+- There is deliberately no numeric suffix or silent fallback. An empty or duplicate folder slug or duplicate derived email aborts the complete import. An existing email is reusable only when its user, deterministic submission, package checksum, and strict import audit prove that it is owned by this importer; every other user or discussion-participant collision aborts before writes.
 - Placeholder addresses are internal import identifiers, not verified contact addresses. Do not send credentials or operational email to them.
 - Generated users are vendor accounts created disabled. The import does not activate them or give the legacy applicant login access.
 - The placeholder domain is fixed by this migration and cannot be overridden on a live run.
@@ -31,7 +31,7 @@ Do not add loose files at the source root, ZIP files, or non-PDF documents. The 
 
 The importer validates the complete source inventory and all database identity collisions before importing. Every document must be a readable, non-empty regular `.pdf` file no larger than 20 MB, with a PDF signature in its header. It rejects nested directories, symbolic links, non-PDF files, case-insensitive duplicate names, more than 200 MB per applicant, more than 500 applicants or 5,000 PDFs, and batches larger than 2 GB. Renaming a corrupt file to `.pdf` does not satisfy validation.
 
-The target must resolve to exactly one procurement with the title above and exactly one active, approved submission form. That form must contain `official_name` (`text`), `official_email` (`email`), and `submit_eoi` (`file`). Any existing non-import submission on the target procurement blocks the import.
+The target must resolve to exactly one procurement with the title above and exactly one active, approved submission form. That form must contain `official_name` (`text`), `official_email` (`email`), and `submit_eoi` (`file`). Unrelated/manual submissions are preserved, but an email or deterministic submission-code collision with one of them blocks the complete run.
 
 The selected target currently has reference `ET-AUC-526435-CS-LCS`, while some source filenames carry the earlier reference `ET-AUC-494958-CS-QCBS`. This import deliberately follows the exact procurement title mandated for this migration and records the target reference in each audit entry; it never chooses a procurement from a filename.
 
@@ -39,7 +39,7 @@ Approved exclusion: `Africa Corporate Advisors/19_Submission - EOI Africa Think 
 
 ## 1. Back up and dry-run
 
-Confirm the exact procurement exists once, its active approved submission form is correct, `resources/Submissions` contains the expected deployed source, and a database plus `storage/app/private` backup is restorable.
+Confirm the exact procurement exists once, its active approved submission form is correct, `resources/Submissions` contains the complete authoritative applicant/document set, and a database plus `storage/app/private` backup is restorable. Removing an applicant folder from this source plans removal of that importer-owned submission.
 
 Linux/macOS shell:
 
@@ -63,11 +63,11 @@ try {
 }
 ```
 
-Set `EXTERNAL_PROCUREMENT_SUBMISSIONS_PATH` in the same process when a path override is required. Review the reported target, folder/file counts, generated identities, packaging plan, and all validation errors. A dry run must not create database rows or stored import artifacts.
+Set `EXTERNAL_PROCUREMENT_SUBMISSIONS_PATH` in the same process when a path override is required. Review the target and the reported `planned new applicants`, `planned replacements`, `planned unchanged`, and `planned removals` counts. A dry run must not create database rows or stored import artifacts. Stop if a removal or replacement was not intended.
 
-## 2. Run the import
+## 2. Run the authoritative synchronization
 
-Dry-run is the safe default. The write run requires an explicit `EXTERNAL_PROCUREMENT_IMPORT_DRY_RUN=false` in the same command process:
+Dry-run is the safe default. The write run requires an explicit `EXTERNAL_PROCUREMENT_IMPORT_DRY_RUN=false` in the same command process. This write run adds new applicant folders, replaces changed importer-owned document sets, and removes importer-owned submissions whose folders are no longer present:
 
 ```bash
 EXTERNAL_PROCUREMENT_IMPORT_DRY_RUN=false \
@@ -91,22 +91,28 @@ try {
 
 Stop if the command reports a different target, an ambiguous target, a validation failure, or a non-zero exit code. Do not weaken PDF validation to make the run pass.
 
-## Idempotent reruns
+## Replacement and duplicate prevention
 
-Each submission code is deterministic: `PROC-EXT-` followed by the first 12 uppercase characters of the SHA-256 hash of `<procurement UUID>|<placeholder email>`. Rerunning with the same target, folder names, files, and seeder version verifies the prior user, submission values, audit provenance, manifest, and target package, then reuses the exact records and files. It does not overwrite conflicting values or packages. Any source drift, unrelated/partial target data, or identity collision aborts instead of silently replacing data or creating a duplicate.
+Each submission code is deterministic: `PROC-EXT-` followed by the first 12 uppercase characters of the SHA-256 hash of `<procurement UUID>|<placeholder email>`. A completely unchanged rerun verifies and reuses the same user, submission, values, audit, and package; it creates no duplicate submission.
 
-Always perform another dry run first. Renaming a folder changes the deterministic identity and will be treated as a different or conflicting import.
+When one or more PDFs change, are added, removed, or renamed inside an existing applicant folder, the importer builds and verifies the complete new PDF/ZIP package first. Inside one locked database transaction it keeps the applicant and submission identities, deletes that submission's old form-value rows, recreates the complete value set, and updates the importer audit to the new manifest. Only after the transaction commits does it delete the previous content-addressed package, and only when that exact safe path is no longer referenced anywhere. A value-only drift is repaired through the same guarded replacement path.
 
-An idempotent rerun is not a rollback and should not be used to undo reviewed submissions or downstream evaluation work.
+When an applicant folder is removed, only a submission proven to be owned by this importer can be removed; unrelated/manual submissions and users are preserved. Re-adding a previously removed folder can require manual reconciliation of the retained placeholder account, so review planned removals carefully.
+
+A changed or removed submission is rejected if it has been screened, assigned, evaluated, visited, awarded, negotiated, otherwise audited, or moved into another workflow state. Conflicting/tampered provenance, a missing or corrupt prior package, and unrelated email/code collisions also abort before replacement. These gates prevent a rerun from destroying reviewed work or adopting records it did not create.
+
+Always perform another dry run first. Renaming a folder changes its placeholder email and deterministic identity; it is treated as a removal plus a new applicant, not as an automatic rename.
+
+An authoritative rerun is not a rollback and must not be used to undo reviewed submissions or downstream evaluation work.
 
 ## Post-import verification
 
-For the approved import scope, expect 20 applicant folders and 52 PDFs: 14 single-PDF submissions and six multi-file ZIP packages. Verify:
+For the approved 2026-08-16 baseline, expect 20 applicant folders and 52 PDFs: 14 direct PDF packages plus six ZIP packages containing the other 38 PDFs and six package manifests. If the approved source changes later, use the new dry-run counts instead of assuming this baseline remains current. Verify:
 
 - all imported submissions belong to the exact procurement title above and its intended form;
 - there is one submission per source applicant folder, with no duplicate submission identities;
 - all generated vendor accounts are disabled and use `@africathinktank.africa`;
-- every stored PDF downloads and opens, and each generated ZIP contains the expected applicant-relative source paths plus `_external-import-manifest.json`;
+- every direct PDF downloads and opens, and each generated ZIP contains every expected applicant PDF exactly once plus `_external-import-manifest.json`;
 - the procurement UI shows the imported submissions without changing the target procurement's publication or evaluation state; and
 - no applicant credential or notification email was queued for placeholder addresses.
 
@@ -114,6 +120,6 @@ Record the command output, source inventory checksum/counts, deployed commit, op
 
 ## Rollback caveats
 
-There is no general `down` operation for a successful seeder run. During an ordinary failed run, all database writes are enclosed in one transaction and the importer deletes only temporary/final artifacts created by that run; it never removes source or pre-existing target paths. A process kill, host failure, or later manual cleanup can still leave database/storage state that needs inspection, and deleting submissions after reviewers start work can cascade into screening, evaluation, or audit records.
+There is no general `down` operation for a successful seeder run. During an ordinary failed run, all database writes are enclosed in one transaction and the importer deletes only new artifacts created by that failed run; the prior database rows and packages remain intact. After a successful replacement commit, obsolete importer packages are checksum/path/reference checked and then removed. If that cleanup fails, the command reports `failed file deletions`; the database replacement has already committed and the old file must be reviewed as an unreferenced artifact. Source files are never removed or modified.
 
 The preferred rollback is restoration of the coordinated pre-import database and private-storage backups. If restoration is impossible, prepare and review a targeted cleanup using the import's deterministic markers: remove only its form-submission values, submissions, generated storage artifacts, and placeholder users that have no other references. Never delete the target procurement or the legacy source folders. Take another backup before any cleanup and repeat the post-import checks afterward.
