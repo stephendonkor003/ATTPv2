@@ -60,22 +60,6 @@ final class ExternalProcurementSubmissionsSeeder extends Seeder
             return $configured;
         }
 
-        $candidates = [
-            storage_path('app/private/submissions'),
-            storage_path('app/private/Submissions'),
-        ];
-
-        $existing = collect($candidates)
-            ->filter(fn (string $candidate): bool => is_dir($candidate))
-            ->unique(fn (string $candidate): string => realpath($candidate) ?: $candidate)
-            ->values();
-
-        if ($existing->count() !== 1) {
-            throw new RuntimeException(
-                'Could not resolve one submissions source directory. Set EXTERNAL_PROCUREMENT_SUBMISSIONS_PATH explicitly.'
-            );
-        }
-
-        return $existing->first();
+        return resource_path('Submissions');
     }
 }

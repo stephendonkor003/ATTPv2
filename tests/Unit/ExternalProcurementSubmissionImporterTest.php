@@ -376,6 +376,7 @@ it('keeps the external import explicit, atomic, idempotent, archived, and privat
     $service = file_get_contents($root.'/app/Services/ExternalProcurementSubmissionImporter.php');
     $seeder = file_get_contents($root.'/database/seeders/ExternalProcurementSubmissionsSeeder.php');
     $databaseSeeder = file_get_contents($root.'/database/seeders/DatabaseSeeder.php');
+    $gitignore = file_get_contents($root.'/.gitignore');
     $inspectSource = new ReflectionMethod(ExternalProcurementSubmissionImporter::class, 'inspectSource');
     $import = new ReflectionMethod(ExternalProcurementSubmissionImporter::class, 'import');
 
@@ -416,10 +417,13 @@ it('keeps the external import explicit, atomic, idempotent, archived, and privat
         ->toContain('$dryRun = true;')
         ->toContain('FILTER_NULL_ON_FAILURE')
         ->toContain('$dryRun')
-        ->toContain('->unique(fn (string $candidate): string => realpath($candidate) ?: $candidate)')
-        ->not->toContain('->map(fn (string $candidate): string => realpath(')
+        ->toContain("return resource_path('Submissions');")
+        ->not->toContain('storage_path(')
+        ->not->toContain('realpath(')
         ->not->toContain('DEFAULT_EMAIL_DOMAIN')
         ->not->toContain('EXTERNAL_PROCUREMENT_APPLICANT_DOMAIN')
         ->and($databaseSeeder)
-        ->not->toContain('ExternalProcurementSubmissionsSeeder::class');
+        ->not->toContain('ExternalProcurementSubmissionsSeeder::class')
+        ->and($gitignore)
+        ->not->toContain('!/storage/app/private/Submissions');
 });

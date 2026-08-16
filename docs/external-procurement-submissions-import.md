@@ -8,12 +8,7 @@ The importer is intentionally not part of `DatabaseSeeder`. Run only the explici
 
 ## Source layout
 
-Without an override, the seeder resolves exactly one of these directories:
-
-1. `storage/app/private/submissions`
-2. `storage/app/private/Submissions`
-
-If both directories exist, or neither exists, resolution fails; set `EXTERNAL_PROCUREMENT_SUBMISSIONS_PATH` explicitly. The source must have one immediate directory per external applicant and one or more PDF files directly inside it:
+Without an override, the seeder reads `resources/Submissions`. This versioned import source is deliberately separate from `storage/app/private`, so deploying it cannot replace other private server files. Set `EXTERNAL_PROCUREMENT_SUBMISSIONS_PATH` only when an explicit alternative location is required. The source must have one immediate directory per external applicant and one or more PDF files directly inside it:
 
 ```text
 <source-root>/
@@ -40,11 +35,11 @@ The target must resolve to exactly one procurement with the title above and exac
 
 The selected target currently has reference `ET-AUC-526435-CS-LCS`, while some source filenames carry the earlier reference `ET-AUC-494958-CS-QCBS`. This import deliberately follows the exact procurement title mandated for this migration and records the target reference in each audit entry; it never chooses a procurement from a filename.
 
-Approved exclusion: `Africa Corporate Advisors/19_Submission - EOI Africa Think Tank Resource Mobilisation ver 15 May 2026 Final.pdf` is only one byte and fails PDF validation. The applicant was explicitly excluded on 2026-08-16 by moving the entire folder, without deleting it, to `storage/app/private/external-procurement-submissions-excluded/Africa Corporate Advisors`. Repeat that recoverable quarantine step on the live server before its dry-run. The seeder does not silently skip invalid applicants and will fail if this folder remains under the configured source root.
+Approved exclusion: `Africa Corporate Advisors/19_Submission - EOI Africa Think Tank Resource Mobilisation ver 15 May 2026 Final.pdf` is only one byte and fails PDF validation. The applicant was explicitly excluded on 2026-08-16. Its folder remains preserved locally at `storage/app/private/external-procurement-submissions-excluded/Africa Corporate Advisors`, outside Git and outside the import source. It is not included in `resources/Submissions`, so a normal deployment contains only the approved 20 applicants. The seeder does not silently skip invalid applicants and will fail if this folder is later added to the configured source root.
 
 ## 1. Back up and dry-run
 
-Confirm the exact procurement exists once, its active approved submission form is correct, the source is mounted read-only if practical, and a database plus `storage/app/private` backup is restorable.
+Confirm the exact procurement exists once, its active approved submission form is correct, `resources/Submissions` contains the expected deployed source, and a database plus `storage/app/private` backup is restorable.
 
 Linux/macOS shell:
 
