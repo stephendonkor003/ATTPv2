@@ -91,6 +91,19 @@ try {
 
 Stop if the command reports a different target, an ambiguous target, a validation failure, or a non-zero exit code. Do not weaken PDF validation to make the run pass.
 
+### Linux server ownership
+
+Run the write seeder as the same operating-system user that serves PHP (normally `www-data` on Ubuntu). This ensures that the authenticated download route can read the private packages after import:
+
+```bash
+sudo -u www-data env EXTERNAL_PROCUREMENT_IMPORT_DRY_RUN=false \
+  php artisan db:seed \
+  --class='Database\Seeders\ExternalProcurementSubmissionsSeeder' \
+  --force
+```
+
+Running the seeder as `root` can create private directories that PHP-FPM cannot traverse. The browser then receives a non-leaking 404 even though the package exists. Do not recursively change all of `storage`; inspect and repair only `storage/app/private/procurement_submissions/external-imports/<procurement UUID>`. On servers with ACL support, grant the PHP user traversal on its parent directories and read access only to that procurement's import directory. Future imports should still run as the PHP user.
+
 ## Replacement and duplicate prevention
 
 Each submission code is deterministic: `PROC-EXT-` followed by the first 12 uppercase characters of the SHA-256 hash of `<procurement UUID>|<placeholder email>`. A completely unchanged rerun verifies and reuses the same user, submission, values, audit, and package; it creates no duplicate submission.

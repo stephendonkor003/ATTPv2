@@ -290,11 +290,25 @@
                                         {{-- FILE --}}
                                         @case('file')
                                             @if ($valueObj && $value)
-                                                <a href="{{ route('procurement.submissions.values.download', ['submission' => $submission->id, 'value' => $valueObj->id]) }}" target="_blank"
+                                                @php
+                                                    $isDocumentPackage = Str::lower(pathinfo((string) $value, PATHINFO_EXTENSION)) === 'zip';
+                                                    $documentUrl = route('procurement.submissions.values.download', [
+                                                        'submission' => $submission->id,
+                                                        'value' => $valueObj->id,
+                                                        ...($isDocumentPackage ? ['download' => 1] : []),
+                                                    ], false);
+                                                @endphp
+                                                <a href="{{ $documentUrl }}"
+                                                    @unless ($isDocumentPackage) target="_blank" rel="noopener" @endunless
                                                     class="btn btn-sm btn-outline-primary">
-                                                    <i class="feather-paperclip me-1"></i>
-                                                    View Attachment
+                                                    <i class="{{ $isDocumentPackage ? 'feather-download' : 'feather-external-link' }} me-1"></i>
+                                                    {{ $isDocumentPackage ? 'Download document package' : 'View document' }}
                                                 </a>
+                                                @if ($isDocumentPackage)
+                                                    <small class="d-block mt-2 text-muted">
+                                                        ZIP package containing all documents uploaded for this submission.
+                                                    </small>
+                                                @endif
                                             @else
                                                 —
                                             @endif

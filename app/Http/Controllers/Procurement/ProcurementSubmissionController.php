@@ -9,6 +9,7 @@ use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
 use App\Services\ProcurementSubmissionScreeningService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -290,7 +291,29 @@ class ProcurementSubmissionController extends Controller
             }
         }
 
-        abort_unless($privateDisk->exists($path), 404, 'File missing on disk.');
+        if (! $privateDisk->exists($path)) {
+            Log::warning('Procurement submission attachment is unavailable on the private disk.', [
+                'submission_id' => $submission->id,
+                'value_id' => $value->id,
+                'storage_path' => $path,
+                'absolute_path' => $privateDisk->path($path),
+                'disk_root' => config('filesystems.disks.local.root'),
+            ]);
+
+            abort(404, 'File missing on disk.');
+        }
+
+        $absolutePath = $privateDisk->path($path);
+        if (is_link($absolutePath) || ! is_file($absolutePath) || ! is_readable($absolutePath)) {
+            Log::warning('Procurement submission attachment exists but is not a readable regular file.', [
+                'submission_id' => $submission->id,
+                'value_id' => $value->id,
+                'storage_path' => $path,
+                'absolute_path' => $absolutePath,
+            ]);
+
+            abort(404, 'File is unavailable.');
+        }
 
         $headers = [
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
@@ -298,11 +321,16 @@ class ProcurementSubmissionController extends Controller
             'X-Content-Type-Options' => 'nosniff',
         ];
 
-        if ($request->boolean('download')) {
-            return $privateDisk->download($path, basename($path), $headers);
+        $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
+        $downloadName = Str::slug($submission->procurement_submission_code ?: 'procurement-submission')
+            .($extension !== '' ? '.'.$extension : '');
+
+        // Browsers cannot display ZIP packages reliably. Always return those as downloads.
+        if ($request->boolean('download') || $extension === 'zip') {
+            return $privateDisk->download($path, $downloadName, $headers);
         }
 
-        return $privateDisk->response($path, null, $headers);
+        return $privateDisk->response($path, $downloadName, $headers);
     }
 
     private function submissionsQuery(?array $scopedNodeIds)
