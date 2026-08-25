@@ -24,6 +24,13 @@ class MeConsolidatedReportingService
                 );
             })
             ->when(
+                filled($filters['project_component_id'] ?? null),
+                fn (Collection $results): Collection => $results->filter(
+                    fn ($result): bool => (string) $result->indicator?->project_component_id
+                        === (string) $filters['project_component_id']
+                )
+            )
+            ->when(
                 $hasDisaggregationFilters,
                 fn (Collection $results): Collection => $results->filter(
                     fn ($result): bool => $result->achievements->contains(

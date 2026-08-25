@@ -1257,6 +1257,20 @@
                                     </a>
                                 </li>
                             @endcanany
+                            @canany(['me.results.view', 'me.performance_reports.view', 'me.configuration.view', 'me.configuration.manage'])
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.consolidation-engine.index') }}"
+                                        class="nxl-link {{ request()->routeIs('budget.me.consolidation-engine.*') ? 'active' : '' }}">
+                                        <i class="feather-git-merge me-2"></i> Consolidations Engine
+                                    </a>
+                                </li>
+                                <li class="nxl-item">
+                                    <a href="{{ route('budget.me.indicator-reports.index') }}"
+                                        class="nxl-link {{ request()->routeIs('budget.me.indicator-reports.*') ? 'active' : '' }}">
+                                        <i class="feather-clipboard me-2"></i> Indicator Report
+                                    </a>
+                                </li>
+                            @endcanany
                             @canany(['me.data_entry.view', 'me.data_entry.manage', 'me.configuration.view', 'me.configuration.manage'])
                                 <li class="nxl-item">
                                     <a href="{{ route('budget.me.rebuild.data-entry') }}" class="nxl-link">
@@ -1311,8 +1325,9 @@
                             @endcanany
                             @canany(['me.performance_reports.view', 'me.performance_reports.review', 'me.configuration.view', 'me.configuration.manage'])
                                 <li class="nxl-item">
-                                    <a href="{{ route('budget.me.consolidated-reports.index') }}" class="nxl-link">
-                                        <i class="feather-pie-chart me-2"></i> Think Tank &amp; Consolidated Reports
+                                    <a href="{{ route('budget.me.consolidated-reports.index') }}"
+                                        class="nxl-link {{ request()->routeIs('budget.me.consolidated-reports.*') ? 'active' : '' }}">
+                                        <i class="feather-file-text me-2"></i> Think Tank M&amp;E Reports
                                     </a>
                                 </li>
                             @endcanany
@@ -2004,7 +2019,7 @@
                 @endcan
 
                 {{-- ================= SYSTEM MANAGEMENT ================= --}}
-                @canany(['users.manage', 'roles.manage', 'permissions.manage', 'system.audit.view'])
+                @canany(['users.manage', 'roles.manage', 'permissions.manage', 'system.audit.view', 'api_sync.view'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.users_security') }}</label>
                     </li>
@@ -2045,6 +2060,15 @@
                         <li class="nxl-item">
                             <a href="{{ route('system.attp-ai-guide.settings') }}" class="nxl-link">
                                 <i class="feather-bot me-2"></i> ATTP AI Guide
+                            </a>
+                        </li>
+                    @endcan
+
+                    @can('api_sync.view')
+                        <li class="nxl-item">
+                            <a href="{{ route('system.api-sync.index') }}"
+                                class="nxl-link {{ request()->routeIs('system.api-sync.*') ? 'active' : '' }}">
+                                <i class="feather-refresh-cw me-2"></i> API Sync
                             </a>
                         </li>
                     @endcan

@@ -12,22 +12,20 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class ConsolidatedMeReportExport implements FromArray, WithHeadings, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class ConsolidatedMeReportExport implements FromArray, WithColumnWidths, WithEvents, WithHeadings, WithStyles, WithTitle
 {
-    public function __construct(private readonly Collection $rows, private readonly array $filters)
-    {
-    }
+    public function __construct(private readonly Collection $rows, private readonly array $filters) {}
 
     public function headings(): array
     {
         return [
-            'Reporting Year', 'Reporting Frequency', 'Reporting Period', 'Indicator Code', 'Indicator',
-            'Result Type', 'Organization Roll-up', 'Consolidated Numeric Result', 'Qualitative Results',
-            'Common Period Target', 'Organizations Reporting', 'Reporting Organizations', 'Reported Values',
-            'Duplicate Source Results Suppressed', 'Achievement Records', 'Beneficiaries', 'Geographic Scopes',
-            'Countries', 'Regional Economic Communities', 'Priority Themes', 'Implementing Institution Types',
-            'Implementing Institutions', 'Stakeholder Categories', 'Female', 'Male', 'Youth Below 35', 'Adults 35+',
-            'Gender Not Disaggregated', 'Age Not Disaggregated',
+            'Reporting Year', 'Reporting Frequency', 'Reporting Period', 'Project Code', 'Project / Component',
+            'Indicator Code', 'Indicator', 'Result Type', 'Organization Roll-up', 'Consolidated Numeric Result',
+            'Qualitative Results', 'Common Period Target', 'Organizations Reporting', 'Reporting Organizations',
+            'Reported Values', 'Duplicate Source Results Suppressed', 'Achievement Records', 'Beneficiaries',
+            'Geographic Scopes', 'Countries', 'Regional Economic Communities', 'Priority Themes',
+            'Implementing Institution Types', 'Implementing Institutions', 'Stakeholder Categories', 'Female',
+            'Male', 'Youth Below 35', 'Adults 35+', 'Gender Not Disaggregated', 'Age Not Disaggregated',
         ];
     }
 
@@ -38,6 +36,8 @@ class ConsolidatedMeReportExport implements FromArray, WithHeadings, WithColumnW
                 $this->filters['year'],
                 $this->filters['period_type'],
                 $this->filters['period_label'],
+                $row['indicator']?->projectComponent?->project_id,
+                $row['indicator']?->projectComponent?->name,
                 $row['indicator']?->indicator_code,
                 $row['indicator']?->name,
                 str($row['indicator']?->value_type ?: 'number')->headline()->toString(),
@@ -78,11 +78,12 @@ class ConsolidatedMeReportExport implements FromArray, WithHeadings, WithColumnW
     public function columnWidths(): array
     {
         return [
-            'A' => 14, 'B' => 18, 'C' => 20, 'D' => 16, 'E' => 46, 'F' => 18,
-            'G' => 30, 'H' => 20, 'I' => 55, 'J' => 18, 'K' => 18, 'L' => 40,
-            'M' => 16, 'N' => 18, 'O' => 18, 'P' => 16, 'Q' => 24, 'R' => 25,
-            'S' => 24, 'T' => 34, 'U' => 32, 'V' => 36, 'W' => 36,
-            'X' => 13, 'Y' => 13, 'Z' => 17, 'AA' => 17, 'AB' => 22, 'AC' => 22,
+            'A' => 14, 'B' => 18, 'C' => 20, 'D' => 18, 'E' => 38, 'F' => 16,
+            'G' => 46, 'H' => 18, 'I' => 30, 'J' => 20, 'K' => 55, 'L' => 18,
+            'M' => 18, 'N' => 40, 'O' => 16, 'P' => 18, 'Q' => 18, 'R' => 16,
+            'S' => 24, 'T' => 25, 'U' => 24, 'V' => 34, 'W' => 32, 'X' => 36,
+            'Y' => 36, 'Z' => 13, 'AA' => 13, 'AB' => 17, 'AC' => 17,
+            'AD' => 22, 'AE' => 22,
         ];
     }
 

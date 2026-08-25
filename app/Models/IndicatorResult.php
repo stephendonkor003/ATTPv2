@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
 class IndicatorResult extends BaseModel
 {
     protected $table = 'me_indicator_results';
@@ -98,6 +100,11 @@ class IndicatorResult extends BaseModel
     public function achievements()
     {
         return $this->hasMany(MeIndicatorAchievement::class, 'indicator_result_id');
+    }
+
+    public function performanceReportResult(): HasOne
+    {
+        return $this->hasOne(MePerformanceReportIndicatorResult::class, 'indicator_result_id');
     }
 
     public function scopeApproved($query)

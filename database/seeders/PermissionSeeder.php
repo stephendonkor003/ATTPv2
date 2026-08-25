@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Permission;
+use Illuminate\Database\Seeder;
 
 class PermissionSeeder extends Seeder
 {
@@ -23,6 +23,14 @@ class PermissionSeeder extends Seeder
             ['name' => 'questions.respond', 'module' => 'system', 'description' => 'Respond to member-state questions and send official feedback'],
             ['name' => 'national_data.review', 'module' => 'system', 'description' => 'View and review member-state national data submissions'],
             ['name' => 'national_data.approve', 'module' => 'system', 'description' => 'Approve, reject, or request revisions for member-state national data'],
+            ['name' => 'api_sync.view', 'module' => 'API Sync', 'description' => 'View API synchronization status and pairing history'],
+            ['name' => 'api_sync.generate', 'module' => 'API Sync', 'description' => 'Generate one-time API synchronization pairing codes'],
+            ['name' => 'api_sync.revoke', 'module' => 'API Sync', 'description' => 'Revoke active API synchronization sessions'],
+            ['name' => 'api_sync.audit.view', 'module' => 'API Sync', 'description' => 'View API synchronization audit events'],
+            ['name' => 'api_sync.invitations.approve', 'module' => 'API Sync', 'description' => 'Approve incoming AU-PReMIS synchronization invitations'],
+            ['name' => 'api_sync.invitations.decline', 'module' => 'API Sync', 'description' => 'Decline incoming AU-PReMIS synchronization invitations'],
+            ['name' => 'api_sync.invitations.revoke', 'module' => 'API Sync', 'description' => 'Revoke approved AU-PReMIS synchronization invitations'],
+            ['name' => 'api_sync.documents.view', 'module' => 'API Sync', 'description' => 'View immutable synchronization document progress and held-document issues'],
 
             // Prescreening
             ['name' => 'prescreening.access', 'module' => 'prescreening', 'description' => 'Access prescreening module'],
@@ -77,25 +85,25 @@ class PermissionSeeder extends Seeder
             ['name' => 'finance.program_funding.delete', 'module' => 'Finance', 'description' => 'Delete program funding'],
             ['name' => 'finance.program_funding.submit', 'module' => 'Finance', 'description' => 'Submit program funding for approval'],
             ['name' => 'finance.program_funding.approve', 'module' => 'Finance', 'description' => 'Approve program funding'],
-	            ['name' => 'finance.program_funding.manage', 'module' => 'Finance', 'description' => 'Manage program funding'],
-		            ['name' => 'finance.commitments.view', 'module' => 'Finance', 'description' => 'View finance commitments'],
-		            ['name' => 'finance.commitments.view_all', 'module' => 'Finance', 'description' => 'View all commitments across governance nodes'],
-		            ['name' => 'finance.commitments.create', 'module' => 'Finance', 'description' => 'Create finance commitments'],
-		            ['name' => 'finance.commitments.edit', 'module' => 'Finance', 'description' => 'Edit finance commitments'],
-		            ['name' => 'finance.commitments.delete', 'module' => 'Finance', 'description' => 'Delete finance commitments'],
-		            ['name' => 'finance.commitments.manage', 'module' => 'Finance', 'description' => 'Manage finance commitments'],
-		            ['name' => 'finance.awp.view', 'module' => 'Finance', 'description' => 'View Approved Work Plans'],
-		            ['name' => 'finance.awp.create', 'module' => 'Finance', 'description' => 'Create Approved Work Plans'],
-		            ['name' => 'finance.awp.edit', 'module' => 'Finance', 'description' => 'Edit Approved Work Plans'],
-		            ['name' => 'finance.awp.approve', 'module' => 'Finance', 'description' => 'Approve and close Approved Work Plans'],
-		            ['name' => 'finance.awp.delete', 'module' => 'Finance', 'description' => 'Delete draft Approved Work Plans'],
-		            ['name' => 'finance.purchase_requests.view', 'module' => 'Finance', 'description' => 'View purchase requests'],
-		            ['name' => 'finance.purchase_requests.view_all', 'module' => 'Finance', 'description' => 'View all purchase requests across governance nodes'],
-		            ['name' => 'finance.purchase_requests.send', 'module' => 'Finance', 'description' => 'Send purchase requests via email'],
-		            ['name' => 'finance.purchase_requests.approve', 'module' => 'Finance', 'description' => 'Approve or reject purchase requests'],
-		            ['name' => 'finance.purchase_orders.create', 'module' => 'Finance', 'description' => 'Create purchase orders from approved commitments'],
-		            ['name' => 'finance.purchase_orders.delete', 'module' => 'Finance', 'description' => 'Delete procurement purchase orders'],
-		            ['name' => 'finance.executions.view', 'module' => 'Finance', 'description' => 'View finance execution dashboard'],
+            ['name' => 'finance.program_funding.manage', 'module' => 'Finance', 'description' => 'Manage program funding'],
+            ['name' => 'finance.commitments.view', 'module' => 'Finance', 'description' => 'View finance commitments'],
+            ['name' => 'finance.commitments.view_all', 'module' => 'Finance', 'description' => 'View all commitments across governance nodes'],
+            ['name' => 'finance.commitments.create', 'module' => 'Finance', 'description' => 'Create finance commitments'],
+            ['name' => 'finance.commitments.edit', 'module' => 'Finance', 'description' => 'Edit finance commitments'],
+            ['name' => 'finance.commitments.delete', 'module' => 'Finance', 'description' => 'Delete finance commitments'],
+            ['name' => 'finance.commitments.manage', 'module' => 'Finance', 'description' => 'Manage finance commitments'],
+            ['name' => 'finance.awp.view', 'module' => 'Finance', 'description' => 'View Approved Work Plans'],
+            ['name' => 'finance.awp.create', 'module' => 'Finance', 'description' => 'Create Approved Work Plans'],
+            ['name' => 'finance.awp.edit', 'module' => 'Finance', 'description' => 'Edit Approved Work Plans'],
+            ['name' => 'finance.awp.approve', 'module' => 'Finance', 'description' => 'Approve and close Approved Work Plans'],
+            ['name' => 'finance.awp.delete', 'module' => 'Finance', 'description' => 'Delete draft Approved Work Plans'],
+            ['name' => 'finance.purchase_requests.view', 'module' => 'Finance', 'description' => 'View purchase requests'],
+            ['name' => 'finance.purchase_requests.view_all', 'module' => 'Finance', 'description' => 'View all purchase requests across governance nodes'],
+            ['name' => 'finance.purchase_requests.send', 'module' => 'Finance', 'description' => 'Send purchase requests via email'],
+            ['name' => 'finance.purchase_requests.approve', 'module' => 'Finance', 'description' => 'Approve or reject purchase requests'],
+            ['name' => 'finance.purchase_orders.create', 'module' => 'Finance', 'description' => 'Create purchase orders from approved commitments'],
+            ['name' => 'finance.purchase_orders.delete', 'module' => 'Finance', 'description' => 'Delete procurement purchase orders'],
+            ['name' => 'finance.executions.view', 'module' => 'Finance', 'description' => 'View finance execution dashboard'],
 
             // Budget
             ['name' => 'budget.access', 'module' => 'Budget', 'description' => 'Access budget module'],

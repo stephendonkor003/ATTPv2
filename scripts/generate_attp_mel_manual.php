@@ -219,7 +219,7 @@ $doc->table([
     ['Think Tank M&E Focal Person', 'Enter organization results, record one or more achievements, disaggregate beneficiaries, upload evidence and submit.', 'Think Tank → M&E Performance Reports'],
     ['Authorized Approver', 'Review a verified report and give independent final approval or return it for correction.', 'Performance Report lifecycle'],
     ['Platform Administrator', 'Deploy migrations, manage accounts/permissions, maintain focal mappings and troubleshoot access.', 'User management and M&E configuration'],
-    ['Programme/Management User', 'View approved organization reports and the consolidated report; export Excel/PDF.', 'Think Tank & Consolidated Reports'],
+    ['Programme/Management User', 'View approved organization and indicator reports; export governed dossiers and consolidated registers.', 'Think Tank M&E Reports, Indicator Report'],
 ]);
 $doc->heading('1.2 What changed from the Excel tracker', 2);
 $doc->bullet('The platform stores an indicator result once per organization and period, then stores every contributing achievement as a separate child record.');
@@ -437,7 +437,7 @@ $doc->numbered('If Approved or Archived, use View/download only.');
 
 $doc->heading('6. Secretariat M&E Officer Guide: Verification');
 $doc->heading('6.1 Open a submitted report', 2);
-$doc->paragraph('Use Reporting and Dashboard, the Data Entry report list, or Think Tank & Consolidated Reports. Open the organization’s Submitted report.');
+$doc->paragraph('Use Reporting and Dashboard, the Data Entry report list, or Think Tank M&E Reports. Open the organization’s Submitted report.');
 $doc->heading('6.2 Verification checklist', 2);
 foreach ([
     'Identity: correct think tank, form, component, period type, label and year.',
@@ -474,7 +474,7 @@ $doc->paragraph('Archived reports remain included in consolidation and become re
 
 $doc->heading('8. Secretariat Reporting: Separate and Consolidated Views');
 $doc->heading('8.1 View all 13 submissions separately', 2);
-$doc->paragraph('Navigate to Monitoring & Evaluation → Think Tank & Consolidated Reports, or /budget/me/consolidated-reports. Select year, frequency, period and optional portfolio.');
+$doc->paragraph('Navigate to Monitoring & Evaluation → Think Tank M&E Reports, or /budget/me/consolidated-reports. Select a Think Tank, year, frequency, period and optional portfolio.');
 $doc->bullet('Every active organization is listed, including “No submission”.');
 $doc->bullet('Each form/report remains separately openable for review.');
 $doc->bullet('Draft, Submitted, Verified, Approved and Archived badges expose readiness.');
@@ -486,6 +486,20 @@ $doc->bullet('PDF produces a management-ready landscape summary.');
 $doc->bullet('The screen shows gender, age, stakeholder, theme, country and REC snapshots.');
 $doc->bullet('If overlapping approved forms contain the same indicator for one organization and period, only the most recently approved result is counted; the suppressed duplicate count is displayed for audit follow-up.');
 $doc->callout('Inclusion rule', 'A merely Submitted or Verified result is not official and is excluded from consolidation. Approve all valid organization reports before issuing the final consolidated report.');
+$doc->heading('8.3 Use the Consolidations Engine', 2);
+$doc->paragraph('Navigate to Monitoring & Evaluation → Consolidations Engine, or /budget/me/consolidation-engine. Use Indicator level for detailed target-versus-actual analysis and Project level for comparable project/component scorecards.');
+$doc->bullet('Filter by target project year, reporting year or period, portfolio, project/component, indicator, Think Tank, results level, performance status, country and thematic area.');
+$doc->bullet('Indicator consolidation exposes the approved contribution sources, organization coverage, aggregation method, target, actual, variance, attainment, trend, evidence links, achievements and participant/beneficiary instances.');
+$doc->bullet('Project consolidation never adds unlike raw indicator values. Its score is the average of rated indicator attainment percentages, with each indicator capped at 100%, alongside coverage and status distribution.');
+$doc->bullet('Download a complete multi-sheet Excel workbook, the selected level as CSV, the selected level as a landscape PDF, or use the print-ready screen.');
+$doc->callout('Interpretation control', 'Participant and beneficiary totals are reporting instances, not deduplicated unique people. Evidence totals are indicator-evidence links. Apply the approved indicator methodology when interpreting either measure.');
+$doc->heading('8.4 Build an Indicator Report', 2);
+$doc->paragraph('Navigate to Monitoring & Evaluation → Indicator Report, or /budget/me/indicator-reports. Choose Individual indicator report for a focused indicator dossier, or Consolidated indicator report for the complete authorized indicator register.');
+$doc->bullet('An individual dossier requires one indicator and presents its definition, approved Indicator Reference Sheet, measurement rules, approved target, actual, attainment, trend, reporting coverage, source contributions and evidence.');
+$doc->bullet('The consolidated report keeps every filtered indicator in its own unit and applies its configured time aggregation and organization roll-up. It does not add unlike indicator values.');
+$doc->bullet('Use the same reporting-period, portfolio, project, contributor, country and thematic filters for the on-screen report and its Excel, CSV and PDF downloads. Print produces a clean hard-copy view.');
+$doc->bullet('Excel includes Summary & Scope, an Indicator Profile or Indicator Consolidation sheet, Approved Contributions and Evidence Links. Individual CSV is source-level; consolidated CSV is indicator-level.');
+$doc->callout('Official-data guardrail', 'Indicator Reports use finally approved, deduplicated indicator results and approved targets only. A report with no approved contribution remains visible as not reported, while draft, submitted, returned and rejected values remain excluded.');
 
 $doc->heading('9. Calculations and Financial/Statistical Controls');
 $doc->heading('9.1 Core calculations', 2);

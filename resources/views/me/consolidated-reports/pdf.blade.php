@@ -47,6 +47,9 @@
     $duplicateCount = (int) $consolidated->sum('duplicate_result_count');
     $activeFilters = collect([
         'Portfolio' => $selectedPortfolio?->name,
+        'Project / component' => $selectedProject
+            ? collect([$selectedProject->project_id, $selectedProject->name])->filter()->join(' · ')
+            : null,
         'Think tank' => $selectedThinkTank?->name,
         'Geographic scope' => $filters['geographic_scope'] ?? null,
         'Country' => $filters['country'] ?? null,
@@ -81,7 +84,7 @@
             $isQualitative = $indicator?->value_type === 'milestone' || $row['qualitative_values']->isNotEmpty();
         @endphp
         <tr>
-            <td><span class="code">{{ $indicator?->indicator_code ?: 'Uncoded' }}</span><br><strong>{{ $indicator?->name ?: 'Indicator unavailable' }}</strong><br><span class="muted">{{ str($indicator?->value_type ?: 'number')->headline() }}</span></td>
+            <td><span class="code">{{ $indicator?->indicator_code ?: 'Uncoded' }}</span><br><strong>{{ $indicator?->name ?: 'Indicator unavailable' }}</strong><br><span class="muted">{{ str($indicator?->value_type ?: 'number')->headline() }}@if($indicator?->projectComponent)<br>Project: {{ $indicator->projectComponent->project_id }} · {{ $indicator->projectComponent->name }}@endif</span></td>
             <td>{{ $row['rollup_label'] }}@if($row['duplicate_result_count']>0)<br><span class="warning">{{ $row['duplicate_result_count'] }} overlap(s) suppressed</span>@endif</td>
             <td>@if($isQualitative)@forelse($row['qualitative_values'] as $qualitative)<div class="qualitative"><strong>{{ $qualitative['organization'] }}</strong>{{ $qualitative['value'] }}</div>@empty<span class="muted">No qualitative result recorded</span>@endforelse @else<span class="value">{{ $row['value']!==null ? number_format($row['value'],2) : 'Not numerically additive' }}</span>@if($unit)<br><span class="muted">{{ $unit }}</span>@endif @endif</td>
             <td class="num">{{ $row['target']!==null ? number_format($row['target'],2) : '—' }}</td>
@@ -103,7 +106,7 @@
     <thead><tr><th style="width:27%">Organization</th><th style="width:29%">Report</th><th style="width:11%">Status</th><th style="width:11%">Indicators</th><th style="width:11%">Approved</th><th style="width:11%">Approved by</th></tr></thead>
     <tbody>
     @forelse($reports as $report)
-        <tr><td><strong>{{ $report->thinkTank?->name ?: 'Organization unavailable' }}</strong><br><span class="muted">{{ $report->thinkTank?->country ?: 'Country not recorded' }}</span></td><td>{{ $report->form?->code ?: 'No code' }} · {{ $report->form?->title ?: 'Form unavailable' }}</td><td>{{ $report->lifecycleLabel() }}</td><td class="num">{{ $report->indicatorResults->count() }}</td><td>{{ $report->approved_at?->format('d M Y, H:i') ?: 'Date unavailable' }}</td><td>{{ $report->approvedBy?->name ?: 'Not recorded' }}</td></tr>
+        <tr><td><strong>{{ $report->thinkTank?->name ?: 'Organization unavailable' }}</strong><br><span class="muted">{{ $report->thinkTank?->country ?: 'Country not recorded' }}</span></td><td>{{ $report->form?->code ?: 'No code' }} · {{ $report->form?->title ?: 'Form unavailable' }}@if($report->projectComponent)<br><span class="muted">Project: {{ $report->projectComponent->project_id }} · {{ $report->projectComponent->name }}</span>@endif</td><td>{{ $report->lifecycleLabel() }}</td><td class="num">{{ $report->indicatorResults->count() }}</td><td>{{ $report->approved_at?->format('d M Y, H:i') ?: 'Date unavailable' }}</td><td>{{ $report->approvedBy?->name ?: 'Not recorded' }}</td></tr>
     @empty
         <tr><td colspan="6" style="padding:18px;text-align:center">No approved source reports are available.</td></tr>
     @endforelse

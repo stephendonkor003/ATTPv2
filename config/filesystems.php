@@ -38,6 +38,17 @@ return [
             'report' => false,
         ],
 
+        // Uses the same private root as approved source documents but cannot
+        // generate temporary URLs. API Sync serves bounded bytes only through
+        // its bearer-, invitation-, snapshot- and range-bound controller.
+        'api_sync_documents' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

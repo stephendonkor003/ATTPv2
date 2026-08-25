@@ -9,6 +9,7 @@ use App\Models\MeDisaggregationDimension;
 use App\Models\MeIndicatorAchievement;
 use App\Models\MeIndicatorAchievementDisaggregation;
 use App\Models\MePerformanceReport;
+use App\Models\Project;
 use App\Models\Sector;
 use App\Services\MeConsolidatedReportingService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -40,8 +41,9 @@ class MeConsolidatedReportController extends Controller
     public function index(Request $request, MeConsolidatedReportingService $service): View
     {
         $filters = $this->filters($request);
+        $scope = $this->reportScope($request, $filters);
         $reports = $this->query($request, $filters)
-            ->with($this->relations())
+            ->with($this->relations($filters))
             ->orderByRaw("CASE status WHEN 'submitted' THEN 1 WHEN 'verified' THEN 2 WHEN 'reviewed' THEN 2 WHEN 'draft' THEN 3 WHEN 'approved' THEN 4 WHEN 'archived' THEN 5 ELSE 6 END")
             ->orderBy('think_tank_member_id')
             ->get();
@@ -112,11 +114,6 @@ class MeConsolidatedReportController extends Controller
             'not_disaggregated' => (int) $consolidated->sum(fn (array $row): int => (int) $row['age_groups']->get('not_disaggregated', 0)),
         ]);
 
-        $portfolios = Sector::query()->orderBy('name');
-        if ($this->userHasAssignedPortfolioScope($request->user())) {
-            $this->applyAssignedPortfolioScopeToSectors($portfolios, $request->user());
-        }
-
         return view('me.consolidated-reports.index', [
             'reports' => $reports,
             'approvedReports' => $approvedReports,
@@ -140,7 +137,10 @@ class MeConsolidatedReportController extends Controller
             'years' => $this->scopedReportQuery($request)->distinct()->orderByDesc('reporting_year')->pluck('reporting_year'),
             'periodTypes' => MePerformanceReport::REPORTING_PERIOD_TYPES,
             'periodLabels' => MePerformanceReport::PERIOD_LABELS,
-            'portfolios' => $portfolios->get(['id', 'name']),
+            'portfolios' => $scope['portfolios'],
+            'projects' => $scope['projects'],
+            'selectedPortfolio' => $scope['selectedPortfolio'],
+            'selectedProject' => $scope['selectedProject'],
             'disaggregationOptions' => $this->disaggregationOptions($request, $this->scopedReportQuery($request)->pluck('id')),
             'generatedAt' => now(),
         ]);
@@ -149,19 +149,21 @@ class MeConsolidatedReportController extends Controller
     public function excel(Request $request, MeConsolidatedReportingService $service)
     {
         $filters = $this->filters($request);
-        $reports = $this->approvedQuery($request, $filters)->with($this->relations())->get();
+        $scope = $this->reportScope($request, $filters);
+        $reports = $this->approvedQuery($request, $filters)->with($this->relations($filters))->get();
         $rows = $service->build($reports, $filters);
 
         return Excel::download(
             new ConsolidatedMeReportExport($rows, $filters),
-            'ATTP-Consolidated-MEL-'.$filters['year'].'-'.$filters['period_label'].'.xlsx'
+            $this->filename($filters, $scope['selectedProject'], 'xlsx')
         );
     }
 
     public function pdf(Request $request, MeConsolidatedReportingService $service)
     {
         $filters = $this->filters($request);
-        $reports = $this->approvedQuery($request, $filters)->with($this->relations())->get();
+        $scope = $this->reportScope($request, $filters);
+        $reports = $this->approvedQuery($request, $filters)->with($this->relations($filters))->get();
         $rows = $service->build($reports, $filters);
 
         return Pdf::loadView('me.consolidated-reports.pdf', [
@@ -172,11 +174,10 @@ class MeConsolidatedReportController extends Controller
                 ? ConsortiumThinkTank::query()->find($filters['think_tank_id'])
                 : null,
             'generatedBy' => $request->user(),
-            'selectedPortfolio' => filled($filters['portfolio_id'])
-                ? Sector::query()->find($filters['portfolio_id'])
-                : null,
+            'selectedPortfolio' => $scope['selectedPortfolio'],
+            'selectedProject' => $scope['selectedProject'],
         ])->setPaper('a4', 'landscape')->download(
-            'ATTP-Consolidated-MEL-'.$filters['year'].'-'.$filters['period_label'].'.pdf'
+            $this->filename($filters, $scope['selectedProject'], 'pdf')
         );
     }
 
@@ -187,8 +188,10 @@ class MeConsolidatedReportController extends Controller
             ->where('reporting_period_type', $filters['period_type'])
             ->where('reporting_period_label', $filters['period_label'])
             ->when($filters['portfolio_id'], fn ($query, $portfolioId) => $query->where('portfolio_id', $portfolioId))
+            ->when($filters['project_component_id'], fn ($query, $projectId) => $query->where('project_component_id', $projectId))
             ->when($filters['think_tank_id'], fn ($query, $thinkTankId) => $query->where('think_tank_member_id', $thinkTankId));
         $this->applyDisaggregationFilters($query, $filters);
+
         return $query;
     }
 
@@ -200,6 +203,49 @@ class MeConsolidatedReportController extends Controller
         }
 
         return $query;
+    }
+
+    /** @return array{portfolios: Collection, projects: Collection, selectedPortfolio: ?Sector, selectedProject: ?Project} */
+    private function reportScope(Request $request, array $filters): array
+    {
+        $portfolioQuery = Sector::query()->orderBy('name');
+        if ($this->userHasAssignedPortfolioScope($request->user())) {
+            $this->applyAssignedPortfolioScopeToSectors($portfolioQuery, $request->user());
+        }
+        $portfolios = $portfolioQuery->get(['id', 'name']);
+
+        if ($filters['portfolio_id'] && ! $portfolios->contains('id', $filters['portfolio_id'])) {
+            abort(403, 'The selected portfolio is outside your authorized M&E reporting scope.');
+        }
+
+        $projectIds = $this->scopedReportQuery($request)
+            ->whereNotNull('project_component_id')
+            ->distinct()
+            ->pluck('project_component_id');
+        $projectQuery = Project::query()
+            ->whereIn('id', $projectIds)
+            ->with(['program:id,sector_id,name', 'program.sector:id,name'])
+            ->orderBy('project_id');
+        if ($this->userHasAssignedPortfolioScope($request->user())) {
+            $this->applyAssignedPortfolioScopeToProjects($projectQuery, $request->user());
+        }
+        $projects = $projectQuery->get(['id', 'program_id', 'project_id', 'name']);
+        $selectedProject = $projects->firstWhere('id', $filters['project_component_id']);
+
+        if ($filters['project_component_id'] && ! $selectedProject) {
+            abort(403, 'The selected project is outside your authorized M&E reporting scope.');
+        }
+        if ($filters['portfolio_id'] && $selectedProject
+            && (string) $selectedProject->program?->sector_id !== (string) $filters['portfolio_id']) {
+            abort(403, 'The selected project does not belong to the selected portfolio.');
+        }
+
+        return [
+            'portfolios' => $portfolios,
+            'projects' => $projects,
+            'selectedPortfolio' => $portfolios->firstWhere('id', $filters['portfolio_id']),
+            'selectedProject' => $selectedProject,
+        ];
     }
 
     private function approvedQuery(Request $request, array $filters): Builder
@@ -227,6 +273,7 @@ class MeConsolidatedReportController extends Controller
             'period_type' => $periodType,
             'period_label' => $periodLabel,
             'portfolio_id' => $this->uuidOrNull($request->query('portfolio_id')),
+            'project_component_id' => $this->uuidOrNull($request->query('project_component_id')),
             'think_tank_id' => $this->uuidOrNull($request->query('think_tank_id')),
             'geographic_scope' => $this->allowedFilter($request, 'geographic_scope', MeIndicatorAchievement::GEOGRAPHIC_SCOPES),
             'country' => $request->filled('country') ? trim((string) $request->query('country')) : null,
@@ -295,14 +342,23 @@ class MeConsolidatedReportController extends Controller
         ];
     }
 
-    private function relations(): array
+    private function relations(array $filters = []): array
     {
         return [
             'form:id,code,title',
             'portfolio:id,name',
+            'projectComponent:id,program_id,project_id,name',
             'thinkTank:id,name,country,role',
             'approvedBy:id,name',
-            'indicatorResults.indicator:id,indicator_code,name,organization_rollup_method,unit_id,value_type,results_level',
+            'indicatorResults' => fn ($query) => $query->when(
+                $filters['project_component_id'] ?? null,
+                fn (Builder $resultQuery, string $projectId): Builder => $resultQuery->whereHas(
+                    'indicator',
+                    fn (Builder $indicatorQuery): Builder => $indicatorQuery->where('project_component_id', $projectId)
+                )
+            ),
+            'indicatorResults.indicator:id,indicator_code,name,organization_rollup_method,unit_id,value_type,results_level,project_component_id',
+            'indicatorResults.indicator.projectComponent:id,project_id,name',
             'indicatorResults.indicator.unit:id,name,symbol',
             'indicatorResults.achievements.breakdowns',
             'documents:id,report_id',
@@ -323,6 +379,14 @@ class MeConsolidatedReportController extends Controller
     private function percentage(int $value, int $total): float
     {
         return $total > 0 ? round(($value / $total) * 100, 1) : 0.0;
+    }
+
+    private function filename(array $filters, ?Project $selectedProject, string $extension): string
+    {
+        $projectLabel = trim((string) ($selectedProject?->project_id ?: $selectedProject?->name));
+        $projectSuffix = $projectLabel !== '' ? '-'.Str::upper(Str::slug($projectLabel)) : '';
+
+        return 'ATTP-Consolidated-MEL-'.$filters['year'].'-'.$filters['period_label'].$projectSuffix.'.'.$extension;
     }
 
     private function uuidOrNull(mixed $value): ?string

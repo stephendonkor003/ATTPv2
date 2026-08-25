@@ -43,6 +43,18 @@ return [
             'after_commit' => false,
         ],
 
+        // API Sync snapshots can legitimately take longer than ordinary jobs.
+        // Isolating them prevents database-queue retry_after from making a
+        // second worker reserve an in-progress materialization.
+        'api_sync_database' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => env('ATTP_API_SYNC_SNAPSHOT_QUEUE', 'api-sync'),
+            'retry_after' => max(120, (int) env('ATTP_API_SYNC_SNAPSHOT_RETRY_AFTER', 2_100)),
+            'after_commit' => true,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),

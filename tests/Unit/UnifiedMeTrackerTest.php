@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\Indicator;
 use App\Models\ConsortiumThinkTank;
+use App\Models\Indicator;
 use App\Models\MeIndicatorAchievement;
 use App\Models\MeIndicatorAchievementDisaggregation;
 use App\Models\MePerformanceReport;
@@ -22,7 +22,7 @@ it('matches indicators only to their approved general reporting period type', fu
     ];
 
     foreach ($cases as [$unit, $value, $periodType, $periodLabel, $expected]) {
-        $indicator = new Indicator();
+        $indicator = new Indicator;
         $indicator->setRelation('frequency', new ReportingFrequency([
             'name' => 'Test', 'code' => 'TEST', 'interval_unit' => $unit, 'interval_value' => $value,
         ]));
@@ -57,7 +57,7 @@ it('consolidates organization results using the indicator-authorized rollup cont
         ]);
         $result->setRelation('indicator', $indicator);
         $result->setRelation('report', $report);
-        $result->setRelation('achievements', new EloquentCollection());
+        $result->setRelation('achievements', new EloquentCollection);
         $report->setRelation('indicatorResults', new EloquentCollection([$result]));
 
         return $report;
@@ -97,7 +97,7 @@ it('suppresses overlapping approved results from the same organization and perio
         ]);
         $result->id = '00000000-0000-0000-0000-00000000030'.$index;
         $result->setRelation('indicator', $indicator);
-        $result->setRelation('achievements', new EloquentCollection());
+        $result->setRelation('achievements', new EloquentCollection);
         $report->setRelation('indicatorResults', new EloquentCollection([$result]));
 
         return $report;
@@ -130,7 +130,7 @@ it('preserves qualitative milestone results with their reporting organization', 
             'actual_text' => $values['actual'],
         ]);
         $result->setRelation('indicator', $indicator);
-        $result->setRelation('achievements', new EloquentCollection());
+        $result->setRelation('achievements', new EloquentCollection);
         $report->setRelation('indicatorResults', new EloquentCollection([$result]));
 
         return $report;
@@ -196,6 +196,53 @@ it('does not consolidate unrelated indicators from a report when disaggregation 
         ->and($rows->first()['indicator']->indicator_code)->toBe('PDO 1')
         ->and($rows->first()['beneficiary_count'])->toBe(7)
         ->and($rows->first()['gender']->get('female'))->toBe(7);
+});
+
+it('does not consolidate a legacy cross-project indicator in a project-scoped report', function () {
+    $selectedProjectId = '00000000-0000-0000-0000-000000000061';
+    $otherProjectId = '00000000-0000-0000-0000-000000000062';
+    $selectedIndicator = new Indicator([
+        'indicator_code' => 'PDO P1',
+        'name' => 'Selected project indicator',
+        'project_component_id' => $selectedProjectId,
+        'organization_rollup_method' => 'sum',
+    ]);
+    $selectedIndicator->id = '00000000-0000-0000-0000-000000000063';
+    $otherIndicator = new Indicator([
+        'indicator_code' => 'PDO P2',
+        'name' => 'Other project indicator',
+        'project_component_id' => $otherProjectId,
+        'organization_rollup_method' => 'sum',
+    ]);
+    $otherIndicator->id = '00000000-0000-0000-0000-000000000064';
+    $report = new MePerformanceReport([
+        'think_tank_member_id' => '00000000-0000-0000-0000-000000000065',
+        'project_component_id' => $selectedProjectId,
+        'status' => 'approved',
+    ]);
+
+    $resultFor = function (Indicator $indicator, float $value): MePerformanceReportIndicatorResult {
+        $result = new MePerformanceReportIndicatorResult([
+            'indicator_id' => $indicator->id,
+            'actual_value' => $value,
+        ]);
+        $result->setRelation('indicator', $indicator);
+        $result->setRelation('achievements', new EloquentCollection);
+
+        return $result;
+    };
+    $report->setRelation('indicatorResults', new EloquentCollection([
+        $resultFor($selectedIndicator, 12),
+        $resultFor($otherIndicator, 99),
+    ]));
+
+    $rows = app(MeConsolidatedReportingService::class)->build(collect([$report]), [
+        'project_component_id' => $selectedProjectId,
+    ]);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows->first()['indicator']->indicator_code)->toBe('PDO P1')
+        ->and($rows->first()['value'])->toBe(12.0);
 });
 
 it('exposes the unified tracker, repository, matrix, focal and consolidated workflows', function () {

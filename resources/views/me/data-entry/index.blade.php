@@ -3371,7 +3371,7 @@
                             <header class="me-form-preview-header">
                                 <div class="me-form-preview-header-main">
                                     <div>
-                                        <div class="me-form-preview-eyebrow"><span data-form-preview-code>FORM</span><span>Â·</span><span data-form-preview-status>Preview</span><span>Â·</span><span>Version <span data-form-preview-version>1</span></span></div>
+                                        <div class="me-form-preview-eyebrow"><span data-form-preview-code>FORM</span><span>·</span><span data-form-preview-status>Preview</span><span>·</span><span>Version <span data-form-preview-version>1</span></span></div>
                                         <h2 id="me-form-preview-title" data-form-preview-title>Form preview</h2>
                                         <p data-form-preview-description>Review how the reporting form will appear to respondents.</p>
                                     </div>

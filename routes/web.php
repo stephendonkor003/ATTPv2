@@ -172,6 +172,7 @@ use App\Http\Controllers\System\{
     MemberStateQuestionAdminController,
     MemberStateNationalDataReviewController,
     DiscussionAdminController,
+    ApiSyncController,
 };
 
 use App\Http\Controllers\{
@@ -488,6 +489,39 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
 
             Route::post('/test-widget', [AttpAiGuideController::class, 'testWidget'])
                 ->name('test');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | API SYNC (ATTP -> AU-PReMIS)
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('api-sync')->name('api-sync.')->group(function () {
+            Route::get('/', [ApiSyncController::class, 'index'])
+                ->middleware('permission:api_sync.view')
+                ->name('index');
+
+            if ((bool) config('api_sync.legacy_v1_enabled', false)) {
+                Route::post('/pairings', [ApiSyncController::class, 'generate'])
+                    ->middleware(['permission:api_sync.generate', 'throttle:6,1,api-sync-generate'])
+                    ->name('pairings.generate');
+
+                Route::post('/pairings/{pairing}/revoke', [ApiSyncController::class, 'revoke'])
+                    ->middleware(['permission:api_sync.revoke', 'throttle:12,1,api-sync-revoke'])
+                    ->name('pairings.revoke');
+            }
+
+            Route::post('/invitations/{invitation}/approve', [ApiSyncController::class, 'approveInvitation'])
+                ->middleware(['permission:api_sync.invitations.approve', 'throttle:5,1,api-sync-v2-local-approval'])
+                ->name('invitations.approve');
+
+            Route::post('/invitations/{invitation}/decline', [ApiSyncController::class, 'declineInvitation'])
+                ->middleware(['permission:api_sync.invitations.decline', 'throttle:10,1,api-sync-v2-local-decline'])
+                ->name('invitations.decline');
+
+            Route::post('/invitations/{invitation}/revoke', [ApiSyncController::class, 'revokeInvitation'])
+                ->middleware(['permission:api_sync.invitations.revoke', 'throttle:10,1,api-sync-v2-local-revoke'])
+                ->name('invitations.revoke');
         });
     });
 
@@ -1371,6 +1405,26 @@ Route::middleware(['auth', 'not.funding.partner'])
                 Route::post('indicators/{indicator}/reference-sheets', 'storeReferenceSheet')->name('irs.store');
                 Route::post('indicators/{indicator}/targets', 'storeTarget')->name('targets.store');
                 Route::post('indicators/{indicator}/calculation-rules', 'storeCalculationRule')->name('calculations.store');
+            });
+
+        Route::prefix('me/consolidation-engine')
+            ->name('me.consolidation-engine.')
+            ->controller(\App\Http\Controllers\MeConsolidationEngineController::class)
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::get('export/excel', 'excel')->name('excel');
+                Route::get('export/csv', 'csv')->name('csv');
+                Route::get('export/pdf', 'pdf')->name('pdf');
+            });
+
+        Route::prefix('me/indicator-reports')
+            ->name('me.indicator-reports.')
+            ->controller(\App\Http\Controllers\MeIndicatorReportController::class)
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::get('export/excel', 'excel')->name('excel');
+                Route::get('export/csv', 'csv')->name('csv');
+                Route::get('export/pdf', 'pdf')->name('pdf');
             });
 
         Route::prefix('me/results-dashboard')

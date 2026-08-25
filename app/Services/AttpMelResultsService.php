@@ -37,9 +37,36 @@ class AttpMelResultsService
         $indicatorQuery = Indicator::query()
             ->where('framework_id', $framework->id)
             ->where('is_active', true)
-            ->with(['projectComponent:id,project_id,name', 'unit:id,name,symbol', 'approvedReferenceSheet', 'calculationRules', 'targets' => fn ($q) => $q->where('approval_status', 'approved')])
+            ->with([
+                'projectComponent:id,program_id,project_id,name',
+                'projectComponent.program:id,sector_id,name',
+                'projectComponent.program.sector:id,name',
+                'unit:id,name,symbol',
+                'frequency',
+                'responsiblePerson',
+                'meansOfVerification',
+                'meansOfVerificationFolder',
+                'disaggregations',
+                'disaggregationRequirements.dimension',
+                'approvedReferenceSheet',
+                'calculationRules',
+                'targets' => fn ($q) => $q->where('approval_status', 'approved'),
+            ])
+            ->when(array_key_exists('component_ids', $filters), function (Builder $query) use ($filters): void {
+                $componentIds = collect($filters['component_ids'] ?? [])->filter()->unique()->values();
+                $componentIds->isEmpty()
+                    ? $query->whereRaw('1 = 0')
+                    : $query->whereIn('project_component_id', $componentIds);
+            })
+            ->when(array_key_exists('indicator_ids', $filters), function (Builder $query) use ($filters): void {
+                $indicatorIds = collect($filters['indicator_ids'] ?? [])->filter()->unique()->values();
+                $indicatorIds->isEmpty()
+                    ? $query->whereRaw('1 = 0')
+                    : $query->whereKey($indicatorIds);
+            })
             ->when(filled($filters['component_id'] ?? null), fn (Builder $q) => $q->where('project_component_id', $filters['component_id']))
             ->when(filled($filters['indicator_id'] ?? null), fn (Builder $q) => $q->whereKey($filters['indicator_id']))
+            ->when(filled($filters['results_level'] ?? null), fn (Builder $q) => $q->where('results_level', $filters['results_level']))
             ->orderBy('display_order');
 
         $activeThinkTanks = ConsortiumThinkTank::query()
@@ -53,7 +80,7 @@ class AttpMelResultsService
             $framework, $period, $projectYear, $reportingYear, $thinkTankId, $filters, $activeThinkTanks
         ): array {
             $target = $this->targetFor($indicator, $projectYear, $reportingYear, $thinkTankId);
-            $sourceIndicators = $this->sourceIndicators($indicator);
+            $sourceIndicators = $this->sourceIndicators($indicator, $filters);
             $periodResults = $this->results($sourceIndicators, $period, $reportingYear, $thinkTankId, $filters, false);
             $cumulativeResults = $indicator->is_cumulative
                 ? $this->results($sourceIndicators, $period, $reportingYear, $thinkTankId, $filters, true)
@@ -66,12 +93,42 @@ class AttpMelResultsService
             $periodResults = $this->applyQualificationFilter($periodResults, data_get($rule?->configuration, 'achievement_filter'));
             $cumulativeResults = $this->applyQualificationFilter($cumulativeResults, data_get($rule?->configuration, 'achievement_filter'));
             $historyResults = $this->applyQualificationFilter($historyResults, data_get($rule?->configuration, 'achievement_filter'));
-            $periodActual = $this->aggregate($indicator, $periodResults);
-            $cumulativeActual = $this->aggregate($indicator, $cumulativeResults);
-            $evidence = $periodResults->flatMap(
-                fn (IndicatorResult $result) => $result->dataSubmission?->evidence ?? collect()
-            )->unique('id');
+            $periodActual = $this->consolidateAcrossOrganizations($indicator, $periodResults);
+            $cumulativeActual = $this->consolidateAcrossOrganizations($indicator, $cumulativeResults);
+            $evidenceLinks = $periodResults
+                ->flatMap(fn (IndicatorResult $result): Collection => $this->evidenceLinks($result))
+                ->unique('key')
+                ->values();
             $breakdowns = $periodResults->flatMap->achievements->flatMap->breakdowns;
+            $reportingOrganizationNames = $periodResults
+                ->map(fn (IndicatorResult $result): string => $result->thinkTank?->name ?: 'Secretariat / Internal')
+                ->unique()
+                ->sort()
+                ->values();
+            $latestApprovedAt = $periodResults
+                ->sortByDesc(fn (IndicatorResult $result): int => $result->approved_at?->getTimestamp() ?? 0)
+                ->first()?->approved_at;
+            $sourceContributions = $periodResults->map(function (IndicatorResult $result) use ($indicator): array {
+                $evidenceLinks = $this->evidenceLinks($result);
+
+                return [
+                    'id' => (string) $result->id,
+                    'organization' => $result->thinkTank?->name ?: 'Secretariat / Internal',
+                    'country' => $result->thinkTank?->country,
+                    'period' => $result->period_label ?: $result->period_end?->format('d M Y'),
+                    'actual' => in_array($indicator->value_type, ['milestone', 'text'], true)
+                        ? $result->actual_text
+                        : ($result->actual_value !== null ? (float) $result->actual_value : null),
+                    'rollup_numerator' => $result->rollup_numerator !== null ? (float) $result->rollup_numerator : null,
+                    'rollup_denominator' => $result->rollup_denominator !== null ? (float) $result->rollup_denominator : null,
+                    'data_source' => $result->data_source,
+                    'evidence_count' => $evidenceLinks->count(),
+                    'verified_evidence_count' => $evidenceLinks->where('verified', true)->count(),
+                    'evidence_links' => $evidenceLinks,
+                    'achievement_count' => $result->achievements->count(),
+                    'approved_at' => $result->approved_at,
+                ];
+            })->values();
             $actual = $indicator->is_cumulative ? $cumulativeActual : $periodActual;
             $targetValue = $target?->target_value !== null ? (float) $target->target_value : null;
             $targetText = $target?->target_text;
@@ -101,8 +158,20 @@ class AttpMelResultsService
                 'trend' => $this->trend($indicator, $historyResults),
                 'classification' => $classification,
                 'result_count' => $periodResults->count(),
-                'evidence_count' => $evidence->count(),
-                'verified_evidence_count' => $evidence->where('verification_status', 'verified')->count(),
+                'evidence_count' => $evidenceLinks->count(),
+                'verified_evidence_count' => $evidenceLinks->where('verified', true)->count(),
+                'evidence_links' => $evidenceLinks,
+                'reporting_organizations' => $reportingOrganizationNames,
+                'latest_approved_at' => $latestApprovedAt,
+                'source_contributions' => $sourceContributions,
+                'achievement_count' => $periodResults->flatMap->achievements->count(),
+                'beneficiary_count' => (int) $breakdowns->sum('beneficiary_count'),
+                'countries' => $periodResults->pluck('thinkTank.country')
+                    ->merge($periodResults->flatMap->achievements->pluck('country'))
+                    ->filter()
+                    ->unique()
+                    ->sort()
+                    ->values(),
                 'female_beneficiaries' => (int) $breakdowns->where('gender', 'female')->sum('beneficiary_count'),
                 'male_beneficiaries' => (int) $breakdowns->where('gender', 'male')->sum('beneficiary_count'),
                 'reported_organizations' => $reportedOrganizations,
@@ -142,14 +211,25 @@ class AttpMelResultsService
         return compact('framework', 'rows', 'summary', 'analytics', 'period', 'projectYear', 'reportingYear', 'thinkTankId');
     }
 
-    private function sourceIndicators(Indicator $indicator): Collection
+    private function sourceIndicators(Indicator $indicator, array $filters = []): Collection
     {
         $rule = $indicator->calculationRules->firstWhere('is_active', true);
         $codes = collect($rule?->configuration['source_indicator_codes'] ?? [])->filter();
 
-        return $codes->isEmpty()
-            ? collect([$indicator])
-            : Indicator::query()->whereIn('indicator_code', $codes)->get();
+        if ($codes->isEmpty()) {
+            return collect([$indicator]);
+        }
+
+        return Indicator::query()
+            ->where('framework_id', $indicator->framework_id)
+            ->whereIn('indicator_code', $codes)
+            ->when(array_key_exists('indicator_ids', $filters), function (Builder $query) use ($filters): void {
+                $indicatorIds = collect($filters['indicator_ids'] ?? [])->filter()->unique()->values();
+                $indicatorIds->isEmpty()
+                    ? $query->whereRaw('1 = 0')
+                    : $query->whereKey($indicatorIds);
+            })
+            ->get();
     }
 
     private function results(
@@ -163,7 +243,13 @@ class AttpMelResultsService
         $query = IndicatorResult::query()
             ->approved()
             ->whereIn('indicator_id', $indicators->pluck('id'))
-            ->with(['achievements.breakdowns', 'thinkTank:id,name,country', 'dataSubmission.evidence']);
+            ->with([
+                'achievements.breakdowns',
+                'achievements.documentLinks.repositoryItem:id,title,validation_status',
+                'thinkTank:id,name,country',
+                'dataSubmission.evidence',
+                'performanceReportResult.report.documents.repositoryItem:id,title,validation_status',
+            ]);
         if ($thinkTankId) {
             $query->where('think_tank_member_id', $thinkTankId);
         }
@@ -216,7 +302,7 @@ class AttpMelResultsService
         if ($results->isEmpty()) {
             return null;
         }
-        if ($indicator->value_type === 'milestone') {
+        if (in_array($indicator->value_type, ['milestone', 'text'], true)) {
             return $results->sortByDesc('approved_at')->first()?->actual_text;
         }
         if ($indicator->value_type === 'percentage') {
@@ -256,6 +342,137 @@ class AttpMelResultsService
                 : null,
             default => (float) $values->sum(),
         };
+    }
+
+    /**
+     * Consolidate in the governed order: one value per organization across
+     * time, followed by the indicator's configured organization roll-up.
+     */
+    private function consolidateAcrossOrganizations(Indicator $indicator, Collection $results): mixed
+    {
+        if ($results->isEmpty()) {
+            return null;
+        }
+        if (in_array($indicator->value_type, ['milestone', 'text'], true)) {
+            return $this->aggregate($indicator, $results);
+        }
+
+        $rollupMethod = $indicator->organization_rollup_method;
+        if (blank($rollupMethod)) {
+            return $this->aggregate($indicator, $results);
+        }
+
+        if ($rollupMethod === 'weighted_average') {
+            $weighted = $results
+                ->whereNotNull('rollup_numerator')
+                ->whereNotNull('rollup_denominator');
+            $denominator = (float) $weighted->sum('rollup_denominator');
+            if ($denominator > 0) {
+                return round(((float) $weighted->sum('rollup_numerator') / $denominator) * 100, 4);
+            }
+        }
+
+        $organizationValues = $results
+            ->groupBy(fn (IndicatorResult $result): string => (string) (
+                $result->think_tank_member_id ?: 'secretariat'
+            ))
+            ->map(function (Collection $organizationResults) use ($indicator): array {
+                $latest = $organizationResults
+                    ->sortBy(fn (IndicatorResult $result): string => sprintf(
+                        '%s|%s|%s',
+                        (string) ($result->getRawOriginal('period_end') ?? ''),
+                        (string) ($result->getRawOriginal('approved_at') ?? ''),
+                        (string) ($result->getRawOriginal('id') ?? '')
+                    ))
+                    ->last();
+
+                return [
+                    'value' => $this->aggregate($indicator, $organizationResults),
+                    'latest_order' => sprintf(
+                        '%s|%s|%s',
+                        (string) ($latest?->getRawOriginal('period_end') ?? ''),
+                        (string) ($latest?->getRawOriginal('approved_at') ?? ''),
+                        (string) ($latest?->getRawOriginal('id') ?? '')
+                    ),
+                ];
+            })
+            ->filter(fn (array $entry): bool => $entry['value'] !== null)
+            ->values();
+
+        if ($organizationValues->isEmpty()) {
+            return null;
+        }
+
+        if ($indicator->value_type === 'boolean') {
+            return match ($rollupMethod) {
+                'minimum' => $organizationValues->every(fn (array $entry): bool => (bool) $entry['value']),
+                'latest' => (bool) $organizationValues->sortBy('latest_order')->last()['value'],
+                'average', 'weighted_average' => (float) $organizationValues->avg('value') >= 0.5,
+                default => $organizationValues->contains(fn (array $entry): bool => (bool) $entry['value']),
+            };
+        }
+
+        $values = $organizationValues->pluck('value')->map(fn ($value): float => (float) $value);
+
+        return match ($rollupMethod) {
+            'sum' => round((float) $values->sum(), 4),
+            'average', 'weighted_average' => round((float) $values->avg(), 4),
+            'minimum' => (float) $values->min(),
+            'maximum' => (float) $values->max(),
+            'latest' => $organizationValues->sortBy('latest_order')->last()['value'],
+            'non_additive' => $this->aggregate($indicator, $results),
+            default => $this->aggregate($indicator, $results),
+        };
+    }
+
+    /**
+     * Return evidence references attached through either supported M&E intake
+     * path. These are link instances, not a count of globally unique files.
+     */
+    private function evidenceLinks(IndicatorResult $result): Collection
+    {
+        $submissionEvidence = collect($result->dataSubmission?->evidence ?? [])
+            ->filter(fn ($evidence): bool => blank($evidence->indicator_id)
+                || (string) $evidence->indicator_id === (string) $result->indicator_id)
+            ->map(fn ($evidence): array => [
+                'key' => 'submission:'.$evidence->id,
+                'source' => 'Structured submission',
+                'title' => $evidence->document_title ?: $evidence->original_name ?: 'Submission evidence',
+                'status' => $evidence->verification_status ?: 'pending',
+                'verified' => in_array($evidence->verification_status, ['verified', 'approved'], true),
+            ]);
+
+        $reportEvidence = collect($result->performanceReportResult?->report?->documents ?? [])
+            ->map(fn ($document): array => [
+                'key' => 'performance-report:'.$document->id,
+                'source' => 'Performance report',
+                'title' => $document->repositoryItem?->title
+                    ?: $document->document_name
+                    ?: $document->original_filename
+                    ?: 'Performance report evidence',
+                'status' => $document->validation_status ?: 'pending',
+                'verified' => in_array($document->validation_status, ['validated', 'verified', 'approved'], true),
+            ]);
+
+        $achievementEvidence = collect($result->achievements)
+            ->flatMap(fn ($achievement) => $achievement->documentLinks)
+            ->map(fn ($link): array => [
+                'key' => 'achievement:'.$link->id,
+                'source' => 'Achievement repository link',
+                'title' => $link->repositoryItem?->title ?: 'Achievement evidence',
+                'status' => $link->repositoryItem?->validation_status ?: 'pending',
+                'verified' => in_array(
+                    $link->repositoryItem?->validation_status,
+                    ['validated', 'verified', 'approved'],
+                    true
+                ),
+            ]);
+
+        return $submissionEvidence
+            ->concat($reportEvidence)
+            ->concat($achievementEvidence)
+            ->unique('key')
+            ->values();
     }
 
     private function targetFor(Indicator $indicator, int $projectYear, ?int $reportingYear, ?string $thinkTankId): ?IndicatorTarget
@@ -311,13 +528,18 @@ class AttpMelResultsService
                 'direction' => 'none',
                 'label' => 'No prior period',
                 'change' => null,
-                'current' => $periods->isEmpty() ? null : $this->aggregate($indicator, $periods->last()['results']),
+                'current' => $periods->isEmpty()
+                    ? null
+                    : $this->consolidateAcrossOrganizations($indicator, $periods->last()['results']),
                 'previous' => null,
             ];
         }
 
-        $current = $this->aggregate($indicator, $periods->last()['results']);
-        $previous = $this->aggregate($indicator, $periods->get($periods->count() - 2)['results']);
+        $current = $this->consolidateAcrossOrganizations($indicator, $periods->last()['results']);
+        $previous = $this->consolidateAcrossOrganizations(
+            $indicator,
+            $periods->get($periods->count() - 2)['results']
+        );
 
         if ($indicator->value_type === 'boolean') {
             $direction = $current === $previous ? 'flat' : ($current ? 'up' : 'down');
@@ -331,7 +553,7 @@ class AttpMelResultsService
             ];
         }
 
-        if ($indicator->value_type === 'milestone') {
+        if (in_array($indicator->value_type, ['milestone', 'text'], true)) {
             return [
                 'direction' => $current === $previous ? 'flat' : 'changed',
                 'label' => $current === $previous ? 'No change' : 'Milestone updated',
@@ -416,7 +638,7 @@ class AttpMelResultsService
 
     private function classification(MeFramework $framework, ?float $achievement, Indicator $indicator, mixed $actual, ?string $targetText): array
     {
-        if ($indicator->value_type === 'milestone') {
+        if (in_array($indicator->value_type, ['milestone', 'text'], true)) {
             return $actual === null
                 ? ['code' => 'not_rated', 'label' => 'Not reported', 'color' => '#64748b']
                 : ['code' => 'qualitative_result', 'label' => 'Qualitative result', 'color' => '#6b63a8'];

@@ -51,7 +51,9 @@
     .mel-consolidated .cr-badge.warning { background: #fff4df; color: var(--cr-warning); }
     .mel-consolidated .cr-badge.danger { background: #fff0ef; color: var(--cr-danger); }
     .mel-consolidated .cr-filter-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: .78rem; }
+    .mel-consolidated .cr-filter-grid.cr-primary-filters { grid-template-columns: repeat(3,minmax(0,1fr)); }
     .mel-consolidated .cr-field label { display: block; margin-bottom: .31rem; color: #48616a; font-size: .7rem; font-weight: 760; }
+    .mel-consolidated .cr-field small { display: block; min-height: 1rem; margin-top: .3rem; color: var(--cr-muted); font-size: .64rem; line-height: 1.35; }
     .mel-consolidated .form-control, .mel-consolidated .form-select { min-height: 40px; border-color: #ccdce1; border-radius: 9px; color: var(--cr-ink); font-size: .78rem; box-shadow: none; }
     .mel-consolidated .form-control:focus, .mel-consolidated .form-select:focus { border-color: var(--cr-primary); box-shadow: 0 0 0 3px rgba(7,92,122,.1); }
     .mel-consolidated .cr-advanced { grid-column: 1/-1; border: 1px solid #e1eaed; border-radius: 11px; background: #fafcfc; }
@@ -106,12 +108,13 @@
     @media(max-width:1250px) {
         .mel-consolidated .cr-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
         .mel-consolidated .cr-filter-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+        .mel-consolidated .cr-filter-grid.cr-primary-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
         .mel-consolidated .cr-quality-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
     }
     @media(max-width:820px) {
         .mel-consolidated .cr-header { flex-direction: column; }
         .mel-consolidated .cr-header-side { width: 100%; align-items: stretch; }
-        .mel-consolidated .cr-filter-grid, .mel-consolidated .cr-grid { grid-template-columns: 1fr; }
+        .mel-consolidated .cr-filter-grid, .mel-consolidated .cr-filter-grid.cr-primary-filters, .mel-consolidated .cr-grid { grid-template-columns: 1fr; }
         .mel-consolidated .cr-filter-actions { align-items: stretch; flex-direction: column; }
         .mel-consolidated .cr-panel-head { align-items: flex-start; }
     }

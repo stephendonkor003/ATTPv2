@@ -2,20 +2,24 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use App\Models\SystemAuditLog;
-use App\Support\IpGeo;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Auth\Events\Failed;
-use Illuminate\Auth\Events\Login;
-use Illuminate\Auth\Events\Logout;
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Gate;
-use App\Models\UserLoginOtp;
+use App\Models\ApiSyncEvent;
+use App\Models\ApiSyncInvitation;
+use App\Models\ApiSyncInvitationEvent;
+use App\Models\ApiSyncPairing;
 use App\Models\DiscussionParticipantToken;
 use App\Models\DiscussionReaction;
 use App\Models\NewsPost;
+use App\Models\SystemAuditLog;
+use App\Models\UserLoginOtp;
+use App\Support\IpGeo;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
@@ -28,322 +32,333 @@ class AppServiceProvider extends ServiceProvider
         //
     }
 
+    public function boot()
+    {
+        // Align paginator HTML with the app's Bootstrap UI.
+        Paginator::useBootstrapFive();
 
-public function boot()
-{
-    // Align paginator HTML with the app's Bootstrap UI.
-    Paginator::useBootstrapFive();
+        Gate::before(function ($user, $ability) {
+            return $user->hasPermission($ability);
+        });
 
-    Gate::before(function ($user, $ability) {
-        return $user->hasPermission($ability);
-    });
+        Event::listen(Login::class, function (Login $event) {
+            $country = IpGeo::countryForIp(request()->ip());
 
-    Event::listen(Login::class, function (Login $event) {
-        $country = IpGeo::countryForIp(request()->ip());
+            SystemAuditLog::create([
+                'user_id' => $event->user->id,
+                'action' => 'login',
+                'description' => 'User logged in',
+                'method' => 'POST',
+                'url' => request()->fullUrl(),
+                'route_name' => optional(request()->route())->getName(),
+                'ip_address' => request()->ip(),
+                'country' => $country,
+                'user_agent' => substr((string) request()->userAgent(), 0, 1000),
+                'status_code' => 200,
+                'payload' => ['email' => $event->user->email],
+            ]);
+        });
 
-        SystemAuditLog::create([
-            'user_id' => $event->user->id,
-            'action' => 'login',
-            'description' => 'User logged in',
-            'method' => 'POST',
-            'url' => request()->fullUrl(),
-            'route_name' => optional(request()->route())->getName(),
-            'ip_address' => request()->ip(),
-            'country' => $country,
-            'user_agent' => substr((string) request()->userAgent(), 0, 1000),
-            'status_code' => 200,
-            'payload' => ['email' => $event->user->email],
-        ]);
-    });
+        Event::listen(Logout::class, function (Logout $event) {
+            $country = IpGeo::countryForIp(request()->ip());
 
-    Event::listen(Logout::class, function (Logout $event) {
-        $country = IpGeo::countryForIp(request()->ip());
+            SystemAuditLog::create([
+                'user_id' => optional($event->user)->id,
+                'action' => 'logout',
+                'description' => 'User logged out',
+                'method' => 'POST',
+                'url' => request()->fullUrl(),
+                'route_name' => optional(request()->route())->getName(),
+                'ip_address' => request()->ip(),
+                'country' => $country,
+                'user_agent' => substr((string) request()->userAgent(), 0, 1000),
+                'status_code' => 200,
+                'payload' => ['email' => optional($event->user)->email],
+            ]);
+        });
 
-        SystemAuditLog::create([
-            'user_id' => optional($event->user)->id,
-            'action' => 'logout',
-            'description' => 'User logged out',
-            'method' => 'POST',
-            'url' => request()->fullUrl(),
-            'route_name' => optional(request()->route())->getName(),
-            'ip_address' => request()->ip(),
-            'country' => $country,
-            'user_agent' => substr((string) request()->userAgent(), 0, 1000),
-            'status_code' => 200,
-            'payload' => ['email' => optional($event->user)->email],
-        ]);
-    });
+        Event::listen(Failed::class, function (Failed $event) {
+            $email = $event->credentials['email'] ?? null;
 
-    Event::listen(Failed::class, function (Failed $event) {
-        $email = $event->credentials['email'] ?? null;
+            $country = IpGeo::countryForIp(request()->ip());
 
-        $country = IpGeo::countryForIp(request()->ip());
+            SystemAuditLog::create([
+                'user_id' => optional($event->user)->id,
+                'action' => 'login_failed',
+                'description' => 'Failed login attempt',
+                'method' => 'POST',
+                'url' => request()->fullUrl(),
+                'route_name' => optional(request()->route())->getName(),
+                'ip_address' => request()->ip(),
+                'country' => $country,
+                'user_agent' => substr((string) request()->userAgent(), 0, 1000),
+                'status_code' => 401,
+                'payload' => ['email' => $email],
+            ]);
+        });
 
-        SystemAuditLog::create([
-            'user_id' => optional($event->user)->id,
-            'action' => 'login_failed',
-            'description' => 'Failed login attempt',
-            'method' => 'POST',
-            'url' => request()->fullUrl(),
-            'route_name' => optional(request()->route())->getName(),
-            'ip_address' => request()->ip(),
-            'country' => $country,
-            'user_agent' => substr((string) request()->userAgent(), 0, 1000),
-            'status_code' => 401,
-            'payload' => ['email' => $email],
-        ]);
-    });
+        Event::listen('eloquent.created: *', function ($eventName, array $data) {
+            $this->logModelEvent('created', $data);
+        });
 
-    Event::listen('eloquent.created: *', function ($eventName, array $data) {
-        $this->logModelEvent('created', $data);
-    });
+        Event::listen('eloquent.updated: *', function ($eventName, array $data) {
+            $this->logModelEvent('updated', $data);
+        });
 
-    Event::listen('eloquent.updated: *', function ($eventName, array $data) {
-        $this->logModelEvent('updated', $data);
-    });
-
-    Event::listen('eloquent.deleted: *', function ($eventName, array $data) {
-        $this->logModelEvent('deleted', $data);
-    });
-}
-
-private function logModelEvent(string $type, array $data): void
-{
-    $model = $data[0] ?? null;
-    if (!$model instanceof Model) {
-        return;
+        Event::listen('eloquent.deleted: *', function ($eventName, array $data) {
+            $this->logModelEvent('deleted', $data);
+        });
     }
 
-    if ($model instanceof SystemAuditLog) {
-        return;
-    }
+    private function logModelEvent(string $type, array $data): void
+    {
+        $model = $data[0] ?? null;
+        if (! $model instanceof Model) {
+            return;
+        }
 
-    // Avoid logging OTP records (contains sensitive verification material).
-    if ($model instanceof UserLoginOtp
-        || $model instanceof DiscussionParticipantToken
-        || $model instanceof DiscussionReaction) {
-        return;
-    }
+        if ($model instanceof SystemAuditLog
+            || $model instanceof ApiSyncPairing
+            || $model instanceof ApiSyncEvent
+            || $model instanceof ApiSyncInvitation
+            || $model instanceof ApiSyncInvitationEvent) {
+            return;
+        }
 
-    $changes = [];
-    if ($type === 'updated') {
-        $changes = $model->getChanges();
-    }
+        // Avoid logging OTP records (contains sensitive verification material).
+        if ($model instanceof UserLoginOtp
+            || $model instanceof DiscussionParticipantToken
+            || $model instanceof DiscussionReaction) {
+            return;
+        }
 
-    $original = [];
-    if ($type === 'updated') {
-        $original = array_intersect_key($model->getOriginal(), $changes);
-    }
+        $changes = [];
+        if ($type === 'updated') {
+            $changes = $model->getChanges();
+        }
 
-    $request = app()->runningInConsole() ? null : request();
-    $country = $request ? IpGeo::countryForIp($request->ip()) : null;
+        $original = [];
+        if ($type === 'updated') {
+            $original = array_intersect_key($model->getOriginal(), $changes);
+        }
 
-    $module = $this->resolveAuditModule($model);
-    $actionMessage = $this->buildActionMessage($type, $model);
+        $request = app()->runningInConsole() ? null : request();
+        $country = $request ? IpGeo::countryForIp($request->ip()) : null;
 
-    $payload = [
-        'model' => get_class($model),
-        'table' => $model->getTable(),
-        'id' => $model->getKey(),
-    ];
+        $module = $this->resolveAuditModule($model);
+        $actionMessage = $this->buildActionMessage($type, $model);
 
-    if ($model instanceof NewsPost) {
-        $changes = $this->summarizeNewsBodyForAudit($changes);
-        $original = $this->summarizeNewsBodyForAudit($original);
-    }
-
-    if ($type === 'updated') {
-        // Store only the diff for updates to reduce log volume.
-        $payload['changes'] = $this->redactAuditPayload($changes);
-        $payload['original'] = $this->redactAuditPayload($original);
-    } else {
-        $attributes = $model->getAttributes();
+        $payload = [
+            'model' => get_class($model),
+            'table' => $model->getTable(),
+            'id' => $model->getKey(),
+        ];
 
         if ($model instanceof NewsPost) {
-            $attributes = $this->summarizeNewsBodyForAudit($attributes);
+            $changes = $this->summarizeNewsBodyForAudit($changes);
+            $original = $this->summarizeNewsBodyForAudit($original);
         }
 
-        $payload['attributes'] = $this->redactAuditPayload($attributes);
-    }
+        if ($type === 'updated') {
+            // Store only the diff for updates to reduce log volume.
+            $payload['changes'] = $this->redactAuditPayload($changes);
+            $payload['original'] = $this->redactAuditPayload($original);
+        } else {
+            $attributes = $model->getAttributes();
 
-    SystemAuditLog::create([
-        'user_id' => optional($request?->user())->id,
-        'module' => $module,
-        'action' => "model_{$type}",
-        'action_message' => $actionMessage,
-        'description' => class_basename($model) . " {$type}",
-        'method' => $request?->method(),
-        'url' => $request?->fullUrl(),
-        'route_name' => $request?->route()?->getName(),
-        'ip_address' => $request?->ip(),
-        'country' => $country,
-        'user_agent' => $request?->userAgent() ? substr((string) $request->userAgent(), 0, 1000) : null,
-        'status_code' => $request ? 200 : null,
-        'payload' => $payload,
-    ]);
-}
+            if ($model instanceof NewsPost) {
+                $attributes = $this->summarizeNewsBodyForAudit($attributes);
+            }
 
-/**
- * Remove secrets/credentials from audit payloads before persisting them.
- *
- * Note: This is not a substitute for careful auditing scope; it's a safety net.
- */
-private function redactAuditPayload(array $data): array
-{
-    foreach (['source_payload', 'row_payload', 'planned_milestones'] as $largeSourceKey) {
-        if (array_key_exists($largeSourceKey, $data)) {
-            $data[$largeSourceKey] = '[PRESERVED IN DEDICATED PROCUREMENT IMPORT TABLE]';
+            $payload['attributes'] = $this->redactAuditPayload($attributes);
         }
+
+        SystemAuditLog::create([
+            'user_id' => optional($request?->user())->id,
+            'module' => $module,
+            'action' => "model_{$type}",
+            'action_message' => $actionMessage,
+            'description' => class_basename($model)." {$type}",
+            'method' => $request?->method(),
+            'url' => $request?->fullUrl(),
+            'route_name' => $request?->route()?->getName(),
+            'ip_address' => $request?->ip(),
+            'country' => $country,
+            'user_agent' => $request?->userAgent() ? substr((string) $request->userAgent(), 0, 1000) : null,
+            'status_code' => $request ? 200 : null,
+            'payload' => $payload,
+        ]);
     }
 
-    $redactKeys = [
-        'password',
-        'remember_token',
-        'current_password',
-        'password_confirmation',
-        'otp_code',
-        'token',
-        'secret',
-        'api_token',
-        'token_hash',
-    ];
-
-    foreach ($redactKeys as $key) {
-        if (array_key_exists($key, $data)) {
-            $data[$key] = '[REDACTED]';
+    /**
+     * Remove secrets/credentials from audit payloads before persisting them.
+     *
+     * Note: This is not a substitute for careful auditing scope; it's a safety net.
+     */
+    private function redactAuditPayload(array $data): array
+    {
+        foreach (['source_payload', 'row_payload', 'planned_milestones'] as $largeSourceKey) {
+            if (array_key_exists($largeSourceKey, $data)) {
+                $data[$largeSourceKey] = '[PRESERVED IN DEDICATED PROCUREMENT IMPORT TABLE]';
+            }
         }
+
+        $redactKeys = [
+            'password',
+            'remember_token',
+            'current_password',
+            'password_confirmation',
+            'otp_code',
+            'token',
+            'secret',
+            'api_token',
+            'token_hash',
+            'code_hash',
+            'claim_idempotency_hash',
+            'claim_recovery_hash',
+            'recovery_key',
+            'pairing_code',
+            'access_token',
+            'authorization_code',
+            'credential_digest',
+            'confirmation_receipt',
+        ];
+
+        foreach ($redactKeys as $key) {
+            if (array_key_exists($key, $data)) {
+                $data[$key] = '[REDACTED]';
+            }
+        }
+
+        return $data;
     }
 
-    return $data;
-}
+    private function summarizeNewsBodyForAudit(array $data): array
+    {
+        if (isset($data['body']) && is_string($data['body'])) {
+            $data['body'] = '[NEWS BODY OMITTED; length='.strlen($data['body']).']';
+        }
 
-private function summarizeNewsBodyForAudit(array $data): array
-{
-    if (isset($data['body']) && is_string($data['body'])) {
-        $data['body'] = '[NEWS BODY OMITTED; length=' . strlen($data['body']) . ']';
+        return $data;
     }
 
-    return $data;
-}
+    private function resolveAuditModule(Model $model): string
+    {
+        $class = class_basename($model);
 
-private function resolveAuditModule(Model $model): string
-{
-    $class = class_basename($model);
+        $map = [
+            // Budget
+            'Sector' => 'budget',
+            'Program' => 'budget',
+            'Project' => 'budget',
+            'Activity' => 'budget',
+            'SubActivity' => 'budget',
 
-    $map = [
-        // Budget
-        'Sector' => 'budget',
-        'Program' => 'budget',
-        'Project' => 'budget',
-        'Activity' => 'budget',
-        'SubActivity' => 'budget',
+            // Users & Security
+            'User' => 'user',
+            'Role' => 'user',
+            'Permission' => 'user',
 
-        // Users & Security
-        'User' => 'user',
-        'Role' => 'user',
-        'Permission' => 'user',
+            // Procurement
+            'Procurement' => 'procurement',
+            'DynamicForm' => 'procurement',
+            'FormSubmission' => 'procurement',
+            'ProcurementSubmissionScreening' => 'procurement',
 
-        // Procurement
-        'Procurement' => 'procurement',
-        'DynamicForm' => 'procurement',
-        'FormSubmission' => 'procurement',
-        'ProcurementSubmissionScreening' => 'procurement',
+            // Prescreening
+            'PrescreeningTemplate' => 'prescreening',
+            'PrescreeningCriterion' => 'prescreening',
+            'PrescreeningResult' => 'prescreening',
 
-        // Prescreening
-        'PrescreeningTemplate' => 'prescreening',
-        'PrescreeningCriterion' => 'prescreening',
-        'PrescreeningResult' => 'prescreening',
+            // Evaluations
+            'Evaluation' => 'evaluations',
+            'EvaluationAssignment' => 'evaluations',
+            'EvaluationSubmission' => 'evaluations',
 
-        // Evaluations
-        'Evaluation' => 'evaluations',
-        'EvaluationAssignment' => 'evaluations',
-        'EvaluationSubmission' => 'evaluations',
+            // HR
+            'HrVacancy' => 'hr',
+            'HrApplicant' => 'hr',
+            'HrEmployee' => 'hr',
 
-        // HR
-        'HrVacancy' => 'hr',
-        'HrApplicant' => 'hr',
-        'HrEmployee' => 'hr',
+            // Finance
+            'FinanceCommitment' => 'finance',
+            'FinanceExecution' => 'finance',
+            'FinanceResource' => 'finance',
+            'FinanceResourceCategory' => 'finance',
+            'FinanceResourceItem' => 'finance',
 
-        // Finance
-        'FinanceCommitment' => 'finance',
-        'FinanceExecution' => 'finance',
-        'FinanceResource' => 'finance',
-        'FinanceResourceCategory' => 'finance',
-        'FinanceResourceItem' => 'finance',
+            // Monitoring, Evaluation and Learning
+            'Indicator' => 'me',
+            'IndicatorTarget' => 'me',
+            'IndicatorResult' => 'me',
+            'MeFramework' => 'me',
+            'MeIndicatorReferenceSheet' => 'me',
+            'MeIndicatorCalculationRule' => 'me',
+            'MePerformanceThreshold' => 'me',
+            'MeReportingPeriod' => 'me',
+            'MeDataEntryForm' => 'me',
+            'MeDataEntryFormSection' => 'me',
+            'MeDataEntryFormField' => 'me',
+            'MeDataCollection' => 'me',
+            'MeDataCollectionAssignment' => 'me',
+            'MeDataSubmission' => 'me',
+            'MeDataSubmissionAnswer' => 'me',
+            'MeDataSubmissionVersion' => 'me',
+            'MeDataSubmissionReview' => 'me',
+            'MeSubmissionEvidence' => 'me',
+            'MeDataQualityFinding' => 'me',
+            'MePerformanceReport' => 'me',
+            'MePerformanceReportIndicatorResult' => 'me',
+            'MeIndicatorAchievement' => 'me',
+            'MeIndicatorAchievementBreakdown' => 'me',
 
-        // Monitoring, Evaluation and Learning
-        'Indicator' => 'me',
-        'IndicatorTarget' => 'me',
-        'IndicatorResult' => 'me',
-        'MeFramework' => 'me',
-        'MeIndicatorReferenceSheet' => 'me',
-        'MeIndicatorCalculationRule' => 'me',
-        'MePerformanceThreshold' => 'me',
-        'MeReportingPeriod' => 'me',
-        'MeDataEntryForm' => 'me',
-        'MeDataEntryFormSection' => 'me',
-        'MeDataEntryFormField' => 'me',
-        'MeDataCollection' => 'me',
-        'MeDataCollectionAssignment' => 'me',
-        'MeDataSubmission' => 'me',
-        'MeDataSubmissionAnswer' => 'me',
-        'MeDataSubmissionVersion' => 'me',
-        'MeDataSubmissionReview' => 'me',
-        'MeSubmissionEvidence' => 'me',
-        'MeDataQualityFinding' => 'me',
-        'MePerformanceReport' => 'me',
-        'MePerformanceReportIndicatorResult' => 'me',
-        'MeIndicatorAchievement' => 'me',
-        'MeIndicatorAchievementBreakdown' => 'me',
+            // Communications
+            'MemberStateCommunication' => 'communications',
+            'MemberStateCommunicationAttachment' => 'communications',
 
-        // Communications
-        'MemberStateCommunication' => 'communications',
-        'MemberStateCommunicationAttachment' => 'communications',
+            // Think Tank Management
+            'Consortium' => 'think_tank_management',
+            'ConsortiumThinkTank' => 'think_tank_management',
+            'ConsortiumFundAllocation' => 'think_tank_management',
+            'ConsortiumDisbursementRequest' => 'think_tank_management',
+            'ConsortiumActivityReport' => 'think_tank_management',
+            'ThinkTankResearchOutput' => 'think_tank_management',
+            'ThinkTankProcurementPlan' => 'think_tank_management',
 
-        // Think Tank Management
-        'Consortium' => 'think_tank_management',
-        'ConsortiumThinkTank' => 'think_tank_management',
-        'ConsortiumFundAllocation' => 'think_tank_management',
-        'ConsortiumDisbursementRequest' => 'think_tank_management',
-        'ConsortiumActivityReport' => 'think_tank_management',
-        'ThinkTankResearchOutput' => 'think_tank_management',
-        'ThinkTankProcurementPlan' => 'think_tank_management',
+            // Public discussion forum
+            'DiscussionParticipant' => 'discussions',
+            'DiscussionTheme' => 'discussions',
+            'DiscussionTopic' => 'discussions',
+            'DiscussionPost' => 'discussions',
+            'DiscussionReaction' => 'discussions',
+            'DiscussionModerationAction' => 'discussions',
+        ];
 
-        // Public discussion forum
-        'DiscussionParticipant' => 'discussions',
-        'DiscussionTheme' => 'discussions',
-        'DiscussionTopic' => 'discussions',
-        'DiscussionPost' => 'discussions',
-        'DiscussionReaction' => 'discussions',
-        'DiscussionModerationAction' => 'discussions',
-    ];
+        return $map[$class] ?? 'system';
+    }
 
-    return $map[$class] ?? 'system';
-}
+    private function buildActionMessage(string $type, Model $model): string
+    {
+        $label = method_exists($model, 'getAttribute')
+            ? ($model->getAttribute('title')
+                ?? $model->getAttribute('name')
+                ?? $model->getAttribute('reference_no')
+                ?? $model->getAttribute('email')
+                ?? $model->getKey())
+            : $model->getKey();
 
-private function buildActionMessage(string $type, Model $model): string
-{
-    $label = method_exists($model, 'getAttribute')
-        ? ($model->getAttribute('title')
-            ?? $model->getAttribute('name')
-            ?? $model->getAttribute('reference_no')
-            ?? $model->getAttribute('email')
-            ?? $model->getKey())
-        : $model->getKey();
+        $modelName = strtolower(str_replace('_', ' ', class_basename($model)));
 
-    $modelName = strtolower(str_replace('_', ' ', class_basename($model)));
+        $message = match ($type) {
+            'created' => "Created a new {$modelName}: {$label}",
+            'updated' => "Updated {$modelName}: {$label}",
+            'deleted' => "Deleted {$modelName}: {$label}",
+            default => ucfirst($type)." {$modelName}: {$label}",
+        };
 
-    $message = match ($type) {
-        'created' => "Created a new {$modelName}: {$label}",
-        'updated' => "Updated {$modelName}: {$label}",
-        'deleted' => "Deleted {$modelName}: {$label}",
-        default => ucfirst($type) . " {$modelName}: {$label}",
-    };
-
-    // system_audit_logs.action_message is varchar(255). Long procurement
-    // descriptions remain in the model/import payload, while the label here
-    // is deliberately bounded so audit logging can never break a write.
-    return Str::limit($message, 250);
-}
-
+        // system_audit_logs.action_message is varchar(255). Long procurement
+        // descriptions remain in the model/import payload, while the label here
+        // is deliberately bounded so audit logging can never break a write.
+        return Str::limit($message, 250);
+    }
 }

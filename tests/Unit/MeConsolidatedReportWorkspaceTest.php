@@ -15,13 +15,20 @@ it('provides a professional approved-only consolidated reporting workspace', fun
         ->toContain('STATUS_ARCHIVED')
         ->toContain('coverageRate')
         ->toContain('stageDistribution')
+        ->toContain('reportScope')
+        ->toContain("'project_component_id' => \$this->uuidOrNull")
+        ->toContain("where('project_component_id', \$projectId)")
         ->toContain("'documents:id,report_id'")
         ->and($service)
         ->toContain('hasDisaggregationFilters')
         ->toContain('qualitative_values')
         ->toContain('organizationName')
+        ->toContain("filled(\$filters['project_component_id'] ?? null)")
         ->and($view)
-        ->toContain('Reporting context and consolidation scope')
+        ->toContain('Find a Think Tank report')
+        ->toContain('data-consolidated-portfolio')
+        ->toContain('data-consolidated-project')
+        ->toContain('All projects in selected portfolio')
         ->toContain('Consolidation quality controls')
         ->toContain('Organization submission register')
         ->toContain('Approved consolidated indicator performance')
@@ -42,10 +49,12 @@ it('exports qualitative results, organizations and complete beneficiary dimensio
     ]);
 
     expect($export->headings())
+        ->toContain('Project Code')
+        ->toContain('Project / Component')
         ->toContain('Qualitative Results')
         ->toContain('Reporting Organizations')
         ->toContain('Gender Not Disaggregated')
         ->toContain('Age Not Disaggregated')
         ->and($export->title())->toBe('Approved Consolidation')
-        ->and($export->columnWidths())->toHaveKeys(['A', 'I', 'AC']);
+        ->and($export->columnWidths())->toHaveKeys(['A', 'I', 'AC', 'AE']);
 });

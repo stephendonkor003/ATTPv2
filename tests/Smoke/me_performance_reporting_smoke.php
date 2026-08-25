@@ -1,11 +1,12 @@
 <?php
 
+use App\Models\ConsortiumThinkTank;
 use App\Models\Indicator;
 use App\Models\IndicatorTarget;
-use App\Models\ConsortiumThinkTank;
 use App\Models\MeDataCollection;
 use App\Models\MeDataCollectionAssignment;
 use App\Models\MeDataEntryForm;
+use App\Models\MeFramework;
 use App\Models\MePerformanceReport;
 use App\Models\Project;
 use App\Models\ReportingFrequency;
@@ -436,26 +437,160 @@ class MePerformanceReportingSmoke
                 'reporting_year' => 2026,
                 'reporting_period_type' => 'quarter',
                 'reporting_period_label' => $context['quarter'],
+                'portfolio_id' => $context['portfolio']->id,
+                'project_component_id' => $context['component']->id,
             ]))
                 ->assertOk()
-                ->assertSee('Think Tank Submissions &amp; Consolidated Report', false)
+                ->assertSee('Think Tank M&amp;E Reports', false)
+                ->assertSee('Only projects belonging to the selected portfolio are shown.')
                 ->assertSee('Reporting coverage')
                 ->assertSee('Consolidation quality controls')
                 ->assertSee('Approved consolidated indicator performance')
                 ->assertSee($context['member']->name)
+                ->assertSee($context['component']->name)
                 ->assertSee($context['indicator']->name);
             $consolidatedFilters = [
                 'reporting_year' => 2026,
                 'reporting_period_type' => 'quarter',
                 'reporting_period_label' => $context['quarter'],
+                'portfolio_id' => $context['portfolio']->id,
+                'project_component_id' => $context['component']->id,
             ];
+            $consolidatedProjectToken = Str::upper(Str::slug(
+                (string) ($context['component']->project_id ?: $context['component']->name)
+            ));
             $this->get(route('budget.me.consolidated-reports.excel', $consolidatedFilters))
                 ->assertOk()
-                ->assertDownload('ATTP-Consolidated-MEL-2026-'.$context['quarter'].'.xlsx');
+                ->assertDownload('ATTP-Consolidated-MEL-2026-'.$context['quarter'].'-'.$consolidatedProjectToken.'.xlsx');
             $this->get(route('budget.me.consolidated-reports.pdf', $consolidatedFilters))
                 ->assertOk()
-                ->assertDownload('ATTP-Consolidated-MEL-2026-'.$context['quarter'].'.pdf')
+                ->assertDownload('ATTP-Consolidated-MEL-2026-'.$context['quarter'].'-'.$consolidatedProjectToken.'.pdf')
                 ->assertHeader('content-type', 'application/pdf');
+
+            $engineFilters = [
+                'project_year' => 1,
+                'reporting_year' => 2026,
+                'component_id' => $context['component']->id,
+                'indicator_id' => $context['indicator']->id,
+            ];
+            $this->get(route('budget.me.consolidation-engine.index', [
+                ...$engineFilters,
+                'level' => 'indicator',
+            ]))
+                ->assertOk()
+                ->assertSee('Consolidations Engine')
+                ->assertSee('Official approved-only consolidation is active')
+                ->assertSee($context['indicator']->name)
+                ->assertSee($context['member']->name);
+            $this->get(route('budget.me.consolidation-engine.index', [
+                ...$engineFilters,
+                'level' => 'project',
+            ]))
+                ->assertOk()
+                ->assertSee('Project-level consolidation')
+                ->assertSee($context['component']->name);
+            $this->get(route('budget.me.consolidation-engine.excel', [
+                ...$engineFilters,
+                'level' => 'indicator',
+            ]))
+                ->assertOk()
+                ->assertDownload('ATTP-complete-Consolidation-2026.xlsx')
+                ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            $indicatorCsv = $this->get(route('budget.me.consolidation-engine.csv', [
+                ...$engineFilters,
+                'level' => 'indicator',
+            ]));
+            $indicatorCsv
+                ->assertOk()
+                ->assertStreamed()
+                ->assertDownload('ATTP-indicator-Consolidation-2026.csv')
+                ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+            $this->assertTrue(
+                str_contains($indicatorCsv->streamedContent(), $context['indicator']->name),
+                'The indicator-level CSV omitted the approved indicator consolidation row.'
+            );
+            $this->get(route('budget.me.consolidation-engine.csv', [
+                ...$engineFilters,
+                'level' => 'project',
+            ]))
+                ->assertOk()
+                ->assertDownload('ATTP-project-Consolidation-2026.csv');
+            $this->get(route('budget.me.consolidation-engine.pdf', [
+                ...$engineFilters,
+                'level' => 'indicator',
+            ]))
+                ->assertOk()
+                ->assertDownload('ATTP-indicator-Consolidation-2026.pdf')
+                ->assertHeader('content-type', 'application/pdf');
+
+            $indicatorReportFilters = [
+                'project_year' => 1,
+                'reporting_year' => 2026,
+                'component_id' => $context['component']->id,
+                'indicator_id' => $context['indicator']->id,
+            ];
+            $individualReportFilters = [
+                ...$indicatorReportFilters,
+                'mode' => 'individual',
+            ];
+            $individualReportStem = 'ATTP-Indicator-Report-'
+                .Str::slug((string) $context['indicator']->indicator_code).'-2026';
+
+            $this->get(route('budget.me.indicator-reports.index', $individualReportFilters))
+                ->assertOk()
+                ->assertSee('Indicator Report')
+                ->assertSee('Individual indicator report')
+                ->assertSee($context['indicator']->name)
+                ->assertSee($context['member']->name);
+            $this->get(route('budget.me.indicator-reports.excel', $individualReportFilters))
+                ->assertOk()
+                ->assertDownload($individualReportStem.'.xlsx')
+                ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            $individualIndicatorCsv = $this->get(route('budget.me.indicator-reports.csv', $individualReportFilters));
+            $individualIndicatorCsv
+                ->assertOk()
+                ->assertStreamed()
+                ->assertDownload($individualReportStem.'.csv')
+                ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+            $this->assertTrue(
+                str_contains($individualIndicatorCsv->streamedContent(), $context['indicator']->name),
+                'The individual indicator-report CSV omitted its approved contribution.'
+            );
+            $this->get(route('budget.me.indicator-reports.pdf', $individualReportFilters))
+                ->assertOk()
+                ->assertDownload($individualReportStem.'.pdf')
+                ->assertHeader('content-type', 'application/pdf');
+
+            $consolidatedIndicatorFilters = [
+                ...$indicatorReportFilters,
+                'mode' => 'consolidated',
+            ];
+            $consolidatedReportStem = 'ATTP-Consolidated-Indicator-Report-2026';
+            $this->get(route('budget.me.indicator-reports.index', $consolidatedIndicatorFilters))
+                ->assertOk()
+                ->assertSee('Indicator Report')
+                ->assertSee('Consolidated indicator report')
+                ->assertSee($context['indicator']->name)
+                ->assertSee($context['component']->name);
+            $this->get(route('budget.me.indicator-reports.excel', $consolidatedIndicatorFilters))
+                ->assertOk()
+                ->assertDownload($consolidatedReportStem.'.xlsx')
+                ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            $consolidatedIndicatorCsv = $this->get(route('budget.me.indicator-reports.csv', $consolidatedIndicatorFilters));
+            $consolidatedIndicatorCsv
+                ->assertOk()
+                ->assertStreamed()
+                ->assertDownload($consolidatedReportStem.'.csv')
+                ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+            $this->assertTrue(
+                str_contains($consolidatedIndicatorCsv->streamedContent(), $context['indicator']->name),
+                'The consolidated indicator-report CSV omitted its approved indicator row.'
+            );
+            $this->get(route('budget.me.indicator-reports.pdf', $consolidatedIndicatorFilters))
+                ->assertOk()
+                ->assertDownload($consolidatedReportStem.'.pdf')
+                ->assertHeader('content-type', 'application/pdf');
+
             $this->get(route('budget.me.consolidated-reports.index', [
                 'reporting_year' => 2026,
                 'reporting_period_type' => 'semi_annual',
@@ -508,6 +643,8 @@ class MePerformanceReportingSmoke
             ->first();
         $this->assertTrue((bool) $component, 'A project component with a responsible Directorate is required.');
         $portfolio = $component->program->sector;
+        $framework = MeFramework::query()->current()->first();
+        $this->assertTrue((bool) $framework, 'An active current M&E framework is required.');
 
         $frequency = ReportingFrequency::query()
             ->indicatorCadences()
@@ -530,8 +667,16 @@ class MePerformanceReportingSmoke
             'indicatorable_type' => Sector::class,
             'indicatorable_id' => $portfolio->id,
             'project_component_id' => $component->id,
+            'framework_id' => $framework->id,
             'name' => 'Quarterly reporting smoke indicator '.Str::upper(Str::random(8)),
             'results_level' => 'pdo',
+            'value_type' => 'number',
+            'aggregation_method' => 'sum',
+            'organization_rollup_method' => 'sum',
+            'reporting_source' => 'both',
+            'is_cumulative' => false,
+            'requires_evidence' => true,
+            'is_active' => true,
             'baseline_type' => 'year',
             'baseline_value' => 0,
             'frequency_of_reporting_id' => $frequency->id,
@@ -543,10 +688,16 @@ class MePerformanceReportingSmoke
         ]);
         IndicatorTarget::query()->create([
             'indicator_id' => $indicator->id,
+            'framework_id' => $framework->id,
             'target_context' => Indicator::SETUP_TARGET_CONTEXT,
             'period_type' => 'year',
             'period_label' => 'Approved target',
             'target_value' => 125,
+            'project_year' => 1,
+            'target_scope' => 'project',
+            'approval_status' => 'approved',
+            'approved_by' => $admin->id,
+            'approved_at' => now(),
             'created_by' => $admin->id,
             'updated_by' => $admin->id,
         ]);

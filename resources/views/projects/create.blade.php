@@ -51,7 +51,7 @@
                                     @foreach ($programs as $p)
                                         <option value="{{ $p->id }}" data-start="{{ $p->start_year }}"
                                             data-end="{{ $p->end_year }}" data-currency="{{ $p->currency }}">
-                                            {{ $p->program_id }} â€” {{ $p->name }}
+                                            {{ $p->program_id }} — {{ $p->name }}
                                         </option>
                                     @endforeach
                                 </select>

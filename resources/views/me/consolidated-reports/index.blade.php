@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'ATTP Consolidated M&E Report')
+@section('title', 'Think Tank M&E Reports')
 @section('lean_admin_scripts', '1')
 
 @push('styles')
@@ -14,29 +14,34 @@
     $canOpenResults = $viewer && ($viewer->can('me.results.view') || $viewer->can('me.performance_reports.view') || $viewer->can('me.configuration.view') || $viewer->can('me.configuration.manage'));
     $advancedKeys = ['geographic_scope','country','rec','implementing_institution_type','implementing_institution','priority_theme','gender','age_group','stakeholder_category'];
     $advancedFilterCount = collect($filters)->only($advancedKeys)->filter(fn ($value) => filled($value))->count();
-    $optionalFilterCount = collect($filters)->only([...$advancedKeys,'portfolio_id','think_tank_id'])->filter(fn ($value) => filled($value))->count();
+    $optionalFilterCount = collect($filters)->only([...$advancedKeys,'portfolio_id','project_component_id','think_tank_id'])->filter(fn ($value) => filled($value))->count();
     $exportFilters = collect([
         'reporting_year' => $filters['year'],
         'reporting_period_type' => $filters['period_type'],
         'reporting_period_label' => $filters['period_label'],
         'portfolio_id' => $filters['portfolio_id'],
+        'project_component_id' => $filters['project_component_id'],
         'think_tank_id' => $filters['think_tank_id'],
         ...collect($filters)->only($advancedKeys)->all(),
     ])->filter(fn ($value) => filled($value))->all();
     $dashboardFilters = collect($exportFilters)
-        ->except('portfolio_id')
+        ->except(['portfolio_id','project_component_id'])
         ->when(filled($filters['portfolio_id']), fn ($values) => $values->put('thematic_area_id', $filters['portfolio_id']))
+        ->when(filled($filters['project_component_id']), fn ($values) => $values->put('component_id', $filters['project_component_id']))
         ->all();
     $yearOptions = collect($years)->push($filters['year'])->filter()->unique()->sortDesc()->values();
     $contextLabel = ($periodTypes[$filters['period_type']] ?? str($filters['period_type'])->headline()).' · '.($periodLabels[$filters['period_type']][$filters['period_label']] ?? $filters['period_label']).' '.$filters['year'];
+    if ($selectedProject) {
+        $contextLabel .= ' | '.collect([$selectedProject->project_id, $selectedProject->name])->filter()->join(' - ');
+    }
 @endphp
 
 <div class="mel-consolidated">
     <header class="cr-header">
         <div>
             <span class="cr-eyebrow">Monitoring, Evaluation and Learning</span>
-            <h1>Think Tank Submissions &amp; Consolidated Report</h1>
-            <p>Track organization reporting coverage, inspect each submission and consolidate only finally approved results using the authorized indicator-level roll-up method.</p>
+            <h1>Think Tank M&amp;E Reports</h1>
+            <p>Select a Think Tank to view its M&amp;E reports, inspect individual submissions and consolidate only finally approved results using the authorized indicator-level roll-up method.</p>
         </div>
         <div class="cr-header-side">
             <span class="cr-generated">{{ $contextLabel }} · Updated {{ $generatedAt->format('d M Y, H:i') }}</span>
@@ -51,23 +56,33 @@
 
     <aside class="cr-note" aria-label="Consolidation policy">
         <span class="cr-note-mark">APR</span>
-        <div><strong>Official consolidation uses final approvals only</strong><p>Draft, submitted, reviewed and verified reports remain visible in the organization register, but they never enter the consolidated indicator totals. Archived reports retain their approved contribution. All results and export files use the same portfolio and disaggregation scope.</p></div>
+        <div><strong>Official consolidation uses final approvals only</strong><p>Draft, submitted, reviewed and verified reports remain visible in the organization register, but they never enter the consolidated indicator totals. Archived reports retain their approved contribution. All results and export files use the same portfolio, project and disaggregation scope.</p></div>
     </aside>
 
     @if($errors->any())<div class="cr-alert" role="alert"><strong>The report scope could not be applied.</strong> {{ $errors->first() }}</div>@endif
 
-    <details class="cr-panel cr-filter" @if($optionalFilterCount > 0) open @endif>
+    <details class="cr-panel cr-filter" open>
         <summary class="cr-panel-head">
-            <div><h2>Reporting context and consolidation scope</h2><p>Select the period first, then narrow the official consolidation by portfolio, organization or beneficiary dimension.</p></div>
+            <div><h2>Find a Think Tank report</h2><p>Choose a Think Tank, then narrow its reports by period, portfolio, project or beneficiary dimension.</p></div>
             <div class="cr-summary-right"><span class="cr-badge">{{ $optionalFilterCount }} optional {{ str('filter')->plural($optionalFilterCount) }}</span><span class="cr-chevron" aria-hidden="true">⌄</span></div>
         </summary>
         <div class="cr-panel-body">
-            <form method="GET" action="{{ route('budget.me.consolidated-reports.index') }}" class="cr-filter-grid" id="consolidated-filter">
+            <form method="GET" action="{{ route('budget.me.consolidated-reports.index') }}" class="cr-filter-grid cr-primary-filters" id="consolidated-filter">
+                <div class="cr-field"><label for="consolidated-owner">Think Tank</label><select id="consolidated-owner" name="think_tank_id" class="form-select"><option value="">All Think Tanks</option>@foreach($thinkTanks as $thinkTank)<option value="{{ $thinkTank->id }}" @selected((string)$filters['think_tank_id']===(string)$thinkTank->id)>{{ $thinkTank->name }}</option>@endforeach</select></div>
                 <div class="cr-field"><label for="consolidated-year">Reporting year</label><select id="consolidated-year" name="reporting_year" class="form-select">@foreach($yearOptions as $year)<option value="{{ $year }}" @selected((int)$filters['year']===(int)$year)>{{ $year }}</option>@endforeach</select></div>
                 <div class="cr-field"><label for="consolidated-period-type">Reporting frequency</label><select name="reporting_period_type" id="consolidated-period-type" class="form-select">@foreach($periodTypes as $value=>$label)<option value="{{ $value }}" @selected($filters['period_type']===$value)>{{ $label }}</option>@endforeach</select></div>
                 <div class="cr-field"><label for="consolidated-period-label">Reporting period</label><select name="reporting_period_label" id="consolidated-period-label" class="form-select"></select></div>
-                <div class="cr-field"><label for="consolidated-portfolio">Portfolio</label><select id="consolidated-portfolio" name="portfolio_id" class="form-select"><option value="">All authorized portfolios</option>@foreach($portfolios as $portfolio)<option value="{{ $portfolio->id }}" @selected((string)$filters['portfolio_id']===(string)$portfolio->id)>{{ $portfolio->name }}</option>@endforeach</select></div>
-                <div class="cr-field"><label for="consolidated-owner">Think tank / partner</label><select id="consolidated-owner" name="think_tank_id" class="form-select"><option value="">All organizations</option>@foreach($thinkTanks as $thinkTank)<option value="{{ $thinkTank->id }}" @selected((string)$filters['think_tank_id']===(string)$thinkTank->id)>{{ $thinkTank->name }}</option>@endforeach</select></div>
+                <div class="cr-field"><label for="consolidated-portfolio">Portfolio</label><select id="consolidated-portfolio" name="portfolio_id" class="form-select" data-consolidated-portfolio><option value="">All authorized portfolios</option>@foreach($portfolios as $portfolio)<option value="{{ $portfolio->id }}" @selected((string)$filters['portfolio_id']===(string)$portfolio->id)>{{ $portfolio->name }}</option>@endforeach</select></div>
+                <div class="cr-field">
+                    <label for="consolidated-project">Project</label>
+                    <select id="consolidated-project" name="project_component_id" class="form-select" data-consolidated-project aria-describedby="consolidated-project-help">
+                        <option value="">All report-bearing projects</option>
+                        @foreach($projects as $project)
+                            <option value="{{ $project->id }}" data-portfolio-id="{{ $project->program?->sector_id }}" @selected((string)$filters['project_component_id']===(string)$project->id)>{{ $project->project_id }} &middot; {{ $project->name }}</option>
+                        @endforeach
+                    </select>
+                    <small id="consolidated-project-help" aria-live="polite">Choose a portfolio to narrow this list to its projects.</small>
+                </div>
 
                 <details class="cr-advanced" @if($advancedFilterCount > 0) open @endif>
                     <summary>Beneficiary and achievement disaggregation filters · {{ $advancedFilterCount }} active</summary>
@@ -86,7 +101,7 @@
 
                 <div class="cr-filter-actions">
                     <p class="cr-filter-tip"><strong>How this works:</strong> a beneficiary filter now includes only indicator results whose achievement breakdown matches every selected dimension. It no longer pulls unrelated indicators from the same report into official totals.</p>
-                    <div class="cr-actions"><a class="cr-btn cr-btn-secondary" href="{{ route('budget.me.consolidated-reports.index') }}">Reset scope</a><button class="cr-btn cr-btn-primary" type="submit">Apply consolidation scope</button></div>
+                    <div class="cr-actions"><a class="cr-btn cr-btn-secondary" href="{{ route('budget.me.consolidated-reports.index') }}">Clear filters</a><button class="cr-btn cr-btn-primary" type="submit">View reports</button></div>
                 </div>
             </form>
         </div>
@@ -104,7 +119,7 @@
     <div class="cr-grid">
         <section class="cr-panel" aria-labelledby="submission-stage-title">
             <div class="cr-panel-head"><div><h2 id="submission-stage-title">Submission lifecycle</h2><p>Current workflow stage of every matching organization report.</p></div><span class="cr-badge">{{ $reports->count() }} reports</span></div>
-            @if($reports->isNotEmpty())<div id="consolidated-stage-chart" class="cr-chart" role="img" aria-label="Donut chart of submission lifecycle stages"></div>@else<div class="cr-empty"><span class="cr-empty-mark">WF</span><strong>No submissions in this reporting scope</strong><p>Broaden the filters or select a reporting period with organization activity.</p></div>@endif
+            @if($reports->isNotEmpty())<div id="consolidated-stage-chart" class="cr-chart" role="img" aria-label="Donut chart of submission lifecycle stages"></div>@else<div class="cr-empty"><span class="cr-empty-mark">WF</span><strong>{{ $selectedProject ? 'No submissions in this project and reporting scope' : 'No submissions in this reporting scope' }}</strong><p>Broaden the filters or select a reporting period with organization activity.</p></div>@endif
         </section>
         <section class="cr-panel" aria-labelledby="organization-volume-title">
             <div class="cr-panel-head"><div><h2 id="organization-volume-title">Reports by organization</h2><p>Submission volume for each organization in the current scope.</p></div><span class="cr-badge">{{ $submittedOrganizationCount }} reporting</span></div>
@@ -151,7 +166,7 @@
                 <tr data-org-row data-search="{{ $searchText }}" data-status="{{ $statuses->isEmpty() ? 'missing' : $statuses->join(' ') }}">
                     <td><span class="cr-title">{{ $item['think_tank']->name }}</span><span class="cr-meta">{{ str($item['think_tank']->role ?: 'think tank')->headline() }}@if($item['think_tank']->status !== 'active') · Inactive organization retained as a period contributor @endif</span></td>
                     <td>{{ $item['think_tank']->country ?: 'Not recorded' }}</td>
-                    <td><strong>{{ $item['report_count'] }} {{ str('report')->plural($item['report_count']) }}</strong><span class="cr-meta">{{ $item['indicator_count'] }} linked indicator {{ str('result')->plural($item['indicator_count']) }} · {{ $item['approved_count'] }} approved input(s)</span>@foreach($item['reports'] as $organizationReport)<span class="cr-meta">{{ $organizationReport->form?->code ?: 'No form code' }} · {{ $organizationReport->form?->title ?: 'Form unavailable' }}</span>@endforeach</td>
+                    <td><strong>{{ $item['report_count'] }} {{ str('report')->plural($item['report_count']) }}</strong><span class="cr-meta">{{ $item['indicator_count'] }} linked indicator {{ str('result')->plural($item['indicator_count']) }} · {{ $item['approved_count'] }} approved input(s)</span>@foreach($item['reports'] as $organizationReport)<span class="cr-meta">{{ $organizationReport->form?->code ?: 'No form code' }} · {{ $organizationReport->form?->title ?: 'Form unavailable' }}</span>@if($organizationReport->projectComponent)<span class="cr-meta">Project: {{ $organizationReport->projectComponent->project_id }} · {{ $organizationReport->projectComponent->name }}</span>@endif @endforeach</td>
                     <td>
                         @forelse($item['reports'] as $organizationReport)
                             @php
@@ -195,7 +210,7 @@
                     $indicatorSearch = str(($indicator?->indicator_code).' '.($indicator?->name).' '.$row['organizations']->join(' '))->lower();
                 @endphp
                 <tr data-indicator-row data-search="{{ $indicatorSearch }}">
-                    <td><span class="cr-meta" style="color:#075c7a;font-weight:800">{{ $indicator?->indicator_code ?: 'No indicator code' }}</span><span class="cr-title">{{ $indicator?->name ?: 'Indicator unavailable' }}</span><span class="cr-meta">{{ str($indicator?->value_type ?: 'number')->headline() }} · {{ str($indicator?->results_level ?: 'results framework')->headline() }}</span></td>
+                    <td><span class="cr-meta" style="color:#075c7a;font-weight:800">{{ $indicator?->indicator_code ?: 'No indicator code' }}</span><span class="cr-title">{{ $indicator?->name ?: 'Indicator unavailable' }}</span><span class="cr-meta">{{ str($indicator?->value_type ?: 'number')->headline() }} · {{ str($indicator?->results_level ?: 'results framework')->headline() }}</span>@if($indicator?->projectComponent)<span class="cr-meta">Project: {{ $indicator->projectComponent->project_id }} · {{ $indicator->projectComponent->name }}</span>@endif</td>
                     <td><strong>{{ $row['rollup_label'] }}</strong><span class="cr-meta">Configured on the indicator; not chosen by this report.</span>@if($row['duplicate_result_count'] > 0)<div class="cr-warning">{{ $row['duplicate_result_count'] }} overlapping approved {{ str('value')->plural($row['duplicate_result_count']) }} suppressed</div>@endif</td>
                     <td>@if($isQualitative)<div class="cr-qualitative">@forelse($row['qualitative_values'] as $qualitative)<div><strong>{{ $qualitative['organization'] }}</strong>{{ $qualitative['value'] }}</div>@empty<span class="cr-meta">No qualitative result recorded</span>@endforelse</div>@else<span class="cr-result">{{ $row['value'] !== null ? number_format($row['value'],2) : 'Not numerically additive' }}</span>@if($unit)<span class="cr-meta">{{ $unit }}</span>@endif @endif</td>
                     <td>@if($row['target'] !== null)<strong>{{ number_format($row['target'],2) }}</strong>@if($unit)<span class="cr-meta">{{ $unit }}</span>@endif @else<span class="cr-meta">No single common target</span>@endif</td>
@@ -228,6 +243,41 @@ document.addEventListener('DOMContentLoaded', function () {
     };
     periodType?.addEventListener('change', function () { currentPeriod = null; refreshPeriods(); });
     refreshPeriods();
+
+    const portfolio = document.querySelector('[data-consolidated-portfolio]');
+    const project = document.querySelector('[data-consolidated-project]');
+    const projectHelp = document.getElementById('consolidated-project-help');
+    const projectPlaceholder = project?.querySelector('option[value=""]');
+    const projectOptions = Array.from(project?.querySelectorAll('option[data-portfolio-id]') || []);
+    const refreshProjects = function (clearInvalid = false) {
+        if (!portfolio || !project || !projectPlaceholder) return;
+        const portfolioId = portfolio.value;
+        let available = 0;
+        let selectedIsAvailable = project.value === '';
+
+        projectOptions.forEach(option => {
+            const matches = !portfolioId || option.dataset.portfolioId === portfolioId;
+            option.hidden = !matches;
+            option.disabled = !matches;
+            if (matches) available++;
+            if (matches && option.value === project.value) selectedIsAvailable = true;
+        });
+
+        if (clearInvalid && !selectedIsAvailable) project.value = '';
+        project.disabled = Boolean(portfolioId && available === 0);
+        projectPlaceholder.textContent = !portfolioId
+            ? 'All report-bearing projects'
+            : (available > 0 ? 'All projects in selected portfolio' : 'No report-bearing projects available');
+        if (projectHelp) {
+            projectHelp.textContent = !portfolioId
+                ? 'Choose a portfolio to narrow this list to its projects.'
+                : (available > 0
+                    ? 'Only projects belonging to the selected portfolio are shown.'
+                    : 'No report-bearing projects are available for this portfolio.');
+        }
+    };
+    portfolio?.addEventListener('change', () => refreshProjects(true));
+    refreshProjects();
 
     const organizationRows = Array.from(document.querySelectorAll('[data-org-row]'));
     const organizationSearch = document.getElementById('organization-search');

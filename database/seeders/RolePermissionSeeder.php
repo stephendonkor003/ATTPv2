@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use App\Models\Role;
 use App\Models\Permission;
+use App\Models\Role;
+use Illuminate\Database\Seeder;
 
 class RolePermissionSeeder extends Seeder
 {
@@ -232,6 +232,19 @@ class RolePermissionSeeder extends Seeder
             'member_state.treaties.update',
             'member_state.treaties.documents.download',
         ]);
+
+        $this->syncRolePermissionsByNames('API Sync Administrator', [
+            'api_sync.view',
+            ...((bool) config('api_sync.legacy_v1_enabled', false) ? [
+                'api_sync.generate',
+                'api_sync.revoke',
+            ] : []),
+            'api_sync.audit.view',
+            'api_sync.invitations.approve',
+            'api_sync.invitations.decline',
+            'api_sync.invitations.revoke',
+            'api_sync.documents.view',
+        ]);
     }
 
     private function syncRolePermissionsByNames(string $roleName, array $permissionNames): void
@@ -243,7 +256,7 @@ class RolePermissionSeeder extends Seeder
     private function syncRolePermissionsByIds(string $roleName, array $permissionIds): void
     {
         $role = Role::where('name', $roleName)->first();
-        if (!$role) {
+        if (! $role) {
             return;
         }
 

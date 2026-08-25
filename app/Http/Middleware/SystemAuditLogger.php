@@ -16,7 +16,7 @@ class SystemAuditLogger
     {
         $response = $next($request);
 
-        $path = '/' . ltrim($request->path(), '/');
+        $path = '/'.ltrim($request->path(), '/');
         $skipPrefixes = ['/assets', '/storage', '/favicon', '/css', '/js', '/build'];
 
         foreach ($skipPrefixes as $prefix) {
@@ -31,6 +31,12 @@ class SystemAuditLogger
                 'password',
                 'password_confirmation',
                 'current_password',
+                'authorization_code',
+                'pairing_code',
+                'code',
+                'credential',
+                'access_token',
+                'authorization',
                 '_token',
             ];
 
