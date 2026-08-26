@@ -22,7 +22,7 @@ it('exposes a System Admin-only procurement registry deletion action', function 
         ->toContain('$lockedProcurement->delete();');
 
     expect($view)
-        ->toContain("auth()->user()?->isAdmin() && \$p->status === 'draft'")
+        ->toContain('auth()->user()?->isAdmin()')
         ->toContain("route('procurements.destroy', \$p)")
         ->toContain("@method('DELETE')")
         ->toContain('This cannot be undone.');
