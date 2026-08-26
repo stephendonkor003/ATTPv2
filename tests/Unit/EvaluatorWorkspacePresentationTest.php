@@ -64,7 +64,7 @@ it('renders the correct response controls for services goods and expression of i
         ->toContain('type="radio"')
         ->toContain('name="criteria[{{ $criterion->id }}][decision]"')
         ->toContain('value="{{ $decisionValue }}"')
-        ->toContain('Evaluator comment')
+        ->toContain('Evidence comment')
         ->toContain('class="form-control evidence-comment"')
         ->toContain('@if ($evaluation->isEoi())')
         ->toContain('<span class="decision-number">{{ $loop->iteration }}</span>')
@@ -77,6 +77,25 @@ it('renders the correct response controls for services goods and expression of i
             1 => 'Average Qualified',
             0 => 'Not Qualified',
         ]);
+});
+
+it('stacks categorical responses below each question without wide qualification columns', function () {
+    $workspace = file_get_contents(
+        dirname(__DIR__, 2).'/resources/views/evaluations/submit.blade.php'
+    );
+
+    expect($workspace)
+        ->toContain('<th>Evaluation question and response</th>')
+        ->toContain('<td class="categorical-criterion-cell">')
+        ->toContain('<div class="criterion-prompt">')
+        ->toContain('<div class="categorical-response-grid">')
+        ->toContain('<legend class="response-field-label">')
+        ->toContain('Evidence comment <span>Required for final submission</span>')
+        ->toContain('.categorical-response-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr)')
+        ->toContain('.decision-options.is-eoi { grid-template-columns: repeat(3, minmax(0, 1fr)); }')
+        ->toContain('@media (max-width: 991.98px)')
+        ->toContain('.categorical-response-grid { grid-template-columns: 1fr; }')
+        ->not->toContain('class="decision-column"');
 });
 
 it('uses applicant-scoped canonical evaluator routes', function () {
