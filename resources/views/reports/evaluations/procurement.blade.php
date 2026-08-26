@@ -110,9 +110,14 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($evaluatorBreakdown as $name => $data)
+                        @forelse ($evaluatorBreakdown as $data)
                             <tr>
-                                <td>{{ $name }}</td>
+                                <td>
+                                    {{ $data['name'] }}
+                                    @if ($data['email'])
+                                        <small class="d-block text-muted">{{ $data['email'] }}</small>
+                                    @endif
+                                </td>
                                 <td>{{ $data['total'] }}</td>
                                 <td>{{ $data['avg_overall'] !== null ? number_format($data['avg_overall'], 2) : 'N/A' }}</td>
                             </tr>

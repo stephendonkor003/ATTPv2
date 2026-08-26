@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\EvaluationSubmission;
+use App\Support\PdfBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -33,10 +34,11 @@ class EvaluationCompleted extends Mailable
                 ->sum('max_score')
             : null;
 
-        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', [
+        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', array_merge([
             'submission' => $submission,
             'overallMax' => $overallMax,
-        ]);
+            'anonymised' => false,
+        ], PdfBranding::viewData()));
 
         return $this->subject('Evaluation Submitted: '.($submission->applicant?->procurement_submission_code ?? 'Submission'))
             ->view('emails.evaluations.completed', compact('submission', 'overallMax'))

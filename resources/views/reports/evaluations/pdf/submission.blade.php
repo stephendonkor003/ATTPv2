@@ -300,10 +300,14 @@
         $sectionOutline = $evaluation
             ? \App\Support\EvaluationSectionHierarchy::flattened($evaluation)
             : collect();
-        $applicantName = $submission->applicant?->display_name ?? 'Applicant';
-        $submissionCode = $submission->applicant?->procurement_submission_code ?? 'N/A';
+        $rawApplicantName = $submission->applicant?->display_name ?? 'Applicant';
+        $rawApplicantEmail = $submission->applicant?->submitter?->email;
+        $rawSubmissionCode = $submission->applicant?->procurement_submission_code ?? 'N/A';
+        $applicantName = $anonymised ? 'Applicant XXX' : $rawApplicantName;
+        $applicantEmail = $anonymised ? 'Redacted' : ($rawApplicantEmail ?? 'N/A');
+        $submissionCode = $anonymised ? 'ANONYMISED' : $rawSubmissionCode;
         $evaluatorName = $submission->evaluator?->name ?? null;
-        $displayEvaluatorName = $anonymised ? 'XXX' : ($evaluatorName ?? 'N/A');
+        $displayEvaluatorName = $evaluatorName ?? 'N/A';
         $score = $submission->overall_score !== null ? (float) $submission->overall_score : null;
         $decisionSummary = collect($evaluation?->decisionOptions() ?? [])
             ->map(function (string $label, int $decision) use ($submission) {
@@ -313,12 +317,23 @@
             })
             ->implode(' / ');
         $modeLabel = $anonymised ? 'Anonymised Applicant' : 'Internal Report';
-        $redact = function ($text) use ($anonymised, $evaluatorName) {
+        $applicantIdentifiers = collect([
+            $rawApplicantName !== 'Applicant' ? $rawApplicantName : null,
+            $rawApplicantEmail,
+            $rawSubmissionCode !== 'N/A' ? $rawSubmissionCode : null,
+        ])->filter()->unique()->values();
+        $redact = function ($text) use ($anonymised, $applicantIdentifiers) {
             if (! $anonymised || blank($text)) {
                 return $text;
             }
 
-            return $evaluatorName ? str_replace($evaluatorName, 'XXX', (string) $text) : $text;
+            $redacted = (string) $text;
+
+            foreach ($applicantIdentifiers as $identifier) {
+                $redacted = str_ireplace((string) $identifier, 'XXX', $redacted);
+            }
+
+            return $redacted;
         };
     @endphp
 
@@ -384,7 +399,7 @@
             </td>
             <td class="soft">
                 <span class="label">Applicant Email</span>
-                <span class="value">{{ $submission->applicant?->submitter?->email ?? 'N/A' }}</span>
+                <span class="value">{{ $applicantEmail }}</span>
             </td>
             <td>
                 <span class="label">Evaluator</span>

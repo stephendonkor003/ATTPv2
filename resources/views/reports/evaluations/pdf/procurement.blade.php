@@ -74,9 +74,14 @@
                 <th>Total Evaluations</th>
                 <th>Average Numeric Score</th>
             </tr>
-            @forelse ($evaluatorBreakdown as $name => $data)
+            @forelse ($evaluatorBreakdown as $data)
                 <tr>
-                    <td>{{ $name }}</td>
+                    <td>
+                        {{ $data['name'] }}
+                        @if ($data['email'])
+                            <br><small>{{ $data['email'] }}</small>
+                        @endif
+                    </td>
                     <td>{{ $data['total'] }}</td>
                     <td>{{ $data['avg_overall'] !== null ? number_format($data['avg_overall'], 2) : 'N/A' }}</td>
                 </tr>

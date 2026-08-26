@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
+use App\Support\PdfBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Str;
 
@@ -79,30 +80,21 @@ class EvaluationReportController extends Controller
 
         $overallMax = $this->overallMax($submission);
 
-        $name = Str::slug($submission->applicant?->display_name ?: 'submission');
-        $code = Str::slug($submission->applicant?->procurement_submission_code ?: $submission->id);
+        $name = $anonymised
+            ? 'applicant'
+            : Str::slug($submission->applicant?->display_name ?: 'submission');
+        $code = $anonymised
+            ? Str::slug((string) $submission->id)
+            : Str::slug($submission->applicant?->procurement_submission_code ?: $submission->id);
         $prefix = $anonymised ? 'evaluation-submission-anonymised-' : 'evaluation-submission-';
 
-        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', [
+        $pdf = Pdf::loadView('reports.evaluations.pdf.submission', array_merge([
             'submission' => $submission,
             'overallMax' => $overallMax,
             'anonymised' => $anonymised,
-            'platformName' => 'Africa Think Tank Platform',
-            'platformUrl' => rtrim(config('app.url') ?: url('/'), '/'),
-            'logoDataUri' => $this->logoDataUri(),
-        ])->setPaper('a4', 'portrait');
+        ], PdfBranding::viewData()))->setPaper('a4', 'portrait');
 
         return $pdf->download($prefix.trim($name.'-'.$code, '-').'.pdf');
-    }
-
-    private function logoDataUri(): ?string
-    {
-        $path = public_path('assets/images/attp-logo.jpeg');
-
-        if (! is_file($path)) {
-            return null;
-        }
-
     }
 
     public function procurement(Procurement $procurement)
@@ -166,7 +158,7 @@ class EvaluationReportController extends Controller
             'rankings',
             'evaluatorBreakdown',
             'evaluationStats'
-        ));
+        ))->setPaper('a4', 'landscape');
 
         return $pdf->download('evaluation-procurement-'.$procurement->id.'.pdf');
     }
@@ -220,7 +212,7 @@ class EvaluationReportController extends Controller
             'summary',
             'evaluatorBreakdown',
             'procurementStats'
-        ));
+        ))->setPaper('a4', 'landscape');
 
         return $pdf->download('evaluation-consolidated.pdf');
     }
@@ -264,6 +256,12 @@ class EvaluationReportController extends Controller
 
     private function assertEvaluationSubmissionScope(EvaluationSubmission $submission): void
     {
+        abort_unless(
+            $submission->submitted_at,
+            404,
+            'A completed evaluation report was not found.'
+        );
+
         $currentUser = request()->user();
 
         if (! $this->userHasAssignedPortfolioScope($currentUser)) {
@@ -281,18 +279,25 @@ class EvaluationReportController extends Controller
 
     private function overallMax(EvaluationSubmission $submission): ?float
     {
-        if (! $submission->evaluation?->usesNumericScoring()) {
+        $evaluation = $submission->evaluation;
+
+        if (! $evaluation?->usesNumericScoring()) {
             return null;
         }
 
-        return 100;
+        return round(
+            (float) $evaluation->sections->sum(
+                fn ($section) => (float) $section->criteria->sum('max_score')
+            ),
+            2
+        );
     }
 
     private function buildSummary($submissions): array
     {
         $total = $submissions->count();
-        $procurements = $submissions->pluck('procurement_id')->unique()->count();
-        $evaluators = $submissions->pluck('evaluator_id')->unique()->count();
+        $procurements = $submissions->pluck('procurement_id')->filter()->unique()->count();
+        $evaluators = $submissions->pluck('evaluator_id')->filter()->unique()->count();
         $avgOverall = $this->numericOverallScores($submissions)->avg();
 
         return [
@@ -306,15 +311,19 @@ class EvaluationReportController extends Controller
     private function buildEvaluatorBreakdown($submissions)
     {
         return $submissions
-            ->groupBy(fn ($s) => $s->evaluator?->name ?? 'Unassigned')
+            ->groupBy(fn ($submission) => $submission->evaluator_id ?: 'unassigned')
             ->map(function ($group) {
                 $avg = $this->numericOverallScores($group)->avg();
+                $evaluator = $group->first()?->evaluator;
 
                 return [
+                    'name' => $evaluator?->name ?? 'Unassigned',
+                    'email' => $evaluator?->email,
                     'total' => $group->count(),
                     'avg_overall' => $avg !== null ? round($avg, 2) : null,
                 ];
-            });
+            })
+            ->values();
     }
 
     private function buildApplicantRankings($submissions)
@@ -361,7 +370,7 @@ class EvaluationReportController extends Controller
                 return [
                     'procurement' => $procurement,
                     'total' => $group->count(),
-                    'evaluators' => $group->pluck('evaluator_id')->unique()->count(),
+                    'evaluators' => $group->pluck('evaluator_id')->filter()->unique()->count(),
                     'avg_overall' => $avg !== null ? round($avg, 2) : null,
                 ];
             })
@@ -371,6 +380,7 @@ class EvaluationReportController extends Controller
     private function buildEvaluationStats($submissions)
     {
         return $submissions
+            ->filter(fn ($submission) => $submission->evaluation !== null)
             ->groupBy('evaluation_id')
             ->map(function ($group) {
                 $evaluation = $group->first()->evaluation;
