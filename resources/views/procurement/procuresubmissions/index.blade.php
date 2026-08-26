@@ -301,6 +301,10 @@
             'rejected' => 'danger',
             'withdrawn' => 'dark',
             'prescreen_failed' => 'danger',
+            'prescreen_passed' => 'success',
+            'eoi_evaluation' => 'warning',
+            'eoi_not_qualified' => 'danger',
+            'technical_evaluation' => 'success',
             'evaluated' => 'info',
             'site_visit_completed' => 'success',
         ];

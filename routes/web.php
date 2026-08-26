@@ -3273,6 +3273,8 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
     ->name('reports.evaluations.')
     ->group(function () {
         Route::get('/', [EvaluationReportController::class, 'index'])->name('index');
+        Route::get('/eoi/{procurement}', [EvaluationReportController::class, 'eoiProcurement'])->withTrashed()->name('eoi.procurement');
+        Route::get('/eoi/{procurement}/pdf', [EvaluationReportController::class, 'eoiProcurementPdf'])->withTrashed()->name('eoi.procurement.pdf');
         Route::get('/submission/{submission}', [EvaluationReportController::class, 'submission'])->name('submission');
         Route::get('/submission/{submission}/pdf', [EvaluationReportController::class, 'submissionPdf'])->name('submission.pdf');
         Route::get('/submission/{submission}/anonymised-pdf', [EvaluationReportController::class, 'submissionAnonymisedPdf'])->name('submission.anonymised-pdf');

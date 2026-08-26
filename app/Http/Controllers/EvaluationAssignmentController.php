@@ -9,6 +9,7 @@ use App\Models\EvaluationAssignment;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\Sector;
+use App\Services\EoiQualificationService;
 use App\Support\ProcurementReviewAssignees;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -129,9 +130,22 @@ class EvaluationAssignmentController extends Controller
                     ->withInput()
                     ->with('error', 'Selected submission does not belong to this procurement.');
             }
+
+            if (! $submission->isAvailableForEvaluation()) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'The selected application is not eligible for further evaluation.');
+            }
+
+            if (! $evaluation->isEoi()
+                && $submission->status === FormSubmission::STATUS_EOI_EVALUATION) {
+                return back()
+                    ->withInput()
+                    ->with('error', 'Complete the applicant\'s EOI panel before assigning Technical Evaluation.');
+            }
         }
 
-        EvaluationAssignment::create([
+        $assignment = EvaluationAssignment::create([
             'evaluation_id' => $validated['evaluation_id'],
             'procurement_id' => $validated['procurement_id'],
             'form_submission_id' => $validated['assignment_type'] === 'submission'
@@ -142,6 +156,16 @@ class EvaluationAssignmentController extends Controller
             'assigned_at' => now(),
             'status' => 'assigned',
         ]);
+
+        if ($evaluation->isEoi()) {
+            $qualificationService = app(EoiQualificationService::class);
+
+            if ($submission) {
+                $qualificationService->synchronizeApplicantStage($submission);
+            } else {
+                $qualificationService->synchronizeProcurementStages($procurement);
+            }
+        }
 
         if ($evaluator?->email) {
             Mail::to($evaluator->email)->send(
@@ -159,6 +183,8 @@ class EvaluationAssignmentController extends Controller
     {
         $this->assertAssignmentManageable($assignment);
 
+        $assignment->loadMissing(['evaluation', 'procurement', 'submission']);
+
         if ($assignment->status === 'submitted') {
             return back()->with([
                 'error' => 'Cannot remove evaluator after submission.',
@@ -167,7 +193,20 @@ class EvaluationAssignmentController extends Controller
         }
 
         $procurementId = $assignment->procurement_id;
+        $isEoi = $assignment->evaluation?->isEoi() ?? false;
+        $procurement = $assignment->procurement;
+        $submission = $assignment->submission;
         $assignment->delete();
+
+        if ($isEoi && $procurement) {
+            $qualificationService = app(EoiQualificationService::class);
+
+            if ($submission) {
+                $qualificationService->synchronizeApplicantStage($submission);
+            } else {
+                $qualificationService->synchronizeProcurementStages($procurement);
+            }
+        }
 
         return back()->with([
             'success' => 'Evaluator removed successfully.',

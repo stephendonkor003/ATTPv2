@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
+use App\Models\Evaluation;
 use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
+use App\Services\EoiQualificationService;
 use App\Support\PdfBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Str;
@@ -31,7 +33,63 @@ class EvaluationReportController extends Controller
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
         $submissions = $submissionQuery->get();
 
-        return view('reports.evaluations.index', compact('procurements', 'submissions'));
+        $eoiProcurementQuery = Procurement::query()
+            ->where(function ($query): void {
+                $query->whereHas('evaluationAssignments.evaluation', function ($evaluation): void {
+                    $evaluation->where('type', Evaluation::TYPE_EOI);
+                })->orWhereHas('submissions.evaluationSubmissions.evaluation', function ($evaluation): void {
+                    $evaluation->where('type', Evaluation::TYPE_EOI);
+                })->orWhereHas('evaluations', function ($evaluation): void {
+                    $evaluation->where('type', Evaluation::TYPE_EOI);
+                });
+            })
+            ->withCount('submissions')
+            ->with([
+                'evaluationAssignments' => function ($assignments): void {
+                    $assignments
+                        ->whereHas('evaluation', fn ($evaluation) => $evaluation
+                            ->where('type', Evaluation::TYPE_EOI))
+                        ->with(['evaluation:id,name,type', 'evaluator:id,name,email']);
+                },
+            ])
+            ->orderBy('title');
+        $this->applyEvaluationReportProcurementScope($eoiProcurementQuery);
+        $eoiProcurements = $eoiProcurementQuery->get();
+
+        $eoiSubmissionGroups = $submissions
+            ->filter(fn (EvaluationSubmission $submission): bool => $submission->evaluation?->isEoi() ?? false)
+            ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->procurement_id);
+        $eoiProcurementStats = $eoiProcurements->mapWithKeys(function (Procurement $procurement) use ($eoiSubmissionGroups): array {
+            $completed = $eoiSubmissionGroups->get((string) $procurement->getKey(), collect());
+            $panelMemberIds = $procurement->evaluationAssignments
+                ->pluck('user_id')
+                ->merge($completed->pluck('evaluator_id'))
+                ->filter()
+                ->unique();
+
+            return [(string) $procurement->getKey() => [
+                'applicants' => (int) $procurement->submissions_count,
+                'evaluated_applicants' => $completed
+                    ->pluck('form_submission_id')
+                    ->filter()
+                    ->unique()
+                    ->count(),
+                'completed_reports' => $completed->count(),
+                'panel_members' => $panelMemberIds->count(),
+                'templates' => $procurement->evaluationAssignments
+                    ->pluck('evaluation.name')
+                    ->filter()
+                    ->unique()
+                    ->values(),
+            ]];
+        });
+
+        return view('reports.evaluations.index', compact(
+            'procurements',
+            'submissions',
+            'eoiProcurements',
+            'eoiProcurementStats'
+        ));
     }
 
     public function submission(EvaluationSubmission $submission)
@@ -64,6 +122,45 @@ class EvaluationReportController extends Controller
         $this->assertEvaluationSubmissionScope($submission);
 
         return $this->downloadSubmissionReport($submission, true);
+    }
+
+    public function eoiProcurement(
+        Procurement $procurement,
+        EoiQualificationService $qualificationService
+    ) {
+        $this->assertEvaluationProcurementScope($procurement);
+        $report = $qualificationService->buildProcurementReport($procurement);
+
+        abort_if(
+            $report['evaluations']->isEmpty(),
+            404,
+            'An Expression of Interest evaluation was not found for this procurement.'
+        );
+
+        return view('reports.evaluations.eoi-procurement', compact('report'));
+    }
+
+    public function eoiProcurementPdf(
+        Procurement $procurement,
+        EoiQualificationService $qualificationService
+    ) {
+        $this->assertEvaluationProcurementScope($procurement);
+        $report = $qualificationService->buildProcurementReport($procurement);
+
+        abort_if(
+            $report['evaluations']->isEmpty(),
+            404,
+            'An Expression of Interest evaluation was not found for this procurement.'
+        );
+
+        $pdf = Pdf::loadView(
+            'reports.evaluations.pdf.eoi-procurement',
+            array_merge(['report' => $report], PdfBranding::viewData())
+        )->setPaper('a4', 'landscape');
+
+        $name = Str::slug($procurement->reference_no ?: $procurement->title ?: $procurement->getKey());
+
+        return $pdf->download('eoi-qualification-'.$name.'.pdf');
     }
 
     private function downloadSubmissionReport(EvaluationSubmission $submission, bool $anonymised = false)

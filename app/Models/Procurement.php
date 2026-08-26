@@ -146,6 +146,16 @@ class Procurement extends BaseModel
         return $this->hasMany(FormSubmission::class);
     }
 
+    public function evaluations()
+    {
+        return $this->belongsToMany(
+            Evaluation::class,
+            'procurement_evaluations',
+            'procurement_id',
+            'evaluation_id'
+        );
+    }
+
     public function thinkTankReviews()
     {
         return $this->hasMany(ThinkTankProcurementReview::class, 'procurement_id');

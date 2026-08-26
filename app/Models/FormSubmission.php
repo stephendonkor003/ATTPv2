@@ -10,6 +10,9 @@ class FormSubmission extends BaseModel
     public const STATUS_SUBMITTED = 'submitted';
     public const STATUS_REVISION_REQUESTED = 'revision_requested';
     public const STATUS_WITHDRAWN = 'withdrawn';
+    public const STATUS_EOI_EVALUATION = 'eoi_evaluation';
+    public const STATUS_EOI_NOT_QUALIFIED = 'eoi_not_qualified';
+    public const STATUS_TECHNICAL_EVALUATION = 'technical_evaluation';
 
     /**
      * Application states in which a new or draft evaluation must not proceed.
@@ -21,6 +24,7 @@ class FormSubmission extends BaseModel
         self::STATUS_REVISION_REQUESTED,
         self::STATUS_WITHDRAWN,
         'prescreen_failed',
+        self::STATUS_EOI_NOT_QUALIFIED,
     ];
 
     protected $fillable = [

@@ -100,9 +100,8 @@
                             ],
                         };
                         $methodLabel = $evaluation?->typeLabel() ?? 'Services';
-                        $assignmentApplications = $assignment->form_submission_id
-                            ? $submissions->where('id', $assignment->form_submission_id)
-                            : $submissions->where('procurement_id', $assignment->procurement_id);
+                        $assignmentApplications = $applicationsByAssignmentId
+                            ->get((string) $assignment->getKey(), collect());
                         $completedForAssignment = $assignmentApplications->filter(function ($application) use ($evaluationSubmissions, $assignment): bool {
                             $key = implode(':', [$assignment->evaluation_id, $assignment->procurement_id, $application->id]);
 

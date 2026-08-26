@@ -9,6 +9,9 @@
         $evaluatorCount = $submissions->pluck('evaluator_id')->filter()->unique()->count();
         $averageScore = $submissions->whereNotNull('overall_score')->avg('overall_score');
         $latestSubmission = $submissions->first();
+        $eoiProcurementIds = $eoiProcurements
+            ->pluck('id')
+            ->mapWithKeys(fn ($id) => [(string) $id => true]);
     @endphp
 
     <main class="nxl-container evaluation-report-page">
@@ -49,6 +52,84 @@
             </div>
         </div>
 
+        <section class="eoi-report-library" aria-labelledby="eoiReportHeading">
+            <div class="eoi-report-library__head">
+                <div>
+                    <span class="report-eyebrow">Expression of Interest</span>
+                    <h5 id="eoiReportHeading">EOI Qualification Gate Reports</h5>
+                    <p>Applicant-level panel outcomes, evaluator coverage, veto decisions, and Technical Evaluation eligibility.</p>
+                </div>
+                @if ($eoiProcurements->isNotEmpty())
+                    <label class="eoi-report-search" for="eoiProcurementSearch">
+                        <i class="feather-search" aria-hidden="true"></i>
+                        <span class="visually-hidden">Search EOI procurements</span>
+                        <input id="eoiProcurementSearch" type="search" placeholder="Search title or reference">
+                    </label>
+                @endif
+            </div>
+
+            @if ($eoiProcurements->isNotEmpty())
+                <div class="eoi-procurement-grid" id="eoiProcurementGrid">
+                    @foreach ($eoiProcurements as $eoiProcurement)
+                        @php
+                            $eoiStats = $eoiProcurementStats->get((string) $eoiProcurement->id, []);
+                            $eoiSearchText = Str::lower(trim(
+                                $eoiProcurement->title.' '.($eoiProcurement->reference_no ?? '')
+                            ));
+                        @endphp
+                        <article class="eoi-procurement-card" data-eoi-card data-search="{{ $eoiSearchText }}">
+                            <div class="eoi-procurement-card__top">
+                                <span class="eoi-method-badge"><i class="feather-check-square"></i> EOI</span>
+                                <span class="eoi-reference">{{ $eoiProcurement->reference_no ?: 'No reference' }}</span>
+                            </div>
+                            <div class="eoi-procurement-card__body">
+                                <h6>
+                                    <a href="{{ route('reports.evaluations.eoi.procurement', $eoiProcurement) }}">
+                                        {{ $eoiProcurement->title }}
+                                    </a>
+                                </h6>
+                                <p>
+                                    @if (collect($eoiStats['templates'] ?? [])->isNotEmpty())
+                                        {{ collect($eoiStats['templates'])->join(', ') }}
+                                    @else
+                                        Expression of Interest qualification panel
+                                    @endif
+                                </p>
+                            </div>
+                            <div class="eoi-procurement-card__metrics">
+                                <span><strong>{{ number_format($eoiStats['applicants'] ?? 0) }}</strong> Applicants</span>
+                                <span><strong>{{ number_format($eoiStats['panel_members'] ?? 0) }}</strong> Panel members</span>
+                                <span><strong>{{ number_format($eoiStats['completed_reports'] ?? 0) }}</strong> Reports filed</span>
+                            </div>
+                            <div class="eoi-procurement-card__actions">
+                                <a href="{{ route('reports.evaluations.eoi.procurement', $eoiProcurement) }}" class="eoi-open-link">
+                                    Open qualification report <i class="feather-arrow-right"></i>
+                                </a>
+                                <a href="{{ route('reports.evaluations.eoi.procurement.pdf', $eoiProcurement) }}"
+                                   class="eoi-pdf-link" title="Download EOI qualification PDF"
+                                   aria-label="Download {{ $eoiProcurement->title }} EOI qualification PDF">
+                                    <i class="feather-download"></i>
+                                </a>
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+                <div class="eoi-no-results d-none" id="eoiNoResults">
+                    <i class="feather-search"></i>
+                    <strong>No matching EOI procurement</strong>
+                    <span>Try a different title or reference.</span>
+                </div>
+            @else
+                <div class="eoi-library-empty">
+                    <span class="eoi-library-empty__icon"><i class="feather-inbox"></i></span>
+                    <div>
+                        <strong>No EOI procurements are ready for reporting</strong>
+                        <p>They will appear here as soon as an Expression of Interest template is linked, assigned, or submitted.</p>
+                    </div>
+                </div>
+            @endif
+        </section>
+
         <section class="report-spotlight">
             <div>
                 <span class="report-eyebrow">Consolidated Report</span>
@@ -81,10 +162,21 @@
                 <select id="procurementSelect" class="form-control report-select">
                     <option value="">Choose procurement</option>
                     @foreach ($procurements as $procurement)
+                        @php
+                            $isEoiProcurement = $eoiProcurementIds->has((string) $procurement->id);
+                            $procurementViewUrl = $isEoiProcurement
+                                ? route('reports.evaluations.eoi.procurement', $procurement)
+                                : route('reports.evaluations.procurement', $procurement);
+                            $procurementPdfUrl = $isEoiProcurement
+                                ? route('reports.evaluations.eoi.procurement.pdf', $procurement)
+                                : route('reports.evaluations.procurement.pdf', $procurement);
+                        @endphp
                         <option
                             value="{{ $procurement->slug }}"
                             data-title="{{ $procurement->title }}"
                             data-reference="{{ $procurement->reference_no ?? 'No reference' }}"
+                            data-view-url="{{ $procurementViewUrl }}"
+                            data-pdf-url="{{ $procurementPdfUrl }}"
                         >
                             {{ $procurement->title }}
                             @if ($procurement->reference_no)
@@ -239,6 +331,196 @@
         .report-kpi--procurement { border-left-color: var(--green); }
         .report-kpi--evaluators { border-left-color: var(--orange); }
         .report-kpi--score { border-left-color: var(--red); }
+
+        .eoi-report-library {
+            background: linear-gradient(135deg, #111827 0%, #1f2937 58%, #312e81 100%);
+            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: 12px;
+            box-shadow: 0 18px 38px rgba(15, 23, 42, .16);
+            margin-bottom: 16px;
+            overflow: hidden;
+            padding: 20px;
+        }
+
+        .eoi-report-library__head {
+            align-items: flex-end;
+            display: flex;
+            gap: 20px;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .eoi-report-library .report-eyebrow { color: #c4b5fd; }
+
+        .eoi-report-library__head h5 {
+            color: #fff;
+            font-size: 20px;
+            font-weight: 800;
+            margin: 5px 0;
+        }
+
+        .eoi-report-library__head p {
+            color: #cbd5e1;
+            margin: 0;
+            max-width: 720px;
+        }
+
+        .eoi-report-search {
+            align-items: center;
+            background: rgba(255, 255, 255, .1);
+            border: 1px solid rgba(255, 255, 255, .18);
+            border-radius: 8px;
+            color: #cbd5e1;
+            display: flex;
+            flex: 0 1 320px;
+            gap: 9px;
+            padding: 0 11px;
+        }
+
+        .eoi-report-search input {
+            background: transparent;
+            border: 0;
+            color: #fff;
+            min-height: 40px;
+            outline: 0;
+            width: 100%;
+        }
+
+        .eoi-report-search input::placeholder { color: #94a3b8; }
+
+        .eoi-procurement-grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        }
+
+        .eoi-procurement-card {
+            background: #fff;
+            border: 1px solid rgba(255, 255, 255, .25);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+            transition: transform .18s ease, box-shadow .18s ease;
+        }
+
+        .eoi-procurement-card:hover {
+            box-shadow: 0 15px 30px rgba(0, 0, 0, .2);
+            transform: translateY(-2px);
+        }
+
+        .eoi-procurement-card__top,
+        .eoi-procurement-card__actions {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .eoi-procurement-card__top { padding: 14px 15px 0; }
+
+        .eoi-method-badge {
+            background: #ede9fe;
+            border-radius: 999px;
+            color: #6d28d9;
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: .06em;
+            padding: 5px 8px;
+        }
+
+        .eoi-reference {
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .eoi-procurement-card__body { padding: 14px 15px; }
+
+        .eoi-procurement-card__body h6 {
+            font-size: 15px;
+            font-weight: 800;
+            line-height: 1.4;
+            margin: 0;
+        }
+
+        .eoi-procurement-card__body h6 a { color: #172033; }
+        .eoi-procurement-card__body h6 a:hover { color: #6d28d9; }
+
+        .eoi-procurement-card__body p {
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.45;
+            margin: 7px 0 0;
+        }
+
+        .eoi-procurement-card__metrics {
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            border-top: 1px solid #e2e8f0;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .eoi-procurement-card__metrics span {
+            color: #64748b;
+            font-size: 10px;
+            padding: 10px 8px;
+            text-align: center;
+        }
+
+        .eoi-procurement-card__metrics span + span { border-left: 1px solid #e2e8f0; }
+
+        .eoi-procurement-card__metrics strong {
+            color: #172033;
+            display: block;
+            font-size: 16px;
+            margin-bottom: 2px;
+        }
+
+        .eoi-procurement-card__actions { margin-top: auto; padding: 12px 15px; }
+
+        .eoi-open-link {
+            color: #5b21b6;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .eoi-pdf-link {
+            align-items: center;
+            background: #ecfdf5;
+            border-radius: 7px;
+            color: #047857;
+            display: inline-flex;
+            height: 32px;
+            justify-content: center;
+            width: 32px;
+        }
+
+        .eoi-no-results,
+        .eoi-library-empty {
+            align-items: center;
+            background: rgba(255, 255, 255, .08);
+            border: 1px dashed rgba(255, 255, 255, .2);
+            border-radius: 9px;
+            color: #e2e8f0;
+            display: flex;
+            gap: 12px;
+            padding: 18px;
+        }
+
+        .eoi-no-results { flex-direction: column; text-align: center; }
+        .eoi-no-results span, .eoi-library-empty p { color: #94a3b8; margin: 3px 0 0; }
+
+        .eoi-library-empty__icon {
+            align-items: center;
+            background: rgba(255, 255, 255, .1);
+            border-radius: 9px;
+            display: inline-flex;
+            flex: 0 0 44px;
+            height: 44px;
+            justify-content: center;
+        }
 
         .report-spotlight,
         .report-panel {
@@ -406,6 +688,13 @@
                 align-items: flex-start;
                 flex-direction: column;
             }
+
+            .eoi-report-library__head {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .eoi-report-search { flex-basis: auto; }
         }
 
         @media (max-width: 640px) {
@@ -428,15 +717,15 @@
             const procurementBaseUrl = @json(url('reports/evaluations/procurement'));
             const submissionBaseUrl = @json(url('reports/evaluations/submission'));
 
-            const setButtonState = (viewButton, pdfButton, url) => {
-                const isActive = Boolean(url);
+            const setButtonState = (viewButton, pdfButton, viewUrl, pdfUrl = null) => {
+                const isActive = Boolean(viewUrl);
                 [viewButton, pdfButton].forEach((button) => {
                     button.classList.toggle('disabled', !isActive);
                     button.setAttribute('aria-disabled', isActive ? 'false' : 'true');
                 });
 
-                viewButton.href = isActive ? url : '#';
-                pdfButton.href = isActive ? `${url}/pdf` : '#';
+                viewButton.href = isActive ? viewUrl : '#';
+                pdfButton.href = isActive ? (pdfUrl || `${viewUrl}/pdf`) : '#';
             };
 
             const setPreview = (preview, label, title, meta) => {
@@ -471,7 +760,12 @@
                     selected.dataset.title || selected.textContent.trim(),
                     selected.dataset.reference || '-'
                 );
-                setButtonState(procurementView, procurementPdf, `${procurementBaseUrl}/${value}`);
+                setButtonState(
+                    procurementView,
+                    procurementPdf,
+                    selected.dataset.viewUrl || `${procurementBaseUrl}/${value}`,
+                    selected.dataset.pdfUrl || null
+                );
             });
 
             submissionSelect.addEventListener('change', function () {
@@ -491,6 +785,23 @@
                     `${selected.dataset.procurement || '-'} | ${selected.dataset.evaluator || '-'} | ${selected.dataset.result || '-'} | ${selected.dataset.submitted || '-'}`
                 );
                 setButtonState(submissionView, submissionPdf, `${submissionBaseUrl}/${value}`);
+            });
+
+            const eoiSearch = document.getElementById('eoiProcurementSearch');
+            const eoiCards = Array.from(document.querySelectorAll('[data-eoi-card]'));
+            const eoiNoResults = document.getElementById('eoiNoResults');
+
+            eoiSearch?.addEventListener('input', function () {
+                const term = this.value.trim().toLowerCase();
+                let visible = 0;
+
+                eoiCards.forEach((card) => {
+                    const matches = !term || (card.dataset.search || '').includes(term);
+                    card.classList.toggle('d-none', !matches);
+                    visible += matches ? 1 : 0;
+                });
+
+                eoiNoResults?.classList.toggle('d-none', visible > 0);
             });
         });
     </script>

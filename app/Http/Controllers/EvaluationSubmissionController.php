@@ -9,7 +9,9 @@ use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
 use App\Models\FormSubmission;
 use App\Models\User;
+use App\Services\EoiQualificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -91,16 +93,19 @@ class EvaluationSubmissionController extends Controller
                 })
                 ->latest()
                 ->get();
+        $applicationsByAssignmentId = $assignments->mapWithKeys(
+            fn (EvaluationAssignment $item): array => [
+                (string) $item->getKey() => $this->applicationsForAssignment($item, $submissions),
+            ]
+        );
 
         $evaluationIds = $assignments->pluck('evaluation_id')->filter()->unique();
         $evaluatorIds = $assignments->pluck('user_id')->filter()->unique();
         $allProcurementIds = $assignments->pluck('procurement_id')->filter()->unique();
         $allSubmissionIds = $submissions->pluck('id');
         $taskTupleKeys = $assignments
-            ->flatMap(function (EvaluationAssignment $item) use ($submissions) {
-                $applications = $item->form_submission_id
-                    ? $submissions->where('id', $item->form_submission_id)
-                    : $submissions->where('procurement_id', $item->procurement_id);
+            ->flatMap(function (EvaluationAssignment $item) use ($applicationsByAssignmentId) {
+                $applications = $applicationsByAssignmentId->get((string) $item->getKey(), collect());
 
                 return $applications->map(fn (FormSubmission $application): string => implode(':', [
                     $item->user_id,
@@ -134,10 +139,10 @@ class EvaluationSubmissionController extends Controller
                     $submission->form_submission_id,
                 ]));
 
-        $taskCount = $assignments->sum(function (EvaluationAssignment $item) use ($submissions): int {
-            return $item->form_submission_id
-                ? $submissions->where('id', $item->form_submission_id)->count()
-                : $submissions->where('procurement_id', $item->procurement_id)->count();
+        $taskCount = $assignments->sum(function (EvaluationAssignment $item) use ($applicationsByAssignmentId): int {
+            return $applicationsByAssignmentId
+                ->get((string) $item->getKey(), collect())
+                ->count();
         });
         $completedCount = $evaluationSubmissions
             ->filter(fn (EvaluationSubmission $submission): bool => filled($submission->submitted_at))
@@ -157,7 +162,8 @@ class EvaluationSubmissionController extends Controller
             'assignments',
             'submissions',
             'evaluationSubmissions',
-            'stats'
+            'stats',
+            'applicationsByAssignmentId'
         ));
     }
 
@@ -168,7 +174,7 @@ class EvaluationSubmissionController extends Controller
     {
         $this->assertAssignmentOwner($assignment);
         $this->assertApplicantBelongsToAssignment($assignment, $applicant);
-        $this->assertApplicantReadyForEvaluation($applicant);
+        $this->assertApplicantReadyForEvaluation($applicant, $assignment->evaluation);
 
         $assignment->loadMissing([
             'procurement',
@@ -218,7 +224,7 @@ class EvaluationSubmissionController extends Controller
     ) {
         $this->assertAssignmentOwner($assignment);
         $this->assertApplicantBelongsToAssignment($assignment, $applicant);
-        $this->assertApplicantReadyForEvaluation($applicant);
+        $this->assertApplicantReadyForEvaluation($applicant, $assignment->evaluation);
 
         $assignment->loadMissing(['procurement', 'evaluation.sections.criteria']);
         abort_unless($assignment->procurement && $assignment->evaluation, 404);
@@ -404,7 +410,7 @@ class EvaluationSubmissionController extends Controller
     ) {
         $this->assertAssignmentOwner($assignment);
         $this->assertApplicantBelongsToAssignment($assignment, $applicant);
-        $this->assertApplicantReadyForEvaluation($applicant);
+        $this->assertApplicantReadyForEvaluation($applicant, $assignment->evaluation);
 
         $assignment->loadMissing(['procurement', 'evaluation.sections.criteria']);
         abort_unless($assignment->procurement && $assignment->evaluation, 404);
@@ -576,6 +582,13 @@ class EvaluationSubmissionController extends Controller
 
             $this->synchronizeAssignmentStatus($assignment);
         });
+
+        // Run after the evaluator transaction commits. If multiple panel members
+        // finish concurrently, the last committed submission recomputes the full
+        // applicant panel and applies the final EOI gate exactly once in effect.
+        if ($evaluation->isEoi()) {
+            app(EoiQualificationService::class)->synchronizeApplicantStage($applicant);
+        }
 
         if ($submission) {
             $submission->load([
@@ -880,12 +893,21 @@ class EvaluationSubmissionController extends Controller
         }
     }
 
-    private function assertApplicantReadyForEvaluation(FormSubmission $applicant): void
-    {
+    private function assertApplicantReadyForEvaluation(
+        FormSubmission $applicant,
+        ?Evaluation $evaluation = null
+    ): void {
         abort_unless(
             $applicant->isAvailableForEvaluation(),
             409,
             'This application is not currently ready for evaluation.'
+        );
+
+        abort_if(
+            $applicant->status === FormSubmission::STATUS_EOI_EVALUATION
+                && ! $evaluation?->isEoi(),
+            409,
+            'The EOI panel must be completed before Technical Evaluation can begin.'
         );
     }
 
@@ -1074,9 +1096,18 @@ class EvaluationSubmissionController extends Controller
 
     private function synchronizeAssignmentStatus(EvaluationAssignment $assignment): void
     {
+        $assignment->loadMissing('evaluation');
+
         $submissionIds = FormSubmission::query()
             ->where('procurement_id', $assignment->procurement_id)
             ->availableForEvaluation()
+            ->when(
+                ! $assignment->evaluation?->isEoi(),
+                fn ($query) => $query->where(function ($statusQuery): void {
+                    $statusQuery->whereNull('status')
+                        ->orWhere('status', '!=', FormSubmission::STATUS_EOI_EVALUATION);
+                })
+            )
             ->when(
                 $assignment->form_submission_id,
                 fn ($query) => $query->whereKey($assignment->form_submission_id)
@@ -1099,6 +1130,23 @@ class EvaluationSubmissionController extends Controller
                 ? 'submitted'
                 : 'assigned',
         ]);
+    }
+
+    private function applicationsForAssignment(
+        EvaluationAssignment $assignment,
+        Collection $submissions
+    ): Collection {
+        $applications = $assignment->form_submission_id
+            ? $submissions->where('id', $assignment->form_submission_id)
+            : $submissions->where('procurement_id', $assignment->procurement_id);
+
+        if (! $assignment->evaluation?->isEoi()) {
+            $applications = $applications->reject(
+                fn (FormSubmission $application): bool => $application->status === FormSubmission::STATUS_EOI_EVALUATION
+            );
+        }
+
+        return $applications->values();
     }
 
     public function panelHub()
