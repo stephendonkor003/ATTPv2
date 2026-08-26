@@ -39,21 +39,25 @@ class EvaluationSubmissionController extends Controller
         $user = auth()->user();
 
         if ($assignment) {
+            $ownsAssignment = (string) $assignment->user_id === (string) $user->id;
             abort_unless(
-                (string) $assignment->user_id === (string) $user->id
-                    || $user->can('evaluations.view_all'),
+                $ownsAssignment || $user->can('evaluations.view_all'),
                 403
             );
+
+            if (! $ownsAssignment && $this->userHasAssignedPortfolioScope($user)) {
+                abort_unless(
+                    $this->evaluationAssignmentIsInAssignedPortfolio($assignment, $user),
+                    403,
+                    'This evaluation is outside your assigned portfolio.'
+                );
+            }
         }
 
         $assignments = EvaluationAssignment::query()
             ->with(['procurement', 'evaluation'])
             ->whereHas('procurement', fn ($query) => $query->whereNull('procurements.deleted_at'))
             ->whereHas('evaluation')
-            ->when(
-                $this->userHasAssignedPortfolioScope($user),
-                fn ($q) => $this->applyAssignedPortfolioScopeToEvaluationAssignments($q, $user)
-            )
             ->when(
                 $assignment,
                 fn ($query) => $query->whereKey($assignment->getKey()),
@@ -76,9 +80,7 @@ class EvaluationSubmissionController extends Controller
         $submissions = ($submissionIds->isEmpty() && $procurementIds->isEmpty())
             ? collect()
             : FormSubmission::with(['form', 'submitter', 'values'])
-                ->where(fn ($query) => $query
-                    ->where('status', FormSubmission::STATUS_SUBMITTED)
-                    ->orWhereNull('status'))
+                ->availableForEvaluation()
                 ->where(function ($q) use ($submissionIds, $procurementIds) {
                     if ($submissionIds->isNotEmpty()) {
                         $q->orWhereIn('id', $submissionIds);
@@ -836,13 +838,16 @@ class EvaluationSubmissionController extends Controller
     {
         $user = auth()->user();
 
-        if ($this->userHasAssignedPortfolioScope($user)
-            && ! $this->evaluationAssignmentIsInAssignedPortfolio($assignment, $user)) {
+        if ((string) $assignment->user_id === (string) $user->id) {
+            return true;
+        }
+
+        if (! $user->can('evaluations.view_all')) {
             return false;
         }
 
-        return $user->can('evaluations.view_all')
-            || (string) $assignment->user_id === (string) $user->id;
+        return ! $this->userHasAssignedPortfolioScope($user)
+            || $this->evaluationAssignmentIsInAssignedPortfolio($assignment, $user);
     }
 
     private function assertAssignmentOwner(EvaluationAssignment $assignment): void
@@ -855,13 +860,6 @@ class EvaluationSubmissionController extends Controller
             'Only the assigned evaluator can modify this evaluation.'
         );
 
-        if ($this->userHasAssignedPortfolioScope($user)) {
-            abort_unless(
-                $this->evaluationAssignmentIsInAssignedPortfolio($assignment, $user),
-                403,
-                'This evaluation is outside your assigned portfolio.'
-            );
-        }
     }
 
     private function assertApplicantBelongsToAssignment(
@@ -885,7 +883,7 @@ class EvaluationSubmissionController extends Controller
     private function assertApplicantReadyForEvaluation(FormSubmission $applicant): void
     {
         abort_unless(
-            $applicant->status === null || $applicant->status === FormSubmission::STATUS_SUBMITTED,
+            $applicant->isAvailableForEvaluation(),
             409,
             'This application is not currently ready for evaluation.'
         );
@@ -1078,9 +1076,7 @@ class EvaluationSubmissionController extends Controller
     {
         $submissionIds = FormSubmission::query()
             ->where('procurement_id', $assignment->procurement_id)
-            ->where(fn ($query) => $query
-                ->where('status', FormSubmission::STATUS_SUBMITTED)
-                ->orWhereNull('status'))
+            ->availableForEvaluation()
             ->when(
                 $assignment->form_submission_id,
                 fn ($query) => $query->whereKey($assignment->form_submission_id)

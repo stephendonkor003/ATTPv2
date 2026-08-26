@@ -104,6 +104,11 @@ class EvaluatorWorkspaceSmoke
                 ]
             );
 
+            // Real procurement submissions continue through lifecycle states
+            // after assignment. They must remain visible and actionable.
+            $goods['applicant']->update(['status' => 'evaluated']);
+            $eoi['applicant']->update(['status' => 'site_visit_completed']);
+
             $evaluator->unsetRelation('permissions');
             $evaluator->unsetRelation('role');
             $this->assertTrue(
@@ -118,6 +123,11 @@ class EvaluatorWorkspaceSmoke
                     $worklist,
                     $fixture['procurement']->title,
                     'My Evaluations did not show an assigned procurement.'
+                );
+                $this->assertResponseContains(
+                    $worklist,
+                    $fixture['applicant']->procurement_submission_code,
+                    'My Evaluations hid an assigned application after its lifecycle status progressed.'
                 );
             }
             $this->assertResponseDoesNotContain(

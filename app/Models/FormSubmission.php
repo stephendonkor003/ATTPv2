@@ -3,12 +3,25 @@
 namespace App\Models;
 
 use App\Models\BaseModel;
+use Illuminate\Database\Eloquent\Builder;
 
 class FormSubmission extends BaseModel
 {
     public const STATUS_SUBMITTED = 'submitted';
     public const STATUS_REVISION_REQUESTED = 'revision_requested';
     public const STATUS_WITHDRAWN = 'withdrawn';
+
+    /**
+     * Application states in which a new or draft evaluation must not proceed.
+     * Every other state remains visible because procurement workflows continue
+     * through states such as prescreen_passed, evaluated and site_visit_completed.
+     */
+    public const EVALUATION_BLOCKED_STATUSES = [
+        'draft',
+        self::STATUS_REVISION_REQUESTED,
+        self::STATUS_WITHDRAWN,
+        'prescreen_failed',
+    ];
 
     protected $fillable = [
         'procurement_id',
@@ -35,6 +48,20 @@ class FormSubmission extends BaseModel
     public function isWithdrawn(): bool
     {
         return $this->status === self::STATUS_WITHDRAWN;
+    }
+
+    public function isAvailableForEvaluation(): bool
+    {
+        return $this->status === null
+            || ! in_array($this->status, self::EVALUATION_BLOCKED_STATUSES, true);
+    }
+
+    public function scopeAvailableForEvaluation(Builder $query): Builder
+    {
+        return $query->where(function (Builder $availability): void {
+            $availability->whereNull('status')
+                ->orWhereNotIn('status', self::EVALUATION_BLOCKED_STATUSES);
+        });
     }
 
     public function procurement()

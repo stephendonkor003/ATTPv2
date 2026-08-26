@@ -139,9 +139,7 @@ class ThinkTankProcurementPlanController extends Controller
             ? collect()
             : FormSubmission::query()
                 ->with(['form', 'submitter', 'values'])
-                ->where(fn ($query) => $query
-                    ->where('status', FormSubmission::STATUS_SUBMITTED)
-                    ->orWhereNull('status'))
+                ->availableForEvaluation()
                 ->where(function ($query) use ($specificSubmissionIds, $wholeProcurementIds): void {
                     if ($specificSubmissionIds->isNotEmpty()) {
                         $query->orWhereIn('id', $specificSubmissionIds);
