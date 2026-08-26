@@ -79,23 +79,30 @@ it('renders the correct response controls for services goods and expression of i
         ]);
 });
 
-it('stacks categorical responses below each question without wide qualification columns', function () {
+it('renders categorical responses as overflow-safe question cards instead of a table', function () {
     $workspace = file_get_contents(
         dirname(__DIR__, 2).'/resources/views/evaluations/submit.blade.php'
     );
 
     expect($workspace)
-        ->toContain('<th>Evaluation question and response</th>')
-        ->toContain('<td class="categorical-criterion-cell">')
-        ->toContain('<div class="criterion-prompt">')
-        ->toContain('<div class="categorical-response-grid">')
-        ->toContain('<legend class="response-field-label">')
-        ->toContain('Evidence comment <span>Required for final submission</span>')
-        ->toContain('.categorical-response-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr)')
-        ->toContain('.decision-options.is-eoi { grid-template-columns: repeat(3, minmax(0, 1fr)); }')
-        ->toContain('@media (max-width: 991.98px)')
-        ->toContain('.categorical-response-grid { grid-template-columns: 1fr; }')
-        ->not->toContain('class="decision-column"');
+        ->toContain('<div class="table-responsive numeric-criteria-wrap">')
+        ->toContain('<div class="categorical-question-list" role="list"')
+        ->toContain('<article class="categorical-question-card" data-criterion-row role="listitem">')
+        ->toContain('<header class="categorical-question-header">')
+        ->toContain('<div class="categorical-answer-stack">')
+        ->toContain('<fieldset class="decision-fieldset categorical-response-panel"')
+        ->toContain('<div class="evidence-response categorical-response-panel">')
+        ->toContain('<strong>Evidence comment</strong>')
+        ->toContain('.categorical-question-list { display: grid; width: 100%; max-width: 100%; min-width: 0;')
+        ->toContain('.categorical-question-copy p { max-width: 100%;')
+        ->toContain('.categorical-answer-stack { display: grid; width: 100%; min-width: 0; grid-template-columns: minmax(0, 1fr);')
+        ->toContain('.decision-options.is-eoi { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }')
+        ->toContain('.decision-option:focus-within')
+        ->toContain('.decision-option > span:last-child { min-width: 0; overflow-wrap: anywhere; }')
+        ->toContain('.evidence-comment { display: block; width: 100%; max-width: 100%;')
+        ->not->toContain('<th>Evaluation question and response</th>')
+        ->not->toContain('class="categorical-criterion-cell"')
+        ->not->toContain('categorical-response-grid');
 });
 
 it('uses applicant-scoped canonical evaluator routes', function () {

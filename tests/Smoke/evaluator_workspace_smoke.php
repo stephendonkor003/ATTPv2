@@ -335,6 +335,16 @@ class EvaluatorWorkspaceSmoke
         $this->assertResponseStatus($workspace, 200, 'The EOI evaluation workspace did not open.');
 
         $html = (string) $workspace->getContent();
+        $this->assertResponseContains(
+            $workspace,
+            'class="categorical-question-list"',
+            'The EOI workspace did not render its questions as responsive cards.'
+        );
+        $this->assertResponseDoesNotContain(
+            $workspace,
+            'class="table-responsive numeric-criteria-wrap"',
+            'The EOI workspace still rendered the overflow-prone scoring table.'
+        );
         foreach ([
             1 => 'Qualified',
             2 => 'Average Qualified',

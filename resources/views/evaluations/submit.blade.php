@@ -222,37 +222,29 @@
 
                                         <div class="assessment-node-body" id="{{ $contentId }}">
                                             @if ($section->criteria->isNotEmpty())
-                                                <div class="table-responsive">
-                                                    <table class="table criteria-table align-middle mb-0">
-                                                        <thead>
-                                                            <tr>
-                                                                <th class="question-index-column">#</th>
-                                                                @if ($isNumeric)
+                                                @if ($isNumeric)
+                                                    <div class="table-responsive numeric-criteria-wrap">
+                                                        <table class="table criteria-table align-middle mb-0">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th class="question-index-column">#</th>
                                                                     <th>Evaluation question</th>
                                                                     <th class="text-center score-column">Maximum</th>
                                                                     <th class="score-column">Score</th>
-                                                                @else
-                                                                    <th>Evaluation question and response</th>
-                                                                @endif
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            @foreach ($section->criteria as $criterion)
-                                                                @php
-                                                                    $saved = $submission?->criteriaScores->firstWhere(
-                                                                        'evaluation_criteria_id',
-                                                                        $criterion->id,
-                                                                    );
-                                                                    $savedDecision = old(
-                                                                        "criteria.{$criterion->id}.decision",
-                                                                        $saved?->decision,
-                                                                    );
-                                                                @endphp
-                                                                <tr class="criterion-row" data-criterion-row>
-                                                                    <td class="question-index-column">
-                                                                        <span class="question-number">{{ $loop->iteration }}</span>
-                                                                    </td>
-                                                                    @if ($isNumeric)
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach ($section->criteria as $criterion)
+                                                                    @php
+                                                                        $saved = $submission?->criteriaScores->firstWhere(
+                                                                            'evaluation_criteria_id',
+                                                                            $criterion->id,
+                                                                        );
+                                                                    @endphp
+                                                                    <tr class="criterion-row" data-criterion-row>
+                                                                        <td class="question-index-column">
+                                                                            <span class="question-number">{{ $loop->iteration }}</span>
+                                                                        </td>
                                                                         <td>
                                                                             <strong>{{ $criterion->name }}</strong>
                                                                             @if (filled($criterion->description))
@@ -272,60 +264,84 @@
                                                                                 <span>/ {{ number_format($criterion->max_score, 2) }}</span>
                                                                             </div>
                                                                         </td>
-                                                                    @else
-                                                                        <td class="categorical-criterion-cell">
-                                                                            <div class="criterion-prompt">
-                                                                                <strong>{{ $criterion->name }}</strong>
-                                                                                @if (filled($criterion->description))
-                                                                                    <p>{{ $criterion->description }}</p>
-                                                                                @endif
-                                                                            </div>
+                                                                    </tr>
+                                                                @endforeach
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                @else
+                                                    <div class="categorical-question-list" role="list"
+                                                        aria-label="{{ $evaluation->isEoi() ? 'Qualification questions' : 'Compliance questions' }}">
+                                                        @foreach ($section->criteria as $criterion)
+                                                            @php
+                                                                $saved = $submission?->criteriaScores->firstWhere(
+                                                                    'evaluation_criteria_id',
+                                                                    $criterion->id,
+                                                                );
+                                                                $savedDecision = old(
+                                                                    "criteria.{$criterion->id}.decision",
+                                                                    $saved?->decision,
+                                                                );
+                                                            @endphp
+                                                            <article class="categorical-question-card" data-criterion-row role="listitem">
+                                                                <header class="categorical-question-header">
+                                                                    <span class="question-number">{{ $loop->iteration }}</span>
+                                                                    <div class="categorical-question-copy">
+                                                                        <span class="question-eyebrow">Evaluation question {{ $loop->iteration }}</span>
+                                                                        <h3>{{ $criterion->name }}</h3>
+                                                                        @if (filled($criterion->description))
+                                                                            <p>{{ $criterion->description }}</p>
+                                                                        @endif
+                                                                    </div>
+                                                                </header>
 
-                                                                            <div class="categorical-response-grid">
-                                                                                <fieldset class="decision-fieldset" data-decision-group
-                                                                                    data-section-id="{{ $section->id }}">
-                                                                                    <legend class="response-field-label">
-                                                                                        {{ $evaluation->isEoi() ? 'Qualification' : 'Compliance decision' }}
-                                                                                    </legend>
-                                                                                    <input type="hidden" name="criteria[{{ $criterion->id }}][decision]" value="">
-                                                                                    <div class="decision-options {{ $evaluation->isEoi() ? 'is-eoi' : 'is-goods' }}">
-                                                                                        @foreach ($decisionOptions as $decisionValue => $decisionLabel)
-                                                                                            @php($decisionId = "decision-{$criterion->id}-{$decisionValue}")
-                                                                                            <label class="decision-option" for="{{ $decisionId }}">
-                                                                                                <input id="{{ $decisionId }}" type="radio"
-                                                                                                    name="criteria[{{ $criterion->id }}][decision]"
-                                                                                                    value="{{ $decisionValue }}"
-                                                                                                    class="decision-input"
-                                                                                                    data-section-id="{{ $section->id }}"
-                                                                                                    @checked((string) $savedDecision === (string) $decisionValue)
-                                                                                                    required>
-                                                                                                @if ($evaluation->isEoi())
-                                                                                                    <span class="decision-number">{{ $loop->iteration }}</span>
-                                                                                                @else
-                                                                                                    <i class="{{ (int) $decisionValue === 1 ? 'feather-check' : 'feather-x' }}" aria-hidden="true"></i>
-                                                                                                @endif
-                                                                                                <span>{{ $decisionLabel }}</span>
-                                                                                            </label>
-                                                                                        @endforeach
-                                                                                    </div>
-                                                                                </fieldset>
+                                                                <div class="categorical-answer-stack">
+                                                                    <fieldset class="decision-fieldset categorical-response-panel" data-decision-group
+                                                                        data-section-id="{{ $section->id }}">
+                                                                        <legend class="visually-hidden">
+                                                                            {{ $evaluation->isEoi() ? 'Qualification' : 'Compliance decision' }} for {{ $criterion->name }}
+                                                                        </legend>
+                                                                        <div class="response-field-heading">
+                                                                            <strong>{{ $evaluation->isEoi() ? 'Qualification' : 'Compliance decision' }}</strong>
+                                                                            <span>Select one option</span>
+                                                                        </div>
+                                                                        <input type="hidden" name="criteria[{{ $criterion->id }}][decision]" value="">
+                                                                        <div class="decision-options {{ $evaluation->isEoi() ? 'is-eoi' : 'is-goods' }}">
+                                                                            @foreach ($decisionOptions as $decisionValue => $decisionLabel)
+                                                                                @php($decisionId = "decision-{$criterion->id}-{$decisionValue}")
+                                                                                <label class="decision-option" for="{{ $decisionId }}">
+                                                                                    <input id="{{ $decisionId }}" type="radio"
+                                                                                        name="criteria[{{ $criterion->id }}][decision]"
+                                                                                        value="{{ $decisionValue }}"
+                                                                                        class="decision-input"
+                                                                                        data-section-id="{{ $section->id }}"
+                                                                                        @checked((string) $savedDecision === (string) $decisionValue)
+                                                                                        required>
+                                                                                    @if ($evaluation->isEoi())
+                                                                                        <span class="decision-number">{{ $loop->iteration }}</span>
+                                                                                    @else
+                                                                                        <i class="{{ (int) $decisionValue === 1 ? 'feather-check' : 'feather-x' }}" aria-hidden="true"></i>
+                                                                                    @endif
+                                                                                    <span>{{ $decisionLabel }}</span>
+                                                                                </label>
+                                                                            @endforeach
+                                                                        </div>
+                                                                    </fieldset>
 
-                                                                                <div class="evidence-response">
-                                                                                    <label for="comment-{{ $criterion->id }}" class="evidence-label">
-                                                                                        Evidence comment <span>Required for final submission</span>
-                                                                                    </label>
-                                                                                    <textarea id="comment-{{ $criterion->id }}" name="criteria[{{ $criterion->id }}][comment]"
-                                                                                        class="form-control evidence-comment" rows="3" maxlength="5000"
-                                                                                        placeholder="Briefly cite the evidence for this decision" required>{{ old("criteria.{$criterion->id}.comment", $saved?->comment) }}</textarea>
-                                                                                </div>
-                                                                            </div>
-                                                                        </td>
-                                                                    @endif
-                                                                </tr>
-                                                            @endforeach
-                                                        </tbody>
-                                                    </table>
-                                                </div>
+                                                                    <div class="evidence-response categorical-response-panel">
+                                                                        <label for="comment-{{ $criterion->id }}" class="evidence-label">
+                                                                            <strong>Evidence comment</strong>
+                                                                            <span>Required for final submission</span>
+                                                                        </label>
+                                                                        <textarea id="comment-{{ $criterion->id }}" name="criteria[{{ $criterion->id }}][comment]"
+                                                                            class="form-control evidence-comment" rows="4" maxlength="5000"
+                                                                            placeholder="Briefly cite the evidence for this decision" required>{{ old("criteria.{$criterion->id}.comment", $saved?->comment) }}</textarea>
+                                                                    </div>
+                                                                </div>
+                                                            </article>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
 
                                                 <div class="section-notes">
                                                     <div>
@@ -590,7 +606,7 @@
         .category-summary { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .28rem; }
         .category-counter { display: inline-flex; align-items: center; gap: .25rem; padding: .22rem .35rem; border-radius: 6px; background: rgba(255,255,255,.8); white-space: nowrap; }
         .category-counter strong { display: grid; min-width: 18px; height: 18px; place-items: center; color: #fff; border-radius: 5px; background: var(--section-color); font-size: .58rem; }
-        .assessment-node-body { padding: .85rem .9rem 1rem; border-top: 1px solid #edf0f4; }
+        .assessment-node-body { min-width: 0; padding: .85rem .9rem 1rem; border-top: 1px solid #edf0f4; }
         .assessment-node-body.is-collapsed { display: none; }
 
         .criteria-table { font-size: .82rem; }
@@ -607,22 +623,33 @@
         .score-entry { display: flex; align-items: center; gap: .35rem; }
         .score-entry span { color: #98a2b3; white-space: nowrap; }
         .criterion-row.is-answered { background: color-mix(in srgb, var(--section-soft) 42%, white); }
-        .categorical-criterion-cell { min-width: 0; }
-        .criterion-prompt { padding-bottom: .65rem; border-bottom: 1px solid #edf0f4; }
-        .categorical-response-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: .75rem; margin-top: .75rem; padding: .75rem; border-radius: 10px; background: #f8fafc; }
-        .decision-fieldset, .evidence-response { min-width: 0; }
-        .response-field-label { display: block; width: 100%; margin: 0 0 .35rem; padding: 0; color: #475467; font-size: .76rem; font-weight: 700; }
-        .decision-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; margin: 0; }
-        .decision-options.is-eoi { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .decision-option { position: relative; display: flex; min-height: 48px; align-items: center; gap: .55rem; margin: 0; padding: .65rem .7rem; color: #344054; border: 1px solid #d8dee8; border-radius: 10px; background: #fff; cursor: pointer; font-size: .78rem; font-weight: 700; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+        .categorical-question-list { display: grid; width: 100%; max-width: 100%; min-width: 0; gap: .9rem; }
+        .categorical-question-card { width: 100%; max-width: 100%; min-width: 0; overflow: hidden; border: 1px solid #e1e6ee; border-radius: 13px; background: #fff; box-shadow: 0 4px 12px rgba(20,34,66,.035); }
+        .categorical-question-card.is-answered { border-color: color-mix(in srgb, var(--section-color) 38%, white); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 7%, transparent); }
+        .categorical-question-header { display: flex; min-width: 0; align-items: flex-start; gap: .75rem; padding: .85rem .9rem; border-bottom: 1px solid #edf0f4; background: linear-gradient(100deg, var(--section-soft), #fff 62%); }
+        .categorical-question-header .question-number { flex: 0 0 30px; width: 30px; height: 30px; margin: 0; }
+        .categorical-question-copy { flex: 1; min-width: 0; }
+        .question-eyebrow { display: block; margin-bottom: .15rem; color: var(--section-deep); font-size: .57rem; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
+        .categorical-question-copy h3 { margin: 0; color: #273246; font-size: .86rem; font-weight: 730; line-height: 1.4; overflow-wrap: anywhere; }
+        .categorical-question-copy p { max-width: 100%; margin: .28rem 0 0; color: var(--workspace-muted); font-size: .74rem; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
+        .categorical-answer-stack { display: grid; width: 100%; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: .75rem; padding: .85rem .9rem .95rem; }
+        .categorical-response-panel { min-width: 0; margin: 0; padding: .75rem; border: 1px solid #e4e8ee; border-radius: 10px; background: #f8fafc; }
+        .response-field-heading, .evidence-label { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .25rem .75rem; margin-bottom: .45rem; }
+        .response-field-heading strong, .evidence-label strong { color: #344054; font-size: .76rem; font-weight: 720; }
+        .response-field-heading span, .evidence-label span { color: #98a2b3; font-size: .67rem; font-weight: 500; }
+        .decision-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .55rem; margin: 0; }
+        .decision-options.is-eoi { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+        .decision-option { position: relative; display: flex; min-width: 0; min-height: 50px; align-items: center; gap: .55rem; margin: 0; padding: .65rem .7rem; color: #344054; border: 1px solid #d8dee8; border-radius: 10px; background: #fff; cursor: pointer; font-size: .78rem; font-weight: 700; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }
         .decision-option:hover { border-color: var(--section-color); background: var(--section-soft); }
+        .decision-option:focus-within { border-color: var(--section-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 12%, transparent); }
         .decision-option:has(input:checked) { color: var(--section-deep); border-color: var(--section-color); background: var(--section-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 10%, transparent); }
-        .decision-option input { width: 17px; height: 17px; margin: 0; accent-color: var(--section-color); }
+        .decision-option input { flex: 0 0 17px; width: 17px; height: 17px; margin: 0; accent-color: var(--section-color); }
         .decision-option i { font-size: 1rem; }
+        .decision-option > span:last-child { min-width: 0; overflow-wrap: anywhere; }
         .decision-number { display: grid; flex: 0 0 25px; width: 25px; height: 25px; place-items: center; color: #fff; border-radius: 7px; background: var(--section-color); font-size: .7rem; }
-        .evidence-label { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .35rem; color: #475467; font-size: .76rem; font-weight: 700; }
-        .evidence-label span { color: #98a2b3; font-size: .68rem; font-weight: 500; }
-        .evidence-comment { font-size: .8rem !important; }
+        .categorical-response-panel .form-control { border-color: #d8dee8; border-radius: 8px; }
+        .categorical-response-panel .form-control:focus { border-color: var(--section-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 10%, transparent); }
+        .evidence-comment { display: block; width: 100%; max-width: 100%; min-height: 104px; resize: vertical; font-size: .8rem !important; }
         .section-notes { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; margin-top: .85rem; padding: .75rem; border-radius: 10px; background: #f8fafc; }
         .section-notes label { display: block; margin-bottom: .3rem; color: #475467; font-size: .78rem; font-weight: 700; }
         .section-notes .form-control { border-color: #d8dee8; border-radius: 8px; font-size: .82rem; }
@@ -704,7 +731,7 @@
 
         @supports not (background: color-mix(in srgb, red 10%, white)) {
             .root-jump-link, .subtotal-summary, .structural-node-note { border-color: #d8dee8; }
-            .criterion-row.is-answered { background: #fafbfc; }
+            .criterion-row.is-answered, .categorical-question-card.is-answered { background: #fafbfc; }
         }
 
         @media (max-width: 1199.98px) {
@@ -715,7 +742,6 @@
         @media (max-width: 991.98px) {
             .evaluation-hero { align-items: flex-start; flex-direction: column; }
             .hero-guidance { max-width: none; }
-            .categorical-response-grid { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 767.98px) {
