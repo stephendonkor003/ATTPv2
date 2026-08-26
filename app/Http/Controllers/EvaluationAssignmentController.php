@@ -98,7 +98,9 @@ class EvaluationAssignmentController extends Controller
         $this->assertEvaluationSelectableForProcurement($evaluation, $procurement);
 
         if ($evaluation->status === 'close') {
-            return back()->with('error', 'Cannot assign evaluators to a closed evaluation.');
+            return back()
+                ->withInput()
+                ->with('error', 'Cannot assign evaluators to a closed evaluation.');
         }
 
         $exists = EvaluationAssignment::where([
@@ -111,7 +113,9 @@ class EvaluationAssignmentController extends Controller
         ])->exists();
 
         if ($exists) {
-            return back()->with('error', 'This user is already assigned as an evaluator.');
+            return back()
+                ->withInput()
+                ->with('error', 'This user is already assigned as an evaluator.');
         }
 
         $submission = null;
@@ -121,7 +125,9 @@ class EvaluationAssignmentController extends Controller
                 ->first();
 
             if (! $submission) {
-                return back()->with('error', 'Selected submission does not belong to this procurement.');
+                return back()
+                    ->withInput()
+                    ->with('error', 'Selected submission does not belong to this procurement.');
             }
         }
 
@@ -143,7 +149,10 @@ class EvaluationAssignmentController extends Controller
             );
         }
 
-        return back()->with('success', 'Evaluator assigned successfully.');
+        return back()->with([
+            'success' => 'Evaluator assigned successfully.',
+            'open_procurement_id' => $procurement->id,
+        ]);
     }
 
     public function destroy(EvaluationAssignment $assignment)
@@ -151,12 +160,19 @@ class EvaluationAssignmentController extends Controller
         $this->assertAssignmentManageable($assignment);
 
         if ($assignment->status === 'submitted') {
-            return back()->with('error', 'Cannot remove evaluator after submission.');
+            return back()->with([
+                'error' => 'Cannot remove evaluator after submission.',
+                'open_procurement_id' => $assignment->procurement_id,
+            ]);
         }
 
+        $procurementId = $assignment->procurement_id;
         $assignment->delete();
 
-        return back()->with('success', 'Evaluator removed successfully.');
+        return back()->with([
+            'success' => 'Evaluator removed successfully.',
+            'open_procurement_id' => $procurementId,
+        ]);
     }
 
     private function assertProcurementManageable(Procurement $procurement): void
