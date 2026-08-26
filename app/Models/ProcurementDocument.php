@@ -22,7 +22,7 @@ class ProcurementDocument extends BaseModel
 
     public function procurement(): BelongsTo
     {
-        return $this->belongsTo(Procurement::class);
+        return $this->belongsTo(Procurement::class)->withTrashed();
     }
 
     public function uploader(): BelongsTo

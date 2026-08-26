@@ -19,6 +19,7 @@ class ProcurementAuditController extends Controller
         }
 
         $logs = ProcurementAuditLog::query()
+            ->with(['procurement', 'user'])
             ->when($scopedNodeIds !== null, function ($query) use ($scopedNodeIds) {
                 $query->whereIn('procurement_id', function ($sub) use ($scopedNodeIds) {
                     $sub->select('id')

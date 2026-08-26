@@ -12,6 +12,7 @@ use App\Models\ProcurementPlan;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class VendorInvoiceController extends Controller
 {
@@ -76,7 +77,10 @@ class VendorInvoiceController extends Controller
         $this->assertVendor($user);
 
         $data = $request->validate([
-            'procurement_id' => 'required|exists:procurements,id',
+            'procurement_id' => [
+                'required',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'invoice_month' => 'required|date_format:Y-m',
             'amount' => 'required_without:deliverable_ids|numeric|min:0.01',
             'notes' => 'nullable|string|max:1000',

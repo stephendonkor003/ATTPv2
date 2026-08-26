@@ -15,6 +15,7 @@ use App\Models\{
 };
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class SiteVisitController extends Controller
 {
@@ -87,7 +88,10 @@ class SiteVisitController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'procurement_id' => 'required|exists:procurements,id',
+            'procurement_id' => [
+                'required',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'form_submission_id' => 'required|exists:form_submissions,id',
             'assignment_type' => 'required|in:individual,group',
             'visit_date' => 'required|date',

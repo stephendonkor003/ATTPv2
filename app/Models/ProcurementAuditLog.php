@@ -20,6 +20,17 @@ class ProcurementAuditLog extends BaseModel
     ];
 
     protected $casts = [
-        'metadata' => 'array'
+        'metadata' => 'array',
+        'created_at' => 'datetime',
     ];
+
+    public function procurement()
+    {
+        return $this->belongsTo(Procurement::class)->withTrashed();
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

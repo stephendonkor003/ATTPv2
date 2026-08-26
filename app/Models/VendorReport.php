@@ -39,7 +39,7 @@ class VendorReport extends BaseModel
 
     public function procurement(): BelongsTo
     {
-        return $this->belongsTo(Procurement::class);
+        return $this->belongsTo(Procurement::class)->withTrashed();
     }
 
     public function purchaseOrder(): BelongsTo

@@ -7,6 +7,7 @@ use App\Models\Procurement;
 use App\Models\DynamicForm;
 use App\Models\ProcurementFormAssignment;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 
 class ProcurementFormAssignmentController extends Controller
@@ -73,7 +74,10 @@ class ProcurementFormAssignmentController extends Controller
     {
         $request->validate([
             'form_id'        => 'required|exists:dynamic_forms,id',
-            'procurement_id' => 'required|exists:procurements,id',
+            'procurement_id' => [
+                'required',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
         ]);
 
         $procurement = Procurement::findOrFail($request->procurement_id);

@@ -70,7 +70,7 @@ class DynamicForm extends BaseModel
 
     public function procurement()
     {
-        return $this->belongsTo(Procurement::class, 'procurement_id');
+        return $this->belongsTo(Procurement::class, 'procurement_id')->withTrashed();
     }
 
     public function submissions()

@@ -67,7 +67,7 @@ class ThinkTankProcurementItem extends BaseModel
 
     public function procurement(): BelongsTo
     {
-        return $this->belongsTo(Procurement::class);
+        return $this->belongsTo(Procurement::class)->withTrashed();
     }
 
     public function reviewer(): BelongsTo

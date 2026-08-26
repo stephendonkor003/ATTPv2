@@ -13,6 +13,7 @@ use App\Support\ProcurementReviewAssignees;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 
 class EvaluationAssignmentController extends Controller
 {
@@ -67,7 +68,10 @@ class EvaluationAssignmentController extends Controller
     {
         $validated = $request->validate([
             'evaluation_id' => 'required|exists:evaluations,id',
-            'procurement_id' => 'required|exists:procurements,id',
+            'procurement_id' => [
+                'required',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'user_id' => [
                 'required',
                 'uuid',

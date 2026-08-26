@@ -69,7 +69,7 @@ class ProcurementPurchaseOrder extends BaseModel
 
     public function procurement(): BelongsTo
     {
-        return $this->belongsTo(Procurement::class, 'procurement_id');
+        return $this->belongsTo(Procurement::class, 'procurement_id')->withTrashed();
     }
 
     public function deliverables(): BelongsToMany

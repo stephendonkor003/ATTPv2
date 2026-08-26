@@ -64,7 +64,9 @@ class DashboardController extends Controller
             'consortia' => Schema::hasTable('attp_consortia') ? DB::table('attp_consortia')->count() : 0,
             'think_tanks' => Schema::hasTable('attp_consortium_think_tanks') ? DB::table('attp_consortium_think_tanks')->count() : 0,
             'published_news' => Schema::hasTable('attp_news_posts') ? DB::table('attp_news_posts')->where('status', 'published')->count() : 0,
-            'open_procurements' => Schema::hasTable('procurements') ? DB::table('procurements')->where('status', 'published')->count() : 0,
+            'open_procurements' => Schema::hasTable('procurements')
+                ? DB::table('procurements')->whereNull('deleted_at')->where('status', 'published')->count()
+                : 0,
         ];
 
         return view('dashboard', compact(

@@ -199,7 +199,7 @@ class Evaluation extends BaseModel
             'procurement_evaluations',
             'evaluation_id',
             'procurement_id'
-        );
+        )->withTrashed();
     }
 
     public function portfolio()
@@ -214,7 +214,7 @@ class Evaluation extends BaseModel
 
     public function procurement()
     {
-        return $this->belongsTo(Procurement::class);
+        return $this->belongsTo(Procurement::class)->withTrashed();
     }
 
     /**

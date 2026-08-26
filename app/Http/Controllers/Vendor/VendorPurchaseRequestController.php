@@ -62,7 +62,10 @@ class VendorPurchaseRequestController extends Controller
 
         $data = $request->validate([
             'title' => 'required|string|max:255',
-            'procurement_id' => ['nullable', Rule::exists('procurements', 'id')],
+            'procurement_id' => [
+                'nullable',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'sub_activity_id' => ['required', Rule::exists('myb_sub_activities', 'id')],
             'currency' => 'required|string|max:10',
             'needed_by' => 'nullable|date',
@@ -171,7 +174,10 @@ class VendorPurchaseRequestController extends Controller
 
         $data = $request->validate([
             'title' => 'required|string|max:255',
-            'procurement_id' => ['nullable', Rule::exists('procurements', 'id')],
+            'procurement_id' => [
+                'nullable',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'sub_activity_id' => ['required', Rule::exists('myb_sub_activities', 'id')],
             'currency' => 'required|string|max:10',
             'needed_by' => 'nullable|date',

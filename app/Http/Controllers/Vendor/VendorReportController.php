@@ -52,7 +52,10 @@ class VendorReportController extends Controller
         $data = $request->validate([
             'title' => 'required|string|max:255',
             'report_type' => 'required|in:progress,completion,financial,deliverable,incident,other',
-            'procurement_id' => ['nullable', Rule::exists('procurements', 'id')],
+            'procurement_id' => [
+                'nullable',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'purchase_order_id' => ['nullable', Rule::exists('procurement_purchase_orders', 'id')],
             'reporting_period_start' => 'nullable|date',
             'reporting_period_end' => 'nullable|date|after_or_equal:reporting_period_start',

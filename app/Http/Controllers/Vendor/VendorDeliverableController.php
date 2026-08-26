@@ -8,6 +8,7 @@ use App\Imports\Procurement\VendorDeliverableImport;
 use App\Models\Procurement;
 use App\Models\ProcurementDeliverable;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Validators\ValidationException as ExcelValidationException;
 
@@ -92,7 +93,10 @@ class VendorDeliverableController extends Controller
         $this->assertVendor($user);
 
         $data = $request->validate([
-            'procurement_id' => 'required|exists:procurements,id',
+            'procurement_id' => [
+                'required',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'file' => 'required|file|mimes:xlsx,xls,csv',
         ]);
 

@@ -15,7 +15,7 @@ class ProcurementFormMap extends BaseModel
 
     public function procurement()
     {
-        return $this->belongsTo(Procurement::class);
+        return $this->belongsTo(Procurement::class)->withTrashed();
     }
 
     public function form()

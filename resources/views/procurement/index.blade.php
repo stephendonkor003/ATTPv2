@@ -92,13 +92,13 @@
                                             <form method="POST"
                                                   action="{{ route('procurements.destroy', $p) }}"
                                                   class="d-inline"
-                                                  onsubmit="return confirm('Permanently delete this procurement? The system will block deletion if it is not an unused draft or has publication history or operational records. This cannot be undone.')">
+                                                  onsubmit="return confirm('Move this procurement to deleted records? It will disappear from the active registry, while linked records and files are retained.')">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit"
                                                         class="btn btn-sm btn-outline-danger"
-                                                        title="Delete procurement"
-                                                        aria-label="Delete {{ $p->title }}">
+                                                        title="Soft delete procurement"
+                                                        aria-label="Soft delete {{ $p->title }}">
                                                     <i class="feather-trash-2"></i>
                                                 </button>
                                             </form>

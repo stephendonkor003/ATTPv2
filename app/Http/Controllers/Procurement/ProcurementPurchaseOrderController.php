@@ -23,6 +23,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ProcurementPurchaseOrderController extends Controller
@@ -308,7 +309,10 @@ class ProcurementPurchaseOrderController extends Controller
         $data = $request->validate([
             'purchase_request_id' => ['required', 'exists:myb_purchase_requests,id'],
             'budget_commitment_id' => ['required', 'exists:myb_budget_commitments,id'],
-            'procurement_id' => ['nullable', 'exists:procurements,id'],
+            'procurement_id' => [
+                'nullable',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'deliverable_ids'   => ['nullable', 'array'],
             'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
             'line_item_resource_categories' => ['nullable', 'array'],
@@ -519,7 +523,10 @@ class ProcurementPurchaseOrderController extends Controller
         $data = $request->validate([
             'purchase_request_id' => ['required', 'exists:myb_purchase_requests,id'],
             'budget_commitment_id' => ['required', 'exists:myb_budget_commitments,id'],
-            'procurement_id' => ['nullable', 'exists:procurements,id'],
+            'procurement_id' => [
+                'nullable',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
             'deliverable_ids'   => ['nullable', 'array'],
             'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
             'line_item_resource_categories' => ['nullable', 'array'],

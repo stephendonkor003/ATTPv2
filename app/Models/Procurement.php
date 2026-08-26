@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\BaseModel;
 use Illuminate\Support\Str;
 use App\Models\EvaluationAssignment;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\Storage;
 
 class Procurement extends BaseModel
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'resource_id',
         'consortium_id',
@@ -42,6 +45,7 @@ class Procurement extends BaseModel
         'awarded_vendor_id',
         'awarded_at',
         'created_by',
+        'deleted_by',
     ];
 
     protected $casts = [
@@ -52,11 +56,12 @@ class Procurement extends BaseModel
         'republished_at' => 'datetime',
         'vendor_categories' => 'array',
         'awarded_at' => 'datetime',
+        'deleted_at' => 'datetime',
     ];
 
     public function isApplicationOpen(): bool
     {
-        if ($this->status !== 'published') {
+        if ($this->trashed() || $this->status !== 'published') {
             return false;
         }
 
@@ -86,6 +91,10 @@ class Procurement extends BaseModel
 
     public function autoCloseIfExpired(): bool
     {
+        if ($this->trashed()) {
+            return false;
+        }
+
         if ($this->status === 'published' && $this->application_end_date && now()->startOfDay()->gt($this->application_end_date)) {
             $this->update(['status' => 'closed']);
             return true;
@@ -172,6 +181,11 @@ class Procurement extends BaseModel
         return $this->belongsTo(User::class, 'awarded_vendor_id');
     }
 
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
+    }
+
     public function evaluatorAssignments()
     {
         return $this->hasMany(EvaluationAssignment::class);
@@ -209,7 +223,7 @@ class Procurement extends BaseModel
                 $counter = 1;
 
                 // Ensure slug uniqueness
-                while (self::where('slug', $slug)->exists()) {
+                while (self::withTrashed()->where('slug', $slug)->exists()) {
                     $slug = $baseSlug . '-' . $counter++;
                 }
 
@@ -229,7 +243,7 @@ class Procurement extends BaseModel
                 $counter = 1;
 
                 while (
-                    self::where('slug', $slug)
+                    self::withTrashed()->where('slug', $slug)
                         ->where('id', '!=', $procurement->id)
                         ->exists()
                 ) {
@@ -240,7 +254,7 @@ class Procurement extends BaseModel
             }
         });
 
-        static::deleted(function (Procurement $procurement) {
+        static::forceDeleted(function (Procurement $procurement) {
             $procurementId = $procurement->getKey();
             $coverImagePath = $procurement->cover_image_path;
 

@@ -2181,6 +2181,7 @@ Route::middleware(['auth', 'not.funding.partner'])
             ->name('notify-vendors');
 
         Route::get('/{procurement}/documents/{document}/download', [ProcurementController::class, 'downloadDocument'])
+            ->withTrashed()
             ->name('documents.download');
 
         Route::delete('/{procurement}', [ProcurementController::class, 'destroy'])
@@ -2255,9 +2256,11 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:forms.manage'])
             ->name('documents.store');
 
         Route::get('{procurement}/{negotiation}/documents/{document}', [ProcurementContractNegotiationController::class, 'downloadDocument'])
+            ->withTrashed()
             ->name('documents.download');
 
         Route::get('{procurement}', [ProcurementContractNegotiationController::class, 'show'])
+            ->withTrashed()
             ->name('show');
 
         Route::post('{procurement}', [ProcurementContractNegotiationController::class, 'store'])
@@ -2777,7 +2780,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
         Route::get(
             '/panel/pdf/procurement/{procurement}',
             [EvaluationPanelPdfController::class, 'bulk']
-        )->name('panel.pdf.bulk');
+        )->withTrashed()->name('panel.pdf.bulk');
 
 });
 
@@ -3116,6 +3119,7 @@ Route::middleware(['auth', 'not.funding.partner'])
     '/procurements/{procurement}/site-visit-report',
     [ProcurementSiteVisitReportController::class, 'show']
     )
+        ->withTrashed()
         ->middleware('permission:site_visits.approve')
         ->name('procurements.site-visit-report');
 
@@ -3123,6 +3127,7 @@ Route::middleware(['auth', 'not.funding.partner'])
     '/procurements/{procurement}/site-visit-report/{siteVisit}/pdf',
     [ProcurementSiteVisitReportController::class, 'downloadVisit']
     )
+        ->withTrashed()
         ->middleware('permission:site_visits.approve')
         ->name('procurements.site-visit-report.pdf');
 
@@ -3130,6 +3135,7 @@ Route::middleware(['auth', 'not.funding.partner'])
     '/procurements/{procurement}/site-visit-report/{siteVisit}/anonymised-pdf',
     [ProcurementSiteVisitReportController::class, 'downloadAnonymisedVisit']
     )
+        ->withTrashed()
         ->middleware('permission:site_visits.approve')
         ->name('procurements.site-visit-report.anonymised-pdf');
 
@@ -3269,8 +3275,8 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:prescreening.repor
         Route::get('/', [PrescreeningReportController::class, 'index'])->name('index');
         Route::get('/submission/{submission}', [PrescreeningReportController::class, 'submission'])->name('submission');
         Route::get('/submission/{submission}/pdf', [PrescreeningReportController::class, 'submissionPdf'])->name('submission.pdf');
-        Route::get('/procurement/{procurement}', [PrescreeningReportController::class, 'procurement'])->name('procurement');
-        Route::get('/procurement/{procurement}/pdf', [PrescreeningReportController::class, 'procurementPdf'])->name('procurement.pdf');
+        Route::get('/procurement/{procurement}', [PrescreeningReportController::class, 'procurement'])->withTrashed()->name('procurement');
+        Route::get('/procurement/{procurement}/pdf', [PrescreeningReportController::class, 'procurementPdf'])->withTrashed()->name('procurement.pdf');
         Route::get('/consolidated', [PrescreeningReportController::class, 'consolidated'])->name('consolidated');
         Route::get('/consolidated/pdf', [PrescreeningReportController::class, 'consolidatedPdf'])->name('consolidated.pdf');
     });
@@ -3283,8 +3289,8 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
         Route::get('/submission/{submission}', [EvaluationReportController::class, 'submission'])->name('submission');
         Route::get('/submission/{submission}/pdf', [EvaluationReportController::class, 'submissionPdf'])->name('submission.pdf');
         Route::get('/submission/{submission}/anonymised-pdf', [EvaluationReportController::class, 'submissionAnonymisedPdf'])->name('submission.anonymised-pdf');
-        Route::get('/procurement/{procurement}', [EvaluationReportController::class, 'procurement'])->name('procurement');
-        Route::get('/procurement/{procurement}/pdf', [EvaluationReportController::class, 'procurementPdf'])->name('procurement.pdf');
+        Route::get('/procurement/{procurement}', [EvaluationReportController::class, 'procurement'])->withTrashed()->name('procurement');
+        Route::get('/procurement/{procurement}/pdf', [EvaluationReportController::class, 'procurementPdf'])->withTrashed()->name('procurement.pdf');
         Route::get('/consolidated', [EvaluationReportController::class, 'consolidated'])->name('consolidated');
         Route::get('/consolidated/pdf', [EvaluationReportController::class, 'consolidatedPdf'])->name('consolidated.pdf');
     });

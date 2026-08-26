@@ -483,7 +483,10 @@ class VendorPortalController extends Controller
         $data = $request->validate([
             'subject' => 'required|string|max:255',
             'message' => 'required|string|min:5',
-            'procurement_id' => 'nullable|exists:procurements,id',
+            'procurement_id' => [
+                'nullable',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
         ]);
 
         $this->assertProcurementOwnership($user->id, $data['procurement_id'] ?? null);
@@ -509,7 +512,10 @@ class VendorPortalController extends Controller
         $data = $request->validate([
             'request_topic' => 'required|string|max:255',
             'details' => 'required|string|min:5',
-            'procurement_id' => 'nullable|exists:procurements,id',
+            'procurement_id' => [
+                'nullable',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
         ]);
 
         $this->assertProcurementOwnership($user->id, $data['procurement_id'] ?? null);

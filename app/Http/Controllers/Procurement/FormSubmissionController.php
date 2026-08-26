@@ -7,6 +7,7 @@ use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
 use App\Models\DynamicForm;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class FormSubmissionController extends Controller
 {
@@ -19,11 +20,18 @@ class FormSubmissionController extends Controller
 
     public function store(Request $request, DynamicForm $form)
     {
+        $validated = $request->validate([
+            'procurement_id' => [
+                'nullable',
+                Rule::exists('procurements', 'id')->whereNull('deleted_at'),
+            ],
+        ]);
+
         $form->ensureGlobalFields();
         $form->load('fields');
 
         $submission = FormSubmission::create([
-            'procurement_id' => request('procurement_id'),
+            'procurement_id' => $validated['procurement_id'] ?? null,
             'form_id' => $form->id,
             'submitted_by' => auth()->id(),
             'submitted_at' => now()
