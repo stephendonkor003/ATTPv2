@@ -22,6 +22,34 @@ class ProcurementController extends Controller
 {
     use GovernanceScope;
 
+    private const DELETE_BLOCKING_RELATIONS = [
+        'attp_think_tank_procurement_items' => 'a linked think tank procurement plan item',
+        'attp_think_tank_procurement_reviews' => 'think tank procurement reviews',
+        'evaluations' => 'procurement evaluation forms',
+        'evaluation_submissions' => 'submitted evaluations',
+        'form_submissions' => 'vendor submissions',
+        'procurement_contract_negotiations' => 'contract negotiations',
+        'procurement_deliverables' => 'procurement deliverables',
+        'procurement_disbursements' => 'procurement disbursements',
+        'procurement_invoices' => 'procurement invoices',
+        'procurement_purchase_orders' => 'purchase orders',
+        'site_visits' => 'site visits',
+        'vendor_information_requests' => 'vendor information requests',
+        'vendor_messages' => 'vendor messages',
+        'vendor_purchase_requests' => 'vendor purchase requests',
+        'vendor_reports' => 'vendor reports',
+    ];
+
+    private const DELETE_SETUP_TABLES = [
+        'evaluation_assignments',
+        'prescreening_assignments',
+        'prescreening_template_procurements',
+        'procurement_evaluations',
+        'procurement_form_assignments',
+        'procurement_form_maps',
+        'procurement_user_permissions',
+    ];
+
     /**
      * List all procurements
      */
@@ -288,6 +316,140 @@ class ProcurementController extends Controller
         }
 
         return back()->with('success', "Notification sent to {$vendors->count()} vendors.");
+    }
+
+    public function destroy(Request $request, Procurement $procurement)
+    {
+        abort_unless(
+            $request->user()?->isAdmin(),
+            403,
+            'Only System Admin users can delete procurements.'
+        );
+
+        $this->assertProcurementInScope($procurement);
+
+        try {
+            $deletionError = DB::transaction(function () use ($procurement): ?string {
+                $lockedProcurement = Procurement::query()
+                    ->whereKey($procurement->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lockedProcurement) {
+                    return 'This procurement no longer exists.';
+                }
+
+                if ($lockedProcurement->status !== 'draft') {
+                    return 'Only draft procurements can be deleted.';
+                }
+
+                if ($this->procurementHasPublicationHistory($lockedProcurement)) {
+                    return 'A procurement that has been published must be retained for audit history.';
+                }
+
+                if (
+                    filled($lockedProcurement->awarded_submission_id)
+                    || filled($lockedProcurement->awarded_vendor_id)
+                    || filled($lockedProcurement->awarded_at)
+                ) {
+                    return 'An awarded procurement must be retained for audit history.';
+                }
+
+                if ($dependency = $this->procurementDeletionDependency($lockedProcurement)) {
+                    return "This procurement cannot be deleted because it has {$dependency}.";
+                }
+
+                DB::table('dynamic_forms')
+                    ->where('procurement_id', $lockedProcurement->getKey())
+                    ->update([
+                        'procurement_id' => null,
+                        'updated_at' => now(),
+                    ]);
+
+                foreach (self::DELETE_SETUP_TABLES as $table) {
+                    DB::table($table)
+                        ->where('procurement_id', $lockedProcurement->getKey())
+                        ->delete();
+                }
+
+                $lockedProcurement->delete();
+
+                return null;
+            });
+        } catch (\Throwable $exception) {
+            Log::error('Procurement deletion failed.', [
+                'procurement_id' => $procurement->getKey(),
+                'user_id' => $request->user()?->getKey(),
+                'exception' => $exception,
+            ]);
+
+            return back()->with(
+                'error',
+                'The procurement could not be deleted. No records or files were removed.'
+            );
+        }
+
+        if ($deletionError) {
+            return back()->with('error', $deletionError);
+        }
+
+        return redirect()
+            ->route('procurements.index')
+            ->with('success', 'Procurement deleted successfully.');
+    }
+
+    private function procurementDeletionDependency(Procurement $procurement): ?string
+    {
+        foreach (self::DELETE_BLOCKING_RELATIONS as $table => $description) {
+            if (
+                DB::table($table)
+                    ->where('procurement_id', $procurement->getKey())
+                    ->exists()
+            ) {
+                return $description;
+            }
+        }
+
+        return null;
+    }
+
+    private function procurementHasPublicationHistory(Procurement $procurement): bool
+    {
+        if (
+            (int) $procurement->publication_version > 1
+            || filled($procurement->recalled_at)
+            || filled($procurement->republished_at)
+        ) {
+            return true;
+        }
+
+        if (
+            filled($procurement->reference_no)
+            && ProcurementPlan::query()
+                ->where('procurement_code', $procurement->reference_no)
+                ->where(function ($query): void {
+                    $query->where('is_launched', true)
+                        ->orWhereNotNull('launched_at');
+                })
+                ->exists()
+        ) {
+            return true;
+        }
+
+        if (
+            DB::table('procurement_audit_logs')
+                ->where('procurement_id', $procurement->getKey())
+                ->whereRaw('LOWER(action) LIKE ?', ['%publish%'])
+                ->exists()
+        ) {
+            return true;
+        }
+
+        return DB::table('system_audit_logs')
+            ->where('payload->table', $procurement->getTable())
+            ->where('payload->id', (string) $procurement->getKey())
+            ->whereIn('payload->changes->status', ['published', 'closed', 'awarded'])
+            ->exists();
     }
 
     private function documentDownloadResponse(Procurement $procurement, ProcurementDocument $document)

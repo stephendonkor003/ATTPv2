@@ -2183,6 +2183,9 @@ Route::middleware(['auth', 'not.funding.partner'])
         Route::get('/{procurement}/documents/{document}/download', [ProcurementController::class, 'downloadDocument'])
             ->name('documents.download');
 
+        Route::delete('/{procurement}', [ProcurementController::class, 'destroy'])
+            ->name('destroy');
+
         // ?? GENERIC ROUTE MUST ALWAYS BE LAST
         Route::get('/{procurement}', [ProcurementController::class, 'show'])
             ->name('show');

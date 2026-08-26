@@ -88,6 +88,22 @@
                                             <i class="feather-eye"></i>
                                         </a>
 
+                                        @if (auth()->user()?->isAdmin() && $p->status === 'draft')
+                                            <form method="POST"
+                                                  action="{{ route('procurements.destroy', $p) }}"
+                                                  class="d-inline"
+                                                  onsubmit="return confirm('Permanently delete this draft procurement? Deletion is blocked if it has publication history or operational records. Attached forms will be detached and assignment setup removed. This cannot be undone.')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit"
+                                                        class="btn btn-sm btn-outline-danger"
+                                                        title="Delete procurement"
+                                                        aria-label="Delete {{ $p->title }}">
+                                                    <i class="feather-trash-2"></i>
+                                                </button>
+                                            </form>
+                                        @endif
+
                                         @if ($p->status === 'draft')
                                             <form method="POST" action="{{ route('statusProcurement.submit', $p) }}" class="d-inline">
                                                 @csrf

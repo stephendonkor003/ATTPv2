@@ -85,7 +85,12 @@ it('gates the UI and publishes bounded authenticated API routes', function () {
         ->toContain('permission:api_sync.generate')
         ->toContain('api-sync-generate');
     expect(file_get_contents($root.'/app/Http/Controllers/System/ApiSyncController.php'))
-        ->toContain("'current_password' => ['required', 'current_password']");
+        ->toContain('Hash::check($currentPassword, (string) $request->user()->getAuthPassword())')
+        ->toContain("request->request->remove('current_password')")
+        ->toContain("withErrors(['current_password'")
+        ->toContain("->with('legacy_panel_open', true)")
+        ->not->toContain("'current_password' => ['required', 'current_password']")
+        ->not->toContain('->withInput(');
     expect($sidebar)
         ->toContain("@can('api_sync.view')")
         ->toContain('API Sync')

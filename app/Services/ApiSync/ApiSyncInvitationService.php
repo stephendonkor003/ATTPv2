@@ -222,7 +222,7 @@ class ApiSyncInvitationService
             true,
         ));
 
-        $pairing = DB::transaction(function () use ($invitation, $signature, $digest, $request): ApiSyncPairing {
+        $activation = DB::transaction(function () use ($invitation, $signature, $digest, $request): ApiSyncPairing|ApiSyncException {
             $locked = ApiSyncInvitation::query()->lockForUpdate()->findOrFail($invitation->id);
             $existing = ApiSyncPairing::query()->where('inbound_invitation_id', $locked->id)->first();
 
@@ -278,11 +278,28 @@ class ApiSyncInvitationService
                 && Str::isUuid((string) $locked->confirmation_request_nonce);
             if ($locked->credential_expires_at?->isPast()) {
                 $locked->forceFill(['status' => ApiSyncInvitation::STATUS_EXPIRED])->save();
-                throw new ApiSyncException('activation_credential_expired', 'The bounded background-activation credential has expired.', 410);
+                $this->audit->record(
+                    $locked,
+                    'invitation_expired',
+                    'The bounded background-activation credential expired before activation completed.',
+                    ['reason' => 'activation_credential_expired'],
+                    request: $request,
+                    statusCode: 410,
+                );
+
+                return new ApiSyncException('activation_credential_expired', 'The bounded background-activation credential has expired.', 410);
             }
             if ($locked->expires_at?->isPast() && ! $signedAuthorizationStored && ! $approvalResponseWasLost) {
                 $locked->forceFill(['status' => ApiSyncInvitation::STATUS_EXPIRED])->save();
-                throw new ApiSyncException('invitation_expired', 'This synchronization request expired before local approval completed.', 410);
+                $this->audit->record(
+                    $locked,
+                    'invitation_expired',
+                    'The synchronization request expired before local approval completed.',
+                    request: $request,
+                    statusCode: 410,
+                );
+
+                return new ApiSyncException('invitation_expired', 'This synchronization request expired before local approval completed.', 410);
             }
             if (blank($locked->approved_by) || (! $signedAuthorizationStored && ! $approvalResponseWasLost)) {
                 throw new ApiSyncException('local_authorization_pending', 'The signed AU-PReMIS authorization must be stored locally before background activation.', 425, ['Retry-After' => '10']);
@@ -347,6 +364,11 @@ class ApiSyncInvitationService
 
             return $pairing->fresh();
         }, 3);
+
+        if ($activation instanceof ApiSyncException) {
+            throw $activation;
+        }
+        $pairing = $activation;
 
         try {
             $this->snapshots->dispatch($pairing);
@@ -494,10 +516,38 @@ class ApiSyncInvitationService
         #[\SensitiveParameter] string $code,
         Request $request,
     ): ApiSyncInvitation {
-        $attempt = DB::transaction(function () use ($invitation, $administrator): array {
+        $attempt = DB::transaction(function () use ($invitation, $administrator, $request): array {
             $locked = ApiSyncInvitation::query()->lockForUpdate()->findOrFail($invitation->id);
             if (in_array($locked->status, [ApiSyncInvitation::STATUS_ACTIVATION_PENDING, ApiSyncInvitation::STATUS_ACTIVE], true)) {
                 return ['already_active' => true, 'invitation' => $locked];
+            }
+            $credentialExpired = in_array($locked->status, [
+                ApiSyncInvitation::STATUS_PENDING,
+                ApiSyncInvitation::STATUS_APPROVAL_IN_PROGRESS,
+                ApiSyncInvitation::STATUS_ACTIVATION_RECEIVED,
+            ], true) && (! $locked->credential_expires_at || $locked->credential_expires_at->isPast());
+            if ($credentialExpired) {
+                if (in_array($locked->status, [
+                    ApiSyncInvitation::STATUS_PENDING,
+                    ApiSyncInvitation::STATUS_APPROVAL_IN_PROGRESS,
+                ], true)) {
+                    $locked->forceFill(['status' => ApiSyncInvitation::STATUS_EXPIRED])->save();
+                    $this->audit->record(
+                        $locked,
+                        'invitation_expired',
+                        'The bounded synchronization credential expired before local approval completed.',
+                        ['reason' => 'approval_credential_expired'],
+                        $administrator,
+                        $request,
+                        410,
+                    );
+                }
+
+                return ['failure' => new ApiSyncException(
+                    'approval_credential_expired',
+                    'This request can no longer be approved because its bounded synchronization credential has expired. Ask AU-PReMIS to send a new request.',
+                    410,
+                )];
             }
             $recovering = in_array($locked->status, [
                 ApiSyncInvitation::STATUS_APPROVAL_IN_PROGRESS,
@@ -508,7 +558,16 @@ class ApiSyncInvitationService
 
             if (! $recovering && $locked->expires_at?->isPast()) {
                 $locked->forceFill(['status' => ApiSyncInvitation::STATUS_EXPIRED])->save();
-                throw new ApiSyncException('invitation_expired', 'This synchronization request has expired. Ask AU-PReMIS to send a new request.', 410);
+                $this->audit->record(
+                    $locked,
+                    'invitation_expired',
+                    'The synchronization request expired before local approval completed.',
+                    actor: $administrator,
+                    request: $request,
+                    statusCode: 410,
+                );
+
+                return ['failure' => new ApiSyncException('invitation_expired', 'This synchronization request has expired. Ask AU-PReMIS to send a new request.', 410)];
             }
             if (! in_array($locked->status, [
                 ApiSyncInvitation::STATUS_PENDING,
@@ -521,7 +580,16 @@ class ApiSyncInvitationService
             $maximum = (int) config('api_sync.v2.maximum_approval_attempts', 5);
             if (! $recovering && (int) $locked->approval_attempts >= $maximum) {
                 $locked->forceFill(['status' => ApiSyncInvitation::STATUS_FAILED])->save();
-                throw new ApiSyncException('approval_attempts_exhausted', 'The approval attempt limit has been reached. Ask AU-PReMIS to create a new request.', 429);
+                $this->audit->record(
+                    $locked,
+                    'approval_attempts_exhausted',
+                    'The local approval attempt limit was reached and the synchronization request was closed.',
+                    actor: $administrator,
+                    request: $request,
+                    statusCode: 429,
+                );
+
+                return ['failure' => new ApiSyncException('approval_attempts_exhausted', 'The approval attempt limit has been reached. Ask AU-PReMIS to create a new request.', 429)];
             }
 
             if ($recovering) {
@@ -550,6 +618,9 @@ class ApiSyncInvitationService
             ];
         }, 3);
 
+        if (($attempt['failure'] ?? null) instanceof ApiSyncException) {
+            throw $attempt['failure'];
+        }
         if ($attempt['already_active']) {
             return $attempt['invitation'];
         }
@@ -787,7 +858,10 @@ class ApiSyncInvitationService
             ->where(function ($query): void {
                 $query->where(function ($pending): void {
                     $pending->where('status', ApiSyncInvitation::STATUS_PENDING)
-                        ->where('expires_at', '<=', now());
+                        ->where(function ($expiry): void {
+                            $expiry->where('expires_at', '<=', now())
+                                ->orWhere('credential_expires_at', '<=', now());
+                        });
                 })->orWhere(function ($authorizedLifecycle): void {
                     $authorizedLifecycle->whereIn('status', [
                         ApiSyncInvitation::STATUS_APPROVAL_IN_PROGRESS,
@@ -806,7 +880,7 @@ class ApiSyncInvitationService
                     return false;
                 }
                 $pendingExpired = $invitation->status === ApiSyncInvitation::STATUS_PENDING
-                    && $invitation->expires_at?->isPast();
+                    && ($invitation->expires_at?->isPast() || $invitation->credential_expires_at?->isPast());
                 $authorizationExpired = in_array($invitation->status, [
                     ApiSyncInvitation::STATUS_APPROVAL_IN_PROGRESS,
                     ApiSyncInvitation::STATUS_ACTIVATION_PENDING,

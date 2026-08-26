@@ -6,6 +6,8 @@ use App\Models\BaseModel;
 use Illuminate\Support\Str;
 use App\Models\EvaluationAssignment;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class Procurement extends BaseModel
@@ -238,11 +240,31 @@ class Procurement extends BaseModel
             }
         });
 
-        static::deleting(function (Procurement $procurement) {
-            Storage::disk('local')->deleteDirectory("procurements/{$procurement->id}");
-            if ($procurement->cover_image_path) {
-                Storage::disk('public')->delete($procurement->cover_image_path);
-            }
+        static::deleted(function (Procurement $procurement) {
+            $procurementId = $procurement->getKey();
+            $coverImagePath = $procurement->cover_image_path;
+
+            DB::afterCommit(function () use ($procurementId, $coverImagePath): void {
+                try {
+                    $localFilesDeleted = Storage::disk('local')
+                        ->deleteDirectory("procurements/{$procurementId}");
+                    $coverImageDeleted = ! $coverImagePath
+                        || Storage::disk('public')->delete($coverImagePath);
+
+                    if (! $localFilesDeleted || ! $coverImageDeleted) {
+                        Log::warning('Deleted procurement left files requiring manual cleanup.', [
+                            'procurement_id' => $procurementId,
+                            'local_directory_deleted' => $localFilesDeleted,
+                            'cover_image_deleted' => $coverImageDeleted,
+                        ]);
+                    }
+                } catch (\Throwable $exception) {
+                    Log::warning('Deleted procurement files could not be fully removed.', [
+                        'procurement_id' => $procurementId,
+                        'exception' => $exception,
+                    ]);
+                }
+            });
         });
     }
 
