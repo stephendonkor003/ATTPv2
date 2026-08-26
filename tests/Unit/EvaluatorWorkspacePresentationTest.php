@@ -105,3 +105,35 @@ it('keeps identity verification final-only and returns evaluators to their workl
         ->toContain("route('my.eval.index')")
         ->not->toContain("route('eval.assign.hub')");
 });
+
+it('uses the full scoring width and keeps secondary evaluator tools in a closed slide-out drawer', function () {
+    $workspace = file_get_contents(
+        dirname(__DIR__, 2).'/resources/views/evaluations/submit.blade.php'
+    );
+
+    expect($workspace)
+        ->toContain('<main class="col-12">')
+        ->not->toContain('<main class="col-xl-9 col-lg-8">')
+        ->not->toContain('class="evaluator-sidebar"')
+        ->toContain('id="evaluatorToolsToggle"')
+        ->toContain('aria-controls="evaluatorToolsDrawer" aria-expanded="false"')
+        ->toContain('id="evaluatorToolsDrawer" class="evaluator-tools-drawer" role="dialog" aria-modal="true"')
+        ->toContain('aria-hidden="true" aria-labelledby="evaluatorToolsTitle"')
+        ->toContain('tabindex="-1" inert')
+        ->toContain('Tools &amp; verification')
+        ->toContain('Evaluation monitor')
+        ->toContain('Identity verification')
+        ->toContain('Form structure')
+        ->toContain('transform: translate3d(100%, 0, 0)')
+        ->toContain('.evaluator-tools-drawer.is-open')
+        ->toContain("toolsToggle?.addEventListener('click', () => openEvaluatorTools())")
+        ->toContain("toolsBackdrop?.addEventListener('click', () => closeEvaluatorTools())")
+        ->toContain("if (event.key === 'Escape')")
+        ->toContain("toolsDrawer.setAttribute('aria-hidden', 'false')")
+        ->toContain("toolsDrawer.setAttribute('aria-hidden', 'true')")
+        ->toContain("toolsDrawer.removeAttribute('inert')")
+        ->toContain("toolsDrawer.setAttribute('inert', '')")
+        ->toContain('focusToRestore.focus()')
+        ->toContain('openEvaluatorTools(finalVideo)')
+        ->toContain('@media (prefers-reduced-motion: reduce)');
+});

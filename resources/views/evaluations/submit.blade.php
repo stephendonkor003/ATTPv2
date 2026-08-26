@@ -47,7 +47,7 @@
         </header>
 
         <div class="row g-4 align-items-start">
-            <main class="col-xl-9 col-lg-8">
+            <main class="col-12">
                 @if ($errors->any())
                     <div class="alert alert-danger mb-4" role="alert">
                         <strong>Please review the evaluation details below.</strong>
@@ -408,51 +408,81 @@
                 </form>
             </main>
 
-            <aside class="col-xl-3 col-lg-4">
-                <div class="evaluator-sidebar">
-                    <section class="monitor-card mb-3">
-                        <header><i class="feather-activity" aria-hidden="true"></i> Evaluation monitor</header>
-                        <div class="monitor-body">
-                            <div><span>Date</span><strong id="currentDate">—</strong></div>
-                            <div><span>Time</span><strong id="currentTime">—</strong></div>
-                            <div><span>Status</span><strong id="evalStatus">Draft</strong></div>
-                        </div>
-                    </section>
-
-                    <section class="camera-card mb-3">
-                        <header>
-                            <span id="cameraStatus" class="camera-status idle" aria-hidden="true"></span>
-                            Identity verification
-                        </header>
-                        <div class="camera-body">
-                            <div class="camera-preview">
-                                <video id="preview" autoplay muted playsinline></video>
-                                <span>Camera preview</span>
-                            </div>
-                            <button id="startCamera" type="button" class="btn btn-primary w-100 mb-2">
-                                <i class="feather-video me-1" aria-hidden="true"></i>Start camera
-                            </button>
-                            <button id="stopCamera" type="button" class="btn btn-outline-danger w-100 d-none">
-                                Stop and use recording
-                            </button>
-                            <div class="verification-divider"><span>or</span></div>
-                            <label for="finalVideo" class="verification-upload-label">Upload a verification video</label>
-                            <input type="file" name="video" id="finalVideo" form="finalForm"
-                                class="form-control form-control-sm" accept="video/webm,video/mp4,video/*">
-                            <p>Record up to 15 seconds or upload WebM/MP4. This is required only for final submission.</p>
-                        </div>
-                    </section>
-
-                    <section class="structure-key">
-                        <strong>Form structure</strong>
-                        @foreach (\App\Models\EvaluationSection::LEVEL_LABELS as $level => $label)
-                            <span><b>{{ $level }}</b>{{ $label }}</span>
-                        @endforeach
-                    </section>
-                </div>
-            </aside>
         </div>
     </div>
+
+    <button type="button" id="evaluatorToolsToggle" class="evaluator-tools-toggle"
+        aria-controls="evaluatorToolsDrawer" aria-expanded="false"
+        aria-haspopup="dialog" aria-label="Open evaluator tools and identity verification">
+        <i class="feather-sliders" aria-hidden="true"></i>
+        <span>Tools &amp; verification</span>
+        <span class="tools-toggle-status" aria-hidden="true"></span>
+    </button>
+
+    <div id="evaluatorToolsBackdrop" class="evaluator-tools-backdrop" aria-hidden="true"></div>
+
+    <aside id="evaluatorToolsDrawer" class="evaluator-tools-drawer" role="dialog" aria-modal="true"
+        aria-hidden="true" aria-labelledby="evaluatorToolsTitle" tabindex="-1" inert>
+        <header class="evaluator-tools-header">
+            <div>
+                <span>Evaluator tools</span>
+                <h2 id="evaluatorToolsTitle">Monitor &amp; verification</h2>
+            </div>
+            <button type="button" id="evaluatorToolsClose" class="evaluator-tools-close"
+                aria-label="Close evaluator tools">
+                <i class="feather-x" aria-hidden="true"></i>
+            </button>
+        </header>
+
+        <div class="evaluator-tools-body">
+            <section class="monitor-card mb-3">
+                <header>
+                    <i class="feather-activity" aria-hidden="true"></i>
+                    <h3>Evaluation monitor</h3>
+                </header>
+                <div class="monitor-body">
+                    <div><span>Date</span><strong id="currentDate">—</strong></div>
+                    <div><span>Time</span><strong id="currentTime">—</strong></div>
+                    <div><span>Status</span><strong id="evalStatus">Draft</strong></div>
+                </div>
+            </section>
+
+            <section class="camera-card mb-3">
+                <header>
+                    <span id="cameraStatus" class="camera-status idle" aria-hidden="true"></span>
+                    <h3>Identity verification</h3>
+                </header>
+                <div class="camera-body">
+                    <div class="camera-preview">
+                        <video id="preview" autoplay muted playsinline></video>
+                        <span>Camera preview</span>
+                    </div>
+                    <button id="startCamera" type="button" class="btn btn-primary w-100 mb-2">
+                        <i class="feather-video me-1" aria-hidden="true"></i>Start camera
+                    </button>
+                    <button id="stopCamera" type="button" class="btn btn-outline-danger w-100 d-none">
+                        Stop and use recording
+                    </button>
+                    <div class="verification-divider"><span>or</span></div>
+                    <label for="finalVideo" class="verification-upload-label">Upload a verification video</label>
+                    <input type="file" name="video" id="finalVideo" form="finalForm"
+                        class="form-control form-control-sm" accept="video/webm,video/mp4,video/*"
+                        aria-describedby="verificationHelp verificationError">
+                    <p id="verificationHelp">Record up to 15 seconds or upload WebM/MP4. This is required only for final submission.</p>
+                    <p id="verificationError" class="verification-error" role="alert" hidden></p>
+                </div>
+            </section>
+
+            <section class="structure-key">
+                <h3>Form structure</h3>
+                <ol>
+                    @foreach (\App\Models\EvaluationSection::LEVEL_LABELS as $level => $label)
+                        <li><b>{{ $level }}</b><span>{{ $label }}</span></li>
+                    @endforeach
+                </ol>
+            </section>
+        </div>
+    </aside>
 
     @include('evaluations.partials.hierarchy-theme')
 
@@ -463,6 +493,7 @@
             --workspace-border: #e2e7ef;
             color: var(--workspace-ink);
         }
+        .evaluator-workspace main { min-width: 0; }
 
         .evaluation-hero { display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding: 1.5rem 1.65rem; color: #fff; border-radius: 18px; background: radial-gradient(circle at 88% 12%, rgba(255,255,255,.16), transparent 28%), linear-gradient(128deg, #17296b 0%, #3157d5 62%, #4d74e8 100%); box-shadow: 0 18px 42px rgba(35,68,178,.16); }
         .hero-back { display: inline-flex; align-items: center; gap: .35rem; margin-bottom: .65rem; color: rgba(255,255,255,.84); font-size: .78rem; font-weight: 700; text-decoration: none; }
@@ -614,9 +645,26 @@
         #draftStatus[data-state="error"] { color: #b42318; }
         .empty-evaluation { display: grid; min-height: 150px; place-items: center; padding: 2rem; color: #98a2b3; border: 1px dashed #cdd5df; border-radius: 13px; background: #fff; }
 
-        .evaluator-sidebar { position: sticky; top: 1rem; }
+        .evaluator-tools-toggle { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 1075; display: inline-flex; align-items: center; gap: .55rem; min-height: 46px; padding: .7rem .9rem; color: #fff; border: 0; border-radius: 999px; background: #203fae; box-shadow: 0 12px 30px rgba(28,53,146,.28); font-size: .75rem; font-weight: 720; transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }
+        .evaluator-tools-toggle:hover { background: #172f8d; box-shadow: 0 14px 34px rgba(28,53,146,.34); transform: translateY(-2px); }
+        .evaluator-tools-toggle:focus-visible, .evaluator-tools-close:focus-visible { outline: 3px solid rgba(49,87,213,.28); outline-offset: 3px; }
+        .tools-toggle-status { width: 8px; height: 8px; border: 2px solid rgba(255,255,255,.62); border-radius: 50%; background: #fdb022; }
+        .evaluator-tools-toggle.is-verified .tools-toggle-status { border-color: rgba(255,255,255,.78); background: #32d583; }
+        .evaluator-tools-backdrop { position: fixed; inset: 0; z-index: 1080; visibility: hidden; background: rgba(16,24,40,.42); opacity: 0; pointer-events: none; transition: opacity .36s ease, visibility 0s linear .36s; }
+        .evaluator-tools-backdrop.is-open { visibility: visible; opacity: 1; pointer-events: auto; transition-delay: 0s; }
+        .evaluator-tools-drawer { --workspace-muted: #667085; --workspace-border: #e2e7ef; position: fixed; top: 0; right: 0; bottom: 0; z-index: 1085; display: flex; width: min(410px, calc(100vw - 1rem)); height: 100vh; height: 100dvh; flex-direction: column; overflow: hidden; visibility: hidden; border-left: 1px solid #e1e6ee; background: #f7f9fc; box-shadow: -20px 0 54px rgba(16,24,40,.2); pointer-events: none; transform: translate3d(100%, 0, 0); transition: transform .38s cubic-bezier(.22,.8,.2,1), visibility 0s linear .38s; }
+        .evaluator-tools-drawer.is-open { visibility: visible; pointer-events: auto; transform: translate3d(0, 0, 0); transition-delay: 0s; }
+        .evaluator-tools-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem; color: #fff; background: linear-gradient(128deg, #17296b, #3157d5); }
+        .evaluator-tools-header span { display: block; margin-bottom: .12rem; color: rgba(255,255,255,.68); font-size: .6rem; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+        .evaluator-tools-header h2 { margin: 0; color: #fff; font-size: 1rem; font-weight: 740; }
+        .evaluator-tools-close { display: grid; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; place-items: center; color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 10px; background: rgba(255,255,255,.12); font-size: 1.1rem; }
+        .evaluator-tools-close:hover { background: rgba(255,255,255,.22); }
+        .evaluator-tools-body { flex: 1 1 auto; min-height: 0; padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+        .evaluator-tools-body .btn, .evaluator-tools-body .form-control { min-height: 44px; }
+        body.evaluator-drawer-open { overflow: hidden; }
         .monitor-card, .camera-card, .structure-key { overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 14px; background: #fff; box-shadow: 0 5px 16px rgba(20,34,66,.045); }
         .monitor-card > header, .camera-card > header { display: flex; align-items: center; gap: .45rem; padding: .7rem .8rem; color: #344054; border-bottom: 1px solid #edf0f4; background: #f8fafc; font-size: .8rem; font-weight: 720; }
+        .monitor-card h3, .camera-card h3, .structure-key h3 { margin: 0; color: inherit; font: inherit; }
         .monitor-body { padding: .7rem .8rem; }
         .monitor-body > div { display: flex; align-items: center; justify-content: space-between; padding: .35rem 0; color: var(--workspace-muted); font-size: .76rem; }
         .monitor-body strong { color: #344054; }
@@ -627,16 +675,18 @@
         .camera-status.recording { background: #d92d20; box-shadow: 0 0 0 5px rgba(217,45,32,.12); }
         .camera-status.ready { background: #12b76a; box-shadow: 0 0 0 5px rgba(18,183,106,.12); }
         .camera-body { padding: .8rem; }
-        .camera-preview { position: relative; min-height: 150px; margin-bottom: .7rem; overflow: hidden; border-radius: 10px; background: #111827; }
-        .camera-preview video { display: block; width: 100%; min-height: 150px; object-fit: cover; }
+        .camera-preview { position: relative; min-height: 150px; margin-bottom: .7rem; overflow: hidden; border-radius: 10px; aspect-ratio: 16 / 9; background: #111827; }
+        .camera-preview video { display: block; width: 100%; height: 100%; min-height: 150px; object-fit: cover; }
         .camera-preview > span { position: absolute; right: .5rem; bottom: .45rem; padding: .2rem .38rem; color: rgba(255,255,255,.8); border-radius: 5px; background: rgba(0,0,0,.38); font-size: .55rem; }
         .camera-body p { margin: .55rem 0 0; color: var(--workspace-muted); font-size: .72rem; line-height: 1.45; text-align: center; }
         .verification-divider { display: flex; align-items: center; gap: .55rem; margin: .65rem 0; color: #98a2b3; font-size: .65rem; text-transform: uppercase; }
         .verification-divider::before, .verification-divider::after { height: 1px; flex: 1; background: #e4e7ec; content: ''; }
         .verification-upload-label { display: block; margin-bottom: .35rem; color: #475467; font-size: .72rem; font-weight: 700; }
+        .camera-body .verification-error { margin-top: .65rem; padding: .55rem .65rem; color: #b42318; border: 1px solid #fecdca; border-radius: 8px; background: #fff1f0; text-align: left; }
         .structure-key { display: grid; gap: .35rem; padding: .75rem .8rem; }
-        .structure-key > strong { margin-bottom: .1rem; color: #344054; font-size: .68rem; }
-        .structure-key > span { display: flex; align-items: center; gap: .45rem; color: var(--workspace-muted); font-size: .62rem; }
+        .structure-key > h3 { margin-bottom: .1rem; color: #344054; font-size: .68rem; font-weight: 720; }
+        .structure-key ol { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+        .structure-key li { display: flex; align-items: center; gap: .45rem; color: var(--workspace-muted); font-size: .62rem; }
         .structure-key b { display: grid; width: 20px; height: 20px; place-items: center; color: #3157d5; border-radius: 6px; background: #eef2ff; font-size: .58rem; }
 
         @supports not (background: color-mix(in srgb, red 10%, white)) {
@@ -652,7 +702,6 @@
         @media (max-width: 991.98px) {
             .evaluation-hero { align-items: flex-start; flex-direction: column; }
             .hero-guidance { max-width: none; }
-            .evaluator-sidebar { position: static; }
         }
 
         @media (max-width: 767.98px) {
@@ -671,6 +720,14 @@
             .overall-categories small { text-align: left; }
             .submission-actions { align-items: stretch; flex-direction: column; }
             .decision-options, .decision-options.is-eoi { grid-template-columns: 1fr; }
+            .evaluator-tools-toggle { right: .75rem; bottom: .75rem; }
+            .evaluator-tools-toggle span:not(.tools-toggle-status) { display: none; }
+            .evaluator-tools-drawer { width: 100vw; max-width: 100vw; border-left: 0; }
+            .evaluator-tools-body { padding: .8rem; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .evaluator-tools-toggle, .evaluator-tools-backdrop, .evaluator-tools-drawer { transition: none; }
         }
     </style>
 
@@ -695,6 +752,92 @@
             const finalForm = byId('finalForm');
             const saveDraftButton = byId('saveDraft');
             const draftStatus = byId('draftStatus');
+            const toolsToggle = byId('evaluatorToolsToggle');
+            const toolsBackdrop = byId('evaluatorToolsBackdrop');
+            const toolsDrawer = byId('evaluatorToolsDrawer');
+            const toolsClose = byId('evaluatorToolsClose');
+            const verificationError = byId('verificationError');
+            const evaluatorWorkspace = document.querySelector('.evaluator-workspace');
+
+            let drawerReturnFocus = null;
+
+            function drawerFocusables() {
+                if (!toolsDrawer) return [];
+
+                return [...toolsDrawer.querySelectorAll(
+                    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                )].filter(element => element.getClientRects().length > 0);
+            }
+
+            function openEvaluatorTools(focusTarget = null) {
+                if (!toolsDrawer || !toolsToggle || !toolsBackdrop) return;
+
+                if (toolsDrawer.getAttribute('aria-hidden') !== 'false') {
+                    drawerReturnFocus = document.activeElement instanceof HTMLElement
+                        ? document.activeElement
+                        : toolsToggle;
+                }
+                toolsDrawer.removeAttribute('inert');
+                toolsDrawer.classList.add('is-open');
+                toolsBackdrop.classList.add('is-open');
+                toolsDrawer.setAttribute('aria-hidden', 'false');
+                toolsToggle.setAttribute('aria-expanded', 'true');
+                evaluatorWorkspace?.setAttribute('inert', '');
+                document.body.classList.add('evaluator-drawer-open');
+
+                window.requestAnimationFrame(() => (focusTarget || toolsClose || toolsDrawer).focus());
+            }
+
+            function closeEvaluatorTools(restoreFocus = true) {
+                if (!toolsDrawer || !toolsToggle || !toolsBackdrop) return;
+
+                const focusToRestore = drawerReturnFocus instanceof HTMLElement
+                    && !toolsDrawer.contains(drawerReturnFocus)
+                    ? drawerReturnFocus
+                    : toolsToggle;
+                evaluatorWorkspace?.removeAttribute('inert');
+                if (restoreFocus) focusToRestore.focus();
+                toolsDrawer.classList.remove('is-open');
+                toolsBackdrop.classList.remove('is-open');
+                toolsDrawer.setAttribute('inert', '');
+                toolsDrawer.setAttribute('aria-hidden', 'true');
+                toolsToggle.setAttribute('aria-expanded', 'false');
+                document.body.classList.remove('evaluator-drawer-open');
+
+                drawerReturnFocus = null;
+            }
+
+            toolsToggle?.addEventListener('click', () => openEvaluatorTools());
+            toolsClose?.addEventListener('click', () => closeEvaluatorTools());
+            toolsBackdrop?.addEventListener('click', () => closeEvaluatorTools());
+
+            document.addEventListener('keydown', event => {
+                if (toolsDrawer?.getAttribute('aria-hidden') !== 'false') return;
+
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeEvaluatorTools();
+                    return;
+                }
+
+                if (event.key !== 'Tab') return;
+                const focusable = drawerFocusables();
+                if (!focusable.length) {
+                    event.preventDefault();
+                    toolsDrawer.focus();
+                    return;
+                }
+
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            });
 
             function updateClock() {
                 const now = new Date();
@@ -756,6 +899,7 @@
                     cameraStatus.className = 'camera-status ready';
                     evalStatus.textContent = 'Verified';
                     evalStatus.className = 'status-ready';
+                    toolsToggle?.classList.add('is-verified');
                     recalculate();
                 };
 
@@ -967,9 +1111,11 @@
             saveDraftButton?.addEventListener('click', () => saveDraft(true));
             finalVideo?.addEventListener('change', () => {
                 if (finalVideo.files.length) {
+                    if (verificationError) verificationError.hidden = true;
                     cameraStatus.className = 'camera-status ready';
                     evalStatus.textContent = 'Verified';
                     evalStatus.className = 'status-ready';
+                    toolsToggle?.classList.add('is-verified');
                 }
             });
 
@@ -987,8 +1133,11 @@
                 recalculate();
                 if (!finalVideo?.files.length) {
                     event.preventDefault();
-                    window.alert('Record or upload an identity verification video before final submission. Your draft remains saved.');
-                    finalVideo?.focus();
+                    if (verificationError) {
+                        verificationError.textContent = 'Record or upload an identity verification video before final submission. Your draft remains saved.';
+                        verificationError.hidden = false;
+                    }
+                    openEvaluatorTools(finalVideo);
                     return;
                 }
 

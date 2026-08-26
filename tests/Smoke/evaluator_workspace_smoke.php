@@ -185,6 +185,31 @@ class EvaluatorWorkspaceSmoke
 
         $firstResponse = $this->actingAsVerified($evaluator)->get($route);
         $this->assertResponseStatus($firstResponse, 200, 'Starting an assigned Services evaluation failed.');
+        $this->assertResponseContains(
+            $firstResponse,
+            'id="evaluatorToolsToggle"',
+            'The evaluator tools drawer trigger is missing.'
+        );
+        $this->assertResponseContains(
+            $firstResponse,
+            'id="evaluatorToolsDrawer"',
+            'The evaluator tools drawer is missing.'
+        );
+        $this->assertResponseContains(
+            $firstResponse,
+            'aria-hidden="true" aria-labelledby="evaluatorToolsTitle"',
+            'The evaluator tools drawer is not closed by default.'
+        );
+        $this->assertResponseContains(
+            $firstResponse,
+            '<main class="col-12">',
+            'The evaluation scoring workspace is not using the available width.'
+        );
+        $this->assertResponseDoesNotContain(
+            $firstResponse,
+            '<main class="col-xl-9 col-lg-8">',
+            'The evaluation scoring workspace still reserves space for the old sidebar.'
+        );
 
         $firstDraft = $this->submissionFor($fixture);
         $this->assertTrue($firstDraft !== null, 'Starting an evaluation did not create its draft.');
