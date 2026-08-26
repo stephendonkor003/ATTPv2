@@ -2808,14 +2808,13 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
 
 
 use App\Http\Controllers\EvaluationSubmissionController;
-use App\Http\Controllers\EvaluationScoringController;
 
 /*
 |--------------------------------------------------------------------------
 | EVALUATOR SIDE
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evaluate'])
+Route::middleware(['auth', 'permission:evaluations.evaluate'])
     ->prefix('my-evaluations')
     ->name('my.eval.')
     ->group(function () {
@@ -2825,53 +2824,41 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evalua
             ->name('index');
 
         // Start / continue evaluation
-        Route::get('/{assignment}/start', [EvaluationSubmissionController::class, 'start'])
+        Route::get('/{assignment}/start/{applicant}', [EvaluationSubmissionController::class, 'start'])
             ->name('start');
 
-        // ? SAVE SCORES (AUTOSAVE / DRAFT)
-        Route::post('/{assignment}/save-scores', [EvaluationSubmissionController::class, 'saveScores'])
-            ->name('saveScores');
+        // Save scores and notes without finalising the evaluation.
+        Route::post('/{assignment}/save/{applicant}', [EvaluationSubmissionController::class, 'saveScores'])
+            ->name('save');
 
         // Submit final evaluation
-        Route::post('/submit/{assignment}', [EvaluationSubmissionController::class, 'submit'])
+        Route::post('/{assignment}/submit/{applicant}', [EvaluationSubmissionController::class, 'submit'])
             ->name('submit');
 
         // View submitted evaluation
-        Route::get('/{assignment}/view', [EvaluationSubmissionController::class, 'view'])
+        Route::get('/{assignment}/view/{applicant}', [EvaluationSubmissionController::class, 'view'])
             ->name('view');
 
-        // Compare evaluators
-        Route::get('/{assignment}/compare', [EvaluationSubmissionController::class, 'compare'])
-            ->name('compare');
+        // Secure video streaming (identity proof)
+        Route::get('/{assignment}/video/{applicant}', [EvaluationSubmissionController::class, 'video'])
+            ->name('video');
 
-        // Sidebar-safe compare redirect
-        Route::get('/compare', [EvaluationSubmissionController::class, 'compareRedirect'])
-            ->name('compare.redirect');
-
-        // Send evaluation for rework
-        Route::post('/evaluations/{submission}/rework', [EvaluationSubmissionController::class, 'sendForRework'])
-            ->name('evaluations.rework');
     });
-
-
 
 /*
 |--------------------------------------------------------------------------
-| SCORING (AJAX)
+| EVALUATION COMPARISON (AUTHORIZED PANEL/ADMIN USERS ONLY)
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evaluate'])
-    ->prefix('evaluation/score')
-    ->name('eval.score.')
+Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_all'])
+    ->prefix('my-evaluations')
+    ->name('my.eval.')
     ->group(function () {
+        Route::get('/{assignment}/compare', [EvaluationSubmissionController::class, 'compare'])
+            ->name('compare');
 
-        Route::post('/criteria',
-            [EvaluationScoringController::class, 'saveCriteriaScore']
-        )->name('criteria');
-
-        Route::post('/section',
-            [EvaluationScoringController::class, 'saveSectionNotes']
-        )->name('section');
+        Route::get('/compare', [EvaluationSubmissionController::class, 'compareRedirect'])
+            ->name('compare.redirect');
     });
 
 /*
@@ -2902,7 +2889,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.manage
         )->name('destroy');
 });
 
-Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evaluate'])
+Route::middleware(['auth', 'permission:evaluations.evaluate'])
     ->prefix('evaluation-assignments')
     ->name('eval.assign.')
     ->group(function () {
@@ -2912,7 +2899,7 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evalua
 
         // List applicants for this assignment
         Route::get('/{assignment}/applicants',
-            [EvaluationSubmissionController::class, 'myEvaluations']
+            [EvaluationSubmissionController::class, 'assignmentApplicants']
         )->name('applicants');
 
         // Start / continue evaluation (PER APPLICANT)

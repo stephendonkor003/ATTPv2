@@ -107,12 +107,14 @@
                                             <i class="feather-users me-1"></i> Applicants
                                         </a>
 
-                                        @if ($a->status === 'submitted')
-                                            <a href="{{ route('my.eval.compare', $a->id) }}"
-                                                class="btn btn-sm btn-outline-success">
-                                                <i class="feather-bar-chart-2 me-1"></i> Compare
-                                            </a>
-                                        @endif
+                                        @can('evaluations.view_all')
+                                            @if ($a->status === 'submitted')
+                                                <a href="{{ route('my.eval.compare', $a->id) }}"
+                                                    class="btn btn-sm btn-outline-success">
+                                                    <i class="feather-bar-chart-2 me-1"></i> Compare
+                                                </a>
+                                            @endif
+                                        @endcan
 
                                         @if ($a->status !== 'submitted')
                                             <form method="POST" action="{{ route('eval.assign.destroy', $a) }}"

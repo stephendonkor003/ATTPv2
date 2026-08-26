@@ -154,8 +154,9 @@ class EvaluationScoringController extends Controller
         }
 
         abort_unless(
-            $user->can('evaluations.view_all') || (string) $submission->evaluator_id === (string) $user->id,
-            403
+            (string) $submission->evaluator_id === (string) $user->id,
+            403,
+            'Only the assigned evaluator can modify this evaluation.'
         );
     }
 

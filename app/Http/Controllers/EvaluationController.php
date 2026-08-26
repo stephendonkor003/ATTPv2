@@ -161,6 +161,26 @@ class EvaluationController extends Controller
                 return back()->with('error', 'Closed evaluations cannot be modified.');
             }
 
+            if ($request->status === 'active') {
+                $evaluation->loadMissing('sections.criteria');
+                $criteria = $evaluation->sections->flatMap->criteria;
+
+                if ($criteria->isEmpty()) {
+                    return back()->with(
+                        'error',
+                        'Add at least one evaluation criterion before activating this form.'
+                    );
+                }
+
+                if ($evaluation->usesNumericScoring()
+                    && $criteria->contains(fn ($criterion) => (float) $criterion->max_score <= 0)) {
+                    return back()->with(
+                        'error',
+                        'Every Services criterion must have a maximum score greater than zero.'
+                    );
+                }
+            }
+
             $evaluation->update([
                 'status' => $request->status,
             ]);

@@ -150,12 +150,14 @@
                                                     </a>
 
                                                     {{-- Panel Comparison --}}
-                                                    @if ($assign->status === 'submitted')
-                                                        <a href="{{ route('my.eval.compare', $assign->id) }}"
-                                                            class="btn btn-sm btn-outline-success">
-                                                            Compare
-                                                        </a>
-                                                    @endif
+                                                    @can('evaluations.view_all')
+                                                        @if ($assign->status === 'submitted')
+                                                            <a href="{{ route('my.eval.compare', $assign->id) }}"
+                                                                class="btn btn-sm btn-outline-success">
+                                                                Compare
+                                                            </a>
+                                                        @endif
+                                                    @endcan
 
                                                     {{-- Remove (only if NOT submitted) --}}
                                                     @if ($assign->status !== 'submitted')

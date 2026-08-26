@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends(auth()->user()?->user_type === 'vendor' ? 'layouts.vendor' : 'layouts.app')
 
 @section('content')
     @php
@@ -54,8 +54,8 @@
                         <i class="feather-download me-1" aria-hidden="true"></i>Download PDF
                     </a>
                 @endcan
-                <a href="{{ route('eval.assign.hub') }}" class="btn btn-outline-light btn-sm">
-                    <i class="feather-arrow-left me-1" aria-hidden="true"></i>Back
+                <a href="{{ route('my.eval.index') }}" class="btn btn-outline-light btn-sm">
+                    <i class="feather-arrow-left me-1" aria-hidden="true"></i>My Evaluations
                 </a>
             </div>
         </header>
@@ -348,7 +348,7 @@
                         <div class="identity-body">
                             @if ($submission->video_path)
                                 <video controls preload="metadata">
-                                    <source src="{{ route('eval.assign.video', [$assignment->id, $applicant->id]) }}">
+                                    <source src="{{ route('my.eval.video', [$assignment->id, $applicant->id]) }}">
                                 </video>
                                 <p>Secure evaluator verification recording</p>
                             @else

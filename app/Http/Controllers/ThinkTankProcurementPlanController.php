@@ -118,7 +118,9 @@ class ThinkTankProcurementPlanController extends Controller
         $assignments = EvaluationAssignment::query()
             ->with(['evaluation', 'procurement.thinkTankPlanningItem.plan'])
             ->where('user_id', $user->id)
-            ->whereHas('procurement', fn ($query) => $query->where('think_tank_member_id', $member->id))
+            ->whereHas('procurement', fn ($query) => $query
+                ->where('think_tank_member_id', $member->id)
+                ->whereNull('procurements.deleted_at'))
             ->latest('assigned_at')
             ->latest()
             ->get();
@@ -137,7 +139,9 @@ class ThinkTankProcurementPlanController extends Controller
             ? collect()
             : FormSubmission::query()
                 ->with(['form', 'submitter', 'values'])
-                ->where('status', '!=', FormSubmission::STATUS_WITHDRAWN)
+                ->where(fn ($query) => $query
+                    ->where('status', FormSubmission::STATUS_SUBMITTED)
+                    ->orWhereNull('status'))
                 ->where(function ($query) use ($specificSubmissionIds, $wholeProcurementIds): void {
                     if ($specificSubmissionIds->isNotEmpty()) {
                         $query->orWhereIn('id', $specificSubmissionIds);

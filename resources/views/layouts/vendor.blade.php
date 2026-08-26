@@ -426,6 +426,11 @@
             <a href="{{ route('vendor.submissions') }}" class="vendor-nav-link {{ request()->routeIs('vendor.submissions', 'vendor.applications.*') ? 'active' : '' }}">
                 <i class="feather-file-text"></i> My Submissions
             </a>
+            @if ($vendorUser?->can('evaluations.evaluate'))
+                <a href="{{ route('my.eval.index') }}" class="vendor-nav-link {{ request()->routeIs('my.eval.*', 'eval.assign.start', 'eval.assign.view') ? 'active' : '' }}">
+                    <i class="feather-check-square"></i> My Evaluations
+                </a>
+            @endif
             <a href="{{ route('vendor.purchase-orders.index') }}" class="vendor-nav-link {{ request()->routeIs('vendor.purchase-orders.*') ? 'active' : '' }}">
                 <i class="feather-file-text"></i> Purchase Orders
             </a>

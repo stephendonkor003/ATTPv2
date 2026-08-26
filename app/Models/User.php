@@ -254,6 +254,27 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    public function evaluationAssignments(): HasMany
+    {
+        return $this->hasMany(EvaluationAssignment::class, 'user_id');
+    }
+
+    /**
+     * Determine whether this user owns evaluation work that is still attached
+     * to an active procurement registry record.
+     */
+    public function hasEvaluationAssignments(): bool
+    {
+        if (! $this->exists || ! $this->getKey()) {
+            return false;
+        }
+
+        return $this->evaluationAssignments()
+            ->whereHas('procurement', fn ($query) => $query
+                ->whereNull('procurements.deleted_at'))
+            ->exists();
+    }
+
     public function evaluatorTeamsLed()
     {
         return $this->hasMany(EvaluatorTeam::class, 'leader_id');
@@ -430,7 +451,8 @@ class User extends Authenticatable
             return EvaluationAssignment::query()
                 ->where('user_id', $this->id)
                 ->whereHas('procurement', fn ($query) => $query
-                    ->where('think_tank_member_id', $this->think_tank_member_id))
+                    ->where('think_tank_member_id', $this->think_tank_member_id)
+                    ->whereNull('procurements.deleted_at'))
                 ->exists();
         }
 
@@ -440,6 +462,13 @@ class User extends Authenticatable
         if ($this->isThinkTankUser()) {
             return str_starts_with($permission, 'think_tank.')
                 && in_array($permission, $this->thinkTankPermissionNames(), true);
+        }
+
+        // An explicit assignment is itself sufficient evaluator authority.
+        // Existing direct/role grants remain valid through the normal checks
+        // below for panel members and other configured evaluation roles.
+        if ($permission === 'evaluations.evaluate' && $this->hasEvaluationAssignments()) {
+            return true;
         }
 
         // 1️⃣ Direct user permission override

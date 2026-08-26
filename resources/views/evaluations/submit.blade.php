@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends(auth()->user()?->user_type === 'vendor' ? 'layouts.vendor' : 'layouts.app')
 
 @section('content')
     @php
@@ -20,6 +20,9 @@
     <div class="nxl-container evaluator-workspace">
         <header class="evaluation-hero mb-4">
             <div class="hero-copy">
+                <a href="{{ route('my.eval.index') }}" class="hero-back">
+                    <i class="feather-arrow-left" aria-hidden="true"></i> My Evaluations
+                </a>
                 <span class="hero-eyebrow">Evaluator workspace</span>
                 <h1>{{ $assignment->procurement->title }}</h1>
                 <p>
@@ -45,11 +48,22 @@
 
         <div class="row g-4 align-items-start">
             <main class="col-xl-9 col-lg-8">
-                <div id="lockedNotice" class="access-gate mb-4" role="status">
-                    <span class="gate-icon"><i class="feather-lock" aria-hidden="true"></i></span>
+                @if ($errors->any())
+                    <div class="alert alert-danger mb-4" role="alert">
+                        <strong>Please review the evaluation details below.</strong>
+                        <ul class="mb-0 mt-2 ps-3">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <div class="access-gate mb-4" role="status">
+                    <span class="gate-icon"><i class="feather-save" aria-hidden="true"></i></span>
                     <div>
-                        <strong>Complete identity verification to begin</strong>
-                        <p>Start the camera from the verification panel. Your evaluation form unlocks after the recording is captured.</p>
+                        <strong>Your evaluation is ready</strong>
+                        <p>Enter scores now and save a draft at any time. Identity verification is only required for final submission.</p>
                     </div>
                 </div>
 
@@ -101,13 +115,12 @@
                     </div>
                 </details>
 
-                <form method="POST" action="{{ route('eval.assign.submit', [$assignment->id, $applicant->id]) }}"
+                <form method="POST" action="{{ route('my.eval.submit', [$assignment->id, $applicant->id]) }}"
                     enctype="multipart/form-data" id="finalForm">
                     @csrf
                     <input type="hidden" name="form_submission_id" value="{{ $applicant->id }}">
-                    <input type="file" name="video" id="finalVideo" hidden required>
 
-                    <div id="evaluationForm" class="d-none">
+                    <div id="evaluationForm">
                         <section class="form-progress-card mb-4" aria-live="polite">
                             <div>
                                 <span class="progress-kicker">Evaluation progress</span>
@@ -231,6 +244,10 @@
                                                                         'evaluation_criteria_id',
                                                                         $criterion->id,
                                                                     );
+                                                                    $savedDecision = old(
+                                                                        "criteria.{$criterion->id}.decision",
+                                                                        $saved?->decision,
+                                                                    );
                                                                 @endphp
                                                                 <tr class="criterion-row" data-criterion-row>
                                                                     <td class="question-index-column">
@@ -252,28 +269,46 @@
                                                                                     max="{{ $criterion->max_score }}" step="0.01"
                                                                                     data-max="{{ $criterion->max_score }}"
                                                                                     data-section-id="{{ $section->id }}"
-                                                                                    value="{{ $saved?->score }}" required
+                                                                                    value="{{ old("criteria.{$criterion->id}", $saved?->score) }}" required
                                                                                     aria-label="Score for {{ $criterion->name }}">
                                                                                 <span>/ {{ number_format($criterion->max_score, 2) }}</span>
                                                                             </div>
                                                                         </td>
                                                                     @else
-                                                                        <td>
-                                                                            <select name="criteria[{{ $criterion->id }}][decision]"
-                                                                                class="form-select decision-input"
-                                                                                data-section-id="{{ $section->id }}" required
-                                                                                aria-label="{{ $evaluation->isEoi() ? 'Qualification' : 'Decision' }} for {{ $criterion->name }}">
-                                                                                <option value="">Select {{ $evaluation->isEoi() ? 'category' : 'decision' }}</option>
-                                                                                @foreach ($decisionOptions as $decisionValue => $decisionLabel)
-                                                                                    <option value="{{ $decisionValue }}" @selected($saved?->decision === $decisionValue)>
-                                                                                        {{ $decisionLabel }}
-                                                                                    </option>
-                                                                                @endforeach
-                                                                            </select>
-                                                                        </td>
-                                                                        <td>
-                                                                            <textarea name="criteria[{{ $criterion->id }}][comment]" class="form-control evidence-comment" rows="2"
-                                                                                placeholder="Briefly cite the evidence for this decision" required>{{ $saved?->comment }}</textarea>
+                                                                        <td colspan="2">
+                                                                            <fieldset class="decision-fieldset" data-decision-group
+                                                                                data-section-id="{{ $section->id }}">
+                                                                                <legend class="visually-hidden">
+                                                                                    {{ $evaluation->isEoi() ? 'Qualification' : 'Compliance decision' }} for {{ $criterion->name }}
+                                                                                </legend>
+                                                                                <input type="hidden" name="criteria[{{ $criterion->id }}][decision]" value="">
+                                                                                <div class="decision-options {{ $evaluation->isEoi() ? 'is-eoi' : 'is-goods' }}">
+                                                                                    @foreach ($decisionOptions as $decisionValue => $decisionLabel)
+                                                                                        @php($decisionId = "decision-{$criterion->id}-{$decisionValue}")
+                                                                                        <label class="decision-option" for="{{ $decisionId }}">
+                                                                                            <input id="{{ $decisionId }}" type="radio"
+                                                                                                name="criteria[{{ $criterion->id }}][decision]"
+                                                                                                value="{{ $decisionValue }}"
+                                                                                                class="decision-input"
+                                                                                                data-section-id="{{ $section->id }}"
+                                                                                                @checked((string) $savedDecision === (string) $decisionValue)
+                                                                                                required>
+                                                                                            @if ($evaluation->isEoi())
+                                                                                                <span class="decision-number">{{ $loop->iteration }}</span>
+                                                                                            @else
+                                                                                                <i class="{{ (int) $decisionValue === 1 ? 'feather-check' : 'feather-x' }}" aria-hidden="true"></i>
+                                                                                            @endif
+                                                                                            <span>{{ $decisionLabel }}</span>
+                                                                                        </label>
+                                                                                    @endforeach
+                                                                                </div>
+                                                                                <label for="comment-{{ $criterion->id }}" class="evidence-label">
+                                                                                    Evaluator comment <span>Required for final submission</span>
+                                                                                </label>
+                                                                                <textarea id="comment-{{ $criterion->id }}" name="criteria[{{ $criterion->id }}][comment]"
+                                                                                    class="form-control evidence-comment" rows="3" maxlength="5000"
+                                                                                    placeholder="Briefly cite the evidence for this decision" required>{{ old("criteria.{$criterion->id}.comment", $saved?->comment) }}</textarea>
+                                                                            </fieldset>
                                                                         </td>
                                                                     @endif
                                                                 </tr>
@@ -286,12 +321,12 @@
                                                     <div>
                                                         <label for="strengths-{{ $section->id }}">Section strengths</label>
                                                         <textarea id="strengths-{{ $section->id }}" name="sections[{{ $section->id }}][strengths]"
-                                                            class="form-control" rows="3" placeholder="Summarise the strongest evidence" required>{{ $savedSectionScore?->strengths }}</textarea>
+                                                            class="form-control" rows="3" maxlength="5000" placeholder="Summarise the strongest evidence" required>{{ old("sections.{$section->id}.strengths", $savedSectionScore?->strengths) }}</textarea>
                                                     </div>
                                                     <div>
                                                         <label for="weaknesses-{{ $section->id }}">Section weaknesses</label>
                                                         <textarea id="weaknesses-{{ $section->id }}" name="sections[{{ $section->id }}][weaknesses]"
-                                                            class="form-control" rows="3" placeholder="Summarise gaps or concerns" required>{{ $savedSectionScore?->weaknesses }}</textarea>
+                                                            class="form-control" rows="3" maxlength="5000" placeholder="Summarise gaps or concerns" required>{{ old("sections.{$section->id}.weaknesses", $savedSectionScore?->weaknesses) }}</textarea>
                                                     </div>
                                                 </div>
 
@@ -357,12 +392,17 @@
                         <div class="submission-actions">
                             <div>
                                 <strong>Ready to finalise?</strong>
-                                <span>Review every section. A submitted evaluation cannot be edited.</span>
+                                <span id="draftStatus" role="status" aria-live="polite">Draft changes are saved as you work.</span>
                             </div>
-                            <button class="btn btn-success btn-lg" type="submit">
-                                <i class="feather-check-circle me-1" aria-hidden="true"></i>
-                                Submit final evaluation
-                            </button>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button class="btn btn-outline-primary" type="button" id="saveDraft">
+                                    <i class="feather-save me-1" aria-hidden="true"></i> Save draft
+                                </button>
+                                <button class="btn btn-success" type="submit" @disabled($totalQuestions === 0)>
+                                    <i class="feather-check-circle me-1" aria-hidden="true"></i>
+                                    Submit final evaluation
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </form>
@@ -375,7 +415,7 @@
                         <div class="monitor-body">
                             <div><span>Date</span><strong id="currentDate">—</strong></div>
                             <div><span>Time</span><strong id="currentTime">—</strong></div>
-                            <div><span>Status</span><strong id="evalStatus" class="status-locked">Locked</strong></div>
+                            <div><span>Status</span><strong id="evalStatus">Draft</strong></div>
                         </div>
                     </section>
 
@@ -393,9 +433,13 @@
                                 <i class="feather-video me-1" aria-hidden="true"></i>Start camera
                             </button>
                             <button id="stopCamera" type="button" class="btn btn-outline-danger w-100 d-none">
-                                Stop recording and unlock
+                                Stop and use recording
                             </button>
-                            <p>Record up to 15 seconds. Verification is required before submission.</p>
+                            <div class="verification-divider"><span>or</span></div>
+                            <label for="finalVideo" class="verification-upload-label">Upload a verification video</label>
+                            <input type="file" name="video" id="finalVideo" form="finalForm"
+                                class="form-control form-control-sm" accept="video/webm,video/mp4,video/*">
+                            <p>Record up to 15 seconds or upload WebM/MP4. This is required only for final submission.</p>
                         </div>
                     </section>
 
@@ -421,6 +465,8 @@
         }
 
         .evaluation-hero { display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding: 1.5rem 1.65rem; color: #fff; border-radius: 18px; background: radial-gradient(circle at 88% 12%, rgba(255,255,255,.16), transparent 28%), linear-gradient(128deg, #17296b 0%, #3157d5 62%, #4d74e8 100%); box-shadow: 0 18px 42px rgba(35,68,178,.16); }
+        .hero-back { display: inline-flex; align-items: center; gap: .35rem; margin-bottom: .65rem; color: rgba(255,255,255,.84); font-size: .78rem; font-weight: 700; text-decoration: none; }
+        .hero-back:hover { color: #fff; }
         .hero-eyebrow { display: block; margin-bottom: .35rem; color: rgba(255,255,255,.72); font-size: .68rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
         .evaluation-hero h1 { margin: 0; color: #fff; font-size: clamp(1.35rem, 2vw, 2rem); font-weight: 750; letter-spacing: -.025em; }
         .evaluation-hero p { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: .45rem 0 0; color: rgba(255,255,255,.78); font-size: .86rem; }
@@ -506,12 +552,12 @@
         .assessment-node-body { padding: .85rem .9rem 1rem; border-top: 1px solid #edf0f4; }
         .assessment-node-body.is-collapsed { display: none; }
 
-        .criteria-table { font-size: .7rem; }
-        .criteria-table thead th { padding: .48rem .55rem; color: #667085; border-bottom: 1px solid #e4e8ee; background: #f8fafc; font-size: .6rem; font-weight: 750; letter-spacing: .035em; text-transform: uppercase; }
+        .criteria-table { font-size: .82rem; }
+        .criteria-table thead th { padding: .55rem .6rem; color: #667085; border-bottom: 1px solid #e4e8ee; background: #f8fafc; font-size: .7rem; font-weight: 750; letter-spacing: .035em; text-transform: uppercase; }
         .criteria-table td { padding: .62rem .55rem; border-color: #edf0f4; }
-        .criteria-table td strong { color: #273246; font-size: .72rem; }
-        .criteria-table td p { margin: .15rem 0 0; color: var(--workspace-muted); font-size: .64rem; line-height: 1.4; }
-        .criteria-table .form-control, .criteria-table .form-select { min-height: 37px; border-color: #d8dee8; border-radius: 8px; font-size: .7rem; }
+        .criteria-table td strong { color: #273246; font-size: .84rem; }
+        .criteria-table td p { margin: .18rem 0 0; color: var(--workspace-muted); font-size: .76rem; line-height: 1.45; }
+        .criteria-table .form-control, .criteria-table .form-select { min-height: 42px; border-color: #d8dee8; border-radius: 8px; font-size: .84rem; }
         .criteria-table .form-control:focus, .criteria-table .form-select:focus, .section-notes .form-control:focus { border-color: var(--section-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 10%, transparent); }
         .question-index-column { width: 38px; text-align: center; }
         .question-number { display: grid; width: 25px; height: 25px; margin: auto; place-items: center; color: var(--section-deep); border-radius: 7px; background: var(--section-soft); font-size: .6rem; font-weight: 750; }
@@ -521,9 +567,21 @@
         .score-entry { display: flex; align-items: center; gap: .35rem; }
         .score-entry span { color: #98a2b3; white-space: nowrap; }
         .criterion-row.is-answered { background: color-mix(in srgb, var(--section-soft) 42%, white); }
+        .decision-fieldset { min-width: 0; }
+        .decision-options { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: .55rem; margin-bottom: .7rem; }
+        .decision-options.is-eoi { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
+        .decision-option { position: relative; display: flex; min-height: 48px; align-items: center; gap: .55rem; margin: 0; padding: .65rem .7rem; color: #344054; border: 1px solid #d8dee8; border-radius: 10px; background: #fff; cursor: pointer; font-size: .78rem; font-weight: 700; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }
+        .decision-option:hover { border-color: var(--section-color); background: var(--section-soft); }
+        .decision-option:has(input:checked) { color: var(--section-deep); border-color: var(--section-color); background: var(--section-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-color) 10%, transparent); }
+        .decision-option input { width: 17px; height: 17px; margin: 0; accent-color: var(--section-color); }
+        .decision-option i { font-size: 1rem; }
+        .decision-number { display: grid; flex: 0 0 25px; width: 25px; height: 25px; place-items: center; color: #fff; border-radius: 7px; background: var(--section-color); font-size: .7rem; }
+        .evidence-label { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .35rem; color: #475467; font-size: .76rem; font-weight: 700; }
+        .evidence-label span { color: #98a2b3; font-size: .68rem; font-weight: 500; }
+        .evidence-comment { font-size: .8rem !important; }
         .section-notes { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; margin-top: .85rem; padding: .75rem; border-radius: 10px; background: #f8fafc; }
-        .section-notes label { display: block; margin-bottom: .3rem; color: #475467; font-size: .66rem; font-weight: 700; }
-        .section-notes .form-control { border-color: #d8dee8; border-radius: 8px; font-size: .7rem; }
+        .section-notes label { display: block; margin-bottom: .3rem; color: #475467; font-size: .78rem; font-weight: 700; }
+        .section-notes .form-control { border-color: #d8dee8; border-radius: 8px; font-size: .82rem; }
         .structural-node-note { display: flex; align-items: center; gap: .65rem; min-height: 46px; padding: .55rem .65rem; color: var(--section-deep); border: 1px dashed color-mix(in srgb, var(--section-color) 35%, white); border-radius: 9px; background: var(--section-soft); }
         .structural-node-note strong, .structural-node-note span { display: block; }
         .structural-node-note strong { font-size: .68rem; }
@@ -550,14 +608,17 @@
         .submission-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; border: 1px solid #cfe8da; border-radius: 13px; background: #f1fbf5; }
         .submission-actions strong, .submission-actions span { display: block; }
         .submission-actions strong { color: #176b43; font-size: .76rem; }
-        .submission-actions span { margin-top: .1rem; color: #638070; font-size: .65rem; }
+        .submission-actions span { margin-top: .1rem; color: #638070; font-size: .76rem; }
+        #draftStatus[data-state="saving"] { color: #3157d5; }
+        #draftStatus[data-state="saved"] { color: #067647; }
+        #draftStatus[data-state="error"] { color: #b42318; }
         .empty-evaluation { display: grid; min-height: 150px; place-items: center; padding: 2rem; color: #98a2b3; border: 1px dashed #cdd5df; border-radius: 13px; background: #fff; }
 
         .evaluator-sidebar { position: sticky; top: 1rem; }
         .monitor-card, .camera-card, .structure-key { overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 14px; background: #fff; box-shadow: 0 5px 16px rgba(20,34,66,.045); }
-        .monitor-card > header, .camera-card > header { display: flex; align-items: center; gap: .45rem; padding: .7rem .8rem; color: #344054; border-bottom: 1px solid #edf0f4; background: #f8fafc; font-size: .7rem; font-weight: 720; }
+        .monitor-card > header, .camera-card > header { display: flex; align-items: center; gap: .45rem; padding: .7rem .8rem; color: #344054; border-bottom: 1px solid #edf0f4; background: #f8fafc; font-size: .8rem; font-weight: 720; }
         .monitor-body { padding: .7rem .8rem; }
-        .monitor-body > div { display: flex; align-items: center; justify-content: space-between; padding: .35rem 0; color: var(--workspace-muted); font-size: .67rem; }
+        .monitor-body > div { display: flex; align-items: center; justify-content: space-between; padding: .35rem 0; color: var(--workspace-muted); font-size: .76rem; }
         .monitor-body strong { color: #344054; }
         .monitor-body .status-locked { color: #b54708; }
         .monitor-body .status-recording { color: #b42318; }
@@ -569,7 +630,10 @@
         .camera-preview { position: relative; min-height: 150px; margin-bottom: .7rem; overflow: hidden; border-radius: 10px; background: #111827; }
         .camera-preview video { display: block; width: 100%; min-height: 150px; object-fit: cover; }
         .camera-preview > span { position: absolute; right: .5rem; bottom: .45rem; padding: .2rem .38rem; color: rgba(255,255,255,.8); border-radius: 5px; background: rgba(0,0,0,.38); font-size: .55rem; }
-        .camera-body p { margin: .55rem 0 0; color: var(--workspace-muted); font-size: .6rem; line-height: 1.45; text-align: center; }
+        .camera-body p { margin: .55rem 0 0; color: var(--workspace-muted); font-size: .72rem; line-height: 1.45; text-align: center; }
+        .verification-divider { display: flex; align-items: center; gap: .55rem; margin: .65rem 0; color: #98a2b3; font-size: .65rem; text-transform: uppercase; }
+        .verification-divider::before, .verification-divider::after { height: 1px; flex: 1; background: #e4e7ec; content: ''; }
+        .verification-upload-label { display: block; margin-bottom: .35rem; color: #475467; font-size: .72rem; font-weight: 700; }
         .structure-key { display: grid; gap: .35rem; padding: .75rem .8rem; }
         .structure-key > strong { margin-bottom: .1rem; color: #344054; font-size: .68rem; }
         .structure-key > span { display: flex; align-items: center; gap: .45rem; color: var(--workspace-muted); font-size: .62rem; }
@@ -606,6 +670,7 @@
             .overall-categories { justify-content: flex-start; }
             .overall-categories small { text-align: left; }
             .submission-actions { align-items: stretch; flex-direction: column; }
+            .decision-options, .decision-options.is-eoi { grid-template-columns: 1fr; }
         }
     </style>
 
@@ -616,6 +681,7 @@
             const IS_NUMERIC = @json($isNumeric);
             const TOTAL_QUESTIONS = @json($totalQuestions);
             const OVERALL_MAXIMUM = @json($overallMaximum);
+            const SAVE_URL = @json(route('my.eval.save', [$assignment->id, $applicant->id]));
             const byId = id => document.getElementById(id);
             const clampPercent = value => Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
             const currentDate = byId('currentDate');
@@ -624,11 +690,11 @@
             const stopCamera = byId('stopCamera');
             const preview = byId('preview');
             const finalVideo = byId('finalVideo');
-            const lockedNotice = byId('lockedNotice');
-            const evaluationForm = byId('evaluationForm');
             const evalStatus = byId('evalStatus');
             const cameraStatus = byId('cameraStatus');
             const finalForm = byId('finalForm');
+            const saveDraftButton = byId('saveDraft');
+            const draftStatus = byId('draftStatus');
 
             function updateClock() {
                 const now = new Date();
@@ -666,7 +732,7 @@
                         if (recorder?.state === 'recording') stopCamera.click();
                     }, 15000);
                 } catch (error) {
-                    window.alert('Camera access was denied or is unavailable. Please allow camera and microphone access to continue.');
+                    window.alert('Camera recording is unavailable. You can continue scoring and upload a verification video before final submission.');
                     console.error(error);
                 }
             });
@@ -677,19 +743,18 @@
                 recorder.onstop = () => {
                     const blobType = recorder.mimeType || 'video/webm';
                     const blob = new Blob(chunks, { type: blobType });
-                    const file = new File([blob], 'identity.webm', { type: blobType });
+                    const extension = blobType.includes('mp4') ? 'mp4' : 'webm';
+                    const file = new File([blob], `identity.${extension}`, { type: blobType });
                     const transfer = new DataTransfer();
                     transfer.items.add(file);
                     finalVideo.files = transfer.files;
 
-                    lockedNotice?.classList.add('d-none');
-                    evaluationForm?.classList.remove('d-none');
                     stopCamera.classList.add('d-none');
                     startCamera.classList.remove('d-none');
                     startCamera.disabled = true;
                     startCamera.innerHTML = '<i class="feather-check me-1" aria-hidden="true"></i>Identity captured';
                     cameraStatus.className = 'camera-status ready';
-                    evalStatus.textContent = 'Ready';
+                    evalStatus.textContent = 'Verified';
                     evalStatus.className = 'status-ready';
                     recalculate();
                 };
@@ -726,8 +791,11 @@
 
             function markRows() {
                 document.querySelectorAll('[data-criterion-row]').forEach(row => {
-                    const input = row.querySelector(IS_NUMERIC ? '.score-input' : '.decision-input');
-                    row.classList.toggle('is-answered', Boolean(input && input.value !== ''));
+                    const scoreInput = row.querySelector('.score-input');
+                    const answered = IS_NUMERIC
+                        ? Boolean(scoreInput && scoreInput.value !== '')
+                        : Boolean(row.querySelector('.decision-input:checked'));
+                    row.classList.toggle('is-answered', answered);
                 });
             }
 
@@ -774,25 +842,25 @@
             }
 
             function recalculateCategorical() {
-                const inputs = [...document.querySelectorAll('.decision-input')];
-                const overallAnswered = inputs.filter(input => input.value !== '').length;
+                const inputs = [...document.querySelectorAll('.decision-input:checked')];
+                const overallAnswered = inputs.length;
 
                 document.querySelectorAll('[data-evaluation-section]').forEach(section => {
                     const ids = subtreeIds(section);
                     const relevant = inputs.filter(input => ids.includes(String(input.dataset.sectionId)));
-                    const answered = relevant.filter(input => input.value !== '').length;
+                    const answered = relevant.length;
 
                     setCompletion(section, answered, Number(section.dataset.questionTotal || 0));
                     section.querySelectorAll('[data-decision-value]').forEach(counter => {
                         counter.textContent = relevant.filter(input =>
-                            input.value !== '' && input.value === counter.dataset.decisionValue
+                            input.value === counter.dataset.decisionValue
                         ).length;
                     });
                 });
 
                 document.querySelectorAll('[data-overall-decision-value]').forEach(counter => {
                     counter.textContent = inputs.filter(input =>
-                        input.value !== '' && input.value === counter.dataset.overallDecisionValue
+                        input.value === counter.dataset.overallDecisionValue
                     ).length;
                 });
                 setOverallCompletion(overallAnswered);
@@ -804,11 +872,105 @@
                 markRows();
             }
 
+            let saveTimer = null;
+            let saveInProgress = false;
+            let saveQueued = false;
+            let hasUnsavedChanges = false;
+            let finalSubmitting = false;
+            let changeVersion = 0;
+
+            function setDraftStatus(message, state = 'idle') {
+                if (draftStatus) {
+                    draftStatus.textContent = message;
+                    draftStatus.dataset.state = state;
+                }
+                if (evalStatus && state !== 'error') {
+                    evalStatus.textContent = state === 'saving' ? 'Saving' : (state === 'saved' ? 'Draft saved' : 'Draft');
+                    evalStatus.className = state === 'saved' ? 'status-ready' : '';
+                }
+            }
+
+            function scheduleDraftSave() {
+                hasUnsavedChanges = true;
+                changeVersion++;
+                setDraftStatus('Unsaved changes — saving shortly…');
+                window.clearTimeout(saveTimer);
+                saveTimer = window.setTimeout(() => saveDraft(false), 1200);
+            }
+
+            async function saveDraft(manual = false) {
+                if (!finalForm || (!hasUnsavedChanges && !manual)) return;
+
+                if (saveInProgress) {
+                    saveQueued = true;
+                    return;
+                }
+
+                saveInProgress = true;
+                saveQueued = false;
+                window.clearTimeout(saveTimer);
+                saveDraftButton?.setAttribute('disabled', 'disabled');
+                setDraftStatus('Saving draft…', 'saving');
+                const savingVersion = changeVersion;
+
+                const payload = new FormData(finalForm);
+                payload.delete('video');
+
+                try {
+                    const response = await fetch(SAVE_URL, {
+                        method: 'POST',
+                        body: payload,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    const result = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        const firstError = result.errors
+                            ? Object.values(result.errors).flat()[0]
+                            : null;
+                        throw new Error(firstError || result.message || 'The draft could not be saved.');
+                    }
+
+                    hasUnsavedChanges = changeVersion !== savingVersion;
+                    if (hasUnsavedChanges) saveQueued = true;
+                    const savedTime = result.saved_at ? new Date(result.saved_at) : new Date();
+                    setDraftStatus(`Draft saved at ${savedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`, 'saved');
+                } catch (error) {
+                    hasUnsavedChanges = true;
+                    setDraftStatus(error.message || 'Draft save failed. Try Save draft again.', 'error');
+                    if (manual) window.alert(error.message || 'The draft could not be saved.');
+                } finally {
+                    saveInProgress = false;
+                    saveDraftButton?.removeAttribute('disabled');
+                    if (saveQueued) {
+                        saveTimer = window.setTimeout(() => saveDraft(false), 250);
+                    }
+                }
+            }
+
             document.addEventListener('input', event => {
                 if (event.target.matches('.score-input, .decision-input')) recalculate();
+                if (event.target.matches('.score-input, .decision-input, .evidence-comment, .section-notes textarea')) {
+                    scheduleDraftSave();
+                }
             });
             document.addEventListener('change', event => {
                 if (event.target.matches('.score-input, .decision-input')) recalculate();
+                if (event.target.matches('.score-input, .decision-input, .evidence-comment, .section-notes textarea')) {
+                    scheduleDraftSave();
+                }
+            });
+
+            saveDraftButton?.addEventListener('click', () => saveDraft(true));
+            finalVideo?.addEventListener('change', () => {
+                if (finalVideo.files.length) {
+                    cameraStatus.className = 'camera-status ready';
+                    evalStatus.textContent = 'Verified';
+                    evalStatus.className = 'status-ready';
+                }
             });
 
             document.querySelectorAll('[data-node-toggle]').forEach(button => {
@@ -825,8 +987,19 @@
                 recalculate();
                 if (!finalVideo?.files.length) {
                     event.preventDefault();
-                    window.alert('Please complete identity verification before submitting.');
+                    window.alert('Record or upload an identity verification video before final submission. Your draft remains saved.');
+                    finalVideo?.focus();
+                    return;
                 }
+
+                finalSubmitting = true;
+                hasUnsavedChanges = false;
+            });
+
+            window.addEventListener('beforeunload', event => {
+                if (!hasUnsavedChanges || finalSubmitting) return;
+                event.preventDefault();
+                event.returnValue = '';
             });
 
             recalculate();
