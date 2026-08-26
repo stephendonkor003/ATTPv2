@@ -146,15 +146,28 @@ try {
     }
 
     $html = view('reports.evaluations.eoi-procurement', compact('report'))->render();
-    foreach (['EOI Qualification Report', 'Average Qualified', 'Not Qualified', 'Technical Evaluation'] as $needle) {
+    foreach (['Qualified Applicants', 'All Applicant Decisions', 'Average Qualified', 'Not Qualified', 'Technical Evaluation'] as $needle) {
         if (! str_contains($html, $needle)) {
             throw new RuntimeException("The EOI HTML report is missing: {$needle}");
         }
     }
 
+    if (! str_contains($html, 'data-qualified-applicant="'.$applicants[0]->id.'"')
+        || str_contains($html, 'data-qualified-applicant="'.$applicants[1]->id.'"')) {
+        throw new RuntimeException('The EOI shortlist did not isolate the applicants approved for Technical Evaluation.');
+    }
+
+    $pdfData = array_merge(compact('report'), PdfBranding::viewData());
+    $pdfHtml = view('reports.evaluations.pdf.eoi-procurement', $pdfData)->render();
+
+    if (! str_contains($pdfHtml, 'Qualified Applicants &mdash; Advancing to Technical Evaluation')
+        || ! str_contains($pdfHtml, $applicants[0]->display_name)) {
+        throw new RuntimeException('The EOI PDF is missing the qualified-applicant advancement shortlist.');
+    }
+
     $pdf = Pdf::loadView(
         'reports.evaluations.pdf.eoi-procurement',
-        array_merge(compact('report'), PdfBranding::viewData())
+        $pdfData
     )->setPaper('a4', 'landscape')->output();
 
     if (! str_starts_with($pdf, '%PDF')) {

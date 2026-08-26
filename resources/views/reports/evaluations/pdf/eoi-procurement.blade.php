@@ -238,6 +238,97 @@
             text-transform: uppercase;
         }
 
+        .qualified-banner {
+            background: #14532d;
+            border-left: 5px solid #4ade80;
+            color: #ffffff;
+            margin: 11px 0 0;
+            padding: 8px 10px;
+            page-break-after: avoid;
+        }
+
+        .qualified-banner table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .qualified-banner td {
+            border: 0;
+            padding: 0;
+            vertical-align: middle;
+        }
+
+        .qualified-banner h3 {
+            color: #ffffff;
+            font-size: 11.5px;
+            line-height: 1.15;
+            margin-bottom: 2px;
+        }
+
+        .qualified-banner p {
+            color: #dcfce7;
+            font-size: 7.4px;
+        }
+
+        .qualified-total {
+            color: #ffffff;
+            font-size: 19px;
+            font-weight: 700;
+            text-align: right;
+            width: 105px;
+        }
+
+        .qualified-total span {
+            display: block;
+            font-size: 6.4px;
+            letter-spacing: .05em;
+            margin-top: 2px;
+            text-transform: uppercase;
+        }
+
+        .qualified-table {
+            border-collapse: collapse;
+            margin-bottom: 11px;
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        .qualified-table th,
+        .qualified-table td {
+            border: 1px solid #bbd8c4;
+            padding: 4px 5px;
+            vertical-align: top;
+        }
+
+        .qualified-table th {
+            background: #dcfce7;
+            color: #14532d;
+            font-size: 6.8px;
+            letter-spacing: .03em;
+            text-align: left;
+            text-transform: uppercase;
+        }
+
+        .qualified-table tbody tr:nth-child(even) td {
+            background: #f0fdf4;
+        }
+
+        .qualified-empty {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-top: 0;
+            color: #166534;
+            margin-bottom: 11px;
+            padding: 10px 12px;
+            text-align: center;
+        }
+
+        .qualified-empty strong {
+            display: block;
+            font-size: 9px;
+            margin-bottom: 2px;
+        }
+
         .section-heading {
             border-bottom: 2px solid #0b2138;
             color: #0b2138;
@@ -520,6 +611,9 @@
         $platformUrl = $platformUrl ?? rtrim((string) config('app.url'), '/');
         $procurement = $report['procurement'];
         $applicants = collect($report['applicants'] ?? []);
+        $qualifiedApplicants = $applicants
+            ->filter(fn (array $row): bool => ($row['can_advance'] ?? false) === true)
+            ->values();
         $stats = $report['stats'] ?? [];
         $generatedAt = $report['generated_at'] ?? now();
         // DomPDF keeps the complete document tree in memory. Keep the official
@@ -615,11 +709,11 @@
 
     <div class="rule-box">
         <strong class="rule-title">Mandatory EOI qualification rule</strong>
-        <strong>One “Not Qualified” decision is an automatic disqualifier.</strong>
+        <strong>One &quot;Not Qualified&quot; decision is an automatic disqualifier.</strong>
         An applicant advances to <strong>Technical Evaluation</strong> only when every assigned panel task is complete,
-        at least one valid criterion decision exists, and no evaluator has recorded “Not Qualified”. Applicants with only
-        “Qualified” decisions are Fully Qualified; applicants with at least one “Average Qualified” decision and no
-        “Not Qualified” decision are Average Qualified. Incomplete panels remain pending.
+        at least one valid criterion decision exists, and no evaluator has recorded &quot;Not Qualified&quot;. Applicants with only
+        &quot;Qualified&quot; decisions are Fully Qualified; applicants with at least one &quot;Average Qualified&quot; decision and no
+        &quot;Not Qualified&quot; decision are Average Qualified. Incomplete panels remain pending.
     </div>
 
     <table class="kpi-table">
@@ -634,6 +728,72 @@
             <td><span class="kpi-number">{{ $stats['submitted_evaluations'] ?? 0 }}</span><span class="kpi-label">Submitted evaluations</span></td>
         </tr>
     </table>
+
+    <div class="qualified-banner">
+        <table>
+            <tr>
+                <td>
+                    <h3>Qualified Applicants &mdash; Advancing to Technical Evaluation</h3>
+                    <p>Official advancement shortlist: completed panel, valid EOI decisions, and no Not Qualified decision.</p>
+                </td>
+                <td class="qualified-total">
+                    {{ $qualifiedApplicants->count() }}
+                    <span>Approved to advance</span>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    @if ($qualifiedApplicants->isNotEmpty())
+        <table class="qualified-table">
+            <thead>
+                <tr>
+                    <th style="width: 4%;">#</th>
+                    <th style="width: 13%;">Submission</th>
+                    <th style="width: 25%;">Applicant</th>
+                    <th style="width: 14%;">Qualification outcome</th>
+                    <th style="width: 12%;">EOI counts</th>
+                    <th style="width: 17%;">Panel completion</th>
+                    <th style="width: 15%;">Next stage</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($qualifiedApplicants as $index => $applicantRow)
+                    @php
+                        $applicant = $applicantRow['applicant'];
+                    @endphp
+                    <tr>
+                        <td class="number-cell">{{ $index + 1 }}</td>
+                        <td><span class="strong">{{ $applicant->procurement_submission_code ?? 'N/A' }}</span></td>
+                        <td>
+                            <span class="strong">{{ $applicant->display_name }}</span>
+                            @if ($applicant->submitter?->email)
+                                <br><span class="muted small">{{ $applicant->submitter->email }}</span>
+                            @endif
+                        </td>
+                        <td><span class="badge {{ $outcomeClass($applicantRow['outcome']) }}">{{ $applicantRow['outcome']['label'] }}</span></td>
+                        <td>
+                            <span class="strong">Q {{ $applicantRow['counts']['qualified'] }}</span>
+                            &nbsp;&middot;&nbsp; AQ {{ $applicantRow['counts']['average_qualified'] }}
+                        </td>
+                        <td>
+                            <span class="strong">{{ $applicantRow['completed_tasks'] }}/{{ $applicantRow['expected_tasks'] }} tasks</span>
+                            <br><span class="muted small">{{ $applicantRow['completed_evaluators'] }}/{{ $applicantRow['expected_evaluators'] }} evaluator(s) &middot; {{ $applicantRow['completion_percent'] }}%</span>
+                        </td>
+                        <td class="route-advance">
+                            {{ $applicantRow['next_stage'] }}
+                            <br><span class="small">Approved to advance</span>
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @else
+        <div class="qualified-empty">
+            <strong>No applicants are currently approved to advance.</strong>
+            Fully Qualified and Average Qualified applicants will appear here after all assigned panel tasks are complete.
+        </div>
+    @endif
 
     <h3 class="section-heading">Applicant Outcome Register</h3>
     <table class="register-table">

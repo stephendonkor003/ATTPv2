@@ -10,15 +10,36 @@
         $generatedAt = $report['generated_at'];
         $procurementTitle = $procurement->title ?: 'Untitled procurement';
         $procurementReference = $procurement->reference_no ?: 'No reference number';
+        $qualifiedApplicants = $applicants
+            ->filter(fn (array $row): bool => (bool) ($row['can_advance'] ?? false)
+                && (bool) ($row['panel_complete'] ?? false)
+                && in_array(data_get($row, 'outcome.code'), ['fully_qualified', 'average_qualified'], true))
+            ->values();
+        $panelInProgressApplicants = $applicants
+            ->filter(fn (array $row): bool => ! (bool) ($row['panel_complete'] ?? false))
+            ->values();
+        $notQualifiedApplicants = $applicants
+            ->where('outcome.code', 'not_qualified')
+            ->values();
+        $finalNotQualifiedApplicants = $notQualifiedApplicants
+            ->filter(fn (array $row): bool => (bool) ($row['panel_complete'] ?? false))
+            ->values();
+        $earlyVetoApplicants = $notQualifiedApplicants
+            ->filter(fn (array $row): bool => ! (bool) ($row['panel_complete'] ?? false))
+            ->values();
+        $determinedApplicants = $qualifiedApplicants->count() + $finalNotQualifiedApplicants->count();
+        $determinationPercent = $stats['total_applicants'] > 0
+            ? (int) round(($determinedApplicants / $stats['total_applicants']) * 100)
+            : 0;
     @endphp
 
     <main class="nxl-container eoi-report" aria-labelledby="eoiReportTitle">
         <header class="page-header eoi-page-header">
             <div class="page-header-left">
-                <span class="eoi-page-kicker">Expression of Interest</span>
+                <span class="eoi-page-kicker">Expression of Interest &middot; Panel Decision</span>
                 <h4 class="fw-bold mb-1" id="eoiReportTitle">
                     <i class="feather-award me-2" aria-hidden="true"></i>
-                    Qualification Report
+                    Selection &amp; Qualification Report
                 </h4>
                 <p class="mb-0">
                     {{ $procurementTitle }}
@@ -39,94 +60,154 @@
             </div>
         </header>
 
-        <section class="eoi-rule-card" aria-labelledby="qualificationRuleTitle">
-            <div class="eoi-rule-icon" aria-hidden="true">
-                <i class="feather-shield"></i>
-            </div>
-            <div class="eoi-rule-copy">
-                <span class="eoi-eyebrow">Mandatory qualification gate</span>
-                <h5 id="qualificationRuleTitle">One Not Qualified decision stops progression</h5>
-                <p>
-                    An applicant advances to <strong>Technical Evaluation</strong> only when every assigned panel task is
-                    complete and no evaluator has recorded <strong>Not Qualified</strong> against any criterion.
-                </p>
-            </div>
-            <div class="eoi-rule-path" aria-label="Qualification rules">
-                <div class="eoi-rule-step eoi-rule-step--success">
-                    <span>All Qualified</span>
-                    <strong>Fully Qualified</strong>
-                    <small>Advances when the panel is complete</small>
+        <section class="eoi-qualified-shortlist" id="eoiQualifiedApplicants" aria-labelledby="qualifiedApplicantsTitle">
+            <header class="eoi-qualified-shortlist__header">
+                <div class="eoi-qualified-heading">
+                    <span class="eoi-qualified-heading__icon" aria-hidden="true">
+                        <i class="feather-check-circle"></i>
+                    </span>
+                    <div>
+                        <span class="eoi-eyebrow">Technical Evaluation shortlist</span>
+                        <h5 id="qualifiedApplicantsTitle">Qualified Applicants</h5>
+                        <p>Panel-complete applicants with no Not Qualified decision, cleared to advance.</p>
+                    </div>
                 </div>
-                <div class="eoi-rule-step eoi-rule-step--warning">
-                    <span>One or more Average Qualified</span>
-                    <strong>Average Qualified</strong>
-                    <small>Advances if there is no NQ</small>
+                <div class="eoi-qualified-totals" aria-label="Qualified applicant totals">
+                    <span><strong>{{ number_format($qualifiedApplicants->count()) }}</strong> advancing</span>
+                    <span><b>{{ number_format($stats['fully_qualified']) }}</b> fully qualified</span>
+                    <span><b>{{ number_format($stats['average_qualified']) }}</b> average qualified</span>
                 </div>
-                <div class="eoi-rule-step eoi-rule-step--danger">
-                    <span>At least one Not Qualified</span>
-                    <strong>Not Qualified</strong>
-                    <small>Does not advance</small>
+            </header>
+
+            @if ($qualifiedApplicants->isNotEmpty())
+                <div class="eoi-qualified-grid">
+                    @foreach ($qualifiedApplicants as $qualifiedRow)
+                        @php
+                            $qualifiedApplicant = $qualifiedRow['applicant'];
+                            $qualifiedOutcome = $qualifiedRow['outcome'];
+                        @endphp
+                        <article
+                            class="eoi-qualified-card eoi-qualified-card--{{ $qualifiedOutcome['code'] }}"
+                            data-qualified-applicant="{{ $qualifiedApplicant->id }}"
+                        >
+                            <div class="eoi-qualified-card__top">
+                                <span class="eoi-qualified-sequence">{{ str_pad((string) $loop->iteration, 2, '0', STR_PAD_LEFT) }}</span>
+                                <span class="eoi-outcome eoi-outcome--{{ $qualifiedOutcome['code'] }}">
+                                    <i class="{{ $qualifiedOutcome['code'] === 'fully_qualified' ? 'feather-check-circle' : 'feather-minus-circle' }}" aria-hidden="true"></i>
+                                    {{ $qualifiedOutcome['label'] }}
+                                </span>
+                            </div>
+                            <div class="eoi-qualified-card__identity">
+                                <span class="eoi-qualified-avatar" aria-hidden="true">
+                                    {{ Illuminate\Support\Str::upper(Illuminate\Support\Str::substr($qualifiedApplicant->display_name, 0, 1)) }}
+                                </span>
+                                <div>
+                                    <h6>{{ $qualifiedApplicant->display_name }}</h6>
+                                    <p>
+                                        {{ $qualifiedApplicant->procurement_submission_code ?: 'No submission code' }}
+                                        @if ($qualifiedApplicant->submitter?->email)
+                                            <span aria-hidden="true">&middot;</span> {{ $qualifiedApplicant->submitter->email }}
+                                        @endif
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="eoi-qualified-card__metrics">
+                                <span><small>Qualified</small><strong>{{ $qualifiedRow['counts']['qualified'] }}</strong></span>
+                                <span><small>Average</small><strong>{{ $qualifiedRow['counts']['average_qualified'] }}</strong></span>
+                                <span><small>Panel tasks</small><strong>{{ $qualifiedRow['completed_tasks'] }}/{{ $qualifiedRow['expected_tasks'] }}</strong></span>
+                            </div>
+                            <div class="eoi-qualified-card__route">
+                                <span><i class="feather-arrow-up-right" aria-hidden="true"></i> Advances to</span>
+                                <strong>Technical Evaluation</strong>
+                                <a
+                                    href="#eoi-applicant-{{ $qualifiedApplicant->id }}"
+                                    data-eoi-open-applicant="{{ $qualifiedApplicant->id }}"
+                                >
+                                    View panel evidence <i class="feather-arrow-right" aria-hidden="true"></i>
+                                </a>
+                            </div>
+                        </article>
+                    @endforeach
                 </div>
-            </div>
+            @else
+                <div class="eoi-qualified-empty">
+                    <span aria-hidden="true"><i class="feather-clock"></i></span>
+                    <div>
+                        <strong>No applicants have cleared the EOI gate yet</strong>
+                        <p>Qualified applicants will appear here automatically after every assigned evaluator completes their panel task.</p>
+                    </div>
+                    <span class="eoi-qualified-empty__progress">{{ number_format($panelInProgressApplicants->count()) }} awaiting panel</span>
+                </div>
+            @endif
         </section>
 
-        <section class="eoi-kpi-grid" aria-label="EOI qualification overview">
-            <article class="eoi-kpi eoi-kpi--total">
-                <span class="eoi-kpi-icon" aria-hidden="true"><i class="feather-users"></i></span>
-                <div>
-                    <span>Total Applicants</span>
-                    <strong>{{ number_format($stats['total_applicants']) }}</strong>
-                    <small>In this EOI report</small>
+        <section class="eoi-executive-overview" aria-labelledby="eoiOverviewTitle">
+            <div class="eoi-overview-main">
+                <span class="eoi-overview-badge"><i class="feather-shield" aria-hidden="true"></i> Automatic qualification gate</span>
+                <h5 id="eoiOverviewTitle">One clear decision register. One non-negotiable rule.</h5>
+                <p>
+                    Every assigned evaluator must finish. Fully Qualified and Average Qualified applicants move forward;
+                    a single <strong>Not Qualified</strong> decision stops progression.
+                </p>
+                <div class="eoi-overview-meta">
+                    <span><i class="feather-hash" aria-hidden="true"></i> {{ $procurementReference }}</span>
+                    <span><i class="feather-users" aria-hidden="true"></i> {{ number_format($stats['panel_members']) }} panel member(s)</span>
+                    <span><i class="feather-file-text" aria-hidden="true"></i> {{ number_format($stats['submitted_evaluations']) }} reports submitted</span>
+                    <span><i class="feather-calendar" aria-hidden="true"></i> {{ $generatedAt->format('d M Y, H:i') }}</span>
                 </div>
+            </div>
+            <aside class="eoi-overview-progress" aria-label="Overall decision progress">
+                <div class="eoi-overview-progress__top">
+                    <span>Decisions finalised</span>
+                    <strong>{{ $determinedApplicants }}/{{ $stats['total_applicants'] }}</strong>
+                </div>
+                <span
+                    class="eoi-overview-progress__track"
+                    role="progressbar"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow="{{ $determinationPercent }}"
+                >
+                    <span style="width: {{ $determinationPercent }}%"></span>
+                </span>
+                <small>{{ $determinationPercent }}% of applicant outcomes are final</small>
+            </aside>
+        </section>
+
+        <section class="eoi-stage-overview" aria-label="EOI workflow summary">
+            <article class="eoi-stage-card eoi-stage-card--total">
+                <span class="eoi-stage-card__icon"><i class="feather-users" aria-hidden="true"></i></span>
+                <div><span>Total applicants</span><strong>{{ number_format($stats['total_applicants']) }}</strong></div>
+                <small>Entered in this EOI decision register</small>
             </article>
-            <article class="eoi-kpi eoi-kpi--advance">
-                <span class="eoi-kpi-icon" aria-hidden="true"><i class="feather-arrow-up-right"></i></span>
-                <div>
-                    <span>Advance to Technical</span>
-                    <strong>{{ number_format($stats['advance']) }}</strong>
-                    <small>Panel-complete applicants</small>
-                </div>
+            <article class="eoi-stage-card eoi-stage-card--advance">
+                <span class="eoi-stage-card__icon"><i class="feather-trending-up" aria-hidden="true"></i></span>
+                <div><span>Technical-ready</span><strong>{{ number_format($qualifiedApplicants->count()) }}</strong></div>
+                <small>{{ number_format($stats['fully_qualified']) }} fully &middot; {{ number_format($stats['average_qualified']) }} average</small>
             </article>
-            <article class="eoi-kpi eoi-kpi--qualified">
-                <span class="eoi-kpi-icon" aria-hidden="true"><i class="feather-check-circle"></i></span>
-                <div>
-                    <span>Fully Qualified</span>
-                    <strong>{{ number_format($stats['fully_qualified']) }}</strong>
-                    <small>Qualified decisions only</small>
-                </div>
+            <article class="eoi-stage-card eoi-stage-card--pending">
+                <span class="eoi-stage-card__icon"><i class="feather-clock" aria-hidden="true"></i></span>
+                <div><span>Panel in progress</span><strong>{{ number_format($panelInProgressApplicants->count()) }}</strong></div>
+                <small>
+                    Outcome held until every task is complete
+                    @if ($earlyVetoApplicants->isNotEmpty())
+                        &middot; {{ number_format($earlyVetoApplicants->count()) }} with NQ recorded
+                    @endif
+                </small>
             </article>
-            <article class="eoi-kpi eoi-kpi--average">
-                <span class="eoi-kpi-icon" aria-hidden="true"><i class="feather-minus-circle"></i></span>
-                <div>
-                    <span>Average Qualified</span>
-                    <strong>{{ number_format($stats['average_qualified']) }}</strong>
-                    <small>No disqualifying decision</small>
-                </div>
-            </article>
-            <article class="eoi-kpi eoi-kpi--not-qualified">
-                <span class="eoi-kpi-icon" aria-hidden="true"><i class="feather-x-circle"></i></span>
-                <div>
-                    <span>Not Qualified</span>
-                    <strong>{{ number_format($stats['not_qualified']) }}</strong>
-                    <small>At least one NQ recorded</small>
-                </div>
-            </article>
-            <article class="eoi-kpi eoi-kpi--pending">
-                <span class="eoi-kpi-icon" aria-hidden="true"><i class="feather-clock"></i></span>
-                <div>
-                    <span>Awaiting Panel</span>
-                    <strong>{{ number_format($stats['pending']) }}</strong>
-                    <small>{{ number_format($stats['panel_members']) }} panel member(s)</small>
-                </div>
+            <article class="eoi-stage-card eoi-stage-card--stopped">
+                <span class="eoi-stage-card__icon"><i class="feather-slash" aria-hidden="true"></i></span>
+                <div><span>NQ recorded</span><strong>{{ number_format($notQualifiedApplicants->count()) }}</strong></div>
+                <small>{{ number_format($finalNotQualifiedApplicants->count()) }} panel-complete &middot; progression stopped</small>
             </article>
         </section>
 
         <section class="eoi-applicant-panel" aria-labelledby="applicantSummaryTitle">
             <div class="eoi-panel-heading">
                 <div>
-                    <span class="eoi-eyebrow">Applicant-level determination</span>
-                    <h5 id="applicantSummaryTitle">Qualification Summary</h5>
-                    <p>Search the shortlist, filter outcomes, and expand an applicant to inspect every evaluator decision.</p>
+                    <span class="eoi-eyebrow">Complete decision register</span>
+                    <h5 id="applicantSummaryTitle">All Applicant Decisions &amp; Panel Evidence</h5>
+                    <p>Search every applicant, review the consolidated decision, then expand a record for the full evaluator audit trail.</p>
                 </div>
                 <div class="eoi-generated-at">
                     <i class="feather-calendar" aria-hidden="true"></i>
@@ -212,7 +293,8 @@
                     @endphp
 
                     <details
-                        class="eoi-applicant"
+                        class="eoi-applicant eoi-applicant--{{ $outcome['code'] }}"
+                        id="eoi-applicant-{{ $applicant->id }}"
                         data-search="{{ $searchText }}"
                         data-outcome="{{ $outcome['code'] }}"
                         data-panel="{{ $panelState }}"
@@ -627,6 +709,524 @@
             text-transform: uppercase;
         }
 
+        .eoi-qualified-shortlist {
+            background: #fff;
+            border: 1px solid #b7e4c7;
+            border-radius: 16px;
+            box-shadow: 0 18px 38px rgba(21, 128, 61, .09);
+            margin-bottom: 16px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .eoi-qualified-shortlist::before {
+            background: linear-gradient(90deg, #15803d, #14b8a6 65%, #38bdf8);
+            content: '';
+            height: 5px;
+            left: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+        }
+
+        .eoi-qualified-shortlist__header {
+            align-items: center;
+            background: linear-gradient(120deg, #f0fdf4 0%, #f7fffb 58%, #eff6ff 100%);
+            border-bottom: 1px solid #cdebd7;
+            display: flex;
+            gap: 24px;
+            justify-content: space-between;
+            padding: 24px 26px 20px;
+        }
+
+        .eoi-qualified-heading {
+            align-items: center;
+            display: flex;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .eoi-qualified-heading__icon {
+            align-items: center;
+            background: linear-gradient(145deg, #15803d, #0f766e);
+            border: 4px solid rgba(255, 255, 255, .82);
+            border-radius: 15px;
+            box-shadow: 0 9px 18px rgba(21, 128, 61, .2);
+            color: #fff;
+            display: inline-flex;
+            flex: 0 0 54px;
+            font-size: 23px;
+            height: 54px;
+            justify-content: center;
+        }
+
+        .eoi-qualified-heading .eoi-eyebrow {
+            color: #15803d;
+        }
+
+        .eoi-qualified-heading h5 {
+            color: #12301f;
+            font-size: 22px;
+            font-weight: 850;
+            letter-spacing: -.025em;
+            margin: 3px 0 2px;
+        }
+
+        .eoi-qualified-heading p {
+            color: #527060;
+            font-size: 12px;
+            margin: 0;
+        }
+
+        .eoi-qualified-totals {
+            align-items: center;
+            display: flex;
+            flex: 0 0 auto;
+            flex-wrap: wrap;
+            gap: 7px;
+            justify-content: flex-end;
+        }
+
+        .eoi-qualified-totals span {
+            background: rgba(255, 255, 255, .88);
+            border: 1px solid #cce7d5;
+            border-radius: 999px;
+            color: #42624e;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 7px 10px;
+            white-space: nowrap;
+        }
+
+        .eoi-qualified-totals span:first-child {
+            background: #166534;
+            border-color: #166534;
+            color: #fff;
+        }
+
+        .eoi-qualified-totals strong,
+        .eoi-qualified-totals b {
+            font-size: 12px;
+            margin-right: 2px;
+        }
+
+        .eoi-qualified-grid {
+            background: #fbfefc;
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            max-height: 610px;
+            overflow: auto;
+            padding: 18px;
+        }
+
+        .eoi-qualified-card {
+            --qualified-accent: #15803d;
+            --qualified-soft: #f0fdf4;
+            background: #fff;
+            border: 1px solid #d9e8df;
+            border-top: 4px solid var(--qualified-accent);
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, .05);
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .eoi-qualified-card--average_qualified {
+            --qualified-accent: #d97706;
+            --qualified-soft: #fffbeb;
+        }
+
+        .eoi-qualified-card__top {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+            padding: 11px 14px 5px;
+        }
+
+        .eoi-qualified-sequence {
+            color: #98a2b3;
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: .12em;
+        }
+
+        .eoi-qualified-card__identity {
+            align-items: center;
+            display: flex;
+            gap: 11px;
+            min-width: 0;
+            padding: 8px 14px 13px;
+        }
+
+        .eoi-qualified-avatar {
+            align-items: center;
+            background: var(--qualified-soft);
+            border: 1px solid #bbf7d0;
+            border-radius: 10px;
+            color: var(--qualified-accent);
+            display: inline-flex;
+            flex: 0 0 42px;
+            font-size: 15px;
+            font-weight: 900;
+            height: 42px;
+            justify-content: center;
+        }
+
+        .eoi-qualified-card--average_qualified .eoi-qualified-avatar {
+            border-color: #fde68a;
+        }
+
+        .eoi-qualified-card__identity > div {
+            min-width: 0;
+        }
+
+        .eoi-qualified-card__identity h6 {
+            color: var(--eoi-ink);
+            font-size: 14px;
+            font-weight: 850;
+            line-height: 1.35;
+            margin: 0 0 3px;
+        }
+
+        .eoi-qualified-card__identity p {
+            color: var(--eoi-muted);
+            font-size: 10px;
+            line-height: 1.45;
+            margin: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .eoi-qualified-card__metrics {
+            background: #f8fafc;
+            border-bottom: 1px solid #e7edf3;
+            border-top: 1px solid #e7edf3;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .eoi-qualified-card__metrics span {
+            padding: 10px 12px;
+        }
+
+        .eoi-qualified-card__metrics span + span {
+            border-left: 1px solid #e7edf3;
+        }
+
+        .eoi-qualified-card__metrics small {
+            color: #7c899b;
+            display: block;
+            font-size: 8px;
+            font-weight: 800;
+            letter-spacing: .045em;
+            text-transform: uppercase;
+        }
+
+        .eoi-qualified-card__metrics strong {
+            color: var(--eoi-ink);
+            display: block;
+            font-size: 14px;
+            margin-top: 2px;
+        }
+
+        .eoi-qualified-card__route {
+            align-items: center;
+            display: grid;
+            gap: 0 8px;
+            grid-template-columns: 1fr auto;
+            margin-top: auto;
+            padding: 12px 14px;
+        }
+
+        .eoi-qualified-card__route > span {
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 700;
+        }
+
+        .eoi-qualified-card__route > span i {
+            color: var(--qualified-accent);
+        }
+
+        .eoi-qualified-card__route > strong {
+            color: var(--qualified-accent);
+            font-size: 11px;
+            grid-column: 1;
+        }
+
+        .eoi-qualified-card__route > a {
+            align-items: center;
+            color: #1d4ed8;
+            display: inline-flex;
+            font-size: 10px;
+            font-weight: 800;
+            gap: 5px;
+            grid-column: 2;
+            grid-row: 1 / 3;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .eoi-qualified-card__route > a:hover {
+            color: #1e3a8a;
+            text-decoration: underline;
+        }
+
+        .eoi-qualified-empty {
+            align-items: center;
+            background: #fbfefc;
+            display: grid;
+            gap: 13px;
+            grid-template-columns: auto 1fr auto;
+            min-height: 116px;
+            padding: 22px 26px;
+        }
+
+        .eoi-qualified-empty > span:first-child {
+            align-items: center;
+            background: #ecfdf3;
+            border: 1px solid #bbf7d0;
+            border-radius: 12px;
+            color: #15803d;
+            display: inline-flex;
+            font-size: 20px;
+            height: 46px;
+            justify-content: center;
+            width: 46px;
+        }
+
+        .eoi-qualified-empty strong {
+            color: #173b25;
+            display: block;
+            font-size: 13px;
+        }
+
+        .eoi-qualified-empty p {
+            color: #667085;
+            font-size: 11px;
+            margin: 3px 0 0;
+        }
+
+        .eoi-qualified-empty__progress {
+            background: #fff;
+            border: 1px solid #cce7d5;
+            border-radius: 999px;
+            color: #527060;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 7px 10px;
+            white-space: nowrap;
+        }
+
+        .eoi-executive-overview {
+            align-items: stretch;
+            background: linear-gradient(130deg, #101c33 0%, #172b46 58%, #143b45 100%);
+            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: 15px;
+            box-shadow: 0 16px 32px rgba(15, 23, 42, .13);
+            color: #fff;
+            display: grid;
+            gap: 26px;
+            grid-template-columns: minmax(0, 1fr) 300px;
+            margin-bottom: 14px;
+            overflow: hidden;
+            padding: 23px 25px;
+            position: relative;
+        }
+
+        .eoi-executive-overview::after {
+            background: #14b8a6;
+            border-radius: 50%;
+            content: '';
+            filter: blur(45px);
+            height: 150px;
+            opacity: .14;
+            position: absolute;
+            right: -40px;
+            top: -70px;
+            width: 210px;
+        }
+
+        .eoi-overview-main,
+        .eoi-overview-progress {
+            position: relative;
+            z-index: 1;
+        }
+
+        .eoi-overview-badge {
+            align-items: center;
+            background: rgba(45, 212, 191, .12);
+            border: 1px solid rgba(94, 234, 212, .25);
+            border-radius: 999px;
+            color: #99f6e4;
+            display: inline-flex;
+            font-size: 9px;
+            font-weight: 850;
+            gap: 6px;
+            letter-spacing: .07em;
+            padding: 5px 9px;
+            text-transform: uppercase;
+        }
+
+        .eoi-overview-main h5 {
+            color: #fff;
+            font-size: 19px;
+            font-weight: 850;
+            letter-spacing: -.018em;
+            margin: 11px 0 6px;
+        }
+
+        .eoi-overview-main > p {
+            color: #cbd5e1;
+            font-size: 12px;
+            line-height: 1.55;
+            margin: 0;
+            max-width: 850px;
+        }
+
+        .eoi-overview-main > p strong {
+            color: #fda4af;
+        }
+
+        .eoi-overview-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px 15px;
+            margin-top: 15px;
+        }
+
+        .eoi-overview-meta span {
+            align-items: center;
+            color: #aebed0;
+            display: inline-flex;
+            font-size: 9px;
+            gap: 5px;
+        }
+
+        .eoi-overview-meta i {
+            color: #5eead4;
+        }
+
+        .eoi-overview-progress {
+            align-self: center;
+            background: rgba(255, 255, 255, .07);
+            border: 1px solid rgba(255, 255, 255, .11);
+            border-radius: 12px;
+            padding: 15px;
+        }
+
+        .eoi-overview-progress__top {
+            align-items: baseline;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .eoi-overview-progress__top span {
+            color: #cbd5e1;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .eoi-overview-progress__top strong {
+            color: #fff;
+            font-size: 19px;
+        }
+
+        .eoi-overview-progress__track {
+            background: rgba(255, 255, 255, .12);
+            border-radius: 999px;
+            display: block;
+            height: 8px;
+            margin: 10px 0 7px;
+            overflow: hidden;
+        }
+
+        .eoi-overview-progress__track > span {
+            background: linear-gradient(90deg, #4ade80, #2dd4bf);
+            border-radius: inherit;
+            display: block;
+            height: 100%;
+        }
+
+        .eoi-overview-progress small {
+            color: #aebed0;
+            font-size: 9px;
+        }
+
+        .eoi-stage-overview {
+            display: grid;
+            gap: 11px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            margin-bottom: 17px;
+        }
+
+        .eoi-stage-card {
+            --stage-accent: #2563eb;
+            --stage-soft: #eff6ff;
+            align-items: center;
+            background: #fff;
+            border: 1px solid var(--eoi-line);
+            border-radius: 11px;
+            box-shadow: 0 7px 18px rgba(15, 23, 42, .04);
+            display: grid;
+            gap: 2px 10px;
+            grid-template-columns: auto 1fr;
+            min-height: 94px;
+            padding: 13px 14px;
+        }
+
+        .eoi-stage-card--advance { --stage-accent: #15803d; --stage-soft: #f0fdf4; }
+        .eoi-stage-card--pending { --stage-accent: #b45309; --stage-soft: #fffbeb; }
+        .eoi-stage-card--stopped { --stage-accent: #b42318; --stage-soft: #fff1f0; }
+
+        .eoi-stage-card__icon {
+            align-items: center;
+            background: var(--stage-soft);
+            border-radius: 9px;
+            color: var(--stage-accent);
+            display: inline-flex;
+            grid-row: 1;
+            height: 36px;
+            justify-content: center;
+            width: 36px;
+        }
+
+        .eoi-stage-card > div {
+            align-items: baseline;
+            display: flex;
+            gap: 8px;
+            justify-content: space-between;
+            min-width: 0;
+        }
+
+        .eoi-stage-card > div span {
+            color: #667085;
+            font-size: 9px;
+            font-weight: 850;
+            letter-spacing: .045em;
+            text-transform: uppercase;
+        }
+
+        .eoi-stage-card > div strong {
+            color: var(--stage-accent);
+            font-size: 23px;
+            line-height: 1;
+        }
+
+        .eoi-stage-card > small {
+            color: #8792a3;
+            font-size: 9px;
+            grid-column: 1 / -1;
+            line-height: 1.35;
+            margin-top: 6px;
+        }
+
         .eoi-rule-card {
             align-items: center;
             background: linear-gradient(135deg, #172033 0%, #263650 100%);
@@ -949,10 +1549,17 @@
         .eoi-applicant {
             background: #fff;
             border: 1px solid var(--eoi-line);
+            border-left: 4px solid #94a3b8;
             border-radius: 10px;
             box-shadow: 0 4px 12px rgba(15, 23, 42, .035);
             overflow: hidden;
+            scroll-margin-top: 100px;
         }
+
+        .eoi-applicant--fully_qualified { border-left-color: var(--eoi-green); }
+        .eoi-applicant--average_qualified { border-left-color: #d97706; }
+        .eoi-applicant--not_qualified { border-left-color: var(--eoi-red); }
+        .eoi-applicant--pending { border-left-color: #64748b; }
 
         .eoi-applicant[open] {
             border-color: #b8c7d9;
@@ -1015,14 +1622,14 @@
         .eoi-applicant-identity strong {
             color: var(--eoi-ink);
             display: block;
-            font-size: 13px;
+            font-size: 14px;
             line-height: 1.35;
         }
 
         .eoi-applicant-identity small {
             color: var(--eoi-muted);
             display: block;
-            font-size: 10px;
+            font-size: 11px;
             line-height: 1.45;
             margin-top: 3px;
             overflow: hidden;
@@ -1415,13 +2022,14 @@
         .eoi-member-head strong {
             color: var(--eoi-ink);
             display: block;
-            font-size: 11px;
+            font-size: 12px;
+            overflow-wrap: anywhere;
         }
 
         .eoi-member-head small {
             color: var(--eoi-muted);
             display: block;
-            font-size: 8px;
+            font-size: 10px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -1431,7 +2039,7 @@
             background: #eef2f6;
             border-radius: 999px;
             color: #64748b;
-            font-size: 8px;
+            font-size: 9px;
             font-weight: 800;
             padding: 4px 7px;
             white-space: nowrap;
@@ -1452,7 +2060,7 @@
 
         .eoi-member-foot > span:first-child {
             color: var(--eoi-muted);
-            font-size: 8px;
+            font-size: 9px;
         }
 
         .eoi-member-counts {
@@ -1504,10 +2112,12 @@
         }
 
         .eoi-matrix-table thead th {
+            --bs-table-color: #fff;
+            --bs-table-color-state: #fff;
             background: #172033;
             border-color: #344054;
-            color: #fff;
-            font-size: 9px;
+            color: #fff !important;
+            font-size: 10px;
             font-weight: 800;
             letter-spacing: .03em;
             padding: 9px 10px;
@@ -1524,9 +2134,9 @@
         }
 
         .eoi-matrix-table thead th small {
-            color: #aab8ca;
+            color: #fff !important;
             display: block;
-            font-size: 7px;
+            font-size: 9px;
             font-weight: 600;
             letter-spacing: 0;
             margin-top: 3px;
@@ -1572,14 +2182,14 @@
         .eoi-criterion-cell strong {
             color: var(--eoi-ink);
             display: block;
-            font-size: 10px;
+            font-size: 11px;
             line-height: 1.4;
         }
 
         .eoi-criterion-cell small {
             color: var(--eoi-muted);
             display: block;
-            font-size: 8px;
+            font-size: 10px;
             font-weight: 400;
             line-height: 1.45;
             margin-top: 4px;
@@ -1620,7 +2230,7 @@
 
         .eoi-assessment-cell p {
             color: var(--eoi-slate);
-            font-size: 9px;
+            font-size: 10px;
             line-height: 1.5;
             margin: 7px 0 0;
             white-space: pre-line;
@@ -1629,7 +2239,7 @@
         .eoi-no-comment {
             color: #98a2b3;
             display: block;
-            font-size: 8px;
+            font-size: 9px;
             font-style: italic;
             margin-top: 7px;
         }
@@ -1714,6 +2324,10 @@
         }
 
         @media (max-width: 1399.98px) {
+            .eoi-stage-overview {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .eoi-kpi-grid {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
             }
@@ -1737,6 +2351,10 @@
         }
 
         @media (max-width: 1199.98px) {
+            .eoi-executive-overview {
+                grid-template-columns: minmax(0, 1fr) 250px;
+            }
+
             .eoi-rule-card {
                 grid-template-columns: auto 1fr;
             }
@@ -1770,6 +2388,46 @@
         }
 
         @media (max-width: 767.98px) {
+            .eoi-qualified-shortlist__header {
+                align-items: flex-start;
+                flex-direction: column;
+                padding: 21px 18px 17px;
+            }
+
+            .eoi-qualified-totals {
+                justify-content: flex-start;
+            }
+
+            .eoi-qualified-grid {
+                grid-template-columns: 1fr;
+                max-height: none;
+                padding: 12px;
+            }
+
+            .eoi-qualified-empty {
+                grid-template-columns: auto 1fr;
+                padding: 18px;
+            }
+
+            .eoi-qualified-empty__progress {
+                grid-column: 1 / -1;
+                justify-self: start;
+            }
+
+            .eoi-executive-overview {
+                gap: 18px;
+                grid-template-columns: 1fr;
+                padding: 20px 18px;
+            }
+
+            .eoi-overview-progress {
+                width: 100%;
+            }
+
+            .eoi-stage-overview {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .eoi-header-actions,
             .eoi-header-actions .btn {
                 width: 100%;
@@ -1857,6 +2515,32 @@
         }
 
         @media (max-width: 479.98px) {
+            .eoi-qualified-heading {
+                align-items: flex-start;
+            }
+
+            .eoi-qualified-heading__icon {
+                flex-basis: 45px;
+                font-size: 19px;
+                height: 45px;
+            }
+
+            .eoi-qualified-heading h5 {
+                font-size: 18px;
+            }
+
+            .eoi-qualified-card__route {
+                align-items: flex-start;
+                grid-template-columns: 1fr;
+            }
+
+            .eoi-qualified-card__route > a {
+                grid-column: 1;
+                grid-row: auto;
+                margin-top: 8px;
+            }
+
+            .eoi-stage-overview,
             .eoi-kpi-grid,
             .eoi-detail-stats {
                 grid-template-columns: 1fr;
@@ -1890,8 +2574,14 @@
             .eoi-header-actions,
             .eoi-filter-bar,
             .eoi-list-status,
-            .eoi-summary-chevron {
+            .eoi-summary-chevron,
+            .eoi-qualified-card__route > a {
                 display: none !important;
+            }
+
+            .eoi-qualified-grid {
+                max-height: none;
+                overflow: visible;
             }
 
             .eoi-report,
@@ -1948,6 +2638,7 @@
             }
 
             const applicantCards = Array.from(applicantList.querySelectorAll('.eoi-applicant'));
+            const qualifiedApplicantLinks = Array.from(document.querySelectorAll('[data-eoi-open-applicant]'));
             const totalApplicants = applicantCards.length;
 
             const normalize = (value) => String(value || '').trim().toLocaleLowerCase();
@@ -2009,6 +2700,29 @@
 
             clearButton?.addEventListener('click', clearFilters);
             noResultsClearButton?.addEventListener('click', clearFilters);
+
+            qualifiedApplicantLinks.forEach((link) => {
+                link.addEventListener('click', function (event) {
+                    const applicantId = link.dataset.eoiOpenApplicant;
+                    const target = document.getElementById(`eoi-applicant-${applicantId}`);
+
+                    if (!target) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    searchInput.value = '';
+                    outcomeFilter.value = 'all';
+                    panelFilter.value = 'all';
+                    applyFilters();
+                    target.open = true;
+
+                    window.requestAnimationFrame(() => {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        window.history.replaceState(null, '', `#eoi-applicant-${applicantId}`);
+                    });
+                });
+            });
 
             applyFilters();
         });
