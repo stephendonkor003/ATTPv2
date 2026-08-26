@@ -30,7 +30,13 @@ class EoiQualificationService
         $linkedEvaluations = $procurement->evaluations()
             ->where('evaluations.type', Evaluation::TYPE_EOI)
             ->with($this->evaluationRelations())
-            ->get();
+            ->get()
+            ->concat(
+                $procurement->directEvaluations()
+                    ->where('type', Evaluation::TYPE_EOI)
+                    ->with($this->evaluationRelations())
+                    ->get()
+            );
 
         $evaluations = $this->mergeEvaluations(
             $linkedEvaluations,

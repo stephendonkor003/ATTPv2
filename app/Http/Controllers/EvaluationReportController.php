@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Evaluation;
 use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
+use App\Models\ProcurementPlan;
 use App\Services\EoiQualificationService;
 use App\Support\PdfBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -17,9 +18,26 @@ class EvaluationReportController extends Controller
 
     public function index()
     {
-        $procurementQuery = Procurement::query()->orderBy('title');
+        $procurementQuery = Procurement::query()
+            ->with([
+                'thinkTankPlanningItem:id,procurement_id,procurement_category,procurement_method',
+                'evaluationAssignments:id,evaluation_id,procurement_id,user_id,status,assigned_at',
+                'evaluationAssignments.evaluation:id,name,type,evaluation_phase,procurement_id',
+                'evaluations:id,name,type,evaluation_phase,procurement_id',
+            ])
+            ->withCount('submissions')
+            ->orderBy('title');
         $this->applyEvaluationReportProcurementScope($procurementQuery);
         $procurements = $procurementQuery->get();
+        $directEvaluationsByProcurement = Evaluation::query()
+            ->whereIn('procurement_id', $procurements->pluck('id'))
+            ->get(['id', 'name', 'type', 'evaluation_phase', 'procurement_id'])
+            ->groupBy(fn (Evaluation $evaluation): string => (string) $evaluation->procurement_id);
+        $procurementPlansByReference = ProcurementPlan::query()
+            ->with('methodPlanned:id,method_name')
+            ->whereIn('procurement_code', $procurements->pluck('reference_no')->filter())
+            ->get(['id', 'procurement_code', 'method_planned_id'])
+            ->keyBy(fn (ProcurementPlan $plan): string => (string) $plan->procurement_code);
 
         $submissionQuery = EvaluationSubmission::with([
             'procurement',
@@ -29,6 +47,8 @@ class EvaluationReportController extends Controller
             'evaluator',
         ])
             ->whereNotNull('submitted_at')
+            ->whereIn('procurement_id', $procurements->pluck('id'))
+            ->whereHas('procurement', fn ($query) => $query->whereNull('procurements.deleted_at'))
             ->orderByDesc('submitted_at');
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
         $submissions = $submissionQuery->get();
@@ -41,6 +61,8 @@ class EvaluationReportController extends Controller
                     $evaluation->where('type', Evaluation::TYPE_EOI);
                 })->orWhereHas('evaluations', function ($evaluation): void {
                     $evaluation->where('type', Evaluation::TYPE_EOI);
+                })->orWhereHas('directEvaluations', function ($evaluation): void {
+                    $evaluation->where('type', Evaluation::TYPE_EOI);
                 });
             })
             ->withCount('submissions')
@@ -51,6 +73,9 @@ class EvaluationReportController extends Controller
                             ->where('type', Evaluation::TYPE_EOI))
                         ->with(['evaluation:id,name,type', 'evaluator:id,name,email']);
                 },
+                'directEvaluations' => fn ($evaluations) => $evaluations
+                    ->where('type', Evaluation::TYPE_EOI)
+                    ->select(['id', 'name', 'type', 'procurement_id']),
             ])
             ->orderBy('title');
         $this->applyEvaluationReportProcurementScope($eoiProcurementQuery);
@@ -78,17 +103,282 @@ class EvaluationReportController extends Controller
                 'panel_members' => $panelMemberIds->count(),
                 'templates' => $procurement->evaluationAssignments
                     ->pluck('evaluation.name')
+                    ->merge($procurement->directEvaluations->pluck('name'))
                     ->filter()
                     ->unique()
                     ->values(),
             ]];
         });
 
+        $configurationTypes = Evaluation::configurationTypes();
+        $submissionsByProcurement = $submissions
+            ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->procurement_id);
+        $eoiProcurementsById = $eoiProcurements
+            ->keyBy(fn (Procurement $procurement): string => (string) $procurement->getKey());
+        $methodOrder = [
+            Evaluation::TYPE_EOI => 0,
+            Evaluation::TYPE_SERVICES => 1,
+            Evaluation::TYPE_GOODS => 2,
+        ];
+
+        $procurementReportGroups = $procurements
+            ->map(function (Procurement $procurement) use (
+                $configurationTypes,
+                $submissionsByProcurement,
+                $eoiProcurementsById,
+                $eoiProcurementStats,
+                $directEvaluationsByProcurement,
+                $procurementPlansByReference,
+                $methodOrder
+            ): array {
+                $procurementId = (string) $procurement->getKey();
+                $procurementSubmissions = $submissionsByProcurement
+                    ->get($procurementId, collect())
+                    ->values();
+                $eoiStats = $eoiProcurementStats->get($procurementId);
+                $procurementPlan = $procurementPlansByReference->get((string) $procurement->reference_no);
+                $configuredEvaluations = collect()
+                    ->merge($procurement->evaluationAssignments->pluck('evaluation'))
+                    ->merge($procurement->evaluations)
+                    ->merge($directEvaluationsByProcurement->get($procurementId, collect()))
+                    ->merge($procurementSubmissions->pluck('evaluation'))
+                    ->filter(fn ($evaluation): bool => $evaluation instanceof Evaluation && filled($evaluation->type))
+                    ->unique(fn (Evaluation $evaluation): string => (string) $evaluation->getKey())
+                    ->values();
+
+                $methods = $procurementSubmissions
+                    ->groupBy(fn (EvaluationSubmission $submission): string => (string) ($submission->evaluation?->type ?: 'unclassified'))
+                    ->map(function ($methodSubmissions, string $type) use ($configurationTypes): array {
+                        $definition = $configurationTypes[$type] ?? [
+                            'label' => str($type)->headline()->toString(),
+                            'mode' => 'Evaluation record',
+                            'description' => 'Submitted evaluation reports.',
+                            'color' => 'secondary',
+                        ];
+                        $latestSubmission = $methodSubmissions
+                            ->sortByDesc(fn (EvaluationSubmission $submission): int => $submission->submitted_at?->getTimestamp() ?? 0)
+                            ->first();
+
+                        return [
+                            'type' => $type,
+                            'label' => $definition['label'],
+                            'mode' => $definition['mode'],
+                            'description' => $definition['description'],
+                            'color' => $definition['color'],
+                            'submissions' => $methodSubmissions->values(),
+                            'templates' => $methodSubmissions
+                                ->pluck('evaluation.name')
+                                ->filter()
+                                ->unique()
+                                ->sort()
+                                ->values(),
+                            'phases' => $methodSubmissions
+                                ->pluck('evaluation.evaluation_phase')
+                                ->filter()
+                                ->map(fn ($phase): string => str((string) $phase)->headline()->toString())
+                                ->unique()
+                                ->sort()
+                                ->values(),
+                            'report_count' => $methodSubmissions->count(),
+                            'applicant_count' => $methodSubmissions
+                                ->pluck('form_submission_id')
+                                ->filter()
+                                ->unique()
+                                ->count(),
+                            'evaluator_count' => $methodSubmissions
+                                ->pluck('evaluator_id')
+                                ->filter()
+                                ->unique()
+                                ->count(),
+                            'assignment_count' => 0,
+                            'completed_assignment_count' => 0,
+                            'status' => $methodSubmissions->isNotEmpty() ? 'ready' : 'awaiting',
+                            'latest_at' => $latestSubmission?->submitted_at,
+                            'is_eoi' => $type === Evaluation::TYPE_EOI,
+                            'eoi_stats' => null,
+                        ];
+                    });
+
+                foreach ($configuredEvaluations->groupBy('type') as $type => $evaluations) {
+                    $definition = $configurationTypes[$type] ?? [
+                        'label' => str((string) $type)->headline()->toString(),
+                        'mode' => 'Evaluation record',
+                        'description' => 'Configured evaluation method.',
+                        'color' => 'secondary',
+                    ];
+                    $existingMethod = $methods->get($type, [
+                        'type' => (string) $type,
+                        'label' => $definition['label'],
+                        'mode' => $definition['mode'],
+                        'description' => $definition['description'],
+                        'color' => $definition['color'],
+                        'submissions' => collect(),
+                        'templates' => collect(),
+                        'phases' => collect(),
+                        'report_count' => 0,
+                        'applicant_count' => 0,
+                        'evaluator_count' => 0,
+                        'assignment_count' => 0,
+                        'completed_assignment_count' => 0,
+                        'status' => 'awaiting',
+                        'latest_at' => null,
+                        'is_eoi' => $type === Evaluation::TYPE_EOI,
+                        'eoi_stats' => null,
+                    ]);
+                    $existingMethod['templates'] = collect($existingMethod['templates'])
+                        ->merge($evaluations->pluck('name'))
+                        ->filter()
+                        ->unique()
+                        ->sort()
+                        ->values();
+                    $existingMethod['phases'] = collect($existingMethod['phases'])
+                        ->merge($evaluations->pluck('evaluation_phase')
+                            ->filter()
+                            ->map(fn ($phase): string => str((string) $phase)->headline()->toString()))
+                        ->unique()
+                        ->sort()
+                        ->values();
+                    $existingMethod['evaluator_count'] = collect($existingMethod['submissions'])
+                        ->pluck('evaluator_id')
+                        ->merge($procurement->evaluationAssignments
+                            ->filter(fn ($assignment): bool => (string) $assignment->evaluation?->type === (string) $type)
+                            ->pluck('user_id'))
+                        ->filter()
+                        ->unique()
+                        ->count();
+                    $methods->put((string) $type, $existingMethod);
+                }
+
+                if ($eoiProcurementsById->has($procurementId)) {
+                    $eoiDefinition = $configurationTypes[Evaluation::TYPE_EOI];
+                    $existingEoi = $methods->get(Evaluation::TYPE_EOI, [
+                        'type' => Evaluation::TYPE_EOI,
+                        'label' => $eoiDefinition['label'],
+                        'mode' => $eoiDefinition['mode'],
+                        'description' => $eoiDefinition['description'],
+                        'color' => $eoiDefinition['color'],
+                        'submissions' => collect(),
+                        'templates' => collect(),
+                        'phases' => collect(),
+                        'report_count' => 0,
+                        'applicant_count' => 0,
+                        'evaluator_count' => 0,
+                        'assignment_count' => 0,
+                        'completed_assignment_count' => 0,
+                        'status' => 'awaiting',
+                        'latest_at' => null,
+                        'is_eoi' => true,
+                        'eoi_stats' => null,
+                    ]);
+
+                    $existingEoi['templates'] = collect($existingEoi['templates'])
+                        ->merge($eoiStats['templates'] ?? [])
+                        ->filter()
+                        ->unique()
+                        ->sort()
+                        ->values();
+                    $existingEoi['report_count'] = max(
+                        (int) $existingEoi['report_count'],
+                        (int) ($eoiStats['completed_reports'] ?? 0)
+                    );
+                    $existingEoi['applicant_count'] = max(
+                        (int) $existingEoi['applicant_count'],
+                        (int) ($eoiStats['evaluated_applicants'] ?? 0)
+                    );
+                    $existingEoi['evaluator_count'] = max(
+                        (int) $existingEoi['evaluator_count'],
+                        (int) ($eoiStats['panel_members'] ?? 0)
+                    );
+                    $existingEoi['eoi_stats'] = $eoiStats;
+                    $methods->put(Evaluation::TYPE_EOI, $existingEoi);
+                }
+
+                $methods = $methods->map(function (array $method) use ($procurement): array {
+                    $methodAssignments = $procurement->evaluationAssignments
+                        ->filter(fn ($assignment): bool => (string) $assignment->evaluation?->type === (string) $method['type']);
+                    $method['assignment_count'] = $methodAssignments->count();
+                    $method['completed_assignment_count'] = $methodAssignments
+                        ->where('status', 'submitted')
+                        ->count();
+                    $method['status'] = match (true) {
+                        $method['report_count'] === 0 => 'awaiting',
+                        $methodAssignments->isEmpty(),
+                        $method['completed_assignment_count'] === $method['assignment_count'] => 'ready',
+                        default => 'in_progress',
+                    };
+
+                    return $method;
+                });
+
+                $methods = $methods
+                    ->sortBy(fn (array $method): string => str_pad(
+                        (string) ($methodOrder[$method['type']] ?? 99),
+                        2,
+                        '0',
+                        STR_PAD_LEFT
+                    ).strtolower($method['label']))
+                    ->values();
+                $latestSubmission = $procurementSubmissions
+                    ->sortByDesc(fn (EvaluationSubmission $submission): int => $submission->submitted_at?->getTimestamp() ?? 0)
+                    ->first();
+                $reportedApplicantCount = $procurementSubmissions
+                    ->pluck('form_submission_id')
+                    ->filter()
+                    ->unique()
+                    ->count();
+                $reportedEvaluatorCount = $procurementSubmissions
+                    ->pluck('evaluator_id')
+                    ->merge($procurement->evaluationAssignments->pluck('user_id'))
+                    ->filter()
+                    ->unique()
+                    ->count();
+
+                return [
+                    'procurement' => $procurement,
+                    'procurement_method' => $procurement->thinkTankPlanningItem?->procurement_method
+                        ?: $procurementPlan?->methodPlanned?->method_name,
+                    'procurement_category' => $procurement->thinkTankPlanningItem?->procurement_category,
+                    'methods' => $methods,
+                    'report_count' => max(
+                        $procurementSubmissions->count(),
+                        (int) $methods->sum('report_count')
+                    ),
+                    'applicant_count' => max(
+                        $reportedApplicantCount,
+                        (int) ($eoiStats['evaluated_applicants'] ?? 0)
+                    ),
+                    'total_applicants' => (int) ($procurement->submissions_count ?? 0),
+                    'evaluator_count' => max(
+                        $reportedEvaluatorCount,
+                        (int) ($eoiStats['panel_members'] ?? 0)
+                    ),
+                    'latest_at' => $latestSubmission?->submitted_at,
+                ];
+            })
+            ->sortByDesc(fn (array $group): int => $group['latest_at']?->getTimestamp() ?? 0)
+            ->values();
+
+        $methodReportStats = $procurementReportGroups
+            ->flatMap(fn (array $group) => $group['methods'])
+            ->groupBy('type')
+            ->map(function ($methods, string $type) use ($configurationTypes): array {
+                return [
+                    'type' => $type,
+                    'label' => $configurationTypes[$type]['label'] ?? str($type)->headline()->toString(),
+                    'procurements' => $methods->count(),
+                    'reports' => $methods->sum('report_count'),
+                ];
+            })
+            ->sortBy(fn (array $method): string => $method['label'])
+            ->values();
+
         return view('reports.evaluations.index', compact(
             'procurements',
             'submissions',
             'eoiProcurements',
-            'eoiProcurementStats'
+            'eoiProcurementStats',
+            'procurementReportGroups',
+            'methodReportStats'
         ));
     }
 

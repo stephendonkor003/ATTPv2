@@ -156,6 +156,11 @@ class Procurement extends BaseModel
         );
     }
 
+    public function directEvaluations()
+    {
+        return $this->hasMany(Evaluation::class, 'procurement_id');
+    }
+
     public function thinkTankReviews()
     {
         return $this->hasMany(ThinkTankProcurementReview::class, 'procurement_id');
