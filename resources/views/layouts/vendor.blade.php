@@ -394,6 +394,7 @@
 </head>
 
 <body>
+    @include('layouts.partials.impersonation-banner')
     @php
         $vendorUser = auth()->user();
         $vendorName = $vendorUser?->name ?? 'Vendor';

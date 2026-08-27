@@ -41,6 +41,7 @@
     <link rel="stylesheet" href="{{ asset('think-tank-portal/assets/css/modules.css') }}?v={{ filemtime(public_path('think-tank-portal/assets/css/modules.css')) }}">
 </head>
 <body class="tt-portal-body">
+    @include('layouts.partials.impersonation-banner')
     <a class="tt-skip-link" href="#tt-main-content">Skip to main content</a>
     @yield('content')
 

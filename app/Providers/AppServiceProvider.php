@@ -12,6 +12,7 @@ use App\Models\NewsPost;
 use App\Models\SystemAuditLog;
 use App\Models\UserLoginOtp;
 use App\Support\IpGeo;
+use App\Support\UserImpersonation;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -42,6 +43,10 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Event::listen(Login::class, function (Login $event) {
+            if (request()->attributes->get(UserImpersonation::AUTH_SWITCH_ATTRIBUTE, false)) {
+                return;
+            }
+
             $country = IpGeo::countryForIp(request()->ip());
 
             SystemAuditLog::create([

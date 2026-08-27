@@ -50,7 +50,8 @@
     </style>
     @stack('styles')
 </head>
-<body>
+<body class="aa-portal-body">
+@include('layouts.partials.impersonation-banner')
 @php($assistantUser = auth()->user())
 <div class="aa-shell">
     <aside class="aa-sidebar">

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\UserImpersonation;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -26,7 +27,13 @@ class EnsurePasswordNotExpired
         $user = $request->user();
 
         // Skip if not authenticated
-        if (!$user) {
+        if (! $user) {
+            return $next($request);
+        }
+
+        // The administrator has already authenticated; do not force changes to
+        // the impersonated user's password or account state.
+        if (UserImpersonation::isActive($request)) {
             return $next($request);
         }
 
@@ -59,7 +66,7 @@ class EnsurePasswordNotExpired
     {
         $routeName = $request->route()?->getName();
 
-        if (!$routeName) {
+        if (! $routeName) {
             return false;
         }
 

@@ -39,6 +39,9 @@
                                     'logout' => 'info',
                                     'login_failed' => 'danger',
                                     'request' => 'primary',
+                                    'user_impersonation_started' => 'warning',
+                                    'user_impersonation_stopped' => 'info',
+                                    'user_impersonation_terminated' => 'danger',
                                 ];
                                 $methodColors = [
                                     'GET' => 'secondary',
@@ -47,6 +50,10 @@
                                     'PATCH' => 'warning',
                                     'DELETE' => 'danger',
                                 ];
+                                $impersonationContext = data_get($log->payload, '_impersonation');
+                                $impersonator = $impersonationContext
+                                    ? $impersonators->get((string) data_get($impersonationContext, 'administrator_id'))
+                                    : null;
                             @endphp
                             <tr>
                                 <td class="ps-4">
@@ -56,6 +63,14 @@
                                 <td>
                                     <div class="fw-semibold">{{ $log->user?->name ?? 'Guest' }}</div>
                                     <small class="text-muted">{{ $log->user?->email ?? '—' }}</small>
+                                    @if ($impersonationContext)
+                                        <div class="mt-1">
+                                            <span class="badge bg-warning-subtle text-warning">ACTING AS USER</span>
+                                        </div>
+                                        <small class="d-block text-dark mt-1">
+                                            Administrator: {{ $impersonator?->name ?? data_get($impersonationContext, 'administrator_id') }}
+                                        </small>
+                                    @endif
                                 </td>
                                 <td>
                                     <span class="badge bg-info-subtle text-info px-2 py-1">

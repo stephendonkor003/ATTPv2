@@ -5,6 +5,7 @@ use App\Http\Middleware\AuthenticateApiSyncV2;
 use App\Http\Middleware\AuthenticateDiscussionParticipant;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\EnsureAdministrativeAssistant;
+use App\Http\Middleware\EnsureEmailIsVerifiedOrImpersonating;
 use App\Http\Middleware\EnsureFundingPartner;
 use App\Http\Middleware\EnsureMemberState;
 use App\Http\Middleware\EnsureNotFundingPartner;
@@ -16,6 +17,7 @@ use App\Http\Middleware\InjectWebsiteVisitTracker;
 use App\Http\Middleware\RedirectAdministrativeAssistantToPortal;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\ValidateUserImpersonation;
 use App\Jobs\IndicatorReminderJob;
 use App\Jobs\ProcessGrmEscalations;
 use Illuminate\Console\Scheduling\Schedule;
@@ -65,6 +67,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'verified' => EnsureEmailIsVerifiedOrImpersonating::class,
             'permission' => CheckPermission::class,
             'api.sync' => AuthenticateApiSync::class,
             'api.sync.v2' => AuthenticateApiSyncV2::class,
@@ -83,6 +86,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             SecurityHeaders::class,
             SetLocale::class,
+            ValidateUserImpersonation::class,
             EnsurePasswordNotExpired::class,
             EnsureOtpVerified::class,
             RedirectAdministrativeAssistantToPortal::class,
@@ -92,6 +96,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             SecurityHeaders::class,
         ]);
+
+        // Recovery must run after the session starts but before route-level
+        // authentication, including when the impersonated user was deleted.
+        $middleware->prependToPriorityList(
+            \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+            ValidateUserImpersonation::class
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

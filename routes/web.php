@@ -167,6 +167,7 @@ use App\Http\Controllers\System\{
     RoleController,
     PermissionController,
     UserAccessController,
+    UserImpersonationController,
     ThinkTankUserController,
     MemberStateCommunicationAdminController,
     MemberStateQuestionAdminController,
@@ -386,6 +387,9 @@ Route::middleware(['auth', 'verified', 'not.funding.partner'])
 
             Route::post('/bulk-login-access', [UserAccessController::class, 'bulkLoginAccess'])
                 ->name('bulk-login-access');
+
+            Route::post('/{user}/login-as', [UserImpersonationController::class, 'store'])
+                ->name('login-as');
 
             Route::get('/{user}/edit', [UserAccessController::class, 'edit'])
                 ->name('edit');

@@ -20,6 +20,7 @@
     @endif
 </head>
 <body class="public-mobile-nav discussion-forum-page" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
+    @include('layouts.partials.impersonation-banner')
     <a class="forum-skip-link" href="#discussion-content">Skip to forum content</a>
 
     <div class="mobile-nav-overlay" id="navOverlay" onclick="closeMobileNav()"></div>

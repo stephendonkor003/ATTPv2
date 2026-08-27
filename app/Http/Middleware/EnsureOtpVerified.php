@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\UserImpersonation;
 use Carbon\Carbon;
 use Closure;
 use Illuminate\Http\Request;
@@ -27,7 +28,13 @@ class EnsureOtpVerified
         $user = $request->user();
 
         // Skip if not authenticated
-        if (!$user) {
+        if (! $user) {
+            return $next($request);
+        }
+
+        // The original administrator's authenticated session is authoritative
+        // while acting on behalf of the selected user.
+        if (UserImpersonation::isActive($request)) {
             return $next($request);
         }
 
@@ -42,12 +49,12 @@ class EnsureOtpVerified
         }
 
         // Skip if user doesn't require OTP verification
-        if (!$user->requiresOtpVerification()) {
+        if (! $user->requiresOtpVerification()) {
             return $next($request);
         }
 
         // Check if OTP was verified in this session and still within validity window.
-        if (!$this->hasValidSessionOtpVerification($request, (string) $user->id)) {
+        if (! $this->hasValidSessionOtpVerification($request, (string) $user->id)) {
             // Store intended URL
             session()->put('url.intended', $request->url());
 
@@ -62,7 +69,7 @@ class EnsureOtpVerified
     {
         $routeName = $request->route()?->getName();
 
-        if (!$routeName) {
+        if (! $routeName) {
             return false;
         }
 
@@ -71,7 +78,7 @@ class EnsureOtpVerified
 
     protected function hasValidSessionOtpVerification(Request $request, string $userId): bool
     {
-        if (!$request->session()->get('otp_verified', false)) {
+        if (! $request->session()->get('otp_verified', false)) {
             return false;
         }
 
@@ -80,7 +87,7 @@ class EnsureOtpVerified
         }
 
         $verifiedAtRaw = $request->session()->get('otp_verified_at');
-        if (!is_string($verifiedAtRaw) || trim($verifiedAtRaw) === '') {
+        if (! is_string($verifiedAtRaw) || trim($verifiedAtRaw) === '') {
             return false;
         }
 

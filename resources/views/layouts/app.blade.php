@@ -395,6 +395,7 @@
 
 
 <body>
+    @include('layouts.partials.impersonation-banner')
 
 
     <div class="main-wrapper">

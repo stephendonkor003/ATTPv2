@@ -289,6 +289,7 @@
     </style>
 </head>
 <body>
+    @include('layouts.partials.impersonation-banner')
     @php
         $ttlUser = auth()->user();
         $ttlName = $ttlUser?->name ?? 'TTL';

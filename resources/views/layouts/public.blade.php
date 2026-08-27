@@ -26,6 +26,7 @@
     @stack('styles')
 </head>
 <body class="public-mobile-nav attp-public-page" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
+    @include('layouts.partials.impersonation-banner')
     <div class="mobile-nav-overlay" id="navOverlay" onclick="closeMobileNav()"></div>
 
     <nav class="mobile-nav" id="mobileNav" aria-label="{{ __('navigation.main_navigation') }}">

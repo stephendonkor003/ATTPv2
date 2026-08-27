@@ -2,6 +2,13 @@
 @section('title', 'Users')
 
 @section('content')
+    @php
+        $currentUser = auth()->user();
+        $canLoginAsUsers = $currentUser
+            && ($currentUser->isAdmin() || $currentUser->isSuperAdmin())
+            && ! \App\Support\UserImpersonation::isActive(request());
+    @endphp
+
     <div class="nxl-container">
 
         {{-- PAGE HEADER --}}
@@ -63,7 +70,7 @@
                             <th class="text-center">Permissions</th>
                             <th>Login Access</th>
                             <th>Created</th>
-                            <th class="text-center" width="280">Actions</th>
+                            <th class="text-center" width="360">Actions</th>
                         </tr>
                     </thead>
 
@@ -71,6 +78,12 @@
                         @foreach($users as $user)
                             @php
                                 $canBulkManageLogin = !($user->id === auth()->id() || $user->isAdmin() || $user->isSuperAdmin());
+                                $canLoginAsUser = $canLoginAsUsers
+                                    && (string) $user->id !== (string) $currentUser->id
+                                    && ! $user->isAdmin()
+                                    && ! $user->isSuperAdmin()
+                                    && ! $user->hasActiveLoginBlock()
+                                    && ! $user->is_blacklisted;
                             @endphp
                             <tr>
                                 <td class="text-center ps-4">
@@ -180,13 +193,26 @@
 
                                 {{-- ACTIONS --}}
                                 <td class="text-center">
-                                    <div class="d-inline-flex gap-1">
+                                    <div class="d-inline-flex flex-wrap justify-content-center gap-1">
                                         <a href="{{ route('system.users.edit', $user->id) }}"
                                             class="btn btn-sm btn-outline-success" title="Edit User">
                                             <i class="feather-edit"></i>
                                         </a>
 
                                         @if (!($user->isAdmin() || $user->isSuperAdmin()))
+                                            @if ($canLoginAsUser)
+                                                <form action="{{ route('system.users.login-as', $user->id) }}"
+                                                    method="POST" class="d-inline"
+                                                    onsubmit="return confirm('You will temporarily use this user\'s access and act on their behalf. Continue?');">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-sm btn-outline-info"
+                                                        title="Login as {{ $user->name }}"
+                                                        aria-label="Login as {{ $user->name }}">
+                                                        <i class="feather-log-in me-1"></i> Login as
+                                                    </button>
+                                                </form>
+                                            @endif
+
                                             <a href="{{ route('system.users.permissions', $user->id) }}"
                                                 class="btn btn-sm btn-outline-primary"
                                                 title="Assign Direct Permissions">

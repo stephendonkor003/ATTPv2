@@ -88,6 +88,7 @@
     </style>
 </head>
 <body>
+    @include('layouts.partials.impersonation-banner')
     <main class="error-card">
         <section class="error-hero">
             <span class="code">404</span>

@@ -16,6 +16,7 @@ class RedirectAdministrativeAssistantToPortal
         'language.*',
         'password.*',
         'verification.*',
+        'impersonation.stop',
     ];
 
     public function handle(Request $request, Closure $next): Response

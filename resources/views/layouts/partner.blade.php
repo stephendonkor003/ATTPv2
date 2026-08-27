@@ -893,6 +893,7 @@
 </head>
 
 <body>
+    @include('layouts.partials.impersonation-banner')
     @php
         $partnerUser = auth()->user();
         $partnerName = $partnerUser?->name ?? 'Partner';

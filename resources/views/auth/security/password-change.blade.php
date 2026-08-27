@@ -212,6 +212,7 @@
     </style>
 </head>
 <body>
+    @include('layouts.partials.impersonation-banner')
     <main class="shell">
         <section class="brand">
             <div class="brand-content">
