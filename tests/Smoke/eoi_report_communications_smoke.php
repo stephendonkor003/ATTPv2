@@ -56,14 +56,27 @@ class EoiReportCommunicationsSmoke
             [$administrator, $viewer] = $this->staffUsers();
             [$procurement, $evaluator, $qualifiedVendor, $notQualifiedVendor, $otherVendor] = $this->fixture($administrator);
 
-            $this->actingAs($administrator)
-                ->get(route('reports.evaluations.eoi.procurement', $procurement))
+            $reportResponse = $this->actingAs($administrator)
+                ->get(route('reports.evaluations.eoi.procurement', $procurement));
+            $reportResponse
                 ->assertOk()
                 ->assertSee('Release outcomes &amp; request proposals', false)
                 ->assertSee('Send evaluation records')
                 ->assertSee('Invite proposal submissions')
                 ->assertSee('name="templates[]"', false)
                 ->assertSee('multiple', false);
+            $reportHtml = $reportResponse->getContent();
+            $reportStart = strpos($reportHtml, 'id="eoiReportTitle"');
+            $reportEnd = $reportStart === false ? false : strpos($reportHtml, '</main>', $reportStart);
+            $proposalModalStart = strpos($reportHtml, 'id="eoiProposalInvitationModal"');
+            $this->assertTrue(
+                $reportEnd !== false && $proposalModalStart !== false && $proposalModalStart > $reportEnd,
+                'The proposal modal must be mounted outside the filtered report container so the backdrop cannot cover it.'
+            );
+            $this->assertTrue(
+                str_contains($reportHtml, 'modal-dialog-scrollable eoi-proposal-dialog'),
+                'The proposal rule editor did not render with its large viewport dialog.'
+            );
 
             $panelBeforeRound = $this->actingAs($administrator)
                 ->get(route('eval.panel.procurement', $procurement));

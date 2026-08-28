@@ -265,14 +265,19 @@
         ])
 
         @can('evaluations.manage')
-            <div class="modal fade" id="eoiProposalInvitationModal" tabindex="-1" aria-labelledby="eoiProposalInvitationTitle" aria-hidden="true">
-                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            @push('modals')
+            <div class="modal fade" id="eoiProposalInvitationModal" tabindex="-1" aria-labelledby="eoiProposalInvitationTitle" aria-describedby="eoiProposalInvitationDescription" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-scrollable eoi-proposal-dialog">
                     <form class="modal-content eoi-proposal-modal" method="POST" enctype="multipart/form-data" action="{{ route('reports.evaluations.eoi.communications.proposal-invitation', $procurement) }}" data-eoi-send-form data-sending-label="Sending invitations...">
                         @csrf
                         <div class="modal-header">
-                            <div>
-                                <span class="eoi-eyebrow">Qualified Applicants &middot; {{ number_format($proposalPreview['eligible'] ?? 0) }} recipient(s)</span>
-                                <h5 class="modal-title" id="eoiProposalInvitationTitle">Compose proposal invitation</h5>
+                            <div class="eoi-proposal-modal__heading">
+                                <span class="eoi-proposal-modal__icon" aria-hidden="true"><i class="feather-sliders"></i></span>
+                                <div>
+                                    <span class="eoi-eyebrow">Qualified Applicants &middot; {{ number_format($proposalPreview['eligible'] ?? 0) }} recipient(s)</span>
+                                    <h5 class="modal-title" id="eoiProposalInvitationTitle">Configure rules &amp; send proposal invitation</h5>
+                                    <p id="eoiProposalInvitationDescription">Set every submission rule, channel, deadline and template in one workspace.</p>
+                                </div>
                             </div>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
@@ -396,6 +401,7 @@
                     </form>
                 </div>
             </div>
+            @endpush
         @endcan
 
         <section class="eoi-qualified-shortlist" id="eoiDecisionSummary" aria-labelledby="eoiDecisionSummaryTitle">
@@ -1112,7 +1118,8 @@
 
 @push('styles')
     <style>
-        .eoi-report {
+        .eoi-report,
+        #eoiProposalInvitationModal {
             --eoi-ink: #172033;
             --eoi-muted: #667085;
             --eoi-line: #dce3ec;
@@ -1126,6 +1133,9 @@
             --eoi-red: #b42318;
             --eoi-red-soft: #fff1f0;
             --eoi-slate: #475467;
+        }
+
+        .eoi-report {
             color: var(--eoi-ink);
             padding-bottom: 28px;
         }
@@ -1260,11 +1270,25 @@
         .eoi-history-stats .is-skipped { background: #fffbeb; color: #b45309; }
         .eoi-history-stats .is-failed { background: #fff1f0; color: #b42318; }
 
-        .eoi-proposal-modal { border: 0; border-radius: 15px; overflow: hidden; }
-        .eoi-proposal-modal .modal-header { align-items: flex-start; background: #f7fbf9; border-bottom-color: var(--eoi-line); padding: 19px 22px; }
-        .eoi-proposal-modal .modal-title { margin-top: 2px; }
-        .eoi-proposal-modal .modal-body { padding: 22px; }
-        .eoi-proposal-modal .modal-footer { background: #fafcfb; border-top-color: var(--eoi-line); padding: 14px 22px; }
+        body.modal-open .eoi-report { filter: none !important; }
+        #eoiProposalInvitationModal { color: var(--eoi-ink); padding: 0 !important; z-index: 2050 !important; }
+        .modal-backdrop.show { background: #081a2b; opacity: .48 !important; z-index: 2040 !important; }
+        .eoi-proposal-dialog {
+            height: calc(100vh - 24px);
+            height: calc(100dvh - 24px);
+            margin: 12px auto;
+            max-width: none;
+            width: calc(100vw - 24px);
+        }
+        .eoi-proposal-modal { border: 0; border-radius: 18px; box-shadow: 0 28px 80px rgba(2, 18, 35, .28); height: 100%; max-height: none !important; overflow: hidden; }
+        .eoi-proposal-modal .modal-header { align-items: center; background: linear-gradient(135deg, #f4fbf7 0%, #fff 72%); border-bottom-color: var(--eoi-line); flex: 0 0 auto; padding: 18px 24px; }
+        .eoi-proposal-modal__heading { align-items: center; display: flex; gap: 13px; min-width: 0; }
+        .eoi-proposal-modal__icon { align-items: center; background: #dff4e8; border-radius: 13px; color: #087443; display: inline-flex; flex: 0 0 auto; font-size: 22px; height: 48px; justify-content: center; width: 48px; }
+        .eoi-proposal-modal .modal-title { font-size: 19px; margin: 1px 0 2px; }
+        .eoi-proposal-modal__heading p { color: var(--eoi-muted); font-size: 11px; margin: 0; }
+        .eoi-proposal-modal .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 22px 24px 30px; scrollbar-gutter: stable; }
+        .eoi-proposal-modal .modal-footer { background: #fafcfb; border-top-color: var(--eoi-line); box-shadow: 0 -8px 24px rgba(15, 23, 42, .05); flex: 0 0 auto; padding: 14px 24px; }
+        .eoi-proposal-modal .eoi-rule-list { max-height: none; overflow: visible; }
         .eoi-modal-note { align-items: flex-start; background: #eef7f2; border: 1px solid #cde4d7; border-radius: 9px; color: #315744; display: flex; font-size: 11px; gap: 8px; margin-bottom: 17px; padding: 10px 12px; }
         .eoi-file-selection { background: var(--eoi-soft); border-radius: 7px; color: var(--eoi-muted); font-size: 10px; margin-top: 7px; padding: 7px 9px; }
 
@@ -1273,6 +1297,15 @@
         }
 
         @media (max-width: 575.98px) {
+            .eoi-proposal-dialog { height: 100vh; height: 100dvh; margin: 0; width: 100vw; }
+            .eoi-proposal-modal { border-radius: 0; }
+            .eoi-proposal-modal .modal-header { align-items: flex-start; padding: 14px 16px; }
+            .eoi-proposal-modal__icon { height: 40px; width: 40px; }
+            .eoi-proposal-modal .modal-title { font-size: 16px; }
+            .eoi-proposal-modal__heading p { display: none; }
+            .eoi-proposal-modal .modal-body { padding: 16px; }
+            .eoi-proposal-modal .modal-footer { padding: 11px 16px; }
+            .eoi-proposal-modal .modal-footer .btn { flex: 1 1 auto; }
             .eoi-communications__header { flex-direction: column; }
             .eoi-communication-grid, .eoi-communication-history { padding-left: 12px; padding-right: 12px; }
             .eoi-communication-card { grid-template-columns: 1fr; }
