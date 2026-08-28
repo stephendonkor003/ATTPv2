@@ -2,7 +2,9 @@
 
 use App\Http\Controllers\EvaluationReportController;
 use App\Models\Evaluation;
+use App\Models\EvaluationAssignment;
 use App\Models\EvaluationCriteria;
+use App\Models\EvaluationCriteriaScore;
 use App\Models\EvaluationSection;
 use App\Models\EvaluationSubmission;
 use App\Models\User;
@@ -151,4 +153,162 @@ it('skips missing evaluation relations when building detailed statistics', funct
         ->toContain('->filter(fn ($submission) => $submission->evaluation !== null)')
         ->toContain("->pluck('evaluator_id')->filter()->unique()->count()")
         ->and($statistics)->toBeEmpty();
+});
+
+it('normalises services scores and ranks only applicants with complete panels', function () {
+    $evaluation = reportEvaluation();
+    $section = (new EvaluationSection)->forceFill(['id' => (string) Str::uuid()]);
+    $section->setRelation('criteria', new EloquentCollection([
+        (new EvaluationCriteria)->forceFill(['max_score' => 50]),
+    ]));
+    $evaluation->setRelation('sections', new EloquentCollection([$section]));
+
+    $submission = function (string $applicantId, string $evaluatorId, float $score) use ($evaluation): EvaluationSubmission {
+        $report = (new EvaluationSubmission)->forceFill([
+            'id' => (string) Str::uuid(),
+            'evaluation_id' => $evaluation->id,
+            'form_submission_id' => $applicantId,
+            'evaluator_id' => $evaluatorId,
+            'overall_score' => $score,
+        ]);
+        $report->setRelation('evaluation', $evaluation);
+        $report->setRelation('criteriaScores', new EloquentCollection);
+        $report->setRelation('applicant', null);
+
+        return $report;
+    };
+
+    $evaluators = collect(range(1, 5))->mapWithKeys(fn (int $index): array => [
+        $index => (string) Str::uuid(),
+    ]);
+    $reports = collect([
+        $submission('applicant-a', $evaluators[1], 40),
+        $submission('applicant-b', $evaluators[2], 40),
+        $submission('applicant-c', $evaluators[3], 35),
+        $submission('applicant-d', $evaluators[4], 45),
+    ]);
+    $assignment = fn (string $applicantId, string $evaluatorId): EvaluationAssignment => (new EvaluationAssignment)->forceFill([
+        'evaluation_id' => $evaluation->id,
+        'form_submission_id' => $applicantId,
+        'user_id' => $evaluatorId,
+    ]);
+    $assignments = collect([
+        $assignment('applicant-a', $evaluators[1]),
+        $assignment('applicant-b', $evaluators[2]),
+        $assignment('applicant-c', $evaluators[3]),
+        $assignment('applicant-d', $evaluators[4]),
+        $assignment('applicant-d', $evaluators[5]),
+    ]);
+
+    $rows = invokeEvaluationReportMethod(
+        'buildMethodApplicantSummaries',
+        $reports,
+        Evaluation::TYPE_SERVICES,
+        $assignments
+    );
+
+    expect($rows->pluck('metric')->all())->toBe([80.0, 80.0, 70.0, 90.0])
+        ->and($rows->pluck('rank')->all())->toBe([1, 1, 3, null])
+        ->and($rows->last())
+        ->toMatchArray([
+            'outcome' => 'Panel incomplete',
+            'completed_tasks' => 1,
+            'expected_tasks' => 2,
+            'panel_complete' => false,
+        ]);
+});
+
+it('excludes services scores when the template maximum is not configured', function () {
+    $evaluation = reportEvaluation();
+    $evaluation->setRelation('sections', new EloquentCollection);
+    $submission = (new EvaluationSubmission)->forceFill([
+        'overall_score' => 40,
+    ]);
+    $submission->setRelation('evaluation', $evaluation);
+
+    expect(invokeEvaluationReportMethod('normalisedServiceScore', $submission))->toBeNull();
+});
+
+it('counts procurement-wide evaluator assignments toward each applicant panel', function () {
+    $evaluationId = (string) Str::uuid();
+    $evaluatorId = (string) Str::uuid();
+    $submission = (new EvaluationSubmission)->forceFill([
+        'id' => (string) Str::uuid(),
+        'evaluation_id' => $evaluationId,
+        'form_submission_id' => (string) Str::uuid(),
+        'evaluator_id' => $evaluatorId,
+    ]);
+    $assignment = (new EvaluationAssignment)->forceFill([
+        'evaluation_id' => $evaluationId,
+        'form_submission_id' => null,
+        'user_id' => $evaluatorId,
+    ]);
+
+    expect(invokeEvaluationReportMethod(
+        'applicantPanelProgress',
+        collect([$submission]),
+        collect([$assignment])
+    ))->toBe([
+        'expected_tasks' => 1,
+        'completed_tasks' => 1,
+        'panel_complete' => true,
+        'panel_status' => 'Panel complete',
+    ]);
+});
+
+it('marks legacy reports without assignment history as unverifiable instead of incomplete', function () {
+    $submission = (new EvaluationSubmission)->forceFill([
+        'id' => (string) Str::uuid(),
+        'evaluation_id' => (string) Str::uuid(),
+        'form_submission_id' => (string) Str::uuid(),
+        'evaluator_id' => (string) Str::uuid(),
+    ]);
+
+    expect(invokeEvaluationReportMethod(
+        'applicantPanelProgress',
+        collect([$submission]),
+        collect()
+    ))->toBe([
+        'expected_tasks' => null,
+        'completed_tasks' => 1,
+        'panel_complete' => false,
+        'panel_status' => 'Assignment baseline unavailable',
+    ]);
+});
+
+it('keeps goods outcomes categorical and never assigns a numeric rank', function () {
+    $evaluation = reportEvaluation(Evaluation::TYPE_GOODS);
+    $submission = (new EvaluationSubmission)->forceFill([
+        'id' => (string) Str::uuid(),
+        'form_submission_id' => 'goods-applicant',
+    ]);
+    $submission->setRelation('evaluation', $evaluation);
+    $submission->setRelation('applicant', null);
+    $submission->setRelation('criteriaScores', new EloquentCollection([
+        (new EvaluationCriteriaScore)->forceFill(['decision' => 1]),
+        (new EvaluationCriteriaScore)->forceFill(['decision' => 0]),
+    ]));
+
+    $row = invokeEvaluationReportMethod(
+        'buildMethodApplicantSummaries',
+        collect([$submission]),
+        Evaluation::TYPE_GOODS
+    )->first();
+
+    expect($row)
+        ->toMatchArray([
+            'rank' => null,
+            'metric' => null,
+            'outcome' => 'Exceptions recorded',
+            'counts' => ['yes' => 1, 'no' => 1, 'total' => 2],
+        ]);
+});
+
+it('neutralises spreadsheet formulas in exported user-controlled values', function () {
+    expect(invokeEvaluationReportMethod('safeSpreadsheetValue', '=HYPERLINK("https://example.test")'))
+        ->toBe('\'=HYPERLINK("https://example.test")')
+        ->and(invokeEvaluationReportMethod('safeSpreadsheetValue', '  +1+1'))
+        ->toBe('\'  +1+1')
+        ->and(invokeEvaluationReportMethod('safeSpreadsheetValue', 'Ordinary applicant'))
+        ->toBe('Ordinary applicant');
 });

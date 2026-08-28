@@ -49,14 +49,26 @@
             </div>
 
             <div class="eoi-header-actions" aria-label="Report actions">
-                <a href="{{ route('reports.evaluations.index') }}" class="btn btn-light btn-sm">
+                <a href="{{ route('reports.evaluations.method', \App\Models\Evaluation::TYPE_EOI) }}" class="btn btn-light btn-sm">
                     <i class="feather-arrow-left me-1" aria-hidden="true"></i>
-                    Back to Reports
+                    EOI Procurements
+                </a>
+                <a href="{{ route('reports.evaluations.eoi.procurement.excel', $procurement) }}" class="btn btn-light btn-sm">
+                    <i class="feather-grid me-1" aria-hidden="true"></i>
+                    Excel
+                </a>
+                <a href="{{ route('reports.evaluations.eoi.procurement.csv', $procurement) }}" class="btn btn-light btn-sm">
+                    <i class="feather-file-text me-1" aria-hidden="true"></i>
+                    CSV
                 </a>
                 <a href="{{ route('reports.evaluations.eoi.procurement.pdf', $procurement) }}" class="btn btn-success btn-sm">
                     <i class="feather-download me-1" aria-hidden="true"></i>
-                    Download PDF
+                    PDF
                 </a>
+                <button type="button" class="btn btn-light btn-sm" onclick="window.print()">
+                    <i class="feather-printer me-1" aria-hidden="true"></i>
+                    Print
+                </button>
             </div>
         </header>
 
@@ -2571,12 +2583,35 @@
         }
 
         @media print {
+            @page {
+                size: A4 landscape;
+                margin: 12mm;
+            }
+
+            .content-wrapper {
+                margin-left: 0 !important;
+            }
+
+            .content-wrapper > header,
+            .nxl-header,
+            .nxl-navigation,
             .eoi-header-actions,
             .eoi-filter-bar,
             .eoi-list-status,
             .eoi-summary-chevron,
             .eoi-qualified-card__route > a {
                 display: none !important;
+            }
+
+            .content-wrapper .content {
+                min-height: auto !important;
+                padding: 0 !important;
+            }
+
+            .eoi-report {
+                margin: 0 !important;
+                max-width: none;
+                padding: 0 !important;
             }
 
             .eoi-qualified-grid {

@@ -3277,8 +3277,29 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
     ->name('reports.evaluations.')
     ->group(function () {
         Route::get('/', [EvaluationReportController::class, 'index'])->name('index');
+        Route::get('/method/{method}', [EvaluationReportController::class, 'methodIndex'])
+            ->where('method', 'services|goods|eoi')
+            ->name('method');
+        Route::get('/method/{method}/procurement/{procurement}', [EvaluationReportController::class, 'methodProcurement'])
+            ->where('method', 'services|goods|eoi')
+            ->withTrashed()
+            ->name('method.procurement');
+        Route::get('/method/{method}/procurement/{procurement}/excel', [EvaluationReportController::class, 'methodProcurementExcel'])
+            ->where('method', 'services|goods|eoi')
+            ->withTrashed()
+            ->name('method.procurement.excel');
+        Route::get('/method/{method}/procurement/{procurement}/csv', [EvaluationReportController::class, 'methodProcurementCsv'])
+            ->where('method', 'services|goods|eoi')
+            ->withTrashed()
+            ->name('method.procurement.csv');
+        Route::get('/method/{method}/procurement/{procurement}/pdf', [EvaluationReportController::class, 'methodProcurementPdf'])
+            ->where('method', 'services|goods|eoi')
+            ->withTrashed()
+            ->name('method.procurement.pdf');
         Route::get('/eoi/{procurement}', [EvaluationReportController::class, 'eoiProcurement'])->withTrashed()->name('eoi.procurement');
         Route::get('/eoi/{procurement}/pdf', [EvaluationReportController::class, 'eoiProcurementPdf'])->withTrashed()->name('eoi.procurement.pdf');
+        Route::get('/eoi/{procurement}/excel', [EvaluationReportController::class, 'eoiProcurementExcel'])->withTrashed()->name('eoi.procurement.excel');
+        Route::get('/eoi/{procurement}/csv', [EvaluationReportController::class, 'eoiProcurementCsv'])->withTrashed()->name('eoi.procurement.csv');
         Route::get('/submission/{submission}', [EvaluationReportController::class, 'submission'])->name('submission');
         Route::get('/submission/{submission}/pdf', [EvaluationReportController::class, 'submissionPdf'])->name('submission.pdf');
         Route::get('/submission/{submission}/anonymised-pdf', [EvaluationReportController::class, 'submissionAnonymisedPdf'])->name('submission.anonymised-pdf');
