@@ -12,6 +12,7 @@ use App\Models\ProcurementPlan;
 use App\Services\EoiQualificationService;
 use App\Support\PdfBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -24,7 +25,7 @@ class EvaluationReportController extends Controller
         $procurementQuery = Procurement::query()
             ->with([
                 'thinkTankPlanningItem:id,procurement_id,procurement_category,procurement_method',
-                'evaluationAssignments:id,evaluation_id,procurement_id,user_id,status,assigned_at',
+                'evaluationAssignments:id,evaluation_id,procurement_id,form_submission_id,user_id,status,assigned_at',
                 'evaluationAssignments.evaluation:id,name,type,evaluation_phase,procurement_id',
                 'evaluations:id,name,type,evaluation_phase,procurement_id',
             ])
@@ -50,15 +51,11 @@ class EvaluationReportController extends Controller
             ->whereHas('procurement', fn ($query) => $query->whereNull('procurements.deleted_at'))
             ->orderByDesc('submitted_at');
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
-        $submissions = $submissionQuery->get();
+        $submissions = $this->activeReportSubmissions($submissionQuery->get());
 
         $eoiProcurementQuery = Procurement::query()
             ->where(function ($query): void {
                 $query->whereHas('evaluationAssignments.evaluation', function ($evaluation): void {
-                    $evaluation->where('type', Evaluation::TYPE_EOI);
-                })->orWhereHas('submissions.evaluationSubmissions.evaluation', function ($evaluation): void {
-                    $evaluation->where('type', Evaluation::TYPE_EOI);
-                })->orWhereHas('evaluationSubmissions.evaluation', function ($evaluation): void {
                     $evaluation->where('type', Evaluation::TYPE_EOI);
                 })->orWhereHas('evaluations', function ($evaluation): void {
                     $evaluation->where('type', Evaluation::TYPE_EOI);
@@ -86,12 +83,14 @@ class EvaluationReportController extends Controller
             ->filter(fn (EvaluationSubmission $submission): bool => $submission->evaluation?->isEoi() ?? false)
             ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->procurement_id);
         $eoiProcurementStats = $eoiProcurements->mapWithKeys(function (Procurement $procurement) use ($eoiSubmissionGroups): array {
-            $completed = $eoiSubmissionGroups->get((string) $procurement->getKey(), collect());
+            $completed = $eoiSubmissionGroups
+                ->get((string) $procurement->getKey(), collect())
+                ->filter(fn (EvaluationSubmission $submission): bool => $this->eoiSubmissionHasActiveAssignment(
+                    $submission,
+                    $procurement->evaluationAssignments
+                ));
             $panelMemberIds = $procurement->evaluationAssignments
-                ->pluck('user_id')
-                ->merge($completed->pluck('evaluator_id'))
-                ->filter()
-                ->unique();
+                ->pluck('user_id')->filter()->unique();
 
             return [(string) $procurement->getKey() => [
                 'applicants' => (int) $procurement->submissions_count,
@@ -135,6 +134,11 @@ class EvaluationReportController extends Controller
                 $procurementId = (string) $procurement->getKey();
                 $procurementSubmissions = $submissionsByProcurement
                     ->get($procurementId, collect())
+                    ->filter(fn (EvaluationSubmission $submission): bool => ! ($submission->evaluation?->isEoi() ?? false)
+                        || $this->eoiSubmissionHasActiveAssignment(
+                            $submission,
+                            $procurement->evaluationAssignments
+                        ))
                     ->values();
                 $eoiStats = $eoiProcurementStats->get($procurementId);
                 $procurementPlan = $procurementPlansByReference->get((string) $procurement->reference_no);
@@ -422,8 +426,8 @@ class EvaluationReportController extends Controller
             ->whereHas('evaluation', fn ($evaluation) => $evaluation->where('type', $method))
             ->orderByDesc('submitted_at');
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
-        $submissionsByProcurement = $submissionQuery
-            ->get([
+        $submissionsByProcurement = $this->activeReportSubmissions(
+            $submissionQuery->get([
                 'id',
                 'evaluation_id',
                 'procurement_id',
@@ -432,6 +436,7 @@ class EvaluationReportController extends Controller
                 'overall_score',
                 'submitted_at',
             ])
+        )
             ->groupBy(fn (EvaluationSubmission $submission): string => (string) $submission->procurement_id);
 
         $procurementRows = $procurements
@@ -442,6 +447,15 @@ class EvaluationReportController extends Controller
             ): array {
                 $reports = $submissionsByProcurement
                     ->get((string) $procurement->getKey(), collect())
+                    ->when(
+                        $method === Evaluation::TYPE_EOI,
+                        fn ($reports) => $reports->filter(
+                            fn (EvaluationSubmission $submission): bool => $this->eoiSubmissionHasActiveAssignment(
+                                $submission,
+                                $procurement->evaluationAssignments
+                            )
+                        )
+                    )
                     ->values();
                 $assignments = $procurement->evaluationAssignments;
                 $completedAssignments = $assignments->where('status', 'submitted')->count();
@@ -491,12 +505,15 @@ class EvaluationReportController extends Controller
             })
             ->sortByDesc(fn (array $row): int => $row['latest_at']?->getTimestamp() ?? 0)
             ->values();
-        $methodEvaluatorCount = $procurements
-            ->flatMap(fn (Procurement $procurement) => $procurement->evaluationAssignments->pluck('user_id'))
-            ->merge($submissionsByProcurement->flatten(1)->pluck('evaluator_id'))
-            ->filter()
-            ->unique()
-            ->count();
+        $methodEvaluatorIds = $procurements
+            ->flatMap(fn (Procurement $procurement) => $procurement->evaluationAssignments->pluck('user_id'));
+
+        if ($method !== Evaluation::TYPE_EOI) {
+            $methodEvaluatorIds = $methodEvaluatorIds
+                ->merge($submissionsByProcurement->flatten(1)->pluck('evaluator_id'));
+        }
+
+        $methodEvaluatorCount = $methodEvaluatorIds->filter()->unique()->count();
 
         $summary = [
             'procurements' => $procurementRows->count(),
@@ -732,7 +749,7 @@ class EvaluationReportController extends Controller
     {
         $this->assertEvaluationProcurementScope($procurement);
 
-        $submissions = EvaluationSubmission::with([
+        $submissions = $this->activeReportSubmissions(EvaluationSubmission::with([
             'procurement',
             'applicant.submitter',
             'evaluation.sections.criteria',
@@ -743,7 +760,7 @@ class EvaluationReportController extends Controller
             ->where('procurement_id', $procurement->id)
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at')
-            ->get();
+            ->get());
 
         $summary = $this->buildSummary($submissions);
         $rankings = $this->buildApplicantRankings($submissions);
@@ -764,7 +781,7 @@ class EvaluationReportController extends Controller
     {
         $this->assertEvaluationProcurementScope($procurement);
 
-        $submissions = EvaluationSubmission::with([
+        $submissions = $this->activeReportSubmissions(EvaluationSubmission::with([
             'procurement',
             'applicant.submitter',
             'evaluation.sections.criteria',
@@ -775,7 +792,7 @@ class EvaluationReportController extends Controller
             ->where('procurement_id', $procurement->id)
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at')
-            ->get();
+            ->get());
 
         $summary = $this->buildSummary($submissions);
         $rankings = $this->buildApplicantRankings($submissions);
@@ -806,7 +823,7 @@ class EvaluationReportController extends Controller
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at');
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
-        $submissions = $submissionQuery->get();
+        $submissions = $this->activeReportSubmissions($submissionQuery->get());
 
         $summary = $this->buildSummary($submissions);
         $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
@@ -832,7 +849,7 @@ class EvaluationReportController extends Controller
             ->whereNotNull('submitted_at')
             ->orderByDesc('submitted_at');
         $this->applyEvaluationReportSubmissionScope($submissionQuery);
-        $submissions = $submissionQuery->get();
+        $submissions = $this->activeReportSubmissions($submissionQuery->get());
 
         $summary = $this->buildSummary($submissions);
         $evaluatorBreakdown = $this->buildEvaluatorBreakdown($submissions);
@@ -891,19 +908,65 @@ class EvaluationReportController extends Controller
                 $procurements
                     ->whereHas('evaluationAssignments.evaluation', fn ($evaluation) => $evaluation
                         ->where('type', $method))
-                    ->orWhereHas('submissions.evaluationSubmissions.evaluation', fn ($evaluation) => $evaluation
-                        ->where('type', $method))
-                    ->orWhereHas('evaluationSubmissions.evaluation', fn ($evaluation) => $evaluation
-                        ->where('type', $method))
                     ->orWhereHas('evaluations', fn ($evaluation) => $evaluation
                         ->where('type', $method))
                     ->orWhereHas('directEvaluations', fn ($evaluation) => $evaluation
                         ->where('type', $method));
+
+                if ($method !== Evaluation::TYPE_EOI) {
+                    $procurements
+                        ->orWhereHas('submissions.evaluationSubmissions.evaluation', fn ($evaluation) => $evaluation
+                            ->where('type', $method))
+                        ->orWhereHas('evaluationSubmissions.evaluation', fn ($evaluation) => $evaluation
+                            ->where('type', $method));
+                }
             });
 
         $this->applyEvaluationReportProcurementScope($query);
 
         return $query;
+    }
+
+    private function eoiSubmissionHasActiveAssignment(EvaluationSubmission $submission, iterable $assignments): bool
+    {
+        return collect($assignments)->contains(
+            fn (EvaluationAssignment $assignment): bool => (string) $assignment->evaluation_id === (string) $submission->evaluation_id
+                && (string) $assignment->user_id === (string) $submission->evaluator_id
+                && (blank($assignment->form_submission_id)
+                    || (string) $assignment->form_submission_id === (string) $submission->form_submission_id)
+        );
+    }
+
+    private function activeReportSubmissions(iterable $submissions): Collection
+    {
+        $submissions = collect($submissions);
+        $eoiSubmissions = $submissions
+            ->filter(fn (EvaluationSubmission $submission): bool => $submission->evaluation?->isEoi() ?? false);
+
+        if ($eoiSubmissions->isEmpty()) {
+            return $submissions->values();
+        }
+
+        $assignmentsByProcurement = EvaluationAssignment::query()
+            ->whereIn('procurement_id', $eoiSubmissions->pluck('procurement_id')->filter()->unique())
+            ->whereIn('evaluation_id', $eoiSubmissions->pluck('evaluation_id')->filter()->unique())
+            ->whereIn('user_id', $eoiSubmissions->pluck('evaluator_id')->filter()->unique())
+            ->get([
+                'id',
+                'evaluation_id',
+                'procurement_id',
+                'form_submission_id',
+                'user_id',
+            ])
+            ->groupBy(fn (EvaluationAssignment $assignment): string => (string) $assignment->procurement_id);
+
+        return $submissions
+            ->filter(fn (EvaluationSubmission $submission): bool => ! ($submission->evaluation?->isEoi() ?? false)
+                || $this->eoiSubmissionHasActiveAssignment(
+                    $submission,
+                    $assignmentsByProcurement->get((string) $submission->procurement_id, collect())
+                ))
+            ->values();
     }
 
     private function buildMethodProcurementReport(string $method, Procurement $procurement): array
@@ -1501,8 +1564,8 @@ class EvaluationReportController extends Controller
             ['Total applicants', $stats['total_applicants']],
             ['Fully qualified', $stats['fully_qualified']],
             ['Average qualified', $stats['average_qualified']],
-            ['Not qualified', $stats['not_qualified']],
-            ['Awaiting panel', $stats['pending']],
+            ['Not qualified (final)', $stats['final_not_qualified'] ?? $stats['not_qualified']],
+            ['Panel incomplete', $stats['panel_incomplete'] ?? $stats['pending']],
             ['Advancing', $stats['advance']],
             ['Panel members', $stats['panel_members']],
             ['Submitted evaluations', $stats['submitted_evaluations']],
@@ -1551,7 +1614,7 @@ class EvaluationReportController extends Controller
             'Procurement reference',
             'Submission code',
             'Applicant',
-            'Final outcome',
+            'Panel outcome / signal',
             'Panel complete',
             'Can advance',
             'Evaluation',

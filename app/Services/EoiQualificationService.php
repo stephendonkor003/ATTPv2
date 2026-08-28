@@ -38,28 +38,14 @@ class EoiQualificationService
                     ->get()
             );
 
-        $evaluations = $this->mergeEvaluations(
-            $linkedEvaluations,
-            $assignments,
-            $submissionRecords
-        );
-
-        $workflowApplicantIds = $submissionRecords
-            ->pluck('form_submission_id')
-            ->filter()
-            ->unique()
-            ->values();
+        $evaluations = $this->mergeEvaluations($linkedEvaluations, $assignments);
 
         $applicants = FormSubmission::query()
             ->where('procurement_id', $procurement->getKey())
             ->with(['submitter', 'values'])
-            ->where(function (Builder $query) use ($workflowApplicantIds): void {
+            ->where(function (Builder $query): void {
                 $query->whereNull('status')
                     ->orWhereNotIn('status', $this->excludedApplicantStatuses());
-
-                if ($workflowApplicantIds->isNotEmpty()) {
-                    $query->orWhereIn('id', $workflowApplicantIds);
-                }
             })
             ->orderBy('submitted_at')
             ->orderBy('created_at')
@@ -85,12 +71,7 @@ class EoiQualificationService
             })
             ->values();
 
-        $completedSubmissions = $submissionRecords
-            ->filter(fn (EvaluationSubmission $submission): bool => filled($submission->submitted_at));
-        $panelMemberIds = $assignments->pluck('user_id')
-            ->merge($completedSubmissions->pluck('evaluator_id'))
-            ->filter()
-            ->unique();
+        $panelMemberIds = $assignments->pluck('user_id')->filter()->unique();
 
         return [
             'procurement' => $procurement,
@@ -108,12 +89,17 @@ class EoiQualificationService
                 'not_qualified' => $applicantRows
                     ->where('outcome.code', self::OUTCOME_NOT_QUALIFIED)
                     ->count(),
+                'final_not_qualified' => $applicantRows
+                    ->where('outcome.code', self::OUTCOME_NOT_QUALIFIED)
+                    ->where('panel_complete', true)
+                    ->count(),
                 'pending' => $applicantRows
                     ->where('outcome.code', self::OUTCOME_PENDING)
                     ->count(),
+                'panel_incomplete' => $applicantRows->where('panel_complete', false)->count(),
                 'advance' => $applicantRows->where('can_advance', true)->count(),
                 'panel_members' => $panelMemberIds->count(),
-                'submitted_evaluations' => $completedSubmissions->count(),
+                'submitted_evaluations' => $applicantRows->sum('completed_tasks'),
             ],
         ];
     }
@@ -145,7 +131,7 @@ class EoiQualificationService
             return null;
         }
 
-        $evaluations = $this->mergeEvaluations(collect(), $assignments, $submissionRecords);
+        $evaluations = $this->mergeEvaluations(collect(), $assignments);
         $row = $this->buildApplicantRow(
             $applicant->loadMissing(['submitter', 'values']),
             $assignments,
@@ -210,7 +196,9 @@ class EoiQualificationService
                 'code' => self::OUTCOME_NOT_QUALIFIED,
                 'label' => 'Not Qualified',
                 'tone' => 'danger',
-                'description' => 'At least one panel decision is Not Qualified, so the applicant does not advance.',
+                'description' => $panelComplete
+                    ? 'At least one panel decision is Not Qualified, so the applicant does not advance.'
+                    : 'A Not Qualified decision is recorded, but final routing remains held until every assigned panel task is complete.',
             ];
         }
 
@@ -274,25 +262,6 @@ class EoiQualificationService
             ->unique('key')
             ->values();
 
-        // Legacy/imported submissions may not have surviving assignment rows.
-        if ($expectedTasks->isEmpty()) {
-            $expectedTasks = $applicantRecords
-                ->map(fn (EvaluationSubmission $submission): array => [
-                    'key' => $this->taskKey(
-                        $submission->evaluation_id,
-                        $submission->evaluator_id,
-                        $submission->getKey()
-                    ),
-                    'evaluation' => $submission->evaluation,
-                    'evaluator' => $submission->evaluator,
-                    'evaluator_id' => $submission->evaluator_id,
-                    'submission' => $submission,
-                    'assigned' => false,
-                ])
-                ->unique('key')
-                ->values();
-        }
-
         $completedTasks = $expectedTasks
             ->filter(fn (array $task): bool => $this->submissionCompletesEvaluation(
                 $task['submission'],
@@ -301,10 +270,10 @@ class EoiQualificationService
         $panelComplete = $expectedTasks->isNotEmpty()
             && $completedTasks->count() === $expectedTasks->count();
 
-        $completedRecords = $applicantRecords
-            ->filter(fn (EvaluationSubmission $submission): bool => filled($submission->submitted_at));
-        $decisionValues = $completedRecords
-            ->flatMap->criteriaScores
+        $decisionValues = $completedTasks
+            ->pluck('submission')
+            ->filter()
+            ->flatMap(fn (EvaluationSubmission $submission) => $submission->criteriaScores)
             ->pluck('decision')
             ->filter(fn ($decision): bool => $decision !== null && $decision !== '')
             ->map(fn ($decision): int => (int) $decision)
@@ -333,12 +302,14 @@ class EoiQualificationService
             'total_decisions' => $decisionValues->count(),
             'outcome' => $outcome,
             'can_advance' => $canAdvance,
-            'next_stage' => $canAdvance
-                ? 'Technical Evaluation'
-                : ($outcome['code'] === self::OUTCOME_NOT_QUALIFIED
-                    ? 'Does not advance'
-                    : 'Awaiting EOI panel'),
+            'next_stage' => match (true) {
+                ! $panelComplete => 'Awaiting EOI panel',
+                $canAdvance => 'Technical Evaluation',
+                $outcome['code'] === self::OUTCOME_NOT_QUALIFIED => 'Does not advance',
+                default => 'Awaiting EOI panel',
+            },
             'panel_complete' => $panelComplete,
+            'assignment_baseline_available' => $expectedTasks->isNotEmpty(),
             'expected_tasks' => $expectedTasks->count(),
             'completed_tasks' => $completedTasks->count(),
             'expected_evaluators' => $expectedEvaluatorKeys->count(),
@@ -352,8 +323,7 @@ class EoiQualificationService
                     $applicantAssignments,
                     $applicantRecords
                 ))
-                ->filter(fn (array $report): bool => $report['members']->isNotEmpty()
-                    || $report['criteria']->isNotEmpty())
+                ->filter(fn (array $report): bool => $report['members']->isNotEmpty())
                 ->values(),
         ];
     }
@@ -387,27 +357,6 @@ class EoiQualificationService
             })
             ->unique('key')
             ->values();
-
-        foreach ($evaluationSubmissions as $submission) {
-            $key = $this->taskKey(
-                $evaluation->getKey(),
-                $submission->evaluator_id,
-                $submission->getKey()
-            );
-
-            if ($members->contains('key', $key)) {
-                continue;
-            }
-
-            $members->push($this->memberRow(
-                $key,
-                $submission->evaluator,
-                $submission->evaluator_id,
-                $submission,
-                $evaluation,
-                false
-            ));
-        }
 
         $criteria = $evaluation->sections
             ->sortBy(fn ($section): string => str_pad((string) ($section->sort_order ?? 0), 8, '0', STR_PAD_LEFT)
@@ -595,12 +544,10 @@ class EoiQualificationService
 
     private function mergeEvaluations(
         Collection $linkedEvaluations,
-        Collection $assignments,
-        Collection $submissionRecords
+        Collection $assignments
     ): Collection {
         return $linkedEvaluations
             ->concat($assignments->pluck('evaluation'))
-            ->concat($submissionRecords->pluck('evaluation'))
             ->filter(fn ($evaluation): bool => $evaluation instanceof Evaluation && $evaluation->isEoi())
             ->unique(fn (Evaluation $evaluation): string => (string) $evaluation->getKey())
             ->sortBy('name')

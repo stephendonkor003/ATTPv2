@@ -6,14 +6,18 @@ use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Mail\EvaluationAssigned;
 use App\Models\Evaluation;
 use App\Models\EvaluationAssignment;
+use App\Models\EvaluationSubmission;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\Sector;
 use App\Services\EoiQualificationService;
 use App\Support\ProcurementReviewAssignees;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class EvaluationAssignmentController extends Controller
@@ -104,21 +108,6 @@ class EvaluationAssignmentController extends Controller
                 ->with('error', 'Cannot assign evaluators to a closed evaluation.');
         }
 
-        $exists = EvaluationAssignment::where([
-            'evaluation_id' => $validated['evaluation_id'],
-            'procurement_id' => $validated['procurement_id'],
-            'user_id' => $validated['user_id'],
-            'form_submission_id' => $validated['assignment_type'] === 'submission'
-                ? $validated['submission_id']
-                : null,
-        ])->exists();
-
-        if ($exists) {
-            return back()
-                ->withInput()
-                ->with('error', 'This user is already assigned as an evaluator.');
-        }
-
         $submission = null;
         if ($validated['assignment_type'] === 'submission') {
             $submission = FormSubmission::where('id', $validated['submission_id'])
@@ -145,17 +134,48 @@ class EvaluationAssignmentController extends Controller
             }
         }
 
-        $assignment = EvaluationAssignment::create([
-            'evaluation_id' => $validated['evaluation_id'],
-            'procurement_id' => $validated['procurement_id'],
-            'form_submission_id' => $validated['assignment_type'] === 'submission'
-                ? $validated['submission_id']
-                : null,
-            'user_id' => $validated['user_id'],
-            'assigned_by' => Auth::id(),
-            'assigned_at' => now(),
-            'status' => 'assigned',
-        ]);
+        $assignment = DB::transaction(function () use ($procurement, $validated): ?EvaluationAssignment {
+            // Lock the shared procurement row so concurrent assignment requests
+            // cannot both pass the overlap check before either insert is visible.
+            Procurement::query()
+                ->whereKey($procurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $existingCoverage = EvaluationAssignment::query()
+                ->where('evaluation_id', $validated['evaluation_id'])
+                ->where('procurement_id', $validated['procurement_id'])
+                ->where('user_id', $validated['user_id']);
+
+            if ($validated['assignment_type'] === 'submission') {
+                $existingCoverage->where(function ($query) use ($validated): void {
+                    $query->whereNull('form_submission_id')
+                        ->orWhere('form_submission_id', $validated['submission_id']);
+                });
+            }
+
+            if ($existingCoverage->exists()) {
+                return null;
+            }
+
+            return EvaluationAssignment::create([
+                'evaluation_id' => $validated['evaluation_id'],
+                'procurement_id' => $validated['procurement_id'],
+                'form_submission_id' => $validated['assignment_type'] === 'submission'
+                    ? $validated['submission_id']
+                    : null,
+                'user_id' => $validated['user_id'],
+                'assigned_by' => Auth::id(),
+                'assigned_at' => now(),
+                'status' => 'assigned',
+            ]);
+        });
+
+        if (! $assignment) {
+            return back()
+                ->withInput()
+                ->with('error', 'This user is already assigned as an evaluator for the selected procurement or applicant.');
+        }
 
         if ($evaluation->isEoi()) {
             $qualificationService = app(EoiQualificationService::class);
@@ -185,18 +205,78 @@ class EvaluationAssignmentController extends Controller
 
         $assignment->loadMissing(['evaluation', 'procurement', 'submission']);
 
-        if ($assignment->status === 'submitted') {
-            return back()->with([
-                'error' => 'Cannot remove evaluator after submission.',
-                'open_procurement_id' => $assignment->procurement_id,
-            ]);
-        }
-
         $procurementId = $assignment->procurement_id;
         $isEoi = $assignment->evaluation?->isEoi() ?? false;
         $procurement = $assignment->procurement;
         $submission = $assignment->submission;
-        $assignment->delete();
+
+        $removal = DB::transaction(function () use ($assignment): array {
+            $lockedAssignment = EvaluationAssignment::query()
+                ->whereKey($assignment->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $remainingCoverage = EvaluationAssignment::query()
+                ->where('evaluation_id', $lockedAssignment->evaluation_id)
+                ->where('procurement_id', $lockedAssignment->procurement_id)
+                ->where('user_id', $lockedAssignment->user_id)
+                ->where('id', '<>', $lockedAssignment->getKey())
+                ->lockForUpdate()
+                ->get(['id', 'form_submission_id']);
+
+            $uncoveredSubmissions = $this->evaluationSubmissionsForAssignment($lockedAssignment)
+                ->lockForUpdate()
+                ->get()
+                ->reject(function (EvaluationSubmission $record) use ($remainingCoverage): bool {
+                    return $remainingCoverage->contains(
+                        fn (EvaluationAssignment $remaining): bool => blank($remaining->form_submission_id)
+                            || (string) $remaining->form_submission_id === (string) $record->form_submission_id
+                    );
+                })
+                ->values();
+
+            if ($uncoveredSubmissions->contains(
+                fn (EvaluationSubmission $record): bool => filled($record->submitted_at)
+            )) {
+                return [
+                    'blocked' => true,
+                    'drafts_removed' => 0,
+                    'draft_paths' => [],
+                ];
+            }
+
+            $draftPaths = [];
+
+            foreach ($uncoveredSubmissions as $draft) {
+                if (filled($draft->video_path)) {
+                    $draftPaths[] = (string) $draft->video_path;
+                }
+
+                $draft->criteriaScores()->delete();
+                $draft->sectionScores()->delete();
+                $draft->delete();
+            }
+
+            $lockedAssignment->delete();
+
+            return [
+                'blocked' => false,
+                'drafts_removed' => $uncoveredSubmissions->count(),
+                'draft_paths' => $draftPaths,
+            ];
+        });
+
+        if ($removal['blocked']) {
+            return back()->with([
+                'error' => 'Cannot remove this evaluator because a submitted evaluation would be left without an active assignment.',
+                'open_procurement_id' => $procurementId,
+            ]);
+        }
+
+        foreach ($removal['draft_paths'] as $draftPath) {
+            Storage::disk('local')->delete($draftPath);
+            Storage::disk('public')->delete($draftPath);
+        }
 
         if ($isEoi && $procurement) {
             $qualificationService = app(EoiQualificationService::class);
@@ -208,10 +288,27 @@ class EvaluationAssignmentController extends Controller
             }
         }
 
+        $success = 'Evaluator removed successfully.';
+        if ($removal['drafts_removed'] > 0) {
+            $success .= ' '.number_format($removal['drafts_removed']).' abandoned draft evaluation(s) were also removed.';
+        }
+
         return back()->with([
-            'success' => 'Evaluator removed successfully.',
+            'success' => $success,
             'open_procurement_id' => $procurementId,
         ]);
+    }
+
+    private function evaluationSubmissionsForAssignment(EvaluationAssignment $assignment): Builder
+    {
+        return EvaluationSubmission::query()
+            ->where('evaluation_id', $assignment->evaluation_id)
+            ->where('procurement_id', $assignment->procurement_id)
+            ->where('evaluator_id', $assignment->user_id)
+            ->when(
+                filled($assignment->form_submission_id),
+                fn ($query) => $query->where('form_submission_id', $assignment->form_submission_id)
+            );
     }
 
     private function assertProcurementManageable(Procurement $procurement): void

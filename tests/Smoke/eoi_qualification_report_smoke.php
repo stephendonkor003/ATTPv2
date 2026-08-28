@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\EvaluationReportController;
 use App\Models\Evaluation;
 use App\Models\EvaluationAssignment;
 use App\Models\EvaluationCriteria;
@@ -121,10 +122,49 @@ try {
         }
     }
 
+    // Simulate the historical bug: a removed evaluator assignment left a
+    // submitted NQ record behind. It must remain outside the active panel.
+    $orphanEvaluator = User::query()
+        ->whereNotIn('id', $evaluators->pluck('id'))
+        ->firstOrFail();
+    $orphanSubmission = EvaluationSubmission::create([
+        'evaluation_id' => $evaluation->id,
+        'procurement_id' => $procurement->id,
+        'form_submission_id' => $applicants[0]->id,
+        'evaluator_id' => $orphanEvaluator->id,
+        'submitted_at' => now(),
+    ]);
+
+    foreach ($criteria as $criterion) {
+        EvaluationCriteriaScore::create([
+            'submission_id' => $orphanSubmission->id,
+            'evaluation_criteria_id' => $criterion->id,
+            'decision' => 0,
+            'score' => null,
+            'comment' => 'Historical evidence from a removed assignment.',
+        ]);
+    }
+
     $qualificationService = $app->make(EoiQualificationService::class);
     $qualificationService->synchronizeApplicantStage($applicants[0]);
     $qualificationService->synchronizeApplicantStage($applicants[1]);
     $report = $qualificationService->buildProcurementReport($procurement);
+
+    $activeReportFilter = new ReflectionMethod(EvaluationReportController::class, 'activeReportSubmissions');
+    $activeReportSubmissions = $activeReportFilter->invoke(
+        $app->make(EvaluationReportController::class),
+        EvaluationSubmission::query()
+            ->with('evaluation')
+            ->where('procurement_id', $procurement->id)
+            ->where('evaluation_id', $evaluation->id)
+            ->whereNotNull('submitted_at')
+            ->get()
+    );
+
+    if ($activeReportSubmissions->count() !== 4
+        || $activeReportSubmissions->contains('id', $orphanSubmission->id)) {
+        throw new RuntimeException('A removed EOI assignment still appeared in a consolidated active report surface.');
+    }
 
     $firstRow = $report['applicants']->first(
         fn (array $row): bool => (string) $row['applicant']->id === (string) $applicants[0]->id
@@ -135,8 +175,13 @@ try {
 
     if (($firstRow['outcome']['code'] ?? null) !== EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED
         || ! ($firstRow['can_advance'] ?? false)
+        || ($firstRow['counts']['not_qualified'] ?? null) !== 0
+        || ($firstRow['expected_tasks'] ?? null) !== 2
+        || ($firstRow['completed_tasks'] ?? null) !== 2
+        || ($report['stats']['panel_members'] ?? null) !== 2
+        || ($report['stats']['submitted_evaluations'] ?? null) !== 4
         || $applicants[0]->fresh()->status !== FormSubmission::STATUS_TECHNICAL_EVALUATION) {
-        throw new RuntimeException('The no-veto EOI applicant did not advance to Technical Evaluation.');
+        throw new RuntimeException('The active EOI panel was changed by evidence from a removed assignment.');
     }
 
     if (($secondRow['outcome']['code'] ?? null) !== EoiQualificationService::OUTCOME_NOT_QUALIFIED
@@ -146,7 +191,7 @@ try {
     }
 
     $html = view('reports.evaluations.eoi-procurement', compact('report'))->render();
-    foreach (['Qualified Applicants', 'All Applicant Decisions', 'Average Qualified', 'Not Qualified', 'Technical Evaluation'] as $needle) {
+    foreach (['Panel Decision Summary', 'Qualified Applicants', 'Not Qualified Applicants', 'Awaiting Panel Completion', 'All Applicant Decisions', 'Average Qualified', 'Technical Evaluation'] as $needle) {
         if (! str_contains($html, $needle)) {
             throw new RuntimeException("The EOI HTML report is missing: {$needle}");
         }
@@ -157,12 +202,39 @@ try {
         throw new RuntimeException('The EOI shortlist did not isolate the applicants approved for Technical Evaluation.');
     }
 
+    $summaryContainsApplicant = static function (string $outcome, string $applicantId) use ($html): bool {
+        return preg_match(
+            '/<li[^>]*data-summary-outcome="'.preg_quote($outcome, '/').'"[^>]*data-summary-applicant="'.preg_quote($applicantId, '/').'"[^>]*>/s',
+            $html
+        ) === 1;
+    };
+
+    if (! $summaryContainsApplicant('qualified', (string) $applicants[0]->id)
+        || ! $summaryContainsApplicant('not-qualified', (string) $applicants[1]->id)
+        || $summaryContainsApplicant('not-qualified', (string) $applicants[0]->id)
+        || ! str_contains($html, 'data-summary-outcome="pending"')) {
+        throw new RuntimeException('The EOI decision summary did not separate qualified, final Not Qualified, and awaiting-panel groups.');
+    }
+
     $pdfData = array_merge(compact('report'), PdfBranding::viewData());
     $pdfHtml = view('reports.evaluations.pdf.eoi-procurement', $pdfData)->render();
 
+    $pdfQualifiedRow = preg_match(
+        '/<tr data-summary-outcome="qualified">.*?'.preg_quote(e($applicants[0]->display_name), '/').'.*?<\/tr>/s',
+        $pdfHtml
+    ) === 1;
+    $pdfNotQualifiedRow = preg_match(
+        '/<tr data-summary-outcome="not-qualified">.*?'.preg_quote(e($applicants[1]->display_name), '/').'.*?<\/tr>/s',
+        $pdfHtml
+    ) === 1;
+
     if (! str_contains($pdfHtml, 'Qualified Applicants &mdash; Advancing to Technical Evaluation')
-        || ! str_contains($pdfHtml, $applicants[0]->display_name)) {
-        throw new RuntimeException('The EOI PDF is missing the qualified-applicant advancement shortlist.');
+        || ! str_contains($pdfHtml, 'Not Qualified Applicants &mdash; Do Not Advance')
+        || ! str_contains($pdfHtml, 'Awaiting Panel Completion')
+        || ! str_contains($pdfHtml, 'Final not qualified')
+        || ! $pdfQualifiedRow
+        || ! $pdfNotQualifiedRow) {
+        throw new RuntimeException('The EOI PDF is missing one or more decision-summary lists or KPIs.');
     }
 
     $pdf = Pdf::loadView(

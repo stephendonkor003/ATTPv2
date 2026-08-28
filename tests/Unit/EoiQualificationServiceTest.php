@@ -76,7 +76,7 @@ it('ignores null and malformed values instead of converting them into categorica
         ->toBe(EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED);
 });
 
-it('waits for every distinct panel task and deduplicates overlapping assignments', function () {
+it('uses only current distinct panel tasks and ignores evidence from removed assignments', function () {
     $evaluation = (new Evaluation)->forceFill([
         'id' => (string) Str::uuid(),
         'name' => 'EOI eligibility',
@@ -179,6 +179,25 @@ it('waits for every distinct panel task and deduplicates overlapping assignments
         ->and($firstOnly['outcome']['code'])
         ->toBe(EoiQualificationService::OUTCOME_PENDING);
 
+    $incompleteWithVeto = $method->invoke(
+        $service,
+        $applicant,
+        $assignments,
+        collect([$submissionFor($evaluators[0], [2, 0])]),
+        collect([$evaluation])
+    );
+
+    expect($incompleteWithVeto)
+        ->toMatchArray([
+            'panel_complete' => false,
+            'can_advance' => false,
+            'next_stage' => 'Awaiting EOI panel',
+        ])
+        ->and($incompleteWithVeto['outcome']['code'])
+        ->toBe(EoiQualificationService::OUTCOME_NOT_QUALIFIED)
+        ->and($incompleteWithVeto['outcome']['description'])
+        ->toContain('final routing remains held');
+
     $completeWithVeto = $method->invoke(
         $service,
         $applicant,
@@ -201,6 +220,64 @@ it('waits for every distinct panel task and deduplicates overlapping assignments
         ->and($completeWithVeto['outcome']['code'])
         ->toBe(EoiQualificationService::OUTCOME_NOT_QUALIFIED)
         ->and($completeWithVeto['next_stage'])->toBe('Does not advance');
+
+    $currentPanelOnly = $method->invoke(
+        $service,
+        $applicant,
+        collect([$assignmentFor($evaluators[0])]),
+        collect([
+            $submissionFor($evaluators[0], [2, 2]),
+            $submissionFor($evaluators[1], [0, 0]), // Historical evidence from a removed assignment.
+        ]),
+        collect([$evaluation])
+    );
+
+    expect($currentPanelOnly)
+        ->toMatchArray([
+            'expected_tasks' => 1,
+            'completed_tasks' => 1,
+            'panel_complete' => true,
+            'can_advance' => true,
+        ])
+        ->and($currentPanelOnly['counts'])->toBe([
+            'qualified' => 2,
+            'average_qualified' => 0,
+            'not_qualified' => 0,
+        ])
+        ->and($currentPanelOnly['outcome']['code'])
+        ->toBe(EoiQualificationService::OUTCOME_FULLY_QUALIFIED)
+        ->and($currentPanelOnly['evaluation_reports']->first()['members'])->toHaveCount(1);
+
+    $allAssignmentsRemoved = $method->invoke(
+        $service,
+        $applicant,
+        collect(),
+        collect([
+            $submissionFor($evaluators[0], [2, 2]),
+            $submissionFor($evaluators[1], [0, 0]),
+        ]),
+        collect([$evaluation])
+    );
+
+    expect($allAssignmentsRemoved)
+        ->toMatchArray([
+            'assignment_baseline_available' => false,
+            'expected_tasks' => 0,
+            'completed_tasks' => 0,
+            'expected_evaluators' => 0,
+            'completed_evaluators' => 0,
+            'panel_complete' => false,
+            'can_advance' => false,
+            'completion_percent' => 0,
+        ])
+        ->and($allAssignmentsRemoved['counts'])->toBe([
+            'qualified' => 0,
+            'average_qualified' => 0,
+            'not_qualified' => 0,
+        ])
+        ->and($allAssignmentsRemoved['outcome']['code'])
+        ->toBe(EoiQualificationService::OUTCOME_PENDING)
+        ->and($allAssignmentsRemoved['evaluation_reports'])->toBeEmpty();
 });
 
 it('wires panel outcomes into the EOI and Technical Evaluation lifecycle gates', function () {

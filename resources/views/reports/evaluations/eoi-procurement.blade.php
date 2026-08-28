@@ -72,85 +72,203 @@
             </div>
         </header>
 
-        <section class="eoi-qualified-shortlist" id="eoiQualifiedApplicants" aria-labelledby="qualifiedApplicantsTitle">
+        <section class="eoi-qualified-shortlist" id="eoiDecisionSummary" aria-labelledby="eoiDecisionSummaryTitle">
             <header class="eoi-qualified-shortlist__header">
                 <div class="eoi-qualified-heading">
                     <span class="eoi-qualified-heading__icon" aria-hidden="true">
-                        <i class="feather-check-circle"></i>
+                        <i class="feather-clipboard"></i>
                     </span>
                     <div>
-                        <span class="eoi-eyebrow">Technical Evaluation shortlist</span>
-                        <h5 id="qualifiedApplicantsTitle">Qualified Applicants</h5>
-                        <p>Panel-complete applicants with no Not Qualified decision, cleared to advance.</p>
+                        <span class="eoi-eyebrow">Applicant outcome summary</span>
+                        <h5 id="eoiDecisionSummaryTitle">Panel Decision Summary</h5>
+                        <p>Final outcomes are separated from applicants whose assigned panel tasks are still in progress.</p>
                     </div>
                 </div>
-                <div class="eoi-qualified-totals" aria-label="Qualified applicant totals">
-                    <span><strong>{{ number_format($qualifiedApplicants->count()) }}</strong> advancing</span>
-                    <span><b>{{ number_format($stats['fully_qualified']) }}</b> fully qualified</span>
-                    <span><b>{{ number_format($stats['average_qualified']) }}</b> average qualified</span>
+                <div class="eoi-qualified-totals" aria-label="Applicant decision totals">
+                    <span><strong>{{ number_format($qualifiedApplicants->count()) }}</strong> qualified</span>
+                    <span class="eoi-qualified-total--stopped"><b>{{ number_format($finalNotQualifiedApplicants->count()) }}</b> not qualified</span>
+                    <span class="eoi-qualified-total--pending"><b>{{ number_format($panelInProgressApplicants->count()) }}</b> awaiting panel</span>
                 </div>
             </header>
 
-            @if ($qualifiedApplicants->isNotEmpty())
-                <div class="eoi-qualified-grid">
-                    @foreach ($qualifiedApplicants as $qualifiedRow)
-                        @php
-                            $qualifiedApplicant = $qualifiedRow['applicant'];
-                            $qualifiedOutcome = $qualifiedRow['outcome'];
-                        @endphp
-                        <article
-                            class="eoi-qualified-card eoi-qualified-card--{{ $qualifiedOutcome['code'] }}"
-                            data-qualified-applicant="{{ $qualifiedApplicant->id }}"
-                        >
-                            <div class="eoi-qualified-card__top">
-                                <span class="eoi-qualified-sequence">{{ str_pad((string) $loop->iteration, 2, '0', STR_PAD_LEFT) }}</span>
-                                <span class="eoi-outcome eoi-outcome--{{ $qualifiedOutcome['code'] }}">
-                                    <i class="{{ $qualifiedOutcome['code'] === 'fully_qualified' ? 'feather-check-circle' : 'feather-minus-circle' }}" aria-hidden="true"></i>
-                                    {{ $qualifiedOutcome['label'] }}
-                                </span>
-                            </div>
-                            <div class="eoi-qualified-card__identity">
-                                <span class="eoi-qualified-avatar" aria-hidden="true">
-                                    {{ Illuminate\Support\Str::upper(Illuminate\Support\Str::substr($qualifiedApplicant->display_name, 0, 1)) }}
-                                </span>
-                                <div>
-                                    <h6>{{ $qualifiedApplicant->display_name }}</h6>
-                                    <p>
-                                        {{ $qualifiedApplicant->procurement_submission_code ?: 'No submission code' }}
-                                        @if ($qualifiedApplicant->submitter?->email)
-                                            <span aria-hidden="true">&middot;</span> {{ $qualifiedApplicant->submitter->email }}
-                                        @endif
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="eoi-qualified-card__metrics">
-                                <span><small>Qualified</small><strong>{{ $qualifiedRow['counts']['qualified'] }}</strong></span>
-                                <span><small>Average</small><strong>{{ $qualifiedRow['counts']['average_qualified'] }}</strong></span>
-                                <span><small>Panel tasks</small><strong>{{ $qualifiedRow['completed_tasks'] }}/{{ $qualifiedRow['expected_tasks'] }}</strong></span>
-                            </div>
-                            <div class="eoi-qualified-card__route">
-                                <span><i class="feather-arrow-up-right" aria-hidden="true"></i> Advances to</span>
-                                <strong>Technical Evaluation</strong>
-                                <a
-                                    href="#eoi-applicant-{{ $qualifiedApplicant->id }}"
-                                    data-eoi-open-applicant="{{ $qualifiedApplicant->id }}"
+            <div class="eoi-decision-summary-grid">
+                <section
+                    class="eoi-decision-group eoi-decision-group--qualified"
+                    aria-labelledby="qualifiedApplicantsTitle"
+                    data-summary-outcome="qualified"
+                >
+                    <header class="eoi-decision-group__header">
+                        <span class="eoi-decision-group__icon" aria-hidden="true"><i class="feather-check-circle"></i></span>
+                        <div>
+                            <h6 id="qualifiedApplicantsTitle">Qualified Applicants</h6>
+                            <p>Panel complete &middot; advances to Technical Evaluation</p>
+                        </div>
+                        <strong aria-label="{{ $qualifiedApplicants->count() }} qualified applicants">{{ number_format($qualifiedApplicants->count()) }}</strong>
+                    </header>
+
+                    @if ($qualifiedApplicants->isNotEmpty())
+                        <ul class="eoi-decision-list" role="list">
+                            @foreach ($qualifiedApplicants as $qualifiedRow)
+                                @php
+                                    $qualifiedApplicant = $qualifiedRow['applicant'];
+                                    $qualifiedOutcome = $qualifiedRow['outcome'];
+                                @endphp
+                                <li
+                                    class="eoi-decision-person"
+                                    data-summary-outcome="qualified"
+                                    data-summary-applicant="{{ $qualifiedApplicant->id }}"
+                                    data-qualified-applicant="{{ $qualifiedApplicant->id }}"
                                 >
-                                    View panel evidence <i class="feather-arrow-right" aria-hidden="true"></i>
-                                </a>
-                            </div>
-                        </article>
-                    @endforeach
-                </div>
-            @else
-                <div class="eoi-qualified-empty">
-                    <span aria-hidden="true"><i class="feather-clock"></i></span>
-                    <div>
-                        <strong>No applicants have cleared the EOI gate yet</strong>
-                        <p>Qualified applicants will appear here automatically after every assigned evaluator completes their panel task.</p>
-                    </div>
-                    <span class="eoi-qualified-empty__progress">{{ number_format($panelInProgressApplicants->count()) }} awaiting panel</span>
-                </div>
-            @endif
+                                    <span class="eoi-decision-avatar" aria-hidden="true">
+                                        {{ Illuminate\Support\Str::upper(Illuminate\Support\Str::substr($qualifiedApplicant->display_name, 0, 1)) }}
+                                    </span>
+                                    <span class="eoi-decision-identity">
+                                        <strong>{{ $qualifiedApplicant->display_name }}</strong>
+                                        <small>{{ $qualifiedApplicant->procurement_submission_code ?: 'No submission code' }}</small>
+                                    </span>
+                                    <span class="eoi-decision-result">
+                                        <span class="eoi-outcome eoi-outcome--{{ $qualifiedOutcome['code'] }}">
+                                            <i class="{{ $qualifiedOutcome['code'] === 'fully_qualified' ? 'feather-check-circle' : 'feather-minus-circle' }}" aria-hidden="true"></i>
+                                            {{ $qualifiedOutcome['label'] }}
+                                        </span>
+                                        <small>{{ $qualifiedRow['completed_tasks'] }}/{{ $qualifiedRow['expected_tasks'] }} panel tasks</small>
+                                    </span>
+                                    <a
+                                        class="eoi-decision-evidence"
+                                        href="#eoi-applicant-{{ $qualifiedApplicant->id }}"
+                                        data-eoi-open-applicant="{{ $qualifiedApplicant->id }}"
+                                        aria-label="View panel evidence for {{ $qualifiedApplicant->display_name }}"
+                                    >
+                                        Evidence <i class="feather-arrow-right" aria-hidden="true"></i>
+                                    </a>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <div class="eoi-decision-empty">
+                            <i class="feather-clock" aria-hidden="true"></i>
+                            <span>No applicants are qualified yet.</span>
+                        </div>
+                    @endif
+                </section>
+
+                <section
+                    class="eoi-decision-group eoi-decision-group--stopped"
+                    aria-labelledby="notQualifiedApplicantsTitle"
+                    data-summary-outcome="not-qualified"
+                >
+                    <header class="eoi-decision-group__header">
+                        <span class="eoi-decision-group__icon" aria-hidden="true"><i class="feather-x-circle"></i></span>
+                        <div>
+                            <h6 id="notQualifiedApplicantsTitle">Not Qualified Applicants</h6>
+                            <p>Panel complete &middot; does not advance</p>
+                        </div>
+                        <strong aria-label="{{ $finalNotQualifiedApplicants->count() }} not qualified applicants">{{ number_format($finalNotQualifiedApplicants->count()) }}</strong>
+                    </header>
+
+                    @if ($finalNotQualifiedApplicants->isNotEmpty())
+                        <ul class="eoi-decision-list" role="list">
+                            @foreach ($finalNotQualifiedApplicants as $notQualifiedRow)
+                                @php
+                                    $notQualifiedApplicant = $notQualifiedRow['applicant'];
+                                @endphp
+                                <li
+                                    class="eoi-decision-person"
+                                    data-summary-outcome="not-qualified"
+                                    data-summary-applicant="{{ $notQualifiedApplicant->id }}"
+                                >
+                                    <span class="eoi-decision-avatar" aria-hidden="true">
+                                        {{ Illuminate\Support\Str::upper(Illuminate\Support\Str::substr($notQualifiedApplicant->display_name, 0, 1)) }}
+                                    </span>
+                                    <span class="eoi-decision-identity">
+                                        <strong>{{ $notQualifiedApplicant->display_name }}</strong>
+                                        <small>{{ $notQualifiedApplicant->procurement_submission_code ?: 'No submission code' }}</small>
+                                    </span>
+                                    <span class="eoi-decision-result">
+                                        <span class="eoi-outcome eoi-outcome--not_qualified">
+                                            <i class="feather-x-circle" aria-hidden="true"></i>
+                                            Not Qualified
+                                        </span>
+                                        <small>{{ $notQualifiedRow['completed_tasks'] }}/{{ $notQualifiedRow['expected_tasks'] }} panel tasks</small>
+                                    </span>
+                                    <a
+                                        class="eoi-decision-evidence"
+                                        href="#eoi-applicant-{{ $notQualifiedApplicant->id }}"
+                                        data-eoi-open-applicant="{{ $notQualifiedApplicant->id }}"
+                                        aria-label="View panel evidence for {{ $notQualifiedApplicant->display_name }}"
+                                    >
+                                        Evidence <i class="feather-arrow-right" aria-hidden="true"></i>
+                                    </a>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <div class="eoi-decision-empty">
+                            <i class="feather-check" aria-hidden="true"></i>
+                            <span>No final Not Qualified decisions.</span>
+                        </div>
+                    @endif
+                </section>
+
+                <section
+                    class="eoi-decision-group eoi-decision-group--pending"
+                    aria-labelledby="awaitingPanelApplicantsTitle"
+                    data-summary-outcome="pending"
+                >
+                    <header class="eoi-decision-group__header">
+                        <span class="eoi-decision-group__icon" aria-hidden="true"><i class="feather-clock"></i></span>
+                        <div>
+                            <h6 id="awaitingPanelApplicantsTitle">Awaiting Panel Completion</h6>
+                            <p>No final routing decision until every remaining assigned task is complete</p>
+                        </div>
+                        <strong aria-label="{{ $panelInProgressApplicants->count() }} applicants awaiting panel completion">{{ number_format($panelInProgressApplicants->count()) }}</strong>
+                    </header>
+
+                    @if ($panelInProgressApplicants->isNotEmpty())
+                        <ul class="eoi-decision-list" role="list">
+                            @foreach ($panelInProgressApplicants as $pendingRow)
+                                @php
+                                    $pendingApplicant = $pendingRow['applicant'];
+                                    $pendingHasVeto = data_get($pendingRow, 'outcome.code') === 'not_qualified';
+                                @endphp
+                                <li
+                                    class="eoi-decision-person"
+                                    data-summary-outcome="pending"
+                                    data-summary-applicant="{{ $pendingApplicant->id }}"
+                                >
+                                    <span class="eoi-decision-avatar" aria-hidden="true">
+                                        {{ Illuminate\Support\Str::upper(Illuminate\Support\Str::substr($pendingApplicant->display_name, 0, 1)) }}
+                                    </span>
+                                    <span class="eoi-decision-identity">
+                                        <strong>{{ $pendingApplicant->display_name }}</strong>
+                                        <small>{{ $pendingApplicant->procurement_submission_code ?: 'No submission code' }}</small>
+                                    </span>
+                                    <span class="eoi-decision-result">
+                                        <span class="eoi-outcome eoi-outcome--pending">
+                                            <i class="feather-clock" aria-hidden="true"></i>
+                                            {{ $pendingHasVeto ? 'NQ recorded · panel incomplete' : 'Awaiting Panel' }}
+                                        </span>
+                                        <small>{{ $pendingRow['completed_tasks'] }}/{{ $pendingRow['expected_tasks'] }} panel tasks</small>
+                                    </span>
+                                    <a
+                                        class="eoi-decision-evidence"
+                                        href="#eoi-applicant-{{ $pendingApplicant->id }}"
+                                        data-eoi-open-applicant="{{ $pendingApplicant->id }}"
+                                        aria-label="View current panel evidence for {{ $pendingApplicant->display_name }}"
+                                    >
+                                        Evidence <i class="feather-arrow-right" aria-hidden="true"></i>
+                                    </a>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <div class="eoi-decision-empty">
+                            <i class="feather-check-circle" aria-hidden="true"></i>
+                            <span>No applicants are awaiting panel completion.</span>
+                        </div>
+                    @endif
+                </section>
+            </div>
         </section>
 
         <section class="eoi-executive-overview" aria-labelledby="eoiOverviewTitle">
@@ -383,7 +501,7 @@
                                     <i class="{{ $outcomeIcon }}"></i>
                                 </span>
                                 <div>
-                                    <span class="eoi-eyebrow">Panel determination</span>
+                                    <span class="eoi-eyebrow">{{ $row['panel_complete'] ? 'Panel determination' : 'Current panel signal' }}</span>
                                     <h6>{{ $outcome['label'] }} &mdash; {{ $row['next_stage'] }}</h6>
                                     <p>{{ $outcome['description'] }}</p>
                                 </div>
@@ -1032,6 +1150,206 @@
             font-weight: 800;
             padding: 7px 10px;
             white-space: nowrap;
+        }
+
+        .eoi-qualified-totals .eoi-qualified-total--stopped {
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+
+        .eoi-qualified-totals .eoi-qualified-total--pending {
+            border-color: #fde68a;
+            color: #92400e;
+        }
+
+        .eoi-decision-summary-grid {
+            background: #f8fafc;
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            padding: 16px;
+        }
+
+        .eoi-decision-group {
+            --decision-accent: #15803d;
+            --decision-border: #bbf7d0;
+            --decision-soft: #f0fdf4;
+            background: #fff;
+            border: 1px solid var(--decision-border);
+            border-radius: 13px;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, .045);
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .eoi-decision-group--stopped {
+            --decision-accent: #b42318;
+            --decision-border: #fecaca;
+            --decision-soft: #fff1f0;
+        }
+
+        .eoi-decision-group--pending {
+            --decision-accent: #b45309;
+            --decision-border: #fde68a;
+            --decision-soft: #fffbeb;
+            grid-column: 1 / -1;
+        }
+
+        .eoi-decision-group__header {
+            align-items: center;
+            background: var(--decision-soft);
+            border-bottom: 1px solid var(--decision-border);
+            display: grid;
+            gap: 10px;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            padding: 13px 14px;
+        }
+
+        .eoi-decision-group__icon {
+            align-items: center;
+            background: #fff;
+            border: 1px solid var(--decision-border);
+            border-radius: 9px;
+            color: var(--decision-accent);
+            display: inline-flex;
+            font-size: 16px;
+            height: 36px;
+            justify-content: center;
+            width: 36px;
+        }
+
+        .eoi-decision-group__header h6 {
+            color: var(--decision-accent);
+            font-size: 13px;
+            font-weight: 850;
+            margin: 0 0 2px;
+        }
+
+        .eoi-decision-group__header p {
+            color: #667085;
+            font-size: 9px;
+            line-height: 1.4;
+            margin: 0;
+        }
+
+        .eoi-decision-group__header > strong {
+            align-items: center;
+            background: var(--decision-accent);
+            border-radius: 999px;
+            color: #fff;
+            display: inline-flex;
+            font-size: 13px;
+            height: 30px;
+            justify-content: center;
+            min-width: 30px;
+            padding: 0 8px;
+        }
+
+        .eoi-decision-list {
+            list-style: none;
+            margin: 0;
+            max-height: 330px;
+            overflow: auto;
+            padding: 0;
+        }
+
+        .eoi-decision-person {
+            align-items: center;
+            display: grid;
+            gap: 10px;
+            grid-template-columns: auto minmax(0, 1fr) auto auto;
+            min-width: 0;
+            padding: 11px 13px;
+        }
+
+        .eoi-decision-person + .eoi-decision-person {
+            border-top: 1px solid #e7edf3;
+        }
+
+        .eoi-decision-avatar {
+            align-items: center;
+            background: var(--decision-soft);
+            border: 1px solid var(--decision-border);
+            border-radius: 9px;
+            color: var(--decision-accent);
+            display: inline-flex;
+            flex: 0 0 38px;
+            font-size: 13px;
+            font-weight: 900;
+            height: 38px;
+            justify-content: center;
+            width: 38px;
+        }
+
+        .eoi-decision-identity,
+        .eoi-decision-result {
+            min-width: 0;
+        }
+
+        .eoi-decision-identity strong {
+            color: var(--eoi-ink);
+            display: block;
+            font-size: 12px;
+            font-weight: 800;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .eoi-decision-identity small,
+        .eoi-decision-result > small {
+            color: #667085;
+            display: block;
+            font-size: 8.5px;
+            margin-top: 3px;
+        }
+
+        .eoi-decision-result {
+            text-align: right;
+        }
+
+        .eoi-decision-result .eoi-outcome {
+            justify-content: center;
+            white-space: nowrap;
+        }
+
+        .eoi-decision-evidence {
+            align-items: center;
+            border-radius: 7px;
+            color: #1d4ed8;
+            display: inline-flex;
+            font-size: 9px;
+            font-weight: 800;
+            gap: 4px;
+            padding: 6px;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .eoi-decision-evidence:hover {
+            background: #eff6ff;
+            color: #1e3a8a;
+            text-decoration: underline;
+        }
+
+        .eoi-decision-evidence:focus-visible {
+            outline: 3px solid rgba(37, 99, 235, .35);
+            outline-offset: 2px;
+        }
+
+        .eoi-decision-empty {
+            align-items: center;
+            color: #667085;
+            display: flex;
+            font-size: 10px;
+            gap: 8px;
+            min-height: 70px;
+            padding: 16px;
+        }
+
+        .eoi-decision-empty i {
+            color: var(--decision-accent);
+            font-size: 15px;
         }
 
         .eoi-executive-overview {
@@ -2426,6 +2744,35 @@
                 justify-self: start;
             }
 
+            .eoi-decision-summary-grid {
+                grid-template-columns: 1fr;
+                padding: 12px;
+            }
+
+            .eoi-decision-group--pending {
+                grid-column: auto;
+            }
+
+            .eoi-decision-list {
+                max-height: none;
+                overflow: visible;
+            }
+
+            .eoi-decision-person {
+                align-items: start;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+            }
+
+            .eoi-decision-result {
+                grid-column: 2 / 4;
+                text-align: left;
+            }
+
+            .eoi-decision-evidence {
+                grid-column: 3;
+                grid-row: 1;
+            }
+
             .eoi-executive-overview {
                 gap: 18px;
                 grid-template-columns: 1fr;
@@ -2552,6 +2899,21 @@
                 margin-top: 8px;
             }
 
+            .eoi-decision-group__header {
+                align-items: start;
+            }
+
+            .eoi-decision-person {
+                grid-template-columns: auto minmax(0, 1fr);
+            }
+
+            .eoi-decision-result,
+            .eoi-decision-evidence {
+                grid-column: 2;
+                grid-row: auto;
+                justify-self: start;
+            }
+
             .eoi-stage-overview,
             .eoi-kpi-grid,
             .eoi-detail-stats {
@@ -2599,7 +2961,8 @@
             .eoi-filter-bar,
             .eoi-list-status,
             .eoi-summary-chevron,
-            .eoi-qualified-card__route > a {
+            .eoi-qualified-card__route > a,
+            .eoi-decision-evidence {
                 display: none !important;
             }
 
@@ -2615,6 +2978,11 @@
             }
 
             .eoi-qualified-grid {
+                max-height: none;
+                overflow: visible;
+            }
+
+            .eoi-decision-list {
                 max-height: none;
                 overflow: visible;
             }
@@ -2753,7 +3121,9 @@
                     target.open = true;
 
                     window.requestAnimationFrame(() => {
-                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                        target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+                        target.querySelector('summary')?.focus({ preventScroll: true });
                         window.history.replaceState(null, '', `#eoi-applicant-${applicantId}`);
                     });
                 });

@@ -276,6 +276,48 @@ it('marks legacy reports without assignment history as unverifiable instead of i
     ]);
 });
 
+it('counts an EOI submission only while a current assignment covers its exact panel task', function () {
+    $evaluationId = (string) Str::uuid();
+    $applicantId = (string) Str::uuid();
+    $evaluatorId = (string) Str::uuid();
+    $submission = (new EvaluationSubmission)->forceFill([
+        'evaluation_id' => $evaluationId,
+        'form_submission_id' => $applicantId,
+        'evaluator_id' => $evaluatorId,
+    ]);
+    $assignment = fn (?string $assignedApplicant, ?string $assignedEvaluator = null): EvaluationAssignment => (new EvaluationAssignment)->forceFill([
+        'evaluation_id' => $evaluationId,
+        'form_submission_id' => $assignedApplicant,
+        'user_id' => $assignedEvaluator ?? $evaluatorId,
+    ]);
+
+    expect(invokeEvaluationReportMethod(
+        'eoiSubmissionHasActiveAssignment',
+        $submission,
+        collect([$assignment(null)])
+    ))->toBeTrue()
+        ->and(invokeEvaluationReportMethod(
+            'eoiSubmissionHasActiveAssignment',
+            $submission,
+            collect([$assignment($applicantId)])
+        ))->toBeTrue()
+        ->and(invokeEvaluationReportMethod(
+            'eoiSubmissionHasActiveAssignment',
+            $submission,
+            collect([$assignment((string) Str::uuid())])
+        ))->toBeFalse()
+        ->and(invokeEvaluationReportMethod(
+            'eoiSubmissionHasActiveAssignment',
+            $submission,
+            collect([$assignment($applicantId, (string) Str::uuid())])
+        ))->toBeFalse()
+        ->and(invokeEvaluationReportMethod(
+            'eoiSubmissionHasActiveAssignment',
+            $submission,
+            collect()
+        ))->toBeFalse();
+});
+
 it('keeps goods outcomes categorical and never assigns a numeric rank', function () {
     $evaluation = reportEvaluation(Evaluation::TYPE_GOODS);
     $submission = (new EvaluationSubmission)->forceFill([

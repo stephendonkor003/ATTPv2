@@ -329,6 +329,64 @@
             margin-bottom: 2px;
         }
 
+        .not-qualified-banner {
+            background: #7f1d1d;
+            border-left-color: #f87171;
+        }
+
+        .not-qualified-banner p {
+            color: #fee2e2;
+        }
+
+        .not-qualified-table th {
+            background: #fee2e2;
+            color: #7f1d1d;
+        }
+
+        .not-qualified-table th,
+        .not-qualified-table td {
+            border-color: #fecaca;
+        }
+
+        .not-qualified-table tbody tr:nth-child(even) td {
+            background: #fff7f7;
+        }
+
+        .not-qualified-empty {
+            background: #fff7f7;
+            border-color: #fca5a5;
+            color: #991b1b;
+        }
+
+        .pending-banner {
+            background: #78350f;
+            border-left-color: #fbbf24;
+        }
+
+        .pending-banner p {
+            color: #fef3c7;
+        }
+
+        .pending-table th {
+            background: #fef3c7;
+            color: #78350f;
+        }
+
+        .pending-table th,
+        .pending-table td {
+            border-color: #fde68a;
+        }
+
+        .pending-table tbody tr:nth-child(even) td {
+            background: #fffbeb;
+        }
+
+        .pending-empty {
+            background: #fffbeb;
+            border-color: #fcd34d;
+            color: #92400e;
+        }
+
         .section-heading {
             border-bottom: 2px solid #0b2138;
             color: #0b2138;
@@ -612,8 +670,17 @@
         $procurement = $report['procurement'];
         $applicants = collect($report['applicants'] ?? []);
         $qualifiedApplicants = $applicants
-            ->filter(fn (array $row): bool => ($row['can_advance'] ?? false) === true)
+            ->filter(fn (array $row): bool => ($row['can_advance'] ?? false) === true
+                && ($row['panel_complete'] ?? false) === true)
             ->values();
+        $finalNotQualifiedApplicants = $applicants
+            ->filter(fn (array $row): bool => ($row['panel_complete'] ?? false) === true
+                && data_get($row, 'outcome.code') === 'not_qualified')
+            ->values();
+        $awaitingPanelApplicants = $applicants
+            ->filter(fn (array $row): bool => ($row['panel_complete'] ?? false) !== true)
+            ->values();
+        $finalDecisionCount = $qualifiedApplicants->count() + $finalNotQualifiedApplicants->count();
         $stats = $report['stats'] ?? [];
         $generatedAt = $report['generated_at'] ?? now();
         // DomPDF keeps the complete document tree in memory. Keep the official
@@ -642,6 +709,10 @@
             };
         };
         $routeClass = function (array $applicantRow): string {
+            if (! ($applicantRow['panel_complete'] ?? false)) {
+                return 'route-pending';
+            }
+
             if ($applicantRow['can_advance'] ?? false) {
                 return 'route-advance';
             }
@@ -719,17 +790,17 @@
     <table class="kpi-table">
         <tr>
             <td><span class="kpi-number">{{ $stats['total_applicants'] ?? 0 }}</span><span class="kpi-label">Applicants</span></td>
-            <td><span class="kpi-number">{{ $stats['fully_qualified'] ?? 0 }}</span><span class="kpi-label">Fully qualified</span></td>
-            <td><span class="kpi-number">{{ $stats['average_qualified'] ?? 0 }}</span><span class="kpi-label">Average qualified</span></td>
-            <td><span class="kpi-number">{{ $stats['not_qualified'] ?? 0 }}</span><span class="kpi-label">Not qualified</span></td>
-            <td><span class="kpi-number">{{ $stats['pending'] ?? 0 }}</span><span class="kpi-label">Awaiting panel</span></td>
-            <td><span class="kpi-number">{{ $stats['advance'] ?? 0 }}</span><span class="kpi-label">Advance</span></td>
+            <td><span class="kpi-number">{{ $qualifiedApplicants->count() }}</span><span class="kpi-label">Qualified / advance</span></td>
+            <td><span class="kpi-number">{{ $qualifiedApplicants->where('outcome.code', 'fully_qualified')->count() }}</span><span class="kpi-label">Fully qualified</span></td>
+            <td><span class="kpi-number">{{ $qualifiedApplicants->where('outcome.code', 'average_qualified')->count() }}</span><span class="kpi-label">Average qualified</span></td>
+            <td><span class="kpi-number">{{ $finalNotQualifiedApplicants->count() }}</span><span class="kpi-label">Final not qualified</span></td>
+            <td><span class="kpi-number">{{ $awaitingPanelApplicants->count() }}</span><span class="kpi-label">Awaiting panel</span></td>
+            <td><span class="kpi-number">{{ $finalDecisionCount }}</span><span class="kpi-label">Final decisions</span></td>
             <td><span class="kpi-number">{{ $stats['panel_members'] ?? 0 }}</span><span class="kpi-label">Panel members</span></td>
-            <td><span class="kpi-number">{{ $stats['submitted_evaluations'] ?? 0 }}</span><span class="kpi-label">Submitted evaluations</span></td>
         </tr>
     </table>
 
-    <div class="qualified-banner">
+    <div class="qualified-banner" data-summary-outcome="qualified">
         <table>
             <tr>
                 <td>
@@ -762,7 +833,7 @@
                     @php
                         $applicant = $applicantRow['applicant'];
                     @endphp
-                    <tr>
+                    <tr data-summary-outcome="qualified">
                         <td class="number-cell">{{ $index + 1 }}</td>
                         <td><span class="strong">{{ $applicant->procurement_submission_code ?? 'N/A' }}</span></td>
                         <td>
@@ -792,6 +863,124 @@
         <div class="qualified-empty">
             <strong>No applicants are currently approved to advance.</strong>
             Fully Qualified and Average Qualified applicants will appear here after all assigned panel tasks are complete.
+        </div>
+    @endif
+
+    <div class="qualified-banner not-qualified-banner" data-summary-outcome="not-qualified">
+        <table>
+            <tr>
+                <td>
+                    <h3>Not Qualified Applicants &mdash; Do Not Advance</h3>
+                    <p>Final non-advancement list: every assigned panel task is complete and at least one Not Qualified decision was recorded.</p>
+                </td>
+                <td class="qualified-total">
+                    {{ $finalNotQualifiedApplicants->count() }}
+                    <span>Final not qualified</span>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    @if ($finalNotQualifiedApplicants->isNotEmpty())
+        <table class="qualified-table not-qualified-table">
+            <thead>
+                <tr>
+                    <th style="width: 4%;">#</th>
+                    <th style="width: 14%;">Submission</th>
+                    <th style="width: 27%;">Applicant</th>
+                    <th style="width: 15%;">Final outcome</th>
+                    <th style="width: 12%;">NQ decisions</th>
+                    <th style="width: 16%;">Panel completion</th>
+                    <th style="width: 12%;">Routing</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($finalNotQualifiedApplicants as $index => $applicantRow)
+                    @php
+                        $applicant = $applicantRow['applicant'];
+                    @endphp
+                    <tr data-summary-outcome="not-qualified">
+                        <td class="number-cell">{{ $index + 1 }}</td>
+                        <td><span class="strong">{{ $applicant->procurement_submission_code ?? 'N/A' }}</span></td>
+                        <td>
+                            <span class="strong">{{ $applicant->display_name }}</span>
+                            @if ($applicant->submitter?->email)
+                                <br><span class="muted small">{{ $applicant->submitter->email }}</span>
+                            @endif
+                        </td>
+                        <td><span class="badge badge-danger">Not Qualified</span></td>
+                        <td class="number-cell route-stop">{{ $applicantRow['counts']['not_qualified'] }}</td>
+                        <td>
+                            <span class="strong">{{ $applicantRow['completed_tasks'] }}/{{ $applicantRow['expected_tasks'] }} tasks</span>
+                            <br><span class="muted small">{{ $applicantRow['completion_percent'] }}% complete</span>
+                        </td>
+                        <td class="route-stop">Does not advance</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @else
+        <div class="qualified-empty not-qualified-empty">
+            <strong>No final Not Qualified decisions.</strong>
+            Incomplete applicants remain in Awaiting Panel until every assigned task is complete.
+        </div>
+    @endif
+
+    <div class="qualified-banner pending-banner" data-summary-outcome="pending">
+        <table>
+            <tr>
+                <td>
+                    <h3>Awaiting Panel Completion</h3>
+                    <p>These applicants do not have a final workflow decision until all remaining assigned panel tasks are complete.</p>
+                </td>
+                <td class="qualified-total">
+                    {{ $awaitingPanelApplicants->count() }}
+                    <span>Pending completion</span>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    @if ($awaitingPanelApplicants->isNotEmpty())
+        <table class="qualified-table pending-table">
+            <thead>
+                <tr>
+                    <th style="width: 4%;">#</th>
+                    <th style="width: 15%;">Submission</th>
+                    <th style="width: 28%;">Applicant</th>
+                    <th style="width: 17%;">Current signal</th>
+                    <th style="width: 18%;">Panel completion</th>
+                    <th style="width: 18%;">Routing</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($awaitingPanelApplicants as $index => $applicantRow)
+                    @php
+                        $applicant = $applicantRow['applicant'];
+                        $pendingHasVeto = data_get($applicantRow, 'outcome.code') === 'not_qualified';
+                    @endphp
+                    <tr data-summary-outcome="pending">
+                        <td class="number-cell">{{ $index + 1 }}</td>
+                        <td><span class="strong">{{ $applicant->procurement_submission_code ?? 'N/A' }}</span></td>
+                        <td><span class="strong">{{ $applicant->display_name }}</span></td>
+                        <td>
+                            <span class="badge badge-pending">
+                                {{ $pendingHasVeto ? 'NQ recorded / incomplete' : 'Awaiting Panel' }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="strong">{{ $applicantRow['completed_tasks'] }}/{{ $applicantRow['expected_tasks'] }} tasks</span>
+                            <br><span class="muted small">{{ $applicantRow['completion_percent'] }}% complete</span>
+                        </td>
+                        <td class="route-pending">Held until panel completion</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @else
+        <div class="qualified-empty pending-empty">
+            <strong>No applicants are awaiting panel completion.</strong>
+            Every reportable applicant currently has a final panel outcome.
         </div>
     @endif
 
