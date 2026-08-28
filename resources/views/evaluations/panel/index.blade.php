@@ -1,279 +1,199 @@
 @extends('layouts.app')
 
+@section('title', 'Panel Evaluations')
+
 @section('content')
-    <div class="nxl-container evaluation-panel">
+    @php
+        $statusLabels = [
+            'ready' => 'Panel complete',
+            'in_progress' => 'In progress',
+            'awaiting' => 'Awaiting reports',
+            'setup_required' => 'Setup required',
+        ];
+    @endphp
 
-        {{-- ================= HEADER ================= --}}
-        <div class="page-header mb-4 d-flex justify-content-between align-items-center">
-            <div>
-                <h4 class="fw-bold mb-1">
-                    <i class="feather-users text-primary me-2"></i>
-                    Panel Evaluations
-                </h4>
-                <p class="text-muted mb-0">
-                    Consolidated view of all evaluator decisions per procurement.
-                </p>
+    <main class="nxl-container pev-shell" aria-labelledby="panelEvaluationTitle">
+        <header class="pev-hero">
+            <div class="pev-hero__copy">
+                <span class="pev-eyebrow">Procurement evaluation workspace</span>
+                <h1 id="panelEvaluationTitle">Panel Evaluations</h1>
+                <p>Open a procurement to follow its evaluation journey, understand what is happening now, and continue into the correct Services, Goods, or EOI workspace.</p>
+                <div class="pev-hero__meta" aria-label="Panel evaluation overview">
+                    <span><i class="feather-briefcase" aria-hidden="true"></i>{{ number_format($summary['procurements']) }} procurements</span>
+                    <span><i class="feather-inbox" aria-hidden="true"></i>{{ number_format($summary['applications']) }} applications</span>
+                    <span><i class="feather-file-text" aria-hidden="true"></i>{{ number_format($summary['reports']) }} active reports</span>
+                </div>
             </div>
-        </div>
+            <div class="pev-hero__signal" aria-hidden="true">
+                <span class="pev-hero__signal-ring"><i class="feather-activity"></i></span>
+                <div><strong>{{ number_format($summary['ready']) }}</strong><span>panel-ready</span></div>
+            </div>
+        </header>
 
-        {{-- ================= PROCUREMENT SELECT ================= --}}
-        <div class="card shadow-sm mb-4">
-            <div class="card-body d-flex justify-content-between align-items-end gap-3">
-                <div class="flex-grow-1">
-                    <label class="form-label fw-semibold">Select Procurement</label>
-                    <select id="procurementSelect" class="form-select">
-                        <option value="">-- Select Procurement --</option>
-                        @foreach ($procurements as $procurement)
-                            <option value="{{ $procurement->id }}">
-                                {{ $procurement->title }}
-                            </option>
-                        @endforeach
-                    </select>
+        <section class="pev-kpi-grid" aria-label="Workspace summary">
+            @foreach ([
+                ['feather-briefcase', 'Procurements', $summary['procurements'], 'in your accessible portfolio'],
+                ['feather-users', 'Applications', $summary['applications'], 'linked to these procurements'],
+                ['feather-file-text', 'Submitted reports', $summary['reports'], 'from currently assigned evaluators'],
+                ['feather-loader', 'Active panels', $summary['in_progress'], 'awaiting or in progress'],
+                ['feather-check-circle', 'Panel complete', $summary['ready'], 'all active assignments complete'],
+            ] as [$icon, $label, $value, $detail])
+                <article class="pev-kpi">
+                    <span class="pev-kpi__icon"><i class="{{ $icon }}" aria-hidden="true"></i></span>
+                    <div><span>{{ $label }}</span><strong>{{ number_format($value) }}</strong><small>{{ $detail }}</small></div>
+                </article>
+            @endforeach
+        </section>
+
+        <section class="pev-panel" aria-labelledby="procurementLibraryTitle">
+            <header class="pev-panel__head">
+                <div>
+                    <span class="pev-eyebrow">Procurement library</span>
+                    <h2 id="procurementLibraryTitle">Choose a procurement</h2>
+                    <p>Each card shows only current panel activity. Removed evaluator records are not included.</p>
+                </div>
+                <span class="pev-count" id="panelResultCount" aria-live="polite">{{ $procurementCards->count() }} procurements</span>
+            </header>
+
+            @if ($procurementCards->isNotEmpty())
+                <div class="pev-toolbar" role="search" aria-label="Filter panel procurements">
+                    <label class="pev-field pev-field--search" for="panelProcurementSearch">
+                        <span>Search</span>
+                        <div class="pev-input">
+                            <i class="feather-search" aria-hidden="true"></i>
+                            <input id="panelProcurementSearch" type="search" autocomplete="off" placeholder="Title, reference, category, or template">
+                        </div>
+                    </label>
+                    <label class="pev-field" for="panelMethodFilter">
+                        <span>Evaluation type</span>
+                        <select id="panelMethodFilter">
+                            <option value="all">All types</option>
+                            <option value="eoi">EOI</option>
+                            <option value="services">Services</option>
+                            <option value="goods">Goods</option>
+                        </select>
+                    </label>
+                    <label class="pev-field" for="panelStatusFilter">
+                        <span>Journey status</span>
+                        <select id="panelStatusFilter">
+                            <option value="all">All statuses</option>
+                            <option value="ready">Panel complete</option>
+                            <option value="in_progress">In progress</option>
+                            <option value="awaiting">Awaiting reports</option>
+                            <option value="setup_required">Setup required</option>
+                        </select>
+                    </label>
+                    <label class="pev-field" for="panelSort">
+                        <span>Sort</span>
+                        <select id="panelSort">
+                            <option value="recent">Recent activity</option>
+                            <option value="title">Title A–Z</option>
+                            <option value="progress">Most progress</option>
+                        </select>
+                    </label>
+                    <button id="panelFilterReset" class="pev-btn pev-btn--outline" type="button">
+                        <i class="feather-rotate-ccw" aria-hidden="true"></i> Reset
+                    </button>
                 </div>
 
-                {{-- <a href="#" id="bulkPdfBtn" class="btn btn-outline-primary d-none">
-                    <i class="feather-download me-1"></i>
-                    Download All PDFs
-                </a> --}}
-            </div>
-        </div>
+                <div id="panelProcurementGrid" class="pev-procurement-grid">
+                    @foreach ($procurementCards as $card)
+                        @include('evaluations.panel.partials.procurement-card', [
+                            'card' => $card,
+                            'statusLabel' => $statusLabels[$card['status']] ?? Str::headline($card['status']),
+                        ])
+                    @endforeach
+                </div>
 
-        {{-- ================= DATA ================= --}}
-        @foreach ($submissions as $procurementId => $apps)
-            <div class="procurement-block d-none" id="procurement-{{ $procurementId }}">
-
-                @foreach ($apps as $applicant)
-                    <div class="card shadow-sm mb-4">
-
-                        {{-- APPLICANT HEADER --}}
-                        <div class="card-header bg-light fw-bold d-flex justify-content-between">
-                            <div>
-                                Submission:
-                                <span class="badge bg-secondary">
-                                    {{ $applicant->procurement_submission_code }}
-                                </span>
-                                <br>
-                                <small class="text-muted">
-                                    {{ optional($applicant->submitter)->name ?? '—' }}
-                                </small>
-                            </div>
-                        </div>
-
-                        {{-- ================= EVALUATORS ================= --}}
-                        <div class="card-body">
-
-                            @php
-                                $evals = $evaluations[$applicant->id] ?? collect();
-                            @endphp
-
-                            @forelse ($evals as $submission)
-                                @php
-                                    $evaluation = $submission->evaluation;
-                                    $isNumeric = $evaluation->usesNumericScoring();
-                                    $sectionOutline = \App\Support\EvaluationSectionHierarchy::flattened($evaluation);
-                                @endphp
-
-                                <div class="border rounded mb-4">
-
-                                    {{-- EVALUATOR HEADER --}}
-                                    <div class="p-3 bg-dark text-white d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <strong>{{ $submission->evaluator->name }}</strong><br>
-                                            <small>
-                                                Submitted {{ $submission->submitted_at->format('d M Y, H:i') }}
-                                            </small>
-                                        </div>
-
-                                        <div class="d-flex gap-2">
-                                            <span class="badge bg-{{ $evaluation->typeColor() }}">
-                                                {{ $evaluation->typeLabel() }}
-                                            </span>
-
-                                            <a href="{{ route('evals.cfg.panel.pdf.single', $submission) }}"
-                                                class="btn btn-sm btn-outline-light">
-                                                PDF
-                                            </a>
-                                        </div>
-                                    </div>
-
-                                    {{-- EVALUATION DETAILS --}}
-                                    <div class="p-3">
-
-                                        @foreach ($sectionOutline as $node)
-                                            @php
-                                                $section = $node['section'];
-                                                $sectionScore = $submission->sectionScores->firstWhere(
-                                                    'evaluation_section_id',
-                                                    $section->id,
-                                                );
-                                                $sectionSubtotal = $isNumeric
-                                                    ? \App\Support\EvaluationSectionHierarchy::numericSubtotal($submission, $section)
-                                                    : null;
-                                                $sectionDistribution = $isNumeric
-                                                    ? []
-                                                    : \App\Support\EvaluationSectionHierarchy::decisionDistribution($submission, $section);
-                                            @endphp
-
-                                            <div class="mb-3 border-start border-3 ps-3"
-                                                style="margin-left: {{ min($node['depth'] * 16, 48) }}px">
-                                                <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
-                                                    <h6 class="fw-bold">
-                                                        <small class="d-block text-muted text-uppercase">{{ $node['label'] }}</small>
-                                                        {{ $node['number'] }}. {{ $section->name }}
-                                                    </h6>
-                                                    @if ($section->show_subtotal && $isNumeric)
-                                                        <span class="badge bg-primary-subtle text-primary">
-                                                            Sub-total {{ number_format($sectionSubtotal, 2) }} / {{ number_format($section->subtotalMaxScore(), 2) }}
-                                                        </span>
-                                                    @elseif ($section->show_subtotal)
-                                                        <span class="d-flex flex-wrap gap-1">
-                                                            @foreach ($sectionDistribution as $decision => $count)
-                                                                <span class="badge bg-light text-dark">{{ $decision }}: {{ $count }}</span>
-                                                            @endforeach
-                                                        </span>
-                                                    @endif
-                                                </div>
-
-                                                {{-- SERVICES --}}
-                                                @if ($section->criteria->isEmpty())
-                                                    <div class="text-muted small mb-2">Grouping section; criteria appear in child sections.</div>
-                                                @elseif ($isNumeric)
-                                                    <table class="table table-sm table-bordered">
-                                                        <thead class="table-light">
-                                                            <tr>
-                                                                <th>Criteria</th>
-                                                                <th width="100">Score</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            @foreach ($section->criteria as $criteria)
-                                                                @php
-                                                                    $cs = $submission->criteriaScores->firstWhere(
-                                                                        'evaluation_criteria_id',
-                                                                        $criteria->id,
-                                                                    );
-                                                                @endphp
-                                                                <tr>
-                                                                    <td>{{ $criteria->name }}</td>
-                                                                    <td class="text-center">
-                                                                        {{ number_format($cs->score ?? 0, 2) }}
-                                                                    </td>
-                                                                </tr>
-                                                            @endforeach
-                                                        </tbody>
-                                                    </table>
-                                                @else
-                                                    {{-- CATEGORICAL DECISIONS --}}
-                                                    <table class="table table-sm table-bordered">
-                                                        <thead class="table-light">
-                                                            <tr>
-                                                                <th>Criteria</th>
-                                                                <th width="90">Decision</th>
-                                                                <th>Comment</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            @foreach ($section->criteria as $criteria)
-                                                                @php
-                                                                    $cs = $submission->criteriaScores->firstWhere(
-                                                                        'evaluation_criteria_id',
-                                                                        $criteria->id,
-                                                                    );
-                                                                    $decisionLabel = $evaluation->decisionLabel($cs?->decision);
-                                                                    $decisionColor = match ($decisionLabel) {
-                                                                        'Yes', 'Qualified' => 'success',
-                                                                        'Average Qualified' => 'warning text-dark',
-                                                                        'No', 'Not Qualified' => 'danger',
-                                                                        default => 'secondary',
-                                                                    };
-                                                                @endphp
-                                                                <tr>
-                                                                    <td>{{ $criteria->name }}</td>
-                                                                    <td class="text-center">
-                                                                        @if ($decisionLabel)
-                                                                            <span class="badge bg-{{ $decisionColor }}">{{ $decisionLabel }}</span>
-                                                                        @else
-                                                                            —
-                                                                        @endif
-                                                                    </td>
-                                                                    <td>{{ $cs->comment ?? '—' }}</td>
-                                                                </tr>
-                                                            @endforeach
-                                                        </tbody>
-                                                    </table>
-                                                @endif
-
-                                                @if ($section->criteria->isNotEmpty())
-                                                    {{-- Notes are only collected for directly assessable sections. --}}
-                                                    <div class="row mt-2">
-                                                        <div class="col-md-6">
-                                                            <strong>Strengths</strong>
-                                                            <div class="form-control bg-light">
-                                                                {{ $sectionScore->strengths ?? '—' }}
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-6">
-                                                            <strong>Weaknesses</strong>
-                                                            <div class="form-control bg-light">
-                                                                {{ $sectionScore->weaknesses ?? '—' }}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                @endif
-                                            </div>
-                                        @endforeach
-
-                                        {{-- OVERALL (SERVICES ONLY) --}}
-                                        @if ($isNumeric)
-                                            <div class="text-end fw-bold">
-                                                Overall Score:
-                                                <span class="text-primary">
-                                                    {{ number_format($submission->overall_score, 2) }}
-                                                </span>
-                                            </div>
-                                        @endif
-                                    </div>
-                                </div>
-
-                            @empty
-                                <div class="text-muted">
-                                    No evaluations submitted yet.
-                                </div>
-                            @endforelse
-
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        @endforeach
-    </div>
-
+                <div id="panelNoResults" class="pev-empty" hidden>
+                    <span class="pev-empty__icon"><i class="feather-search" aria-hidden="true"></i></span>
+                    <h3>No procurements match these filters</h3>
+                    <p>Change a filter or reset the procurement library.</p>
+                </div>
+            @else
+                <div class="pev-empty">
+                    <span class="pev-empty__icon"><i class="feather-briefcase" aria-hidden="true"></i></span>
+                    <h3>No panel procurements yet</h3>
+                    <p>No procurement is currently available within your accessible portfolio.</p>
+                </div>
+            @endif
+        </section>
+    </main>
 @endsection
 
-@push('scripts')
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const select = document.getElementById('procurementSelect');
-        const bulkBtn = document.getElementById('bulkPdfBtn');
+@push('styles')
+    @include('evaluations.panel.partials.styles')
+@endpush
 
-        select.addEventListener('change', function() {
-            document.querySelectorAll('.procurement-block').forEach(el => {
-                el.classList.add('d-none');
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const grid = document.getElementById('panelProcurementGrid');
+            const search = document.getElementById('panelProcurementSearch');
+            const method = document.getElementById('panelMethodFilter');
+            const status = document.getElementById('panelStatusFilter');
+            const sort = document.getElementById('panelSort');
+            const reset = document.getElementById('panelFilterReset');
+            const count = document.getElementById('panelResultCount');
+            const empty = document.getElementById('panelNoResults');
+
+            if (!grid || !search || !method || !status || !sort) return;
+
+            const cards = Array.from(grid.querySelectorAll('[data-panel-procurement]'));
+            const normalize = (value) => String(value || '').trim().toLocaleLowerCase();
+
+            const arrange = () => {
+                cards.sort((left, right) => {
+                    if (sort.value === 'title') {
+                        return (left.dataset.title || '').localeCompare(right.dataset.title || '');
+                    }
+
+                    if (sort.value === 'progress') {
+                        return Number(right.dataset.progress || 0) - Number(left.dataset.progress || 0)
+                            || (left.dataset.title || '').localeCompare(right.dataset.title || '');
+                    }
+
+                    return Number(right.dataset.latest || 0) - Number(left.dataset.latest || 0)
+                        || (left.dataset.title || '').localeCompare(right.dataset.title || '');
+                });
+
+                cards.forEach((card) => grid.appendChild(card));
+            };
+
+            const filter = () => {
+                const query = normalize(search.value);
+                let visible = 0;
+
+                cards.forEach((card) => {
+                    const types = normalize(card.dataset.methods).split(' ').filter(Boolean);
+                    const matches = (!query || normalize(card.dataset.search).includes(query))
+                        && (method.value === 'all' || types.includes(method.value))
+                        && (status.value === 'all' || card.dataset.status === status.value);
+
+                    card.hidden = !matches;
+                    visible += matches ? 1 : 0;
+                });
+
+                if (count) count.textContent = `${visible} ${visible === 1 ? 'procurement' : 'procurements'}`;
+                if (empty) empty.hidden = visible !== 0;
+            };
+
+            search.addEventListener('input', filter);
+            method.addEventListener('change', filter);
+            status.addEventListener('change', filter);
+            sort.addEventListener('change', () => { arrange(); filter(); });
+            reset?.addEventListener('click', () => {
+                search.value = '';
+                method.value = 'all';
+                status.value = 'all';
+                sort.value = 'recent';
+                arrange();
+                filter();
+                search.focus();
             });
 
-            if (!this.value) {
-                bulkBtn?.classList.add('d-none');
-                return;
-            }
-
-            document.getElementById('procurement-' + this.value)
-                ?.classList.remove('d-none');
-
-            if (bulkBtn) {
-                bulkBtn.href = `/evals/config/panel/pdf/procurement/${this.value}`;
-                bulkBtn.classList.remove('d-none');
-            }
+            arrange();
+            filter();
         });
-    });
-</script>
+    </script>
 @endpush

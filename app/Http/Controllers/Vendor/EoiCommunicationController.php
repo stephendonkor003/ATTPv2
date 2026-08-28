@@ -7,7 +7,11 @@ use App\Models\EoiReportCommunication;
 use App\Models\EoiReportCommunicationAttachment;
 use App\Models\EoiReportCommunicationRecipient;
 use App\Models\EoiReportProposalDocument;
+use App\Models\EoiTechnicalProposalCandidate;
+use App\Models\EoiTechnicalProposalSubmission;
+use App\Models\FormSubmission;
 use App\Services\EoiReportCommunicationService;
+use App\Services\EoiTechnicalProposalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +30,7 @@ class EoiCommunicationController extends Controller
             ->where('user_id', $request->user()->getKey())
             ->with([
                 'communication.procurement' => fn ($query) => $query->withTrashed(),
+                'communication.technicalProposalRound',
                 'communication.attachments',
                 'proposalDocuments',
             ])
@@ -40,6 +45,8 @@ class EoiCommunicationController extends Controller
         $this->assertRecipientOwner($request, $recipient);
         $recipient->load([
             'communication.procurement' => fn ($query) => $query->withTrashed(),
+            'communication.technicalProposalRound.rules',
+            'communication.technicalProposalRound.templates',
             'communication.attachments',
             'proposalDocuments',
         ]);
@@ -48,7 +55,16 @@ class EoiCommunicationController extends Controller
             $recipient->forceFill(['read_at' => now()])->save();
         }
 
-        return view('vendor.eoi-communications.show', compact('recipient'));
+        $proposalCandidate = $this->technicalProposalCandidate($recipient);
+        $deadlineState = $proposalCandidate
+            ? app(EoiTechnicalProposalService::class)->deadlineState($proposalCandidate->round)
+            : null;
+
+        return view('vendor.eoi-communications.show', compact(
+            'recipient',
+            'proposalCandidate',
+            'deadlineState'
+        ));
     }
 
     public function downloadEvaluationRecord(
@@ -82,13 +98,18 @@ class EoiCommunicationController extends Controller
     ): StreamedResponse {
         $this->assertRecipientOwner($request, $recipient);
         $recipient->loadMissing('communication');
+        $validTemplatePath = str_starts_with(
+            $attachment->file_path,
+            'eoi-communications/'.$recipient->communication_id.'/templates/'
+        ) || ($recipient->communication?->technical_proposal_round_id
+            && str_starts_with(
+                $attachment->file_path,
+                'eoi-technical-proposals/'.$recipient->communication->technical_proposal_round_id.'/templates/'
+            ));
         abort_unless(
             $recipient->communication?->type === EoiReportCommunication::TYPE_PROPOSAL_INVITATION
                 && (string) $attachment->communication_id === (string) $recipient->communication_id
-                && str_starts_with(
-                    $attachment->file_path,
-                    'eoi-communications/'.$recipient->communication_id.'/templates/'
-                ),
+                && $validTemplatePath,
             404
         );
         abort_unless(Storage::disk('local')->exists($attachment->file_path), 404);
@@ -103,7 +124,8 @@ class EoiCommunicationController extends Controller
     public function submitProposal(
         Request $request,
         EoiReportCommunicationRecipient $recipient,
-        EoiReportCommunicationService $communicationService
+        EoiReportCommunicationService $communicationService,
+        EoiTechnicalProposalService $technicalProposalService
     ): RedirectResponse {
         $this->assertRecipientOwner($request, $recipient);
         $recipient->loadMissing('communication');
@@ -112,10 +134,13 @@ class EoiCommunicationController extends Controller
             404
         );
 
+        $hasTechnicalRound = filled($recipient->communication->technical_proposal_round_id);
         $validated = $request->validate([
             'proposal_message' => ['nullable', 'string', 'max:2000'],
-            'documents' => ['required', 'array', 'min:1', 'max:10'],
-            'documents.*' => ['required', 'file', 'mimes:pdf,doc,docx,xls,xlsx', 'max:10240'],
+            'documents' => ['required', 'array', 'min:1', 'max:'.($hasTechnicalRound ? 20 : 10)],
+            'documents.*' => $hasTechnicalRound
+                ? ['required', 'file', 'max:25600']
+                : ['required', 'file', 'mimes:pdf,doc,docx,xls,xlsx', 'max:10240'],
         ], [
             'documents.required' => 'Choose at least one proposal document.',
             'documents.max' => 'You may upload up to 10 proposal documents at a time.',
@@ -124,6 +149,44 @@ class EoiCommunicationController extends Controller
         ]);
 
         $documents = array_values(array_filter($request->file('documents', [])));
+
+        if ($hasTechnicalRound) {
+            $candidate = $this->technicalProposalCandidate($recipient);
+            abort_unless($candidate, 404);
+
+            $proposalSubmission = $technicalProposalService->createSubmission(
+                $candidate,
+                $documents,
+                $request->user(),
+                EoiTechnicalProposalSubmission::SOURCE_VENDOR_PORTAL,
+                EoiTechnicalProposalSubmission::CHANNEL_PORTAL,
+                null,
+                ['cover_note' => $validated['proposal_message'] ?? null]
+            );
+
+            foreach ($proposalSubmission->documents as $document) {
+                EoiReportProposalDocument::create([
+                    'recipient_id' => $recipient->getKey(),
+                    'uploaded_by' => $request->user()->getKey(),
+                    'file_path' => $document->file_path,
+                    'original_filename' => $document->original_filename,
+                    'mime_type' => $document->mime_type,
+                    'file_size' => $document->file_size,
+                    'sha256' => $document->sha256,
+                ]);
+            }
+
+            $recipient->forceFill([
+                'proposal_submitted_at' => $proposalSubmission->received_at,
+                'proposal_message' => trim((string) ($validated['proposal_message'] ?? '')) ?: null,
+            ])->save();
+            $candidate->applicant?->forceFill([
+                'status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
+            ])->save();
+
+            return back()->with('success', 'Your proposal revision was submitted securely and time-stamped.');
+        }
+
         $communicationService->assertCombinedUploadSize($documents);
         $storedPaths = [];
 
@@ -176,12 +239,17 @@ class EoiCommunicationController extends Controller
         EoiReportProposalDocument $document
     ): StreamedResponse {
         $this->assertRecipientOwner($request, $recipient);
+        $candidate = $this->technicalProposalCandidate($recipient);
+        $validProposalPath = str_starts_with(
+            $document->file_path,
+            'eoi-communications/'.$recipient->communication_id.'/proposals/'.$recipient->getKey().'/'
+        ) || ($candidate && str_starts_with(
+            $document->file_path,
+            'eoi-technical-proposals/'.$candidate->round_id.'/candidates/'.$candidate->getKey().'/revisions/'
+        ));
         abort_unless(
             (string) $document->recipient_id === (string) $recipient->getKey()
-                && str_starts_with(
-                    $document->file_path,
-                    'eoi-communications/'.$recipient->communication_id.'/proposals/'.$recipient->getKey().'/'
-                ),
+                && $validProposalPath,
             404
         );
         abort_unless(Storage::disk('local')->exists($document->file_path), 404);
@@ -212,6 +280,30 @@ class EoiCommunicationController extends Controller
                 && (string) $recipient->applicant->submitted_by !== (string) $request->user()->getKey(),
             404
         );
+    }
+
+    private function technicalProposalCandidate(
+        EoiReportCommunicationRecipient $recipient
+    ): ?EoiTechnicalProposalCandidate {
+        $recipient->loadMissing('communication');
+        $roundId = $recipient->communication?->technical_proposal_round_id;
+
+        if (! $roundId || ! $recipient->form_submission_id) {
+            return null;
+        }
+
+        return EoiTechnicalProposalCandidate::query()
+            ->where('round_id', $roundId)
+            ->where('form_submission_id', $recipient->form_submission_id)
+            ->where('user_id', $recipient->user_id)
+            ->with([
+                'round.rules',
+                'round.templates',
+                'applicant',
+                'submissions.documents',
+                'ruleApplications.rule',
+            ])
+            ->first();
     }
 
     private function privateDownload(string $path, string $filename, string $mimeType): StreamedResponse

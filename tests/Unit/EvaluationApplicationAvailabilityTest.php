@@ -28,17 +28,24 @@ it('blocks application states that must not receive evaluation input', function 
     'prescreen failed' => 'prescreen_failed',
 ]);
 
-it('uses one lifecycle availability rule across evaluator worklists and status synchronization', function () {
+it('keeps broad lifecycle availability while delegating workflow targets to the assignment resolver', function () {
     $root = dirname(__DIR__, 2);
     $model = file_get_contents($root.'/app/Models/FormSubmission.php');
     $workspace = file_get_contents($root.'/app/Http/Controllers/EvaluationSubmissionController.php');
+    $targetResolver = file_get_contents($root.'/app/Services/EvaluationAssignmentTargetResolver.php');
     $thinkTankWorkspace = file_get_contents($root.'/app/Http/Controllers/ThinkTankProcurementPlanController.php');
 
     expect($model)
         ->toContain('public const EVALUATION_BLOCKED_STATUSES')
         ->toContain('public function scopeAvailableForEvaluation(Builder $query): Builder')
-        ->and(substr_count($workspace, '->availableForEvaluation()'))->toBe(2)
-        ->and($workspace)->toContain('$applicant->isAvailableForEvaluation()')
+        ->and($targetResolver)
+        ->toContain('->availableForEvaluation()')
+        ->toContain('targetsForAssignment(')
+        ->toContain('EoiTechnicalProposalCandidate::STATUS_QUALIFIED')
+        ->toContain('FormSubmission::STATUS_TECHNICAL_EVALUATION')
+        ->and($workspace)
+        ->toContain('targetsForAssignment(')
+        ->toContain('isEligible(')
         ->and($thinkTankWorkspace)->toContain('->availableForEvaluation()');
 });
 
@@ -57,6 +64,6 @@ it('treats an explicit assignment as evaluator access without applying managemen
         ->toContain("fn (\$query) => \$query->where('user_id', \$user->id)")
         ->not->toContain('applyAssignedPortfolioScopeToEvaluationAssignments')
         ->and($ownerMethod)
-        ->toContain("(string) \$assignment->user_id === (string) \$user->id")
+        ->toContain('(string) $assignment->user_id === (string) $user->id')
         ->not->toContain('evaluationAssignmentIsInAssignedPortfolio');
 });

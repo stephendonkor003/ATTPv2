@@ -141,6 +141,8 @@ use App\Http\Controllers\{
     GovernanceStructureController,
     EvaluationAssignmentController,
     EoiReportCommunicationController,
+    EoiTechnicalProposalController,
+    PanelEvaluationController,
 };
 
 use App\Http\Controllers\Vendor\{
@@ -2849,6 +2851,11 @@ Route::middleware(['auth', 'permission:evaluations.evaluate'])
         Route::get('/{assignment}/video/{applicant}', [EvaluationSubmissionController::class, 'video'])
             ->name('video');
 
+        // Private technical-proposal evidence for the assigned evaluator.
+        Route::get('/{assignment}/technical-proposals/{candidate}/submissions/{proposalSubmission}/documents/{document}',
+            [EvaluationSubmissionController::class, 'proposalDocument']
+        )->name('proposal-document');
+
     });
 
 /*
@@ -2934,19 +2941,16 @@ Route::middleware(['auth', 'permission:evaluations.evaluate'])
         )->name('video');
     });
 
-Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.evaluate'])
+Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_all'])
     ->prefix('panel-evaluations')
     ->name('eval.panel.')
     ->group(function () {
-
-        // Panel Evaluation Dashboard
-        Route::get('/',
-            [EvaluationSubmissionController::class, 'panelHub']
-        )->name('index');
-
-        // (optional, later)
-        // Route::get('/data', [EvaluationSubmissionController::class, 'panelData'])
-        //     ->name('data');
+        Route::get('/', [PanelEvaluationController::class, 'index'])->name('index');
+        Route::get('/procurements/{procurement}', [PanelEvaluationController::class, 'show'])
+            ->name('procurement');
+        Route::get('/procurements/{procurement}/methods/{method}', [PanelEvaluationController::class, 'method'])
+            ->where('method', 'services|goods|eoi')
+            ->name('method');
 });
 
 
@@ -3314,6 +3318,18 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
         Route::get('/eoi/{procurement}/communications/{communication}/recipients/{recipient}/proposal-documents/{document}', [EoiReportCommunicationController::class, 'downloadProposalDocument'])
             ->middleware('permission:evaluations.manage')
             ->name('eoi.communications.proposal-documents.download');
+        Route::post('/eoi/{procurement}/technical-proposals/{round}/candidates/{candidate}/capture', [EoiTechnicalProposalController::class, 'capture'])
+            ->middleware('permission:evaluations.manage')
+            ->name('eoi.technical-proposals.capture');
+        Route::post('/eoi/{procurement}/technical-proposals/{round}/candidates/{candidate}/review', [EoiTechnicalProposalController::class, 'review'])
+            ->middleware('permission:evaluations.manage')
+            ->name('eoi.technical-proposals.review');
+        Route::get('/eoi/{procurement}/technical-proposals/{round}/templates/{template}', [EoiTechnicalProposalController::class, 'downloadTemplate'])
+            ->middleware('permission:evaluations.manage')
+            ->name('eoi.technical-proposals.templates.download');
+        Route::get('/eoi/{procurement}/technical-proposals/{round}/candidates/{candidate}/submissions/{proposalSubmission}/documents/{document}', [EoiTechnicalProposalController::class, 'downloadDocument'])
+            ->middleware('permission:evaluations.manage')
+            ->name('eoi.technical-proposals.documents.download');
         Route::get('/submission/{submission}', [EvaluationReportController::class, 'submission'])->name('submission');
         Route::get('/submission/{submission}/pdf', [EvaluationReportController::class, 'submissionPdf'])->name('submission.pdf');
         Route::get('/submission/{submission}/anonymised-pdf', [EvaluationReportController::class, 'submissionAnonymisedPdf'])->name('submission.anonymised-pdf');

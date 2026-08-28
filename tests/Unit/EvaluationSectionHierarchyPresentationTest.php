@@ -152,14 +152,13 @@ it('reports categorical subtree distributions and never treats unanswered values
         ]);
 });
 
-it('wires hierarchy subtotals into evaluator, read-only, panel and report presentations', function () {
+it('wires hierarchy subtotals into evaluator, read-only, panel PDF and report presentations', function () {
     $root = dirname(__DIR__, 2);
     $views = [
         'resources/views/evaluations/submit.blade.php',
         'resources/views/evaluations/view.blade.php',
         'resources/views/evaluations/partials/template-preview.blade.php',
         'resources/views/evaluations/pdf/template.blade.php',
-        'resources/views/evaluations/panel/index.blade.php',
         'resources/views/evaluations/panel/pdf/single.blade.php',
         'resources/views/evaluations/panel/pdf/bulk.blade.php',
         'resources/views/reports/evaluations/submission.blade.php',
@@ -210,7 +209,6 @@ it('wires hierarchy subtotals into evaluator, read-only, panel and report presen
 
     foreach ([
         'resources/views/evaluations/view.blade.php',
-        'resources/views/evaluations/panel/index.blade.php',
         'resources/views/evaluations/panel/pdf/single.blade.php',
         'resources/views/evaluations/panel/pdf/bulk.blade.php',
         'resources/views/reports/evaluations/submission.blade.php',

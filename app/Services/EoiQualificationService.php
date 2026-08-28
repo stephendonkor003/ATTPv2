@@ -246,8 +246,10 @@ class EoiQualificationService
         $expectedTasks = $applicantAssignments
             ->map(function (EvaluationAssignment $assignment) use ($applicantRecords): array {
                 $submission = $applicantRecords->first(
-                    fn (EvaluationSubmission $record): bool => (string) $record->evaluation_id === (string) $assignment->evaluation_id
-                        && (string) $record->evaluator_id === (string) $assignment->user_id
+                    fn (EvaluationSubmission $record): bool => filled($record->evaluation_assignment_id)
+                        ? (string) $record->evaluation_assignment_id === (string) $assignment->getKey()
+                        : (string) $record->evaluation_id === (string) $assignment->evaluation_id
+                            && (string) $record->evaluator_id === (string) $assignment->user_id
                 );
 
                 return [
@@ -344,7 +346,9 @@ class EoiQualificationService
             ->map(function (EvaluationAssignment $assignment) use ($evaluation, $evaluationSubmissions): array {
                 $submission = $evaluationSubmissions
                     ->sortByDesc(fn (EvaluationSubmission $record): int => $record->submitted_at?->getTimestamp() ?? 0)
-                    ->first(fn (EvaluationSubmission $record): bool => (string) $record->evaluator_id === (string) $assignment->user_id);
+                    ->first(fn (EvaluationSubmission $record): bool => filled($record->evaluation_assignment_id)
+                        ? (string) $record->evaluation_assignment_id === (string) $assignment->getKey()
+                        : (string) $record->evaluator_id === (string) $assignment->user_id);
 
                 return $this->memberRow(
                     $this->taskKey($evaluation->getKey(), $assignment->user_id),
@@ -512,6 +516,7 @@ class EoiQualificationService
     {
         return EvaluationAssignment::query()
             ->where('procurement_id', $procurement->getKey())
+            ->where('workflow_stage', EvaluationAssignment::STAGE_APPLICATION)
             ->whereHas('evaluation', fn (Builder $query) => $query->where('type', Evaluation::TYPE_EOI))
             ->with([
                 'evaluator:id,name,email',
@@ -523,6 +528,11 @@ class EoiQualificationService
     {
         return EvaluationSubmission::query()
             ->where('procurement_id', $procurement->getKey())
+            ->where(function (Builder $query): void {
+                $query->whereNull('evaluation_assignment_id')
+                    ->orWhereHas('assignment', fn (Builder $assignment) => $assignment
+                        ->where('workflow_stage', EvaluationAssignment::STAGE_APPLICATION));
+            })
             ->whereHas('evaluation', fn (Builder $query) => $query->where('type', Evaluation::TYPE_EOI))
             ->with([
                 'evaluator:id,name,email',

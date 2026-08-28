@@ -16,6 +16,7 @@ class EoiReportCommunication extends BaseModel
         'type',
         'subject',
         'message',
+        'technical_proposal_round_id',
         'created_by',
         'sent_at',
     ];
@@ -35,6 +36,11 @@ class EoiReportCommunication extends BaseModel
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function technicalProposalRound(): BelongsTo
+    {
+        return $this->belongsTo(EoiTechnicalProposalRound::class, 'technical_proposal_round_id');
     }
 
     public function recipients(): HasMany

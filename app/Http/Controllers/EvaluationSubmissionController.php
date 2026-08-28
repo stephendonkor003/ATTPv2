@@ -4,12 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Mail\EvaluationCompleted;
+use App\Models\EoiTechnicalProposalCandidate;
+use App\Models\EoiTechnicalProposalDocument;
+use App\Models\EoiTechnicalProposalSubmission;
 use App\Models\Evaluation;
 use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
 use App\Models\FormSubmission;
 use App\Models\User;
 use App\Services\EoiQualificationService;
+use App\Services\EvaluationAssignmentTargetResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +22,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EvaluationSubmissionController extends Controller
 {
@@ -57,7 +62,7 @@ class EvaluationSubmissionController extends Controller
         }
 
         $assignments = EvaluationAssignment::query()
-            ->with(['procurement', 'evaluation'])
+            ->with(['procurement', 'evaluation', 'technicalProposalRound'])
             ->whereHas('procurement', fn ($query) => $query->whereNull('procurements.deleted_at'))
             ->whereHas('evaluation')
             ->when(
@@ -69,75 +74,51 @@ class EvaluationSubmissionController extends Controller
             ->latest()
             ->get();
 
-        $submissionIds = $assignments
-            ->whereNotNull('form_submission_id')
-            ->pluck('form_submission_id')
-            ->unique();
+        $applicationsByAssignmentId = $assignments->mapWithKeys(function (EvaluationAssignment $item): array {
+            $applications = $this->applicationsForAssignment($item);
+            $applications->each(fn (FormSubmission $application) => $application->loadMissing([
+                'form',
+                'submitter',
+                'values',
+            ]));
 
-        $procurementIds = $assignments
-            ->whereNull('form_submission_id')
-            ->pluck('procurement_id')
-            ->unique();
-
-        $submissions = ($submissionIds->isEmpty() && $procurementIds->isEmpty())
-            ? collect()
-            : FormSubmission::with(['form', 'submitter', 'values'])
-                ->availableForEvaluation()
-                ->where(function ($q) use ($submissionIds, $procurementIds) {
-                    if ($submissionIds->isNotEmpty()) {
-                        $q->orWhereIn('id', $submissionIds);
-                    }
-                    if ($procurementIds->isNotEmpty()) {
-                        $q->orWhereIn('procurement_id', $procurementIds);
-                    }
-                })
-                ->latest()
-                ->get();
-        $applicationsByAssignmentId = $assignments->mapWithKeys(
-            fn (EvaluationAssignment $item): array => [
-                (string) $item->getKey() => $this->applicationsForAssignment($item, $submissions),
-            ]
-        );
-
-        $evaluationIds = $assignments->pluck('evaluation_id')->filter()->unique();
-        $evaluatorIds = $assignments->pluck('user_id')->filter()->unique();
-        $allProcurementIds = $assignments->pluck('procurement_id')->filter()->unique();
+            return [(string) $item->getKey() => $applications];
+        });
+        $submissions = $applicationsByAssignmentId
+            ->flatten(1)
+            ->unique(fn (FormSubmission $application): string => (string) $application->getKey())
+            ->values();
         $allSubmissionIds = $submissions->pluck('id');
-        $taskTupleKeys = $assignments
-            ->flatMap(function (EvaluationAssignment $item) use ($applicationsByAssignmentId) {
-                $applications = $applicationsByAssignmentId->get((string) $item->getKey(), collect());
+        $assignmentIds = $assignments->pluck('id');
+        $applicationAssignments = $assignments->reject->isTechnicalProposal();
 
-                return $applications->map(fn (FormSubmission $application): string => implode(':', [
-                    $item->user_id,
-                    $item->evaluation_id,
-                    $item->procurement_id,
-                    $application->id,
-                ]));
-            })
-            ->flip();
-
-        $evaluationSubmissions = ($evaluationIds->isEmpty()
-            || $evaluatorIds->isEmpty()
-            || $allProcurementIds->isEmpty()
-            || $allSubmissionIds->isEmpty())
+        $submissionRecords = ($assignmentIds->isEmpty() || $allSubmissionIds->isEmpty())
             ? collect()
             : EvaluationSubmission::query()
-                ->whereIn('evaluator_id', $evaluatorIds)
-                ->whereIn('evaluation_id', $evaluationIds)
-                ->whereIn('procurement_id', $allProcurementIds)
                 ->whereIn('form_submission_id', $allSubmissionIds)
-                ->get()
-                ->filter(fn (EvaluationSubmission $submission): bool => $taskTupleKeys->has(implode(':', [
-                    $submission->evaluator_id,
-                    $submission->evaluation_id,
-                    $submission->procurement_id,
-                    $submission->form_submission_id,
-                ])))
-                ->keyBy(fn (EvaluationSubmission $submission): string => implode(':', [
-                    $submission->evaluation_id,
-                    $submission->procurement_id,
-                    $submission->form_submission_id,
-                ]));
+                ->where(function ($query) use ($assignmentIds, $applicationAssignments): void {
+                    $query->whereIn('evaluation_assignment_id', $assignmentIds);
+
+                    if ($applicationAssignments->isNotEmpty()) {
+                        $query->orWhere(function ($legacy) use ($applicationAssignments): void {
+                            $legacy->whereNull('evaluation_assignment_id')
+                                ->whereIn('evaluation_id', $applicationAssignments->pluck('evaluation_id')->filter()->unique())
+                                ->whereIn('procurement_id', $applicationAssignments->pluck('procurement_id')->filter()->unique())
+                                ->whereIn('evaluator_id', $applicationAssignments->pluck('user_id')->filter()->unique());
+                        });
+                    }
+                })
+                ->get();
+
+        $evaluationSubmissions = collect();
+        foreach ($assignments as $item) {
+            foreach ($applicationsByAssignmentId->get((string) $item->getKey(), collect()) as $application) {
+                $record = $this->submissionRecordFromCollection($submissionRecords, $item, $application);
+                if ($record) {
+                    $evaluationSubmissions->put($this->assignmentTaskKey($item, $application), $record);
+                }
+            }
+        }
 
         $taskCount = $assignments->sum(function (EvaluationAssignment $item) use ($applicationsByAssignmentId): int {
             return $applicationsByAssignmentId
@@ -174,11 +155,12 @@ class EvaluationSubmissionController extends Controller
     {
         $this->assertAssignmentOwner($assignment);
         $this->assertApplicantBelongsToAssignment($assignment, $applicant);
-        $this->assertApplicantReadyForEvaluation($applicant, $assignment->evaluation);
+        $this->assertApplicantReadyForEvaluation($assignment, $applicant);
 
         $assignment->loadMissing([
             'procurement',
             'evaluation.sections.criteria',
+            'technicalProposalRound',
         ]);
         $applicant->loadMissing(['form', 'submitter', 'values']);
 
@@ -193,12 +175,7 @@ class EvaluationSubmissionController extends Controller
         $submission = DB::transaction(function () use ($assignment, $applicant) {
             $this->lockEvaluationWorkItem($assignment, $applicant);
 
-            return EvaluationSubmission::firstOrCreate([
-                'evaluation_id' => $assignment->evaluation_id,
-                'procurement_id' => $assignment->procurement_id,
-                'evaluator_id' => $assignment->user_id,
-                'form_submission_id' => $applicant->id,
-            ]);
+            return $this->evaluationSubmissionForUpdate($assignment, $applicant);
         });
 
         if ($submission->isSubmitted()) {
@@ -206,11 +183,13 @@ class EvaluationSubmissionController extends Controller
         }
 
         $submission->load(['criteriaScores', 'sectionScores']);
+        $proposalTarget = $this->proposalTargetForDisplay($assignment, $applicant, $submission);
 
         return view('evaluations.submit', compact(
             'assignment',
             'submission',
-            'applicant'
+            'applicant',
+            'proposalTarget'
         ));
     }
 
@@ -224,7 +203,7 @@ class EvaluationSubmissionController extends Controller
     ) {
         $this->assertAssignmentOwner($assignment);
         $this->assertApplicantBelongsToAssignment($assignment, $applicant);
-        $this->assertApplicantReadyForEvaluation($applicant, $assignment->evaluation);
+        $this->assertApplicantReadyForEvaluation($assignment, $applicant);
 
         $assignment->loadMissing(['procurement', 'evaluation.sections.criteria']);
         abort_unless($assignment->procurement && $assignment->evaluation, 404);
@@ -254,12 +233,7 @@ class EvaluationSubmissionController extends Controller
             $this->lockEvaluationWorkItem($assignment, $applicant);
             $evaluation = $assignment->evaluation;
 
-            $submission = EvaluationSubmission::firstOrCreate([
-                'evaluation_id' => $evaluation->id,
-                'procurement_id' => $assignment->procurement_id,
-                'evaluator_id' => $assignment->user_id,
-                'form_submission_id' => $applicant->id,
-            ]);
+            $submission = $this->evaluationSubmissionForUpdate($assignment, $applicant);
 
             abort_unless(
                 $this->submissionIsMutable($submission),
@@ -410,7 +384,7 @@ class EvaluationSubmissionController extends Controller
     ) {
         $this->assertAssignmentOwner($assignment);
         $this->assertApplicantBelongsToAssignment($assignment, $applicant);
-        $this->assertApplicantReadyForEvaluation($applicant, $assignment->evaluation);
+        $this->assertApplicantReadyForEvaluation($assignment, $applicant);
 
         $assignment->loadMissing(['procurement', 'evaluation.sections.criteria']);
         abort_unless($assignment->procurement && $assignment->evaluation, 404);
@@ -441,12 +415,7 @@ class EvaluationSubmissionController extends Controller
             /* ===============================
              | GET / CREATE SUBMISSION
              =============================== */
-            $submission = EvaluationSubmission::firstOrCreate([
-                'evaluation_id' => $evaluation->id,
-                'procurement_id' => $assignment->procurement_id,
-                'evaluator_id' => $assignment->user_id,
-                'form_submission_id' => $applicant->id,
-            ]);
+            $submission = $this->evaluationSubmissionForUpdate($assignment, $applicant);
 
             abort_if($submission->isSubmitted(), 403);
 
@@ -586,7 +555,7 @@ class EvaluationSubmissionController extends Controller
         // Run after the evaluator transaction commits. If multiple panel members
         // finish concurrently, the last committed submission recomputes the full
         // applicant panel and applies the final EOI gate exactly once in effect.
-        if ($evaluation->isEoi()) {
+        if ($evaluation->isEoi() && ! $assignment->isTechnicalProposal()) {
             app(EoiQualificationService::class)->synchronizeApplicantStage($applicant);
         }
 
@@ -654,28 +623,31 @@ class EvaluationSubmissionController extends Controller
         abort_unless($this->canViewAssignment($assignment), 403);
         $this->assertApplicantBelongsToAssignment($assignment, $applicant);
 
-        $assignment->loadMissing(['procurement', 'evaluation.sections.criteria']);
+        $assignment->loadMissing([
+            'procurement',
+            'evaluation.sections.criteria',
+            'technicalProposalRound',
+        ]);
         $applicant->loadMissing(['form', 'submitter', 'values']);
         abort_unless($assignment->procurement && $assignment->evaluation, 404);
 
-        $submission = EvaluationSubmission::with([
-            'criteriaScores.criteria',
-            'sectionScores.section',
-            'evaluator',
-        ])
-            ->where([
-                'evaluation_id' => $assignment->evaluation_id,
-                'procurement_id' => $assignment->procurement_id,
-                'evaluator_id' => $assignment->user_id,
-                'form_submission_id' => $applicant->id,
+        $submission = $this->evaluationSubmissionQuery($assignment, $applicant)
+            ->with([
+                'criteriaScores.criteria',
+                'sectionScores.section',
+                'evaluator',
+                'technicalProposalCandidate.round',
+                'technicalProposalSubmission.documents',
             ])
             ->whereNotNull('submitted_at')
             ->firstOrFail();
+        $proposalTarget = $this->proposalTargetForDisplay($assignment, $applicant, $submission);
 
         return view('evaluations.view', compact(
             'assignment',
             'submission',
-            'applicant'
+            'applicant',
+            'proposalTarget'
         ));
     }
 
@@ -687,12 +659,9 @@ class EvaluationSubmissionController extends Controller
         abort_unless($this->canViewAssignment($assignment), 403);
         $this->assertApplicantBelongsToAssignment($assignment, $applicant);
 
-        $submission = EvaluationSubmission::where([
-            'evaluation_id' => $assignment->evaluation_id,
-            'procurement_id' => $assignment->procurement_id,
-            'evaluator_id' => $assignment->user_id,
-            'form_submission_id' => $applicant->id,
-        ])->whereNotNull('submitted_at')->firstOrFail();
+        $submission = $this->evaluationSubmissionQuery($assignment, $applicant)
+            ->whereNotNull('submitted_at')
+            ->firstOrFail();
 
         $path = (string) ($submission->video_path ?? '');
         abort_if($path === '', 404, 'Video not found.');
@@ -722,6 +691,64 @@ class EvaluationSubmissionController extends Controller
         return $privateDisk->response($path, null, $headers);
     }
 
+    public function proposalDocument(
+        EvaluationAssignment $assignment,
+        EoiTechnicalProposalCandidate $candidate,
+        EoiTechnicalProposalSubmission $proposalSubmission,
+        EoiTechnicalProposalDocument $document
+    ): StreamedResponse {
+        abort_unless($this->canViewAssignment($assignment), 403);
+        abort_unless($assignment->isTechnicalProposal(), 404);
+
+        $assignment->loadMissing(['procurement', 'evaluation', 'technicalProposalRound']);
+        abort_unless(
+            (string) $candidate->round_id === (string) $assignment->technical_proposal_round_id
+                && (string) $proposalSubmission->candidate_id === (string) $candidate->getKey()
+                && (string) $document->proposal_submission_id === (string) $proposalSubmission->getKey(),
+            404
+        );
+
+        $applicant = FormSubmission::query()
+            ->whereKey($candidate->form_submission_id)
+            ->where('procurement_id', $assignment->procurement_id)
+            ->firstOrFail();
+        $this->assertApplicantBelongsToAssignment($assignment, $applicant);
+
+        $snapshotProposalId = EvaluationSubmission::query()
+            ->where('evaluation_assignment_id', $assignment->getKey())
+            ->where('form_submission_id', $applicant->getKey())
+            ->value('technical_proposal_submission_id');
+
+        if (! $snapshotProposalId) {
+            $target = $this->targetResolver()->targetForApplicant(
+                $assignment->procurement,
+                $assignment->evaluation,
+                $applicant,
+                EvaluationAssignment::STAGE_TECHNICAL_PROPOSAL,
+                $assignment->technicalProposalRound
+            );
+            $snapshotProposalId = $target ? $target['proposal_submission']?->getKey() : null;
+        }
+
+        abort_unless(
+            (string) $snapshotProposalId === (string) $proposalSubmission->getKey()
+                && str_starts_with(
+                    (string) $document->file_path,
+                    'eoi-technical-proposals/'.$assignment->technical_proposal_round_id
+                        .'/candidates/'.$candidate->getKey().'/revisions/'
+                ),
+            404
+        );
+        abort_unless(Storage::disk('local')->exists($document->file_path), 404);
+
+        return Storage::disk('local')->download($document->file_path, $document->original_filename, [
+            'Content-Type' => $document->mime_type,
+            'Cache-Control' => 'private, no-store, max-age=0',
+            'Pragma' => 'no-cache',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     public function compare(EvaluationAssignment $assignment)
     {
         abort_unless(auth()->user()->can('evaluations.view_all'), 403);
@@ -739,9 +766,38 @@ class EvaluationSubmissionController extends Controller
             $relations[] = 'criteriaScores.criteria';
         }
 
+        $coverageAssignments = EvaluationAssignment::query()
+            ->where('evaluation_id', $assignment->evaluation_id)
+            ->where('procurement_id', $assignment->procurement_id)
+            ->where('workflow_stage', $assignment->workflow_stage ?: EvaluationAssignment::STAGE_APPLICATION)
+            ->when(
+                $assignment->technical_proposal_round_id,
+                fn ($query) => $query->where('technical_proposal_round_id', $assignment->technical_proposal_round_id),
+                fn ($query) => $query->whereNull('technical_proposal_round_id')
+            )
+            ->when($assignment->form_submission_id, function ($query) use ($assignment): void {
+                $query->where(function ($scope) use ($assignment): void {
+                    $scope->whereNull('form_submission_id')
+                        ->orWhere('form_submission_id', $assignment->form_submission_id);
+                });
+            })
+            ->get(['id', 'user_id']);
+
         $submissionQuery = EvaluationSubmission::with($relations)
             ->where('evaluation_id', $assignment->evaluation_id)
             ->where('procurement_id', $assignment->procurement_id)
+            ->where(function ($query) use ($assignment, $coverageAssignments): void {
+                $query->whereIn('evaluation_assignment_id', $coverageAssignments->pluck('id'));
+
+                if (! $assignment->isTechnicalProposal()) {
+                    $query->orWhere(function ($legacy) use ($assignment, $coverageAssignments): void {
+                        $legacy->whereNull('evaluation_assignment_id')
+                            ->where('evaluation_id', $assignment->evaluation_id)
+                            ->where('procurement_id', $assignment->procurement_id)
+                            ->whereIn('evaluator_id', $coverageAssignments->pluck('user_id'));
+                    });
+                }
+            })
             ->whereNotNull('submitted_at');
 
         if ($assignment->form_submission_id) {
@@ -894,21 +950,180 @@ class EvaluationSubmissionController extends Controller
     }
 
     private function assertApplicantReadyForEvaluation(
-        FormSubmission $applicant,
-        ?Evaluation $evaluation = null
+        EvaluationAssignment $assignment,
+        FormSubmission $applicant
     ): void {
+        $assignment->loadMissing(['procurement', 'evaluation', 'technicalProposalRound']);
+
+        abort_unless($assignment->procurement && $assignment->evaluation, 404);
         abort_unless(
-            $applicant->isAvailableForEvaluation(),
+            $this->targetResolver()->isEligible(
+                $assignment->procurement,
+                $assignment->evaluation,
+                $applicant,
+                $assignment->workflow_stage ?: EvaluationAssignment::STAGE_APPLICATION,
+                $assignment->technicalProposalRound
+            ),
             409,
-            'This application is not currently ready for evaluation.'
+            $assignment->isTechnicalProposal()
+                ? 'This technical proposal is not in the qualified second-round shortlist.'
+                : 'This application is not currently ready for evaluation. The EOI panel must be completed before Technical Evaluation can begin.'
+        );
+    }
+
+    private function targetResolver(): EvaluationAssignmentTargetResolver
+    {
+        return app(EvaluationAssignmentTargetResolver::class);
+    }
+
+    private function assignmentTaskKey(
+        EvaluationAssignment $assignment,
+        FormSubmission $applicant
+    ): string {
+        return (string) $assignment->getKey().':'.(string) $applicant->getKey();
+    }
+
+    private function submissionRecordFromCollection(
+        Collection $records,
+        EvaluationAssignment $assignment,
+        FormSubmission $applicant
+    ): ?EvaluationSubmission {
+        $linked = $records->first(fn (EvaluationSubmission $record): bool => (string) $record->evaluation_assignment_id === (string) $assignment->getKey()
+            && (string) $record->form_submission_id === (string) $applicant->getKey()
         );
 
-        abort_if(
-            $applicant->status === FormSubmission::STATUS_EOI_EVALUATION
-                && ! $evaluation?->isEoi(),
-            409,
-            'The EOI panel must be completed before Technical Evaluation can begin.'
+        if ($linked || $assignment->isTechnicalProposal()) {
+            return $linked;
+        }
+
+        return $records->first(fn (EvaluationSubmission $record): bool => blank($record->evaluation_assignment_id)
+            && (string) $record->evaluation_id === (string) $assignment->evaluation_id
+            && (string) $record->procurement_id === (string) $assignment->procurement_id
+            && (string) $record->evaluator_id === (string) $assignment->user_id
+            && (string) $record->form_submission_id === (string) $applicant->getKey()
         );
+    }
+
+    private function evaluationSubmissionQuery(
+        EvaluationAssignment $assignment,
+        FormSubmission $applicant
+    ): \Illuminate\Database\Eloquent\Builder {
+        return EvaluationSubmission::query()
+            ->where('form_submission_id', $applicant->getKey())
+            ->where(function ($query) use ($assignment): void {
+                $query->where('evaluation_assignment_id', $assignment->getKey());
+
+                if (! $assignment->isTechnicalProposal()) {
+                    $query->orWhere(function ($legacy) use ($assignment): void {
+                        $legacy->whereNull('evaluation_assignment_id')
+                            ->where('evaluation_id', $assignment->evaluation_id)
+                            ->where('procurement_id', $assignment->procurement_id)
+                            ->where('evaluator_id', $assignment->user_id);
+                    });
+                }
+            })
+            ->orderByRaw('CASE WHEN evaluation_assignment_id IS NULL THEN 1 ELSE 0 END');
+    }
+
+    private function evaluationSubmissionForUpdate(
+        EvaluationAssignment $assignment,
+        FormSubmission $applicant
+    ): EvaluationSubmission {
+        $assignment->loadMissing(['procurement', 'evaluation', 'technicalProposalRound']);
+        abort_unless($assignment->procurement && $assignment->evaluation, 404);
+
+        $target = $this->targetResolver()->assertEligible(
+            $assignment->procurement,
+            $assignment->evaluation,
+            $applicant,
+            $assignment->workflow_stage ?: EvaluationAssignment::STAGE_APPLICATION,
+            $assignment->technicalProposalRound
+        );
+
+        $submission = EvaluationSubmission::query()
+            ->where('evaluation_assignment_id', $assignment->getKey())
+            ->where('form_submission_id', $applicant->getKey())
+            ->lockForUpdate()
+            ->first();
+
+        if (! $submission && ! $assignment->isTechnicalProposal()) {
+            $submission = EvaluationSubmission::query()
+                ->whereNull('evaluation_assignment_id')
+                ->where('evaluation_id', $assignment->evaluation_id)
+                ->where('procurement_id', $assignment->procurement_id)
+                ->where('evaluator_id', $assignment->user_id)
+                ->where('form_submission_id', $applicant->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if ($submission) {
+                $submission->forceFill([
+                    'evaluation_assignment_id' => $assignment->getKey(),
+                ])->save();
+            }
+        }
+
+        if (! $submission) {
+            $submission = EvaluationSubmission::create([
+                'evaluation_assignment_id' => $assignment->getKey(),
+                'evaluation_id' => $assignment->evaluation_id,
+                'procurement_id' => $assignment->procurement_id,
+                'evaluator_id' => $assignment->user_id,
+                'form_submission_id' => $applicant->getKey(),
+                'technical_proposal_candidate_id' => $target['candidate']?->getKey(),
+                'technical_proposal_submission_id' => $target['proposal_submission']?->getKey(),
+            ]);
+        }
+
+        return $submission;
+    }
+
+    /** @return array<string, mixed>|null */
+    private function proposalTargetForDisplay(
+        EvaluationAssignment $assignment,
+        FormSubmission $applicant,
+        ?EvaluationSubmission $submission = null
+    ): ?array {
+        if (! $assignment->isTechnicalProposal()) {
+            return null;
+        }
+
+        $assignment->loadMissing(['procurement', 'evaluation', 'technicalProposalRound']);
+
+        if ($submission?->technical_proposal_candidate_id && $submission?->technical_proposal_submission_id) {
+            $submission->loadMissing([
+                'technicalProposalCandidate',
+                'technicalProposalSubmission.documents',
+            ]);
+
+            return [
+                'stage' => EvaluationAssignment::STAGE_TECHNICAL_PROPOSAL,
+                'applicant' => $applicant,
+                'candidate' => $submission->technicalProposalCandidate,
+                'proposal_submission' => $submission->technicalProposalSubmission,
+                'round' => $assignment->technicalProposalRound,
+            ];
+        }
+
+        if (! $assignment->procurement || ! $assignment->evaluation) {
+            return null;
+        }
+
+        $target = $this->targetResolver()->targetForApplicant(
+            $assignment->procurement,
+            $assignment->evaluation,
+            $applicant,
+            EvaluationAssignment::STAGE_TECHNICAL_PROPOSAL,
+            $assignment->technicalProposalRound
+        );
+
+        if (! $target) {
+            return null;
+        }
+
+        $target['proposal_submission']?->loadMissing('documents');
+
+        return $target;
     }
 
     private function submissionIsMutable(EvaluationSubmission $submission): bool
@@ -1049,6 +1264,26 @@ class EvaluationSubmissionController extends Controller
             ->whereKey($assignment->getKey())
             ->lockForUpdate()
             ->firstOrFail();
+
+        if ($assignment->isTechnicalProposal()) {
+            $candidate = EoiTechnicalProposalCandidate::query()
+                ->where('round_id', $assignment->technical_proposal_round_id)
+                ->where('form_submission_id', $applicant->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            abort_unless(
+                $candidate
+                    && $assignment->technicalProposalRound
+                    && $this->targetResolver()->technicalCandidateIsEligible(
+                        $candidate,
+                        $assignment->technicalProposalRound,
+                        $assignment->procurement
+                    ),
+                409,
+                'This technical proposal is no longer eligible for evaluation.'
+            );
+        }
     }
 
     private function recalculateSubmissionTotals(
@@ -1096,30 +1331,27 @@ class EvaluationSubmissionController extends Controller
 
     private function synchronizeAssignmentStatus(EvaluationAssignment $assignment): void
     {
-        $assignment->loadMissing('evaluation');
+        $assignment->loadMissing(['evaluation', 'procurement', 'technicalProposalRound']);
 
-        $submissionIds = FormSubmission::query()
-            ->where('procurement_id', $assignment->procurement_id)
-            ->availableForEvaluation()
-            ->when(
-                ! $assignment->evaluation?->isEoi(),
-                fn ($query) => $query->where(function ($statusQuery): void {
-                    $statusQuery->whereNull('status')
-                        ->orWhere('status', '!=', FormSubmission::STATUS_EOI_EVALUATION);
-                })
-            )
-            ->when(
-                $assignment->form_submission_id,
-                fn ($query) => $query->whereKey($assignment->form_submission_id)
-            )
+        $submissionIds = $this->targetResolver()
+            ->targetsForAssignment($assignment)
             ->pluck('id');
 
         $completedCount = $submissionIds->isEmpty()
             ? 0
             : EvaluationSubmission::query()
-                ->where('evaluation_id', $assignment->evaluation_id)
-                ->where('procurement_id', $assignment->procurement_id)
-                ->where('evaluator_id', $assignment->user_id)
+                ->where(function ($query) use ($assignment): void {
+                    $query->where('evaluation_assignment_id', $assignment->getKey());
+
+                    if (! $assignment->isTechnicalProposal()) {
+                        $query->orWhere(function ($legacy) use ($assignment): void {
+                            $legacy->whereNull('evaluation_assignment_id')
+                                ->where('evaluation_id', $assignment->evaluation_id)
+                                ->where('procurement_id', $assignment->procurement_id)
+                                ->where('evaluator_id', $assignment->user_id);
+                        });
+                    }
+                })
                 ->whereIn('form_submission_id', $submissionIds)
                 ->whereNotNull('submitted_at')
                 ->distinct('form_submission_id')
@@ -1133,20 +1365,9 @@ class EvaluationSubmissionController extends Controller
     }
 
     private function applicationsForAssignment(
-        EvaluationAssignment $assignment,
-        Collection $submissions
+        EvaluationAssignment $assignment
     ): Collection {
-        $applications = $assignment->form_submission_id
-            ? $submissions->where('id', $assignment->form_submission_id)
-            : $submissions->where('procurement_id', $assignment->procurement_id);
-
-        if (! $assignment->evaluation?->isEoi()) {
-            $applications = $applications->reject(
-                fn (FormSubmission $application): bool => $application->status === FormSubmission::STATUS_EOI_EVALUATION
-            );
-        }
-
-        return $applications->values();
+        return $this->targetResolver()->targetsForAssignment($assignment)->values();
     }
 
     public function panelHub()

@@ -12,6 +12,7 @@ use App\Models\EvaluationSubmission;
 use App\Models\FormSubmission;
 use App\Models\Permission;
 use App\Models\Procurement;
+use App\Models\ProcurementAuditLog;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Contracts\Console\Kernel;
@@ -110,6 +111,10 @@ class EoiReportCommunicationsSmoke
                 ->postWithCsrf(route('reports.evaluations.eoi.communications.proposal-invitation', $procurement), [
                     'subject' => 'Qualified Applicant proposal stage',
                     'message' => 'Please complete the attached templates and submit your proposal through the protected vendor portal.',
+                    'deadline_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                    'portal_requirement' => 'allowed',
+                    'email_requirement' => 'not_allowed',
+                    'physical_requirement' => 'required',
                     'templates' => [
                         UploadedFile::fake()->create('technical-template.docx', 20, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
                         UploadedFile::fake()->create('financial-template.xlsx', 20, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
@@ -210,12 +215,145 @@ class EoiReportCommunicationsSmoke
                 ->assertOk()
                 ->assertHeader('cache-control', 'max-age=0, no-store, private');
 
+            $round = $proposalBatch->technicalProposalRound()
+                ->with(['candidates', 'rules'])
+                ->firstOrFail();
+            $candidate = $round->candidates->firstOrFail();
+
+            $captureResponse = $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.technical-proposals.capture', [
+                    $procurement,
+                    $round,
+                    $candidate,
+                ]), [
+                    'received_via' => 'email',
+                    'received_at' => now()->subHour()->format('Y-m-d H:i:s'),
+                    'capture_note' => 'Received in the procurement mailbox and registered on the applicant’s behalf.',
+                    'documents' => [
+                        UploadedFile::fake()->create('emailed-proposal.pdf', 30, 'application/pdf'),
+                    ],
+                ]);
+            $this->assertTrue($captureResponse->isRedirect(), 'The admin capture request did not redirect.');
+
+            $candidate->refresh()->load('submissions.documents');
+            $this->assertSame(2, $candidate->submissions->count(), 'The admin-captured email was not retained as a new immutable revision.');
+            $capturedSubmission = $candidate->submissions->sortByDesc('revision_number')->first();
+            $this->assertSame('admin_capture', $capturedSubmission->source, 'The on-behalf proposal source was not audited.');
+            $this->assertSame('email', $capturedSubmission->received_via, 'The actual receipt channel was not preserved.');
+
+            $invalidFindings = [];
+            foreach ($round->rules->values() as $ruleIndex => $rule) {
+                $invalidFindings[$rule->id] = [
+                    'finding' => $ruleIndex === 1 ? 'non_compliant' : 'compliant',
+                    'effect' => 'none',
+                    'rationale' => null,
+                ];
+            }
+
+            $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.technical-proposals.review', [
+                    $procurement,
+                    $round,
+                    $candidate,
+                ]), ['findings' => $invalidFindings])
+                ->assertRedirect()
+                ->assertSessionHasErrors('rationale');
+            $this->assertSame(
+                0,
+                $candidate->ruleApplications()->count(),
+                'A rejected multi-rule review left partial findings behind.'
+            );
+
+            $findings = [];
+            foreach ($round->rules as $rule) {
+                $isChannelRule = $rule->category === 'channel';
+                $findings[$rule->id] = [
+                    'finding' => $isChannelRule ? 'non_compliant' : 'compliant',
+                    'effect' => $isChannelRule ? 'disqualify' : 'none',
+                    'rationale' => $isChannelRule
+                        ? 'A physical copy was mandatory, but the applicant sent the revision only by email.'
+                        : null,
+                ];
+            }
+
+            $reviewResponse = $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.technical-proposals.review', [
+                    $procurement,
+                    $round,
+                    $candidate,
+                ]), ['findings' => $findings]);
+            $this->assertTrue(
+                $reviewResponse->isRedirect(),
+                'The proposal compliance review did not redirect (HTTP '.$reviewResponse->getStatusCode().'): '
+                    .Str::limit(strip_tags($reviewResponse->getContent()), 500)
+            );
+
+            $candidate->refresh();
+            $this->assertSame('disqualified', $candidate->status, 'A documented disqualifying channel failure did not stop the applicant.');
+            $reviewAudit = ProcurementAuditLog::query()
+                ->where('procurement_id', $procurement->id)
+                ->where('action', 'technical_proposal_reviewed')
+                ->latest('created_at')
+                ->firstOrFail();
+            $this->assertSame(
+                (string) $candidate->form_submission_id,
+                (string) $reviewAudit->submission_id,
+                'The proposal review audit was not linked to the original applicant submission.'
+            );
+            $this->assertSame(
+                FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
+                $candidate->applicant()->value('status'),
+                'The applicant lifecycle did not reflect the proposal-stage disqualification.'
+            );
+
+            $capturedDocument = $capturedSubmission->documents->firstOrFail();
+            $this->actingAs($administrator)
+                ->get(route('reports.evaluations.eoi.technical-proposals.documents.download', [
+                    $procurement,
+                    $round,
+                    $candidate,
+                    $capturedSubmission,
+                    $capturedDocument,
+                ]))
+                ->assertOk()
+                ->assertHeader('cache-control', 'max-age=0, no-store, private');
+
             $this->assertTrue(
                 ! EoiReportCommunication::query()
                     ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION)
                     ->whereHas('recipients', fn ($query) => $query->where('user_id', $notQualifiedVendor->id))
                     ->exists(),
                 'A final Not Qualified applicant was invited to submit a proposal.'
+            );
+
+            [$offlineProcurement, , $offlineQualifiedVendor] = $this->fixture($administrator);
+            $offlineQualifiedVendor->forceFill(['is_disabled' => true])->save();
+
+            $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.communications.proposal-invitation', $offlineProcurement), [
+                    'subject' => 'Offline qualified applicant proposal stage',
+                    'message' => 'This applicant will submit outside the portal and the administrator will capture the received documents.',
+                    'deadline_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                    'portal_requirement' => 'not_allowed',
+                    'email_requirement' => 'allowed',
+                    'physical_requirement' => 'required',
+                ])
+                ->assertRedirect()
+                ->assertSessionHas('warning');
+
+            $offlineBatch = EoiReportCommunication::query()
+                ->where('procurement_id', $offlineProcurement->id)
+                ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION)
+                ->with(['technicalProposalRound.candidates', 'recipients'])
+                ->firstOrFail();
+            $this->assertSame(1, $offlineBatch->technicalProposalRound->candidates->count(), 'An offline Qualified Applicant was not enrolled for admin capture.');
+            $this->assertSame('skipped', $offlineBatch->recipients->firstOrFail()->delivery_status, 'The undeliverable invitation was not tracked as skipped.');
+            $this->assertTrue(
+                ! FormSubmission::query()
+                    ->where('submitted_by', $offlineQualifiedVendor->id)
+                    ->where('status', FormSubmission::STATUS_TECHNICAL_PROPOSAL_INVITED)
+                    ->exists(),
+                'An offline applicant was incorrectly marked as emailed.'
             );
 
             echo "EOI_REPORT_COMMUNICATIONS_SMOKE_OK\n";

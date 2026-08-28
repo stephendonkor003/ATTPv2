@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\EoiReportCommunicationRecipient;
+use App\Support\PdfBranding;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -18,6 +19,7 @@ class ApplicantEvaluationRecordMail extends Mailable
         $this->recipient->loadMissing('communication.procurement');
 
         $mail = $this
+            ->from((string) config('mail.from.address'), PdfBranding::PLATFORM_NAME)
             ->subject($this->recipient->communication->subject)
             ->view('emails.evaluations.applicant-record', [
                 'recipient' => $this->recipient,

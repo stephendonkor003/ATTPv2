@@ -7,7 +7,7 @@
 </head>
 <body style="margin:0;padding:0;background:#eef3f0;font-family:Arial,Helvetica,sans-serif;color:#172033;line-height:1.6;">
     @php
-        $appName = trim((string) config('app.name', 'ATTP')) ?: 'ATTP';
+        $appName = \App\Support\PdfBranding::PLATFORM_NAME;
         $reference = trim((string) ($procurement?->reference_no ?? '')) ?: 'Not provided';
         $title = trim((string) ($procurement?->title ?? '')) ?: 'Procurement opportunity';
         $supportEmail = trim((string) config('mail.from.address'));

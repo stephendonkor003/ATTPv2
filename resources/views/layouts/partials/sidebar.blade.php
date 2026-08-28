@@ -1756,7 +1756,7 @@
 
 
 
-                @canany(['evaluations.manage', 'evaluations.evaluate'])
+                @canany(['evaluations.manage', 'evaluations.evaluate', 'evaluations.view_all'])
                     <li class="nxl-item nxl-caption">
                         <label>{{ __('admin.evaluation') }}</label>
                     </li>

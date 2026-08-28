@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EvaluationSubmission extends BaseModel
 {
@@ -17,10 +18,13 @@ class EvaluationSubmission extends BaseModel
      * Mass assignable attributes
      */
     protected $fillable = [
+        'evaluation_assignment_id',
         'evaluation_id',
         'procurement_id',
         'evaluator_id',
         'form_submission_id',   // applicant (form submission)
+        'technical_proposal_candidate_id',
+        'technical_proposal_submission_id',
         'overall_score',
         'comments',
         'video_path',
@@ -43,7 +47,12 @@ class EvaluationSubmission extends BaseModel
     /**
      * Evaluation definition
      */
-    public function evaluation()
+    public function assignment(): BelongsTo
+    {
+        return $this->belongsTo(EvaluationAssignment::class, 'evaluation_assignment_id');
+    }
+
+    public function evaluation(): BelongsTo
     {
         return $this->belongsTo(Evaluation::class);
     }
@@ -51,7 +60,7 @@ class EvaluationSubmission extends BaseModel
     /**
      * Procurement context
      */
-    public function procurement()
+    public function procurement(): BelongsTo
     {
         return $this->belongsTo(Procurement::class)->withTrashed();
     }
@@ -59,7 +68,7 @@ class EvaluationSubmission extends BaseModel
     /**
      * Evaluator (user)
      */
-    public function evaluator()
+    public function evaluator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'evaluator_id');
     }
@@ -67,12 +76,22 @@ class EvaluationSubmission extends BaseModel
     /**
      * Applicant being evaluated (form submission)
      */
-    public function applicant()
+    public function applicant(): BelongsTo
     {
         return $this->belongsTo(
             FormSubmission::class,
             'form_submission_id'
         );
+    }
+
+    public function technicalProposalCandidate(): BelongsTo
+    {
+        return $this->belongsTo(EoiTechnicalProposalCandidate::class, 'technical_proposal_candidate_id');
+    }
+
+    public function technicalProposalSubmission(): BelongsTo
+    {
+        return $this->belongsTo(EoiTechnicalProposalSubmission::class, 'technical_proposal_submission_id');
     }
 
     /**
@@ -132,5 +151,15 @@ class EvaluationSubmission extends BaseModel
     public function isSubmitted(): bool
     {
         return $this->submitted_at !== null;
+    }
+
+    public function isTechnicalProposalEvaluation(): bool
+    {
+        if ($this->technical_proposal_candidate_id || $this->technical_proposal_submission_id) {
+            return true;
+        }
+
+        return $this->relationLoaded('assignment')
+            && $this->assignment?->isTechnicalProposalStage();
     }
 }

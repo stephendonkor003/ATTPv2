@@ -7,6 +7,7 @@ use App\Mail\QualifiedProposalInvitationMail;
 use App\Models\EoiReportCommunication;
 use App\Models\EoiReportCommunicationAttachment;
 use App\Models\EoiReportCommunicationRecipient;
+use App\Models\EoiTechnicalProposalRound;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\User;
@@ -55,6 +56,7 @@ class EoiReportCommunicationService
     {
         return $this->finalRows($report)
             ->filter(fn (array $row): bool => (bool) ($row['can_advance'] ?? false)
+                && ($row['applicant']->status ?? null) !== FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED
                 && in_array(
                     data_get($row, 'outcome.code'),
                     [
@@ -140,7 +142,8 @@ class EoiReportCommunicationService
         User $sender,
         string $subject,
         string $message,
-        array $templates = []
+        array $templates = [],
+        ?EoiTechnicalProposalRound $technicalProposalRound = null
     ): array {
         $rows = $this->qualifiedRows($report);
         $storedPaths = [];
@@ -153,6 +156,7 @@ class EoiReportCommunicationService
                 $subject,
                 $message,
                 $templates,
+                $technicalProposalRound,
                 &$storedPaths
             ): EoiReportCommunication {
                 $communication = EoiReportCommunication::create([
@@ -160,32 +164,49 @@ class EoiReportCommunicationService
                     'type' => EoiReportCommunication::TYPE_PROPOSAL_INVITATION,
                     'subject' => $this->cleanSubject($subject),
                     'message' => trim($message),
+                    'technical_proposal_round_id' => $technicalProposalRound?->getKey(),
                     'created_by' => $sender->getKey(),
                 ]);
 
-                foreach ($templates as $template) {
-                    $sha256 = hash_file('sha256', $template->getRealPath());
-                    $extension = strtolower((string) $template->getClientOriginalExtension());
-                    $path = $template->storeAs(
-                        'eoi-communications/'.$communication->getKey().'/templates',
-                        Str::uuid().($extension !== '' ? '.'.$extension : ''),
-                        'local'
-                    );
+                if ($technicalProposalRound) {
+                    $technicalProposalRound->loadMissing('templates');
 
-                    if (! is_string($path) || $path === '') {
-                        throw new \RuntimeException('A proposal template could not be stored.');
+                    foreach ($technicalProposalRound->templates as $template) {
+                        EoiReportCommunicationAttachment::create([
+                            'communication_id' => $communication->getKey(),
+                            'uploaded_by' => $template->uploaded_by ?: $sender->getKey(),
+                            'file_path' => $template->file_path,
+                            'original_filename' => $template->original_filename,
+                            'mime_type' => $template->mime_type,
+                            'file_size' => $template->file_size,
+                            'sha256' => $template->sha256,
+                        ]);
                     }
+                } else {
+                    foreach ($templates as $template) {
+                        $sha256 = hash_file('sha256', $template->getRealPath());
+                        $extension = strtolower((string) $template->getClientOriginalExtension());
+                        $path = $template->storeAs(
+                            'eoi-communications/'.$communication->getKey().'/templates',
+                            Str::uuid().($extension !== '' ? '.'.$extension : ''),
+                            'local'
+                        );
 
-                    $storedPaths[] = $path;
-                    EoiReportCommunicationAttachment::create([
-                        'communication_id' => $communication->getKey(),
-                        'uploaded_by' => $sender->getKey(),
-                        'file_path' => $path,
-                        'original_filename' => $this->safeFilename($template->getClientOriginalName()),
-                        'mime_type' => $template->getMimeType() ?: 'application/octet-stream',
-                        'file_size' => $template->getSize(),
-                        'sha256' => $sha256 ?: hash('sha256', $path),
-                    ]);
+                        if (! is_string($path) || $path === '') {
+                            throw new \RuntimeException('A proposal template could not be stored.');
+                        }
+
+                        $storedPaths[] = $path;
+                        EoiReportCommunicationAttachment::create([
+                            'communication_id' => $communication->getKey(),
+                            'uploaded_by' => $sender->getKey(),
+                            'file_path' => $path,
+                            'original_filename' => $this->safeFilename($template->getClientOriginalName()),
+                            'mime_type' => $template->getMimeType() ?: 'application/octet-stream',
+                            'file_size' => $template->getSize(),
+                            'sha256' => $sha256 ?: hash('sha256', $path),
+                        ]);
+                    }
                 }
 
                 foreach ($rows as $row) {

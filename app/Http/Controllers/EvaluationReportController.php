@@ -9,6 +9,7 @@ use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
 use App\Models\EoiReportCommunication;
 use App\Models\EoiReportCommunicationRecipient;
+use App\Models\EoiTechnicalProposalRound;
 use App\Models\Procurement;
 use App\Models\ProcurementPlan;
 use App\Services\EoiQualificationService;
@@ -681,11 +682,35 @@ class EvaluationReportController extends Controller
             ->limit(8)
             ->get();
         $communicationPreview = $communicationService->recipientPreview($report);
+        $technicalProposalRounds = EoiTechnicalProposalRound::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->with([
+                'creator:id,name',
+                'publisher:id,name',
+                'rules',
+                'templates',
+                'candidates' => fn ($query) => $query
+                    ->orderBy('status')
+                    ->orderBy('invited_at')
+                    ->with([
+                        'applicant.submitter:id,name,email',
+                        'submissions.documents',
+                        'submissions.submitter:id,name',
+                        'submissions.capturer:id,name',
+                        'ruleApplications' => fn ($findings) => $findings
+                            ->whereNull('revoked_at')
+                            ->with(['rule', 'applier:id,name']),
+                    ]),
+            ])
+            ->orderByDesc('round_number')
+            ->limit(5)
+            ->get();
 
         return view('reports.evaluations.eoi-procurement', compact(
             'report',
             'communications',
-            'communicationPreview'
+            'communicationPreview',
+            'technicalProposalRounds'
         ));
     }
 

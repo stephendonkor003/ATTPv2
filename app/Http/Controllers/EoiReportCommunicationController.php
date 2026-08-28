@@ -7,9 +7,13 @@ use App\Models\EoiReportCommunication;
 use App\Models\EoiReportCommunicationAttachment;
 use App\Models\EoiReportCommunicationRecipient;
 use App\Models\EoiReportProposalDocument;
+use App\Models\EoiTechnicalProposalCandidate;
+use App\Models\EoiTechnicalProposalRound;
+use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Services\EoiQualificationService;
 use App\Services\EoiReportCommunicationService;
+use App\Services\EoiTechnicalProposalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -47,7 +51,7 @@ class EoiReportCommunicationController extends Controller
             $request->user()
         );
 
-        return back()->with($result['failed'] > 0 ? 'warning' : 'success', $this->deliveryMessage(
+        return back()->with(($result['failed'] + $result['skipped']) > 0 ? 'warning' : 'success', $this->deliveryMessage(
             'Evaluation records processed',
             $result
         ));
@@ -57,27 +61,37 @@ class EoiReportCommunicationController extends Controller
         Request $request,
         Procurement $procurement,
         EoiQualificationService $qualificationService,
-        EoiReportCommunicationService $communicationService
+        EoiReportCommunicationService $communicationService,
+        EoiTechnicalProposalService $technicalProposalService
     ): RedirectResponse {
         $this->assertProcurementScope($request, $procurement);
 
         $validated = $request->validate([
             'subject' => ['required', 'string', 'max:180'],
             'message' => ['required', 'string', 'min:5', 'max:5000'],
-            'templates' => ['nullable', 'array', 'max:10'],
-            'templates.*' => ['file', 'mimes:pdf,doc,docx,xls,xlsx', 'max:10240'],
+            'proposal_title' => ['nullable', 'string', 'max:180'],
+            'opens_at' => ['nullable', 'date'],
+            'deadline_at' => ['nullable', 'date'],
+            'timezone' => ['nullable', 'timezone'],
+            'late_policy' => ['nullable', 'in:reject,allow_flagged,admin_capture_only'],
+            'portal_requirement' => ['nullable', 'in:required,allowed,not_allowed'],
+            'email_requirement' => ['nullable', 'in:required,allowed,not_allowed'],
+            'physical_requirement' => ['nullable', 'in:required,allowed,not_allowed'],
+            'rules' => ['nullable', 'array', 'min:1', 'max:250'],
+            'rules.*.title' => ['required_with:rules', 'string', 'max:255'],
+            'rules.*.description' => ['nullable', 'string', 'max:10000'],
+            'rules.*.category' => ['nullable', 'in:general,eligibility,document,deadline,channel,declaration'],
+            'rules.*.is_mandatory' => ['nullable', 'boolean'],
+            'rules.*.is_disqualifying' => ['nullable', 'boolean'],
+            'rules.*.requires_acknowledgement' => ['nullable', 'boolean'],
+            'templates' => ['nullable', 'array', 'max:20'],
+            'templates.*' => ['file', 'max:20480'],
         ], [
-            'templates.max' => 'You may upload up to 10 proposal templates.',
-            'templates.*.mimes' => 'Templates must be PDF, Word, or Excel files.',
-            'templates.*.max' => 'Each proposal template may not exceed 10 MB.',
+            'templates.max' => 'You may upload up to 20 proposal templates.',
+            'templates.*.max' => 'Each proposal template may not exceed 20 MB.',
         ]);
 
         $templates = array_values(array_filter($request->file('templates', [])));
-        $communicationService->assertCombinedUploadSize(
-            $templates,
-            'templates',
-            EoiReportCommunicationService::MAX_EMAIL_TEMPLATE_BYTES
-        );
         $report = $this->report($procurement, $qualificationService);
 
         if ($communicationService->qualifiedRows($report)->isEmpty()) {
@@ -86,11 +100,49 @@ class EoiReportCommunicationController extends Controller
             ]);
         }
 
-        if (data_get($communicationService->recipientPreview($report), 'proposal_invitation.eligible', 0) < 1) {
-            throw ValidationException::withMessages([
-                'message' => 'No Qualified Applicant has an enabled vendor account with a deliverable email address.',
-            ]);
-        }
+        $rules = $validated['rules'] ?? [
+            [
+                'title' => 'Submission received by the stated deadline',
+                'description' => 'The proposal must be received no later than the published deadline.',
+                'category' => 'deadline',
+                'is_mandatory' => true,
+                'is_disqualifying' => true,
+            ],
+            [
+                'title' => 'Submission channel requirements followed',
+                'description' => 'Every channel marked as required must be satisfied and prohibited channels must not be used.',
+                'category' => 'channel',
+                'is_mandatory' => true,
+                'is_disqualifying' => true,
+            ],
+            [
+                'title' => 'Required proposal documents are complete',
+                'description' => 'All required forms, schedules, and supporting documents must be included.',
+                'category' => 'document',
+                'is_mandatory' => true,
+                'is_disqualifying' => true,
+            ],
+        ];
+
+        $round = $technicalProposalService->createDraft([
+            'procurement_id' => $procurement->getKey(),
+            'title' => $validated['proposal_title']
+                ?? 'Technical Proposal Submission — '.($procurement->reference_no ?: $procurement->title),
+            'instructions' => $validated['message'],
+            'opens_at' => $validated['opens_at'] ?? null,
+            'deadline_at' => $validated['deadline_at'] ?? now()->addDays(14),
+            'timezone' => $validated['timezone'] ?? config('app.timezone', 'UTC'),
+            'late_policy' => $validated['late_policy'] ?? EoiTechnicalProposalRound::LATE_ALLOW_FLAGGED,
+            'portal_requirement' => $validated['portal_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_REQUIRED,
+            'email_requirement' => $validated['email_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_ALLOWED,
+            'physical_requirement' => $validated['physical_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_NOT_ALLOWED,
+        ], $rules, $templates, $request->user());
+
+        $round = $technicalProposalService->publish(
+            $round,
+            $communicationService->qualifiedRows($report),
+            $request->user()
+        );
 
         $result = $communicationService->sendProposalInvitation(
             $procurement,
@@ -98,10 +150,23 @@ class EoiReportCommunicationController extends Controller
             $request->user(),
             $validated['subject'],
             $validated['message'],
-            $templates
+            [],
+            $round
         );
 
-        return back()->with($result['failed'] > 0 ? 'warning' : 'success', $this->deliveryMessage(
+        $sentApplicationIds = $result['communication']->recipients
+            ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SENT)
+            ->pluck('form_submission_id')
+            ->filter()
+            ->values();
+
+        if ($sentApplicationIds->isNotEmpty()) {
+            FormSubmission::query()
+                ->whereIn('id', $sentApplicationIds)
+                ->update(['status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_INVITED]);
+        }
+
+        return back()->with(($result['failed'] + $result['skipped']) > 0 ? 'warning' : 'success', $this->deliveryMessage(
             'Proposal invitations processed',
             $result
         ));
@@ -114,13 +179,18 @@ class EoiReportCommunicationController extends Controller
         EoiReportCommunicationAttachment $attachment
     ): StreamedResponse {
         $this->assertProcurementScope($request, $procurement);
+        $validTemplatePath = str_starts_with(
+            $attachment->file_path,
+            'eoi-communications/'.$communication->getKey().'/templates/'
+        ) || ($communication->technical_proposal_round_id
+            && str_starts_with(
+                $attachment->file_path,
+                'eoi-technical-proposals/'.$communication->technical_proposal_round_id.'/templates/'
+            ));
         abort_unless(
             (string) $communication->procurement_id === (string) $procurement->getKey()
                 && (string) $attachment->communication_id === (string) $communication->getKey()
-                && str_starts_with(
-                    $attachment->file_path,
-                    'eoi-communications/'.$communication->getKey().'/templates/'
-                ),
+                && $validTemplatePath,
             404
         );
         abort_unless(Storage::disk('local')->exists($attachment->file_path), 404);
@@ -144,15 +214,25 @@ class EoiReportCommunicationController extends Controller
         EoiReportProposalDocument $document
     ): StreamedResponse {
         $this->assertProcurementScope($request, $procurement);
+        $technicalCandidate = $communication->technical_proposal_round_id
+            ? EoiTechnicalProposalCandidate::query()
+                ->where('round_id', $communication->technical_proposal_round_id)
+                ->where('form_submission_id', $recipient->form_submission_id)
+                ->first()
+            : null;
+        $validProposalPath = str_starts_with(
+            $document->file_path,
+            'eoi-communications/'.$communication->getKey().'/proposals/'.$recipient->getKey().'/'
+        ) || ($technicalCandidate && str_starts_with(
+            $document->file_path,
+            'eoi-technical-proposals/'.$technicalCandidate->round_id.'/candidates/'.$technicalCandidate->getKey().'/revisions/'
+        ));
         abort_unless(
             (string) $communication->procurement_id === (string) $procurement->getKey()
                 && $communication->type === EoiReportCommunication::TYPE_PROPOSAL_INVITATION
                 && (string) $recipient->communication_id === (string) $communication->getKey()
                 && (string) $document->recipient_id === (string) $recipient->getKey()
-                && str_starts_with(
-                    $document->file_path,
-                    'eoi-communications/'.$communication->getKey().'/proposals/'.$recipient->getKey().'/'
-                ),
+                && $validProposalPath,
             404
         );
         abort_unless(Storage::disk('local')->exists($document->file_path), 404);

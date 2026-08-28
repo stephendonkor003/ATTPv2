@@ -33,6 +33,7 @@
             ? (int) round(($determinedApplicants / $stats['total_applicants']) * 100)
             : 0;
         $communications = $communications ?? collect();
+        $technicalProposalRounds = $technicalProposalRounds ?? collect();
         $communicationPreview = $communicationPreview ?? [
             'evaluation_records' => [
                 'total' => $determinedApplicants,
@@ -258,9 +259,14 @@
             @endif
         </section>
 
+        @include('reports.evaluations.partials.eoi-technical-proposal-workflow', [
+            'technicalProposalRounds' => $technicalProposalRounds,
+            'procurement' => $procurement,
+        ])
+
         @can('evaluations.manage')
             <div class="modal fade" id="eoiProposalInvitationModal" tabindex="-1" aria-labelledby="eoiProposalInvitationTitle" aria-hidden="true">
-                <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
                     <form class="modal-content eoi-proposal-modal" method="POST" enctype="multipart/form-data" action="{{ route('reports.evaluations.eoi.communications.proposal-invitation', $procurement) }}" data-eoi-send-form data-sending-label="Sending invitations...">
                         @csrf
                         <div class="modal-header">
@@ -283,10 +289,101 @@
                                 <div class="form-text">Formatting is kept as plain text in the email for security. Line breaks will be preserved.</div>
                                 @error('message')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
+                            <div class="eoi-round-config mb-4">
+                                <div class="eoi-round-config__head">
+                                    <div>
+                                        <span class="eoi-eyebrow">Technical proposal round</span>
+                                        <h6>Deadline and submission channels</h6>
+                                    </div>
+                                    <span><i class="feather-lock"></i> Locked after invitation</span>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="eoiProposalTitle" class="form-label">Round title</label>
+                                        <input id="eoiProposalTitle" name="proposal_title" class="form-control" maxlength="180" value="{{ old('proposal_title', 'Technical Proposal Submission — '.$procurementReference) }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="eoiProposalDeadline" class="form-label">Submission deadline</label>
+                                        <input id="eoiProposalDeadline" name="deadline_at" type="datetime-local" class="form-control @error('deadline_at') is-invalid @enderror" value="{{ old('deadline_at', now()->addDays(14)->format('Y-m-d\TH:i')) }}" required>
+                                        @error('deadline_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="eoiProposalTimezone" class="form-label">Time zone</label>
+                                        <select id="eoiProposalTimezone" name="timezone" class="form-select">
+                                            @foreach (['Africa/Nairobi' => 'Africa/Nairobi (EAT)', 'UTC' => 'UTC', 'Africa/Addis_Ababa' => 'Africa/Addis Ababa', 'Africa/Accra' => 'Africa/Accra', 'Africa/Lagos' => 'Africa/Lagos', 'Africa/Johannesburg' => 'Africa/Johannesburg'] as $zone => $zoneLabel)
+                                                <option value="{{ $zone }}" @selected(old('timezone', config('app.timezone', 'Africa/Nairobi')) === $zone)>{{ $zoneLabel }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label" for="eoiLatePolicy">Late proposals</label>
+                                        <select id="eoiLatePolicy" name="late_policy" class="form-select">
+                                            <option value="allow_flagged" @selected(old('late_policy', 'allow_flagged') === 'allow_flagged')>Accept and flag late</option>
+                                            <option value="reject" @selected(old('late_policy') === 'reject')>Reject in portal</option>
+                                            <option value="admin_capture_only" @selected(old('late_policy') === 'admin_capture_only')>Admin capture only</option>
+                                        </select>
+                                    </div>
+                                    @foreach ([
+                                        'portal_requirement' => ['Portal submission', 'required'],
+                                        'email_requirement' => ['Email submission', 'allowed'],
+                                        'physical_requirement' => ['Physical copy', 'not_allowed'],
+                                    ] as $channelName => [$channelLabel, $channelDefault])
+                                        <div class="col-md-3">
+                                            <label class="form-label" for="{{ $channelName }}">{{ $channelLabel }}</label>
+                                            <select id="{{ $channelName }}" name="{{ $channelName }}" class="form-select">
+                                                <option value="required" @selected(old($channelName, $channelDefault) === 'required')>Required</option>
+                                                <option value="allowed" @selected(old($channelName, $channelDefault) === 'allowed')>Allowed</option>
+                                                <option value="not_allowed" @selected(old($channelName, $channelDefault) === 'not_allowed')>Not allowed</option>
+                                            </select>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+
+                            @php
+                                $proposalRules = old('rules', [
+                                    ['title' => 'Submission received by the stated deadline', 'description' => 'The proposal must be received no later than the published deadline.', 'category' => 'deadline', 'is_mandatory' => 1, 'is_disqualifying' => 1],
+                                    ['title' => 'Submission channel requirements followed', 'description' => 'Every channel marked as required must be satisfied.', 'category' => 'channel', 'is_mandatory' => 1, 'is_disqualifying' => 1],
+                                    ['title' => 'Required proposal documents are complete', 'description' => 'All required forms, schedules, and supporting documents must be included.', 'category' => 'document', 'is_mandatory' => 1, 'is_disqualifying' => 1],
+                                ]);
+                            @endphp
+                            <div class="eoi-rules-builder mb-4">
+                                <div class="eoi-rules-builder__head">
+                                    <div>
+                                        <span class="eoi-eyebrow">Rules &amp; regulations</span>
+                                        <h6>Proposal compliance checklist</h6>
+                                        <p>Add as many rules as needed. A failed disqualifying rule must include a reviewer rationale.</p>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-success btn-sm" id="eoiAddProposalRule"><i class="feather-plus me-1"></i> Add rule</button>
+                                </div>
+                                <div id="eoiProposalRules" class="eoi-rule-list">
+                                    @foreach ($proposalRules as $ruleIndex => $proposalRule)
+                                        <div class="eoi-rule-row" data-rule-row>
+                                            <span class="eoi-rule-row__number">{{ $ruleIndex + 1 }}</span>
+                                            <div class="eoi-rule-row__fields">
+                                                <input name="rules[{{ $ruleIndex }}][title]" class="form-control" maxlength="255" required placeholder="Rule title" value="{{ $proposalRule['title'] ?? '' }}">
+                                                <textarea name="rules[{{ $ruleIndex }}][description]" class="form-control" rows="2" maxlength="10000" placeholder="What must the applicant do?">{{ $proposalRule['description'] ?? '' }}</textarea>
+                                                <div class="eoi-rule-row__options">
+                                                    <select name="rules[{{ $ruleIndex }}][category]" class="form-select form-select-sm">
+                                                        @foreach (['general', 'eligibility', 'document', 'deadline', 'channel', 'declaration'] as $ruleCategory)
+                                                            <option value="{{ $ruleCategory }}" @selected(($proposalRule['category'] ?? 'general') === $ruleCategory)>{{ str($ruleCategory)->headline() }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                    <label><input type="hidden" name="rules[{{ $ruleIndex }}][is_mandatory]" value="0"><input type="checkbox" name="rules[{{ $ruleIndex }}][is_mandatory]" value="1" @checked((bool) ($proposalRule['is_mandatory'] ?? true))> Mandatory</label>
+                                                    <label><input type="hidden" name="rules[{{ $ruleIndex }}][is_disqualifying]" value="0"><input type="checkbox" name="rules[{{ $ruleIndex }}][is_disqualifying]" value="1" @checked((bool) ($proposalRule['is_disqualifying'] ?? false))> Can disqualify</label>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="eoi-rule-remove" data-remove-rule aria-label="Remove this rule"><i class="feather-trash-2"></i></button>
+                                        </div>
+                                    @endforeach
+                                </div>
+                                @error('rules')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
+                                @error('rules.*.title')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
+                            </div>
                             <div>
                                 <label for="eoiProposalTemplates" class="form-label">Proposal templates <span class="text-muted fw-normal">(optional)</span></label>
-                                <input id="eoiProposalTemplates" name="templates[]" type="file" class="form-control @error('templates') is-invalid @enderror @error('templates.*') is-invalid @enderror" accept=".pdf,.doc,.docx,.xls,.xlsx" multiple>
-                                <div class="form-text">PDF, DOC, DOCX, XLS, or XLSX. Up to 10 files, 10 MB each, 18 MB combined for reliable email delivery.</div>
+                                <input id="eoiProposalTemplates" name="templates[]" type="file" class="form-control @error('templates') is-invalid @enderror @error('templates.*') is-invalid @enderror" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.odt,.ods,.odp,.jpg,.jpeg,.png" multiple>
+                                <div class="form-text">Up to 20 safe business-document or image files, 20 MB each. Executables, scripts, SVG, HTML, and macro-enabled Office files are blocked.</div>
                                 @error('templates')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 @error('templates.*')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 <div class="eoi-file-selection" id="eoiTemplateSelection" aria-live="polite">No templates selected.</div>
@@ -3400,6 +3497,54 @@
                 }
             });
 
+            const rulesList = document.getElementById('eoiProposalRules');
+            const addRuleButton = document.getElementById('eoiAddProposalRule');
+            let nextRuleIndex = rulesList
+                ? rulesList.querySelectorAll('[data-rule-row]').length
+                : 0;
+
+            const refreshRuleRows = () => {
+                if (!rulesList) return;
+                const rows = Array.from(rulesList.querySelectorAll('[data-rule-row]'));
+                rows.forEach((row, index) => {
+                    const number = row.querySelector('.eoi-rule-row__number');
+                    if (number) number.textContent = String(index + 1);
+                    const removeButton = row.querySelector('[data-remove-rule]');
+                    if (removeButton) removeButton.disabled = rows.length === 1;
+                });
+            };
+
+            rulesList?.addEventListener('click', (event) => {
+                const removeButton = event.target.closest('[data-remove-rule]');
+                if (!removeButton || rulesList.querySelectorAll('[data-rule-row]').length <= 1) return;
+                removeButton.closest('[data-rule-row]')?.remove();
+                refreshRuleRows();
+            });
+
+            addRuleButton?.addEventListener('click', () => {
+                if (!rulesList || rulesList.querySelectorAll('[data-rule-row]').length >= 250) return;
+                const index = nextRuleIndex++;
+                const row = document.createElement('div');
+                row.className = 'eoi-rule-row';
+                row.dataset.ruleRow = '';
+                row.innerHTML = `
+                    <span class="eoi-rule-row__number"></span>
+                    <div class="eoi-rule-row__fields">
+                        <input name="rules[${index}][title]" class="form-control" maxlength="255" required placeholder="Rule title">
+                        <textarea name="rules[${index}][description]" class="form-control" rows="2" maxlength="10000" placeholder="What must the applicant do?"></textarea>
+                        <div class="eoi-rule-row__options">
+                            <select name="rules[${index}][category]" class="form-select form-select-sm"><option value="general">General</option><option value="eligibility">Eligibility</option><option value="document">Document</option><option value="deadline">Deadline</option><option value="channel">Channel</option><option value="declaration">Declaration</option></select>
+                            <label><input type="hidden" name="rules[${index}][is_mandatory]" value="0"><input type="checkbox" name="rules[${index}][is_mandatory]" value="1" checked> Mandatory</label>
+                            <label><input type="hidden" name="rules[${index}][is_disqualifying]" value="0"><input type="checkbox" name="rules[${index}][is_disqualifying]" value="1"> Can disqualify</label>
+                        </div>
+                    </div>
+                    <button type="button" class="eoi-rule-remove" data-remove-rule aria-label="Remove this rule"><i class="feather-trash-2"></i></button>`;
+                rulesList.appendChild(row);
+                refreshRuleRows();
+                row.querySelector('input')?.focus();
+            });
+            refreshRuleRows();
+
             document.querySelectorAll('[data-eoi-send-form]').forEach((form) => {
                 form.addEventListener('submit', function (event) {
                     if (form.dataset.submitting === 'true') {
@@ -3421,7 +3566,7 @@
                 });
             });
 
-            @if ($errors->has('subject') || $errors->has('message') || $errors->has('templates') || $errors->has('templates.*'))
+            @if ($errors->has('subject') || $errors->has('message') || $errors->has('deadline_at') || $errors->has('rules') || $errors->has('rules.*') || $errors->has('templates') || $errors->has('templates.*'))
                 const proposalModalElement = document.getElementById('eoiProposalInvitationModal');
                 if (proposalModalElement && window.bootstrap?.Modal) {
                     window.bootstrap.Modal.getOrCreateInstance(proposalModalElement).show();

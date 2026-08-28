@@ -10,6 +10,7 @@ use App\Models\Procurement;
 use App\Models\User;
 use App\Services\EoiQualificationService;
 use App\Services\EoiReportCommunicationService;
+use App\Support\PdfBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -83,16 +84,29 @@ it('uses finalized web-report rows as the only evaluation-record and proposal re
         false,
         false
     );
+    $previouslyDisqualified = communicationRow(
+        communicationApplicant('proposal-disqualified@example.test'),
+        EoiQualificationService::OUTCOME_FULLY_QUALIFIED,
+        true,
+        true
+    );
+    $previouslyDisqualified['applicant']->status = FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED;
     $report = ['applicants' => collect([
         $fullyQualified,
         $averageQualified,
         $finalNotQualified,
         $earlyVeto,
         $pending,
+        $previouslyDisqualified,
     ])];
 
     expect($service->finalRows($report)->pluck('applicant.submitter.email')->all())
-        ->toBe(['fully@example.test', 'average@example.test', 'not-qualified@example.test'])
+        ->toBe([
+            'fully@example.test',
+            'average@example.test',
+            'not-qualified@example.test',
+            'proposal-disqualified@example.test',
+        ])
         ->and($service->qualifiedRows($report)->pluck('applicant.submitter.email')->all())
         ->toBe(['fully@example.test', 'average@example.test']);
 });
@@ -145,6 +159,7 @@ it('redacts evaluator names and email addresses from applicant-facing free text'
 it('keeps communication delivery private scoped and recipient owned throughout the UI and routes', function () {
     $root = dirname(__DIR__, 2);
     $service = file_get_contents($root.'/app/Services/EoiReportCommunicationService.php');
+    $technicalService = file_get_contents($root.'/app/Services/EoiTechnicalProposalService.php');
     $adminController = file_get_contents($root.'/app/Http/Controllers/EoiReportCommunicationController.php');
     $vendorController = file_get_contents($root.'/app/Http/Controllers/Vendor/EoiCommunicationController.php');
     $routes = file_get_contents($root.'/routes/web.php');
@@ -158,8 +173,11 @@ it('keeps communication delivery private scoped and recipient owned throughout t
         ->toContain('panel_complete')
         ->toContain('can_advance')
         ->and($adminController)
-        ->toContain("'mimes:pdf,doc,docx,xls,xlsx'")
-        ->toContain('assertCombinedUploadSize')
+        ->toContain("'templates' => ['nullable', 'array', 'max:20']")
+        ->toContain('EoiTechnicalProposalService')
+        ->and($technicalService)
+        ->toContain('ALLOWED_DOCUMENT_MIME_TYPES')
+        ->toContain("Storage::disk('local')")
         ->and($vendorController)
         ->toContain('assertRecipientOwner')
         ->toContain("'Cache-Control' => 'private, no-store, max-age=0'")
@@ -339,7 +357,11 @@ it('builds individualized branded mail with private record and template attachme
         'proposal-template.docx',
         ['mime' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
     ))->toBeTrue()
+        ->and($invitationMail->from[0]['name'] ?? null)->toBe(PdfBranding::PLATFORM_NAME)
+        ->and($recordMail->from[0]['name'] ?? null)->toBe(PdfBranding::PLATFORM_NAME)
         ->and($invitationHtml)
+        ->toContain(PdfBranding::PLATFORM_NAME)
+        ->not->toContain('Think Thank')
         ->toContain('Applicant Research Centre')
         ->toContain('Open invitation &amp; submit proposal')
         ->toContain('&lt;script&gt;alert(&#039;unsafe&#039;)&lt;/script&gt;')

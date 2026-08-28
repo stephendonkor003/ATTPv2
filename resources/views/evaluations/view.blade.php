@@ -71,11 +71,13 @@
 
         <div class="row g-4 align-items-start">
             <main class="col-xl-9 col-lg-8">
+                @include('evaluations.partials.technical-proposal-dossier', ['proposalTarget' => $proposalTarget ?? null])
+
                 <details class="applicant-panel mb-4">
                     <summary>
                         <span class="summary-icon"><i class="feather-file-text" aria-hidden="true"></i></span>
                         <span>
-                            <strong>Applicant submitted information</strong>
+                            <strong>{{ !empty($proposalTarget) ? 'Original EOI application background' : 'Applicant submitted information' }}</strong>
                             <small>{{ $applicant->procurement_submission_code }} · {{ optional($applicant->submitter)->name ?? 'Applicant' }}</small>
                         </span>
                         <i class="feather-chevron-down summary-chevron" aria-hidden="true"></i>

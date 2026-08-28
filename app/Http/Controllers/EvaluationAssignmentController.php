@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Mail\EvaluationAssigned;
+use App\Models\EoiTechnicalProposalCandidate;
+use App\Models\EoiTechnicalProposalRound;
 use App\Models\Evaluation;
 use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
@@ -11,6 +13,7 @@ use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\Sector;
 use App\Services\EoiQualificationService;
+use App\Services\EvaluationAssignmentTargetResolver;
 use App\Support\ProcurementReviewAssignees;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -19,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class EvaluationAssignmentController extends Controller
 {
@@ -30,7 +34,10 @@ class EvaluationAssignmentController extends Controller
             'evaluationAssignments.evaluator',
             'evaluationAssignments.evaluation.portfolio:id,name',
             'evaluationAssignments.submission',
-            'submissions',
+            'evaluationAssignments.technicalProposalRound:id,procurement_id,round_number,title,status',
+            'submissions.submitter:id,name,email',
+            'submissions.values',
+            'technicalProposalRounds.candidates:id,round_id,status',
         ])
             ->orderBy('created_at', 'desc');
 
@@ -60,12 +67,50 @@ class EvaluationAssignmentController extends Controller
             ->orderBy('name')
             ->get();
 
+        $targetResolver = app(EvaluationAssignmentTargetResolver::class);
+        $assignmentContexts = $procurements->mapWithKeys(function (Procurement $procurement) use ($targetResolver): array {
+            $proposalContext = $targetResolver->technicalProposalContext($procurement);
+            $round = $proposalContext['round'];
+            $technicalTargets = collect($proposalContext['targets'] ?? [])->map(function ($target) use ($round): ?array {
+                if (! $target instanceof FormSubmission || ! $round) {
+                    return null;
+                }
+
+                $candidate = $target->technicalProposalCandidates->first();
+
+                return $candidate ? [
+                    'applicant' => $target,
+                    'candidate' => $candidate,
+                    'latest_submission' => $candidate->latestSubmission,
+                ] : null;
+            })->filter()->values();
+
+            return [(string) $procurement->getKey() => [
+                'application_submission_ids' => $procurement->submissions
+                    ->filter(fn (FormSubmission $submission): bool => $submission->isAvailableForEvaluation())
+                    ->pluck('id')
+                    ->map(fn ($id): string => (string) $id)
+                    ->all(),
+                'technical_round' => $round,
+                'technical_candidates' => $technicalTargets,
+                'technical_submission_ids' => $technicalTargets
+                    ->pluck('applicant.id')
+                    ->map(fn ($id): string => (string) $id)
+                    ->all(),
+                'eligible_count' => $technicalTargets->count(),
+                'status_counts' => $round
+                    ? $round->candidates->countBy('status')->all()
+                    : [],
+            ]];
+        })->all();
+
         return view('evaluations.assign-hub', compact(
             'procurements',
             'evaluations',
             'evaluationsByPortfolioId',
             'procurementPortfolioIds',
-            'evaluators'
+            'evaluators',
+            'assignmentContexts'
         ));
     }
 
@@ -82,8 +127,32 @@ class EvaluationAssignmentController extends Controller
                 'uuid',
                 ProcurementReviewAssignees::existsRule(),
             ],
-            'assignment_type' => 'required|in:procurement,submission',
-            'submission_id' => 'required_if:assignment_type,submission|nullable|exists:form_submissions,id',
+            'assignment_type' => [
+                'required',
+                Rule::in([
+                    'procurement',
+                    'submission',
+                    'technical_proposal_procurement',
+                    'technical_proposal_submission',
+                ]),
+            ],
+            'submission_id' => [
+                Rule::requiredIf(fn (): bool => in_array($request->input('assignment_type'), [
+                    'submission',
+                    'technical_proposal_submission',
+                ], true)),
+                'nullable',
+                'exists:form_submissions,id',
+            ],
+            'technical_proposal_round_id' => [
+                Rule::requiredIf(fn (): bool => str_starts_with(
+                    (string) $request->input('assignment_type'),
+                    'technical_proposal_'
+                )),
+                'nullable',
+                'uuid',
+                Rule::exists('eoi_technical_proposal_rounds', 'id'),
+            ],
         ], [
             'user_id.exists' => ProcurementReviewAssignees::INELIGIBLE_MESSAGE,
         ]);
@@ -102,6 +171,31 @@ class EvaluationAssignmentController extends Controller
             ->firstOrFail();
         $this->assertEvaluationSelectableForProcurement($evaluation, $procurement);
 
+        $workflowStage = str_starts_with($validated['assignment_type'], 'technical_proposal_')
+            ? EvaluationAssignment::STAGE_TECHNICAL_PROPOSAL
+            : EvaluationAssignment::STAGE_APPLICATION;
+        $isSubmissionAssignment = in_array($validated['assignment_type'], [
+            'submission',
+            'technical_proposal_submission',
+        ], true);
+        $targetResolver = app(EvaluationAssignmentTargetResolver::class);
+        $technicalProposalRound = $workflowStage === EvaluationAssignment::STAGE_TECHNICAL_PROPOSAL
+            ? EoiTechnicalProposalRound::query()
+                ->whereKey($validated['technical_proposal_round_id'] ?? null)
+                ->where('procurement_id', $procurement->getKey())
+                ->whereIn('status', [
+                    EoiTechnicalProposalRound::STATUS_PUBLISHED,
+                    EoiTechnicalProposalRound::STATUS_CLOSED,
+                ])
+                ->first()
+            : null;
+
+        if ($workflowStage === EvaluationAssignment::STAGE_TECHNICAL_PROPOSAL && ! $technicalProposalRound) {
+            return back()
+                ->withInput()
+                ->with('error', 'No published technical-proposal round is ready for evaluator assignment.');
+        }
+
         if ($evaluation->status === 'close') {
             return back()
                 ->withInput()
@@ -109,7 +203,7 @@ class EvaluationAssignmentController extends Controller
         }
 
         $submission = null;
-        if ($validated['assignment_type'] === 'submission') {
+        if ($isSubmissionAssignment) {
             $submission = FormSubmission::where('id', $validated['submission_id'])
                 ->where('procurement_id', $validated['procurement_id'])
                 ->first();
@@ -120,21 +214,44 @@ class EvaluationAssignmentController extends Controller
                     ->with('error', 'Selected submission does not belong to this procurement.');
             }
 
-            if (! $submission->isAvailableForEvaluation()) {
+            if (! $targetResolver->isEligible(
+                $procurement,
+                $evaluation,
+                $submission,
+                $workflowStage,
+                $technicalProposalRound
+            )) {
                 return back()
                     ->withInput()
-                    ->with('error', 'The selected application is not eligible for further evaluation.');
-            }
-
-            if (! $evaluation->isEoi()
-                && $submission->status === FormSubmission::STATUS_EOI_EVALUATION) {
-                return back()
-                    ->withInput()
-                    ->with('error', 'Complete the applicant\'s EOI panel before assigning Technical Evaluation.');
+                    ->with('error', $workflowStage === EvaluationAssignment::STAGE_TECHNICAL_PROPOSAL
+                        ? 'Only applicants qualified in the selected technical-proposal round can be assigned.'
+                        : 'The selected application is not eligible for this evaluation assignment.');
             }
         }
 
-        $assignment = DB::transaction(function () use ($procurement, $validated): ?EvaluationAssignment {
+        if ($workflowStage === EvaluationAssignment::STAGE_TECHNICAL_PROPOSAL
+            && ! $isSubmissionAssignment
+            && $targetResolver->eligibleTargets(
+                $procurement,
+                $evaluation,
+                $workflowStage,
+                $technicalProposalRound
+            )->isEmpty()) {
+            return back()
+                ->withInput()
+                ->with('error', 'Complete proposal compliance review first. No second-round qualified applicants are available.');
+        }
+
+        $assignment = DB::transaction(function () use (
+            $procurement,
+            $evaluation,
+            $validated,
+            $workflowStage,
+            $isSubmissionAssignment,
+            $technicalProposalRound,
+            $targetResolver,
+            $submission
+        ): ?EvaluationAssignment {
             // Lock the shared procurement row so concurrent assignment requests
             // cannot both pass the overlap check before either insert is visible.
             Procurement::query()
@@ -142,12 +259,60 @@ class EvaluationAssignmentController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            if ($technicalProposalRound) {
+                $lockedRound = EoiTechnicalProposalRound::query()
+                    ->whereKey($technicalProposalRound->getKey())
+                    ->where('procurement_id', $procurement->getKey())
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if (! in_array($lockedRound->status, [
+                    EoiTechnicalProposalRound::STATUS_PUBLISHED,
+                    EoiTechnicalProposalRound::STATUS_CLOSED,
+                ], true)) {
+                    return null;
+                }
+
+                if ($submission) {
+                    $candidate = EoiTechnicalProposalCandidate::query()
+                        ->where('round_id', $lockedRound->getKey())
+                        ->where('form_submission_id', $submission->getKey())
+                        ->with(['applicant', 'latestSubmission.documents'])
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (! $candidate || ! $targetResolver->technicalCandidateIsEligible(
+                        $candidate,
+                        $lockedRound,
+                        $procurement
+                    )) {
+                        throw ValidationException::withMessages([
+                            'submission_id' => 'Only an applicant in the qualified technical-proposal shortlist can be assigned.',
+                        ]);
+                    }
+
+                    $targetResolver->assertEligible(
+                        $procurement,
+                        $evaluation,
+                        $submission,
+                        $workflowStage,
+                        $lockedRound
+                    );
+                }
+            }
+
             $existingCoverage = EvaluationAssignment::query()
                 ->where('evaluation_id', $validated['evaluation_id'])
                 ->where('procurement_id', $validated['procurement_id'])
-                ->where('user_id', $validated['user_id']);
+                ->where('user_id', $validated['user_id'])
+                ->where('workflow_stage', $workflowStage)
+                ->when(
+                    $technicalProposalRound,
+                    fn ($query) => $query->where('technical_proposal_round_id', $technicalProposalRound->getKey()),
+                    fn ($query) => $query->whereNull('technical_proposal_round_id')
+                );
 
-            if ($validated['assignment_type'] === 'submission') {
+            if ($isSubmissionAssignment) {
                 $existingCoverage->where(function ($query) use ($validated): void {
                     $query->whereNull('form_submission_id')
                         ->orWhere('form_submission_id', $validated['submission_id']);
@@ -161,9 +326,11 @@ class EvaluationAssignmentController extends Controller
             return EvaluationAssignment::create([
                 'evaluation_id' => $validated['evaluation_id'],
                 'procurement_id' => $validated['procurement_id'],
-                'form_submission_id' => $validated['assignment_type'] === 'submission'
+                'form_submission_id' => $isSubmissionAssignment
                     ? $validated['submission_id']
                     : null,
+                'workflow_stage' => $workflowStage,
+                'technical_proposal_round_id' => $technicalProposalRound?->getKey(),
                 'user_id' => $validated['user_id'],
                 'assigned_by' => Auth::id(),
                 'assigned_at' => now(),
@@ -177,7 +344,7 @@ class EvaluationAssignmentController extends Controller
                 ->with('error', 'This user is already assigned as an evaluator for the selected procurement or applicant.');
         }
 
-        if ($evaluation->isEoi()) {
+        if ($evaluation->isEoi() && $workflowStage === EvaluationAssignment::STAGE_APPLICATION) {
             $qualificationService = app(EoiQualificationService::class);
 
             if ($submission) {
@@ -206,7 +373,8 @@ class EvaluationAssignmentController extends Controller
         $assignment->loadMissing(['evaluation', 'procurement', 'submission']);
 
         $procurementId = $assignment->procurement_id;
-        $isEoi = $assignment->evaluation?->isEoi() ?? false;
+        $isEoi = ($assignment->evaluation?->isEoi() ?? false)
+            && ! $assignment->isTechnicalProposal();
         $procurement = $assignment->procurement;
         $submission = $assignment->submission;
 
@@ -220,6 +388,12 @@ class EvaluationAssignmentController extends Controller
                 ->where('evaluation_id', $lockedAssignment->evaluation_id)
                 ->where('procurement_id', $lockedAssignment->procurement_id)
                 ->where('user_id', $lockedAssignment->user_id)
+                ->where('workflow_stage', $lockedAssignment->workflow_stage ?: EvaluationAssignment::STAGE_APPLICATION)
+                ->when(
+                    $lockedAssignment->technical_proposal_round_id,
+                    fn ($query) => $query->where('technical_proposal_round_id', $lockedAssignment->technical_proposal_round_id),
+                    fn ($query) => $query->whereNull('technical_proposal_round_id')
+                )
                 ->where('id', '<>', $lockedAssignment->getKey())
                 ->lockForUpdate()
                 ->get(['id', 'form_submission_id']);
@@ -302,13 +476,22 @@ class EvaluationAssignmentController extends Controller
     private function evaluationSubmissionsForAssignment(EvaluationAssignment $assignment): Builder
     {
         return EvaluationSubmission::query()
-            ->where('evaluation_id', $assignment->evaluation_id)
-            ->where('procurement_id', $assignment->procurement_id)
-            ->where('evaluator_id', $assignment->user_id)
-            ->when(
-                filled($assignment->form_submission_id),
-                fn ($query) => $query->where('form_submission_id', $assignment->form_submission_id)
-            );
+            ->where(function (Builder $query) use ($assignment): void {
+                $query->where('evaluation_assignment_id', $assignment->getKey());
+
+                if (! $assignment->isTechnicalProposal()) {
+                    $query->orWhere(function (Builder $legacy) use ($assignment): void {
+                        $legacy->whereNull('evaluation_assignment_id')
+                            ->where('evaluation_id', $assignment->evaluation_id)
+                            ->where('procurement_id', $assignment->procurement_id)
+                            ->where('evaluator_id', $assignment->user_id)
+                            ->when(
+                                filled($assignment->form_submission_id),
+                                fn ($scope) => $scope->where('form_submission_id', $assignment->form_submission_id)
+                            );
+                    });
+                }
+            });
     }
 
     private function assertProcurementManageable(Procurement $procurement): void

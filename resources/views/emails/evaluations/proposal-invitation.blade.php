@@ -7,10 +7,11 @@
 </head>
 <body style="margin:0;padding:0;background:#eef3f0;font-family:Arial,Helvetica,sans-serif;color:#172033;line-height:1.6;">
     @php
-        $appName = trim((string) config('app.name', 'ATTP')) ?: 'ATTP';
+        $appName = \App\Support\PdfBranding::PLATFORM_NAME;
         $reference = trim((string) ($procurement?->reference_no ?? '')) ?: 'Not provided';
         $title = trim((string) ($procurement?->title ?? '')) ?: 'Procurement opportunity';
         $supportEmail = trim((string) config('mail.from.address'));
+        $proposalRound = $communication->technicalProposalRound;
     @endphp
 
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">You are invited to submit your proposal through the vendor portal.</div>
@@ -38,8 +39,27 @@
                                 <div style="padding:14px 16px;"><strong>{{ $title }}</strong><br><span style="color:#64748b;">Reference: {{ $reference }} &middot; Outcome: {{ $recipient->outcome_label }}</span></div>
                             </div>
 
+                            @if ($proposalRound)
+                                <div style="margin:0 0 22px;border:1px solid #cfe2d7;border-radius:10px;overflow:hidden;">
+                                    <div style="padding:12px 16px;background:#edf8f2;font-size:13px;font-weight:700;color:#075f38;text-transform:uppercase;letter-spacing:.05em;">Technical proposal requirements</div>
+                                    <div style="padding:14px 16px;font-size:13px;color:#344054;">
+                                        <strong>Deadline:</strong> {{ $proposalRound->deadline_at ? $proposalRound->deadline_at->timezone($proposalRound->timezone)->format('d M Y, H:i').' '.$proposalRound->timezone : 'No fixed deadline' }}<br>
+                                        <strong>Portal:</strong> {{ str($proposalRound->portal_requirement)->replace('_', ' ')->headline() }} &middot;
+                                        <strong>Email:</strong> {{ str($proposalRound->email_requirement)->replace('_', ' ')->headline() }} &middot;
+                                        <strong>Physical copy:</strong> {{ str($proposalRound->physical_requirement)->replace('_', ' ')->headline() }}
+                                        @if ($proposalRound->rules->isNotEmpty())
+                                            <ol style="margin:12px 0 0;padding-left:20px;">
+                                                @foreach ($proposalRound->rules as $rule)
+                                                    <li style="margin:0 0 7px;"><strong>{{ $rule->title }}</strong>@if($rule->is_disqualifying) <span style="color:#b42318;">(may disqualify)</span>@endif @if($rule->description)<br><span style="color:#64748b;">{{ $rule->description }}</span>@endif</li>
+                                                @endforeach
+                                            </ol>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endif
+
                             @if ($communication->attachments->isNotEmpty())
-                                <p style="margin:0 0 16px;font-size:13px;color:#516172;">{{ $communication->attachments->count() }} proposal {{ Str::plural('template', $communication->attachments->count()) }} {{ Str::plural('is', $communication->attachments->count()) }} attached and also available securely in the portal.</p>
+                                <p style="margin:0 0 16px;font-size:13px;color:#516172;">{{ $communication->attachments->count() }} proposal {{ Str::plural('template', $communication->attachments->count()) }} {{ $proposalRound ? Str::plural('is', $communication->attachments->count()).' available securely in the portal.' : Str::plural('is', $communication->attachments->count()).' attached and also available securely in the portal.' }}</p>
                             @endif
 
                             <a href="{{ $portalUrl }}" style="display:inline-block;border-radius:8px;background:#006b3f;padding:13px 20px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;">Open invitation &amp; submit proposal</a>

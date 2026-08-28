@@ -12,6 +12,9 @@ class FormSubmission extends BaseModel
     public const STATUS_WITHDRAWN = 'withdrawn';
     public const STATUS_EOI_EVALUATION = 'eoi_evaluation';
     public const STATUS_EOI_NOT_QUALIFIED = 'eoi_not_qualified';
+    public const STATUS_TECHNICAL_PROPOSAL_INVITED = 'technical_proposal_invited';
+    public const STATUS_TECHNICAL_PROPOSAL_SUBMITTED = 'technical_proposal_submitted';
+    public const STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED = 'technical_proposal_disqualified';
     public const STATUS_TECHNICAL_EVALUATION = 'technical_evaluation';
 
     /**
@@ -25,6 +28,7 @@ class FormSubmission extends BaseModel
         self::STATUS_WITHDRAWN,
         'prescreen_failed',
         self::STATUS_EOI_NOT_QUALIFIED,
+        self::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
     ];
 
     protected $fillable = [
@@ -128,6 +132,11 @@ public function evaluationSubmissions()
             EvaluationSubmission::class,
             'form_submission_id'
         );
+}
+
+public function technicalProposalCandidates()
+{
+    return $this->hasMany(EoiTechnicalProposalCandidate::class, 'form_submission_id');
 }
 
 public function thinkTankReview()

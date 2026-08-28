@@ -151,6 +151,11 @@ class Procurement extends BaseModel
         return $this->hasMany(EvaluationSubmission::class);
     }
 
+    public function technicalProposalRounds(): HasMany
+    {
+        return $this->hasMany(EoiTechnicalProposalRound::class)->orderByDesc('round_number');
+    }
+
     public function evaluations()
     {
         return $this->belongsToMany(

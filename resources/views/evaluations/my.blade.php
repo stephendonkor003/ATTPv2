@@ -103,7 +103,7 @@
                         $assignmentApplications = $applicationsByAssignmentId
                             ->get((string) $assignment->getKey(), collect());
                         $completedForAssignment = $assignmentApplications->filter(function ($application) use ($evaluationSubmissions, $assignment): bool {
-                            $key = implode(':', [$assignment->evaluation_id, $assignment->procurement_id, $application->id]);
+                            $key = implode(':', [$assignment->id, $application->id]);
 
                             return filled($evaluationSubmissions->get($key)?->submitted_at);
                         })->count();
@@ -122,7 +122,12 @@
                             <div class="assignment-title">
                                 <div class="assignment-labels">
                                     <span class="method-label">{{ $methodLabel }}</span>
-                                    <span>{{ $assignment->form_submission_id ? 'Specific application' : 'All applications' }}</span>
+                                    <span>
+                                        {{ $assignment->isTechnicalProposal()
+                                            ? 'Technical proposal · Round '.($assignment->technicalProposalRound?->round_number ?? '—')
+                                            : 'Original application' }}
+                                    </span>
+                                    <span>{{ $assignment->form_submission_id ? 'Specific applicant' : 'All eligible applicants' }}</span>
                                 </div>
                                 <h3>{{ $procurement?->title ?? 'Procurement evaluation' }}</h3>
                                 <p>{{ $evaluation?->name ?? 'Evaluation form' }}</p>
@@ -155,7 +160,7 @@
 
                             @forelse ($assignmentApplications as $application)
                                 @php
-                                    $submissionKey = implode(':', [$assignment->evaluation_id, $assignment->procurement_id, $application->id]);
+                                    $submissionKey = implode(':', [$assignment->id, $application->id]);
                                     $evaluationSubmission = $evaluationSubmissions->get($submissionKey);
                                     $isCompleted = filled($evaluationSubmission?->submitted_at);
                                     $isDraft = $evaluationSubmission && ! $isCompleted;
@@ -203,7 +208,11 @@
                                     <span><i class="feather-inbox" aria-hidden="true"></i></span>
                                     <div>
                                         <strong>No applications are ready for evaluation</strong>
-                                        <p>This assignment will become actionable when an eligible application is submitted.</p>
+                                        <p>
+                                            {{ $assignment->isTechnicalProposal()
+                                                ? 'No applicant currently remains qualified in this technical-proposal round. Contact the procurement administrator if the shortlist has changed.'
+                                                : 'This assignment will become actionable when an eligible application is submitted.' }}
+                                        </p>
                                     </div>
                                 </div>
                             @endforelse
