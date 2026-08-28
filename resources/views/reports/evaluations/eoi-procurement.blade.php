@@ -3566,10 +3566,17 @@
                 });
             });
 
-            @if ($errors->has('subject') || $errors->has('message') || $errors->has('deadline_at') || $errors->has('rules') || $errors->has('rules.*') || $errors->has('templates') || $errors->has('templates.*'))
+            @if (request()->boolean('compose_proposal') || $errors->has('subject') || $errors->has('message') || $errors->has('deadline_at') || $errors->has('rules') || $errors->has('rules.*') || $errors->has('templates') || $errors->has('templates.*'))
                 const proposalModalElement = document.getElementById('eoiProposalInvitationModal');
                 if (proposalModalElement && window.bootstrap?.Modal) {
                     window.bootstrap.Modal.getOrCreateInstance(proposalModalElement).show();
+                }
+            @endif
+
+            @if (request()->boolean('admin_upload'))
+                const firstProposalCandidate = document.querySelector('#technicalProposalWorkspace .tp-candidate');
+                if (firstProposalCandidate) {
+                    firstProposalCandidate.open = true;
                 }
             @endif
 

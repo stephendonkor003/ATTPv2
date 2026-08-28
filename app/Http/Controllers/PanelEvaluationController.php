@@ -488,6 +488,45 @@ class PanelEvaluationController extends Controller
                 ));
             $proposalIntakeComplete = $notificationComplete
                 && ($proposalCandidates === 0 || $responded >= $proposalCandidates);
+            $proposalReportUrl = route('reports.evaluations.eoi.procurement', $procurement);
+            $proposalAdminActions = $communicationSummary['has_proposal_round']
+                ? [
+                    [
+                        'label' => 'Review proposal rules',
+                        'url' => $proposalReportUrl.'#technicalProposalWorkspace',
+                        'icon' => 'feather-shield',
+                        'style' => 'outline',
+                        'disabled' => false,
+                    ],
+                    [
+                        'label' => 'Upload for an applicant',
+                        'url' => $proposalReportUrl.'?admin_upload=1#technicalProposalWorkspace',
+                        'icon' => 'feather-upload-cloud',
+                        'style' => 'primary',
+                        'disabled' => $proposalCandidates === 0,
+                    ],
+                ]
+                : [
+                    [
+                        'label' => 'Set rules & notify applicants',
+                        'url' => $proposalReportUrl.'?compose_proposal=1#eoiCommunicationsTitle',
+                        'icon' => 'feather-sliders',
+                        'style' => 'primary',
+                        'disabled' => ! $eoiPanelComplete || $qualified === 0,
+                    ],
+                    [
+                        'label' => 'Upload for an applicant',
+                        'url' => null,
+                        'icon' => 'feather-upload-cloud',
+                        'style' => 'outline',
+                        'disabled' => true,
+                    ],
+                ];
+            $proposalAdminNote = $communicationSummary['has_proposal_round']
+                ? 'Published rules remain read-only for audit integrity. Select an enrolled applicant in the proposal workspace to capture one or several documents on their behalf.'
+                : ($eoiPanelComplete && $qualified > 0
+                    ? 'Define the rules, submission channels, deadline and templates before sending the invitation. Applicant upload becomes available after the round is published.'
+                    : 'Rule setup becomes available when the EOI panel has a final Qualified Applicant.');
 
             $steps->push(
                 [
@@ -517,6 +556,8 @@ class PanelEvaluationController extends Controller
                     'meta' => number_format($communicationSummary['proposal_invitation_batches']).' invitation batch(es) for '.number_format($proposalCandidates).' applicant(s)',
                     'icon' => 'feather-mail',
                     'complete' => $notificationComplete,
+                    'actions' => $proposalAdminActions,
+                    'action_note' => $proposalAdminNote,
                 ],
                 [
                     'key' => 'technical_proposals',

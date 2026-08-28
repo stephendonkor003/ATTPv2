@@ -65,6 +65,21 @@ class EoiReportCommunicationsSmoke
                 ->assertSee('name="templates[]"', false)
                 ->assertSee('multiple', false);
 
+            $panelBeforeRound = $this->actingAs($administrator)
+                ->get(route('eval.panel.procurement', $procurement));
+            $this->assertSame(200, $panelBeforeRound->status(), 'The Step 5 journey did not render for the administrator.');
+            $this->assertTrue(str_contains($panelBeforeRound->getContent(), 'Step 05'), 'The qualified-applicant hand-off is no longer Step 5.');
+            $this->assertTrue(str_contains($panelBeforeRound->getContent(), 'Set rules &amp; notify applicants'), 'Step 5 did not expose proposal rule setup.');
+            $this->assertTrue(str_contains($panelBeforeRound->getContent(), '?compose_proposal=1#eoiCommunicationsTitle'), 'The Step 5 rule action does not open the proposal composer.');
+            $this->assertTrue(str_contains($panelBeforeRound->getContent(), 'Upload for an applicant'), 'Step 5 did not explain the upcoming admin upload action.');
+
+            $panelBeforeRoundForViewer = $this->actingAs($viewer)
+                ->withSession($this->otpSession($viewer))
+                ->get(route('eval.panel.procurement', $procurement));
+            $this->assertSame(200, $panelBeforeRoundForViewer->status(), 'The Step 5 journey did not render for the report viewer.');
+            $this->assertTrue(! str_contains($panelBeforeRoundForViewer->getContent(), 'Set rules &amp; notify applicants'), 'A report-only viewer could see the Step 5 rule action.');
+            $this->assertTrue(! str_contains($panelBeforeRoundForViewer->getContent(), 'Upload for an applicant'), 'A report-only viewer could see the Step 5 upload action.');
+
             $viewerResponse = $this->actingAs($viewer)
                 ->postWithCsrf(route('reports.evaluations.eoi.communications.evaluation-records', $procurement));
             if ($viewerResponse->status() !== 403) {
@@ -115,6 +130,22 @@ class EoiReportCommunicationsSmoke
                     'portal_requirement' => 'allowed',
                     'email_requirement' => 'not_allowed',
                     'physical_requirement' => 'required',
+                    'rules' => [
+                        0 => [
+                            'title' => 'All required schedules are signed',
+                            'description' => 'Every mandatory schedule must be included and signed.',
+                            'category' => 'document',
+                            'is_mandatory' => 1,
+                            'is_disqualifying' => 0,
+                        ],
+                        2 => [
+                            'title' => 'Required physical copy is delivered',
+                            'description' => 'The physical copy must reach the procurement office by the deadline.',
+                            'category' => 'channel',
+                            'is_mandatory' => 1,
+                            'is_disqualifying' => 1,
+                        ],
+                    ],
                     'templates' => [
                         UploadedFile::fake()->create('technical-template.docx', 20, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
                         UploadedFile::fake()->create('financial-template.xlsx', 20, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
@@ -218,6 +249,30 @@ class EoiReportCommunicationsSmoke
             $round = $proposalBatch->technicalProposalRound()
                 ->with(['candidates', 'rules'])
                 ->firstOrFail();
+            $this->assertSame(2, $round->rules->count(), 'The custom Step 5 rules were not persisted exactly as configured.');
+            $this->assertSame(
+                ['All required schedules are signed', 'Required physical copy is delivered'],
+                $round->rules->pluck('title')->values()->all(),
+                'Removing a rule-builder row changed the remaining custom rule order.'
+            );
+            $channelRule = $round->rules->firstWhere('category', 'channel');
+            $this->assertTrue((bool) $channelRule?->is_mandatory, 'The custom channel rule lost its mandatory flag.');
+            $this->assertTrue((bool) $channelRule?->is_disqualifying, 'The custom channel rule lost its disqualifying flag.');
+
+            $panelAfterRound = $this->actingAs($administrator)
+                ->get(route('eval.panel.procurement', $procurement));
+            $this->assertSame(200, $panelAfterRound->status(), 'The Step 5 journey did not render after publishing the proposal round.');
+            $this->assertTrue(str_contains($panelAfterRound->getContent(), 'Review proposal rules'), 'Step 5 did not expose the published rule register.');
+            $this->assertTrue(str_contains($panelAfterRound->getContent(), 'Upload for an applicant'), 'Step 5 did not expose admin upload after candidate enrollment.');
+            $this->assertTrue(str_contains($panelAfterRound->getContent(), '?admin_upload=1#technicalProposalWorkspace'), 'The Step 5 upload action does not open the admin capture workspace.');
+            $this->assertTrue(! str_contains($panelAfterRound->getContent(), 'Set rules &amp; notify applicants'), 'Step 5 still offered to replace rules after publication.');
+
+            $panelAfterRoundForViewer = $this->actingAs($viewer)
+                ->withSession($this->otpSession($viewer))
+                ->get(route('eval.panel.procurement', $procurement));
+            $this->assertSame(200, $panelAfterRoundForViewer->status(), 'The report viewer lost access to the journey after proposal publication.');
+            $this->assertTrue(! str_contains($panelAfterRoundForViewer->getContent(), 'Review proposal rules'), 'A report-only viewer could see the published-rule admin action.');
+            $this->assertTrue(! str_contains($panelAfterRoundForViewer->getContent(), 'Upload for an applicant'), 'A report-only viewer could see the active upload action.');
             $candidate = $round->candidates->firstOrFail();
 
             $captureResponse = $this->actingAs($administrator)

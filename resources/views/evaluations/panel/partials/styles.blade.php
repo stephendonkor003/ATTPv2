@@ -295,6 +295,11 @@
     .pev-step--current .pev-step__content { background: linear-gradient(120deg, #f4fbf8, #fff); border-color: #a9d3c7; box-shadow: 0 8px 20px rgba(18,107,87,.08); }
     .pev-step--current .pev-step__state { background: var(--pev-green); color: #fff; }
     .pev-step--upcoming .pev-step__content { background: #fafcfc; }
+    .pev-step__admin-tools { border-top: 1px solid var(--pev-line); margin-top: 13px; padding-top: 12px; }
+    .pev-step__admin-label { align-items: center; color: var(--pev-green-dark); display: inline-flex; font-size: 9px; font-weight: 800; gap: 5px; letter-spacing: .08em; text-transform: uppercase; }
+    .pev-step__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .pev-step__actions .pev-btn { font-size: 10px; min-height: 35px; padding: 8px 11px; }
+    .pev-step__admin-note { color: var(--pev-muted); font-size: 10px; line-height: 1.5; margin: 8px 0 0 !important; max-width: 830px; }
 
     .pev-section { margin-bottom: 22px; }
     .pev-method-grid { display: grid; gap: 17px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -368,6 +373,8 @@
         .pev-step { gap: 10px; grid-template-columns: 42px minmax(0, 1fr); }
         .pev-step__orb { height: 36px; width: 36px; }
         .pev-step__heading { align-items: flex-start; flex-direction: column; gap: 7px; }
+        .pev-step__actions { align-items: stretch; flex-direction: column; }
+        .pev-step__actions .pev-btn { justify-content: center; width: 100%; }
         .pev-handoff-grid article { border-bottom: 1px solid var(--pev-line); border-right: 0; }
         .pev-handoff-grid article:last-child { border-bottom: 0; }
     }
