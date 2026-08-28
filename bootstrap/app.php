@@ -64,6 +64,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Expire unapproved central invitations and retain replay nonces only
         // for their bounded security window.
         $schedule->command('api-sync:invitations:maintain --limit=500')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+
+        // Recipient rows are a durable outbox for proposal invitations. This
+        // completes any after-response delivery interrupted by PHP/FPM.
+        $schedule->command('eoi:communications:deliver --limit=25')->everyMinute()->withoutOverlapping()->onOneServer();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

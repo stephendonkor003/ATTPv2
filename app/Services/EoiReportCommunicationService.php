@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendQualifiedProposalInvitation;
 use App\Mail\ApplicantEvaluationRecordMail;
 use App\Mail\QualifiedProposalInvitationMail;
 use App\Models\EoiReportCommunication;
@@ -231,19 +232,125 @@ class EoiReportCommunicationService
         $communication->load(['attachments', 'procurement', 'recipients.user']);
 
         foreach ($communication->recipients->where('delivery_status', EoiReportCommunicationRecipient::STATUS_PENDING) as $recipient) {
-            try {
-                Mail::to($recipient->recipient_email, $recipient->recipient_name)
-                    ->send(new QualifiedProposalInvitationMail($recipient));
-
-                $this->markSent($recipient);
-            } catch (Throwable $exception) {
-                $this->markFailed($recipient, $exception);
-            }
+            // SMTP must never hold the administrator's HTTP request open. The
+            // recipient row is the durable outbox; the scheduled recovery
+            // command can pick it up if PHP is stopped after the response.
+            SendQualifiedProposalInvitation::dispatchAfterResponse((string) $recipient->getKey());
         }
 
-        $communication->forceFill(['sent_at' => now()])->save();
+        $this->finalizeCommunicationIfComplete($communication->getKey());
 
         return $this->deliverySummary($communication->fresh('recipients'));
+    }
+
+    /**
+     * Re-dispatch an unfinished batch created by an interrupted older request.
+     * This prevents an administrator retry from creating another round and
+     * sending duplicate invitations.
+     */
+    public function resumePendingProposalInvitation(Procurement $procurement): ?array
+    {
+        $communication = EoiReportCommunication::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION)
+            ->whereHas('recipients', fn ($query) => $query->whereIn('delivery_status', [
+                EoiReportCommunicationRecipient::STATUS_PENDING,
+                EoiReportCommunicationRecipient::STATUS_PROCESSING,
+            ]))
+            ->with(['attachments', 'procurement', 'recipients.user'])
+            ->latest('created_at')
+            ->first();
+
+        if (! $communication) {
+            return null;
+        }
+
+        foreach ($communication->recipients->where('delivery_status', EoiReportCommunicationRecipient::STATUS_PENDING) as $recipient) {
+            SendQualifiedProposalInvitation::dispatchAfterResponse((string) $recipient->getKey());
+        }
+
+        return $this->deliverySummary($communication);
+    }
+
+    /**
+     * Deliver one claimed proposal invitation. This is shared by the
+     * after-response job and the scheduled recovery command.
+     */
+    public function deliverProposalInvitationRecipient(string $recipientId): bool
+    {
+        $recipient = DB::transaction(function () use ($recipientId): ?EoiReportCommunicationRecipient {
+            $recipient = EoiReportCommunicationRecipient::query()
+                ->with('communication')
+                ->lockForUpdate()
+                ->find($recipientId);
+
+            if (! $recipient
+                || $recipient->communication?->type !== EoiReportCommunication::TYPE_PROPOSAL_INVITATION) {
+                return null;
+            }
+
+            $staleProcessing = $recipient->delivery_status === EoiReportCommunicationRecipient::STATUS_PROCESSING
+                && $recipient->updated_at?->lessThanOrEqualTo(now()->subMinutes(10));
+
+            if ($recipient->delivery_status !== EoiReportCommunicationRecipient::STATUS_PENDING && ! $staleProcessing) {
+                return null;
+            }
+
+            $recipient->forceFill([
+                'delivery_status' => EoiReportCommunicationRecipient::STATUS_PROCESSING,
+                'delivery_error' => null,
+            ])->save();
+
+            return $recipient;
+        });
+
+        if (! $recipient) {
+            return false;
+        }
+
+        try {
+            $recipient->loadMissing([
+                'communication.procurement',
+                'communication.attachments',
+                'communication.technicalProposalRound.templates',
+                'user',
+            ]);
+
+            Mail::to($recipient->recipient_email, $recipient->recipient_name)
+                ->send(new QualifiedProposalInvitationMail($recipient));
+
+            $this->markSent($recipient);
+
+            if ($recipient->form_submission_id) {
+                FormSubmission::query()
+                    ->whereKey($recipient->form_submission_id)
+                    ->update(['status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_INVITED]);
+            }
+        } catch (Throwable $exception) {
+            $this->markFailed($recipient, $exception);
+        } finally {
+            $this->finalizeCommunicationIfComplete($recipient->communication_id);
+        }
+
+        return $recipient->fresh()->delivery_status === EoiReportCommunicationRecipient::STATUS_SENT;
+    }
+
+    /** @return Collection<int, string> */
+    public function recoverableProposalInvitationRecipientIds(int $limit = 25): Collection
+    {
+        return EoiReportCommunicationRecipient::query()
+            ->whereHas('communication', fn ($query) => $query
+                ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION))
+            ->where(function ($query): void {
+                $query->where('delivery_status', EoiReportCommunicationRecipient::STATUS_PENDING)
+                    ->orWhere(function ($query): void {
+                        $query->where('delivery_status', EoiReportCommunicationRecipient::STATUS_PROCESSING)
+                            ->where('updated_at', '<=', now()->subMinutes(10));
+                    });
+            })
+            ->oldest('created_at')
+            ->limit(max(1, min($limit, 100)))
+            ->pluck('id');
     }
 
     public function assertCombinedUploadSize(
@@ -458,6 +565,24 @@ class EoiReportCommunicationService
         ])->save();
     }
 
+    private function finalizeCommunicationIfComplete(string $communicationId): void
+    {
+        $hasOutstandingRecipients = EoiReportCommunicationRecipient::query()
+            ->where('communication_id', $communicationId)
+            ->whereIn('delivery_status', [
+                EoiReportCommunicationRecipient::STATUS_PENDING,
+                EoiReportCommunicationRecipient::STATUS_PROCESSING,
+            ])
+            ->exists();
+
+        if (! $hasOutstandingRecipients) {
+            EoiReportCommunication::query()
+                ->whereKey($communicationId)
+                ->whereNull('sent_at')
+                ->update(['sent_at' => now()]);
+        }
+    }
+
     private function skipRecipient(EoiReportCommunicationRecipient $recipient, string $reason): void
     {
         $recipient->forceFill([
@@ -473,6 +598,10 @@ class EoiReportCommunicationService
         return [
             'communication' => $communication,
             'total' => $recipients->count(),
+            'pending' => $recipients->whereIn('delivery_status', [
+                EoiReportCommunicationRecipient::STATUS_PENDING,
+                EoiReportCommunicationRecipient::STATUS_PROCESSING,
+            ])->count(),
             'sent' => $recipients->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SENT)->count(),
             'failed' => $recipients->where('delivery_status', EoiReportCommunicationRecipient::STATUS_FAILED)->count(),
             'skipped' => $recipients->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SKIPPED)->count(),

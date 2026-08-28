@@ -161,6 +161,9 @@ it('keeps communication delivery private scoped and recipient owned throughout t
     $service = file_get_contents($root.'/app/Services/EoiReportCommunicationService.php');
     $technicalService = file_get_contents($root.'/app/Services/EoiTechnicalProposalService.php');
     $adminController = file_get_contents($root.'/app/Http/Controllers/EoiReportCommunicationController.php');
+    $deliveryJob = file_get_contents($root.'/app/Jobs/SendQualifiedProposalInvitation.php');
+    $deliveryCommand = file_get_contents($root.'/app/Console/Commands/DeliverPendingEoiProposalInvitations.php');
+    $schedule = file_get_contents($root.'/bootstrap/app.php');
     $vendorController = file_get_contents($root.'/app/Http/Controllers/Vendor/EoiCommunicationController.php');
     $routes = file_get_contents($root.'/routes/web.php');
     $report = file_get_contents($root.'/resources/views/reports/evaluations/eoi-procurement.blade.php');
@@ -172,9 +175,19 @@ it('keeps communication delivery private scoped and recipient owned throughout t
         ->toContain("str_ends_with(\$email, '@africathinktank.africa')")
         ->toContain('panel_complete')
         ->toContain('can_advance')
+        ->toContain('dispatchAfterResponse')
+        ->toContain('resumePendingProposalInvitation')
+        ->toContain('recoverableProposalInvitationRecipientIds')
         ->and($adminController)
         ->toContain("'templates' => ['nullable', 'array', 'max:20']")
         ->toContain('EoiTechnicalProposalService')
+        ->toContain('EOI proposal invitation setup failed.')
+        ->and($deliveryJob)
+        ->toContain('deliverProposalInvitationRecipient')
+        ->and($deliveryCommand)
+        ->toContain('eoi:communications:deliver')
+        ->and($schedule)
+        ->toContain('eoi:communications:deliver --limit=25')
         ->and($technicalService)
         ->toContain('ALLOWED_DOCUMENT_MIME_TYPES')
         ->toContain("Storage::disk('local')")

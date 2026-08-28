@@ -9,16 +9,18 @@ use App\Models\EoiReportCommunicationRecipient;
 use App\Models\EoiReportProposalDocument;
 use App\Models\EoiTechnicalProposalCandidate;
 use App\Models\EoiTechnicalProposalRound;
-use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Services\EoiQualificationService;
 use App\Services\EoiReportCommunicationService;
 use App\Services\EoiTechnicalProposalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class EoiReportCommunicationController extends Controller
 {
@@ -100,6 +102,13 @@ class EoiReportCommunicationController extends Controller
             ]);
         }
 
+        if ($resumed = $communicationService->resumePendingProposalInvitation($procurement)) {
+            return back()->with('success', $this->deliveryMessage(
+                'The unfinished proposal invitation was resumed',
+                $resumed
+            ));
+        }
+
         $rules = $validated['rules'] ?? [
             [
                 'title' => 'Submission received by the stated deadline',
@@ -124,46 +133,57 @@ class EoiReportCommunicationController extends Controller
             ],
         ];
 
-        $round = $technicalProposalService->createDraft([
-            'procurement_id' => $procurement->getKey(),
-            'title' => $validated['proposal_title']
-                ?? 'Technical Proposal Submission — '.($procurement->reference_no ?: $procurement->title),
-            'instructions' => $validated['message'],
-            'opens_at' => $validated['opens_at'] ?? null,
-            'deadline_at' => $validated['deadline_at'] ?? now()->addDays(14),
-            'timezone' => $validated['timezone'] ?? config('app.timezone', 'UTC'),
-            'late_policy' => $validated['late_policy'] ?? EoiTechnicalProposalRound::LATE_ALLOW_FLAGGED,
-            'portal_requirement' => $validated['portal_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_REQUIRED,
-            'email_requirement' => $validated['email_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_ALLOWED,
-            'physical_requirement' => $validated['physical_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_NOT_ALLOWED,
-        ], $rules, $templates, $request->user());
+        $failureReference = Str::upper(Str::random(10));
+        $stage = 'creating the proposal round';
+        $round = null;
 
-        $round = $technicalProposalService->publish(
-            $round,
-            $communicationService->qualifiedRows($report),
-            $request->user()
-        );
+        try {
+            $round = $technicalProposalService->createDraft([
+                'procurement_id' => $procurement->getKey(),
+                'title' => $validated['proposal_title']
+                    ?? 'Technical Proposal Submission — '.($procurement->reference_no ?: $procurement->title),
+                'instructions' => $validated['message'],
+                'opens_at' => $validated['opens_at'] ?? null,
+                'deadline_at' => $validated['deadline_at'] ?? now()->addDays(14),
+                'timezone' => $validated['timezone'] ?? config('app.timezone', 'UTC'),
+                'late_policy' => $validated['late_policy'] ?? EoiTechnicalProposalRound::LATE_ALLOW_FLAGGED,
+                'portal_requirement' => $validated['portal_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_REQUIRED,
+                'email_requirement' => $validated['email_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_ALLOWED,
+                'physical_requirement' => $validated['physical_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_NOT_ALLOWED,
+            ], $rules, $templates, $request->user());
 
-        $result = $communicationService->sendProposalInvitation(
-            $procurement,
-            $report,
-            $request->user(),
-            $validated['subject'],
-            $validated['message'],
-            [],
-            $round
-        );
+            $stage = 'enrolling qualified applicants';
+            $round = $technicalProposalService->publish(
+                $round,
+                $communicationService->qualifiedRows($report),
+                $request->user()
+            );
 
-        $sentApplicationIds = $result['communication']->recipients
-            ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SENT)
-            ->pluck('form_submission_id')
-            ->filter()
-            ->values();
+            $stage = 'preparing applicant notifications';
+            $result = $communicationService->sendProposalInvitation(
+                $procurement,
+                $report,
+                $request->user(),
+                $validated['subject'],
+                $validated['message'],
+                [],
+                $round
+            );
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            Log::error('EOI proposal invitation setup failed.', [
+                'reference' => $failureReference,
+                'stage' => $stage,
+                'procurement_id' => $procurement->getKey(),
+                'round_id' => $round?->getKey(),
+                'actor_id' => $request->user()?->getKey(),
+                'exception' => $exception,
+            ]);
 
-        if ($sentApplicationIds->isNotEmpty()) {
-            FormSubmission::query()
-                ->whereIn('id', $sentApplicationIds)
-                ->update(['status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_INVITED]);
+            throw ValidationException::withMessages([
+                'proposal_invitation' => "The invitation could not be prepared while {$stage}. Please check the proposal history before retrying, or give support reference {$failureReference} to the administrator.",
+            ]);
         }
 
         return back()->with(($result['failed'] + $result['skipped']) > 0 ? 'warning' : 'success', $this->deliveryMessage(
@@ -276,9 +296,22 @@ class EoiReportCommunicationController extends Controller
 
     private function deliveryMessage(string $prefix, array $result): string
     {
+        $pending = (int) ($result['pending'] ?? 0);
+
+        if ($pending < 1) {
+            return sprintf(
+                '%s: %d sent, %d skipped, %d failed.',
+                $prefix,
+                $result['sent'],
+                $result['skipped'],
+                $result['failed']
+            );
+        }
+
         return sprintf(
-            '%s: %d sent, %d skipped, %d failed.',
+            '%s: %d queued, %d sent, %d skipped, %d failed.',
             $prefix,
+            $pending,
             $result['sent'],
             $result['skipped'],
             $result['failed']

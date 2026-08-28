@@ -4,12 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Exports\EvaluationProcurementWorkbookExport;
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
-use App\Models\Evaluation;
-use App\Models\EvaluationAssignment;
-use App\Models\EvaluationSubmission;
 use App\Models\EoiReportCommunication;
 use App\Models\EoiReportCommunicationRecipient;
 use App\Models\EoiTechnicalProposalRound;
+use App\Models\Evaluation;
+use App\Models\EvaluationAssignment;
+use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
 use App\Models\ProcurementPlan;
 use App\Services\EoiQualificationService;
@@ -673,6 +673,11 @@ class EvaluationReportController extends Controller
                 'recipients',
                 'recipients as sent_recipients_count' => fn ($query) => $query
                     ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SENT),
+                'recipients as pending_recipients_count' => fn ($query) => $query
+                    ->whereIn('delivery_status', [
+                        EoiReportCommunicationRecipient::STATUS_PENDING,
+                        EoiReportCommunicationRecipient::STATUS_PROCESSING,
+                    ]),
                 'recipients as skipped_recipients_count' => fn ($query) => $query
                     ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SKIPPED),
                 'recipients as failed_recipients_count' => fn ($query) => $query

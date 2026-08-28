@@ -248,6 +248,7 @@
                                     @endcan
                                 </div>
                                 <div class="eoi-history-stats">
+                                    @if ($communication->pending_recipients_count)<span class="is-pending">{{ $communication->pending_recipients_count }} queued</span>@endif
                                     <span class="is-sent">{{ $communication->sent_recipients_count }} sent</span>
                                     @if ($communication->skipped_recipients_count)<span class="is-skipped">{{ $communication->skipped_recipients_count }} skipped</span>@endif
                                     @if ($communication->failed_recipients_count)<span class="is-failed">{{ $communication->failed_recipients_count }} failed</span>@endif
@@ -282,6 +283,12 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
+                            @error('proposal_invitation')
+                                <div class="alert alert-danger d-flex align-items-start gap-2" role="alert">
+                                    <i class="feather-alert-circle mt-1" aria-hidden="true"></i>
+                                    <div><strong>Invitation not prepared.</strong><br>{{ $message }}</div>
+                                </div>
+                            @enderror
                             <div class="eoi-modal-note"><i class="feather-shield" aria-hidden="true"></i><span>Each applicant receives a separate email and a private portal invitation. No recipient list is exposed.</span></div>
                             <div class="mb-3">
                                 <label for="eoiProposalSubject" class="form-label">Email subject</label>
@@ -1266,6 +1273,7 @@
         .eoi-history-proposals section a { background: #eaf5ef; border-radius: 5px; color: #087443; font-size: 9px; padding: 3px 6px; text-decoration: none; }
         .eoi-history-stats { align-items: flex-end; display: flex; flex-direction: column; gap: 3px; }
         .eoi-history-stats span { border-radius: 999px; font-size: 9px; font-weight: 800; padding: 3px 7px; }
+        .eoi-history-stats .is-pending { background: #eff6ff; color: #1d4ed8; }
         .eoi-history-stats .is-sent { background: #ecfdf3; color: #15803d; }
         .eoi-history-stats .is-skipped { background: #fffbeb; color: #b45309; }
         .eoi-history-stats .is-failed { background: #fff1f0; color: #b42318; }
@@ -3599,7 +3607,7 @@
                 });
             });
 
-            @if (request()->boolean('compose_proposal') || $errors->has('subject') || $errors->has('message') || $errors->has('deadline_at') || $errors->has('rules') || $errors->has('rules.*') || $errors->has('templates') || $errors->has('templates.*'))
+            @if (request()->boolean('compose_proposal') || $errors->has('proposal_invitation') || $errors->has('subject') || $errors->has('message') || $errors->has('deadline_at') || $errors->has('rules') || $errors->has('rules.*') || $errors->has('templates') || $errors->has('templates.*'))
                 const proposalModalElement = document.getElementById('eoiProposalInvitationModal');
                 if (proposalModalElement && window.bootstrap?.Modal) {
                     window.bootstrap.Modal.getOrCreateInstance(proposalModalElement).show();

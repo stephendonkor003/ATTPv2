@@ -3,6 +3,7 @@
 use App\Mail\ApplicantEvaluationRecordMail;
 use App\Mail\QualifiedProposalInvitationMail;
 use App\Models\EoiReportCommunication;
+use App\Models\EoiTechnicalProposalRound;
 use App\Models\Evaluation;
 use App\Models\EvaluationAssignment;
 use App\Models\EvaluationCriteria;
@@ -182,11 +183,58 @@ class EoiReportCommunicationsSmoke
                 ->firstOrFail();
             $this->assertSame(1, $proposalBatch->recipients->count(), 'A non-qualified applicant entered the proposal invitation batch.');
             $this->assertSame((string) $qualifiedVendor->id, (string) $proposalBatch->recipients->first()->user_id, 'The proposal invitation targeted the wrong vendor.');
+            $this->assertSame('sent', $proposalBatch->recipients->first()->delivery_status, 'The after-response proposal invitation was not delivered.');
+            $this->assertTrue($proposalBatch->fresh()->sent_at !== null, 'The completed proposal invitation batch was not finalized.');
+            $this->assertSame(
+                FormSubmission::STATUS_TECHNICAL_PROPOSAL_INVITED,
+                FormSubmission::query()->whereKey($proposalBatch->recipients->first()->form_submission_id)->value('status'),
+                'The applicant lifecycle was not advanced after successful email delivery.'
+            );
             $this->assertSame(3, $proposalBatch->attachments->count(), 'Multiple proposal templates were not retained.');
 
             foreach ($proposalBatch->attachments as $attachment) {
                 $this->assertTrue(Storage::disk('local')->exists($attachment->file_path), 'A proposal template was not stored on the private disk.');
             }
+
+            $proposalBatch->recipients->first()->forceFill([
+                'delivery_status' => 'pending',
+                'emailed_at' => null,
+            ])->save();
+            $proposalBatch->forceFill(['sent_at' => null])->save();
+            $roundCountBeforeResume = EoiTechnicalProposalRound::query()
+                ->where('procurement_id', $procurement->id)
+                ->count();
+            $batchCountBeforeResume = EoiReportCommunication::query()
+                ->where('procurement_id', $procurement->id)
+                ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION)
+                ->count();
+
+            $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.communications.proposal-invitation', $procurement), [
+                    'subject' => 'Retry must resume the unfinished invitation',
+                    'message' => 'Resume the existing pending recipient without creating a duplicate proposal round.',
+                ])
+                ->assertRedirect()
+                ->assertSessionHas('success');
+
+            $this->assertSame(
+                $roundCountBeforeResume,
+                EoiTechnicalProposalRound::query()->where('procurement_id', $procurement->id)->count(),
+                'Retrying an unfinished invitation created a duplicate proposal round.'
+            );
+            $this->assertSame(
+                $batchCountBeforeResume,
+                EoiReportCommunication::query()
+                    ->where('procurement_id', $procurement->id)
+                    ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION)
+                    ->count(),
+                'Retrying an unfinished invitation created a duplicate communication batch.'
+            );
+            $this->assertSame(
+                'sent',
+                $proposalBatch->recipients()->firstOrFail()->delivery_status,
+                'The unfinished invitation was not resumed after the administrator retried.'
+            );
 
             $recipient = $proposalBatch->recipients->first();
 
