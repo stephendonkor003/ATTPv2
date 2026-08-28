@@ -170,7 +170,7 @@
                     <div class="eoi-communication-card__body">
                         <span class="eoi-communication-step">2 &middot; Qualified Applicants only</span>
                         <h6>Invite proposal submissions</h6>
-                        <p>Write a tailored message, attach up to 10 PDF, Word, or Excel templates, and invite qualified applicants into their protected vendor-portal workspace.</p>
+                        <p>Set the rules, deadline, channels and templates, then either notify qualified applicants or open the stage for administrator-managed proposal uploads.</p>
                         <div class="eoi-recipient-counts">
                             <span><b>{{ number_format($proposalPreview['eligible'] ?? 0) }}</b> ready</span>
                             <span><b>{{ number_format($proposalPreview['total'] ?? 0) }}</b> qualified</span>
@@ -188,9 +188,9 @@
                         @endif
                     </div>
                     @can('evaluations.manage')
-                        <button type="button" class="btn btn-success eoi-communication-card__action" data-bs-toggle="modal" data-bs-target="#eoiProposalInvitationModal" @disabled(($proposalPreview['eligible'] ?? 0) < 1)>
-                            <i class="feather-mail me-1" aria-hidden="true"></i>
-                            Compose invitation
+                        <button type="button" class="btn btn-success eoi-communication-card__action" data-bs-toggle="modal" data-bs-target="#eoiProposalInvitationModal" @disabled(($proposalPreview['total'] ?? 0) < 1)>
+                            <i class="feather-sliders me-1" aria-hidden="true"></i>
+                            Configure &amp; initiate
                         </button>
                     @else
                         <div class="eoi-communication-card__readonly"><i class="feather-eye" aria-hidden="true"></i> Manage permission required to send</div>
@@ -269,15 +269,15 @@
             @push('modals')
             <div class="modal fade" id="eoiProposalInvitationModal" tabindex="-1" aria-labelledby="eoiProposalInvitationTitle" aria-describedby="eoiProposalInvitationDescription" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-scrollable eoi-proposal-dialog">
-                    <form class="modal-content eoi-proposal-modal" method="POST" enctype="multipart/form-data" action="{{ route('reports.evaluations.eoi.communications.proposal-invitation', $procurement) }}" data-eoi-send-form data-sending-label="Sending invitations...">
+                    <form class="modal-content eoi-proposal-modal" method="POST" enctype="multipart/form-data" action="{{ route('reports.evaluations.eoi.communications.proposal-invitation', $procurement) }}" data-eoi-send-form>
                         @csrf
                         <div class="modal-header">
                             <div class="eoi-proposal-modal__heading">
                                 <span class="eoi-proposal-modal__icon" aria-hidden="true"><i class="feather-sliders"></i></span>
                                 <div>
-                                    <span class="eoi-eyebrow">Qualified Applicants &middot; {{ number_format($proposalPreview['eligible'] ?? 0) }} recipient(s)</span>
-                                    <h5 class="modal-title" id="eoiProposalInvitationTitle">Configure rules &amp; send proposal invitation</h5>
-                                    <p id="eoiProposalInvitationDescription">Set every submission rule, channel, deadline and template in one workspace.</p>
+                                    <span class="eoi-eyebrow">Qualified Applicants &middot; {{ number_format($proposalPreview['total'] ?? 0) }} applicant(s)</span>
+                                    <h5 class="modal-title" id="eoiProposalInvitationTitle">Configure the technical proposal round</h5>
+                                    <p id="eoiProposalInvitationDescription">Set every submission rule, channel, deadline and template, then choose how to initiate the stage.</p>
                                 </div>
                             </div>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -286,13 +286,16 @@
                             @error('proposal_invitation')
                                 <div class="alert alert-danger d-flex align-items-start gap-2" role="alert">
                                     <i class="feather-alert-circle mt-1" aria-hidden="true"></i>
-                                    <div><strong>Invitation not prepared.</strong><br>{{ $message }}</div>
+                                    <div><strong>Proposal round not prepared.</strong><br>{{ $message }}</div>
                                 </div>
                             @enderror
-                            <div class="eoi-modal-note"><i class="feather-shield" aria-hidden="true"></i><span>Each applicant receives a separate email and a private portal invitation. No recipient list is exposed.</span></div>
+                            @error('delivery_mode')
+                                <div class="alert alert-danger" role="alert">{{ $message }}</div>
+                            @enderror
+                            <div class="eoi-modal-note"><i class="feather-shield" aria-hidden="true"></i><span><strong>Choose at the end:</strong> send a private email and portal invitation, or initiate the round for admin upload only. No email or portal notification is created by the initiate-only action.</span></div>
                             <div class="mb-3">
-                                <label for="eoiProposalSubject" class="form-label">Email subject</label>
-                                <input id="eoiProposalSubject" name="subject" type="text" class="form-control @error('subject') is-invalid @enderror" maxlength="180" required value="{{ old('subject', 'Invitation to submit proposal — '.$procurementReference) }}">
+                                <label for="eoiProposalSubject" class="form-label">Email subject <span class="text-muted fw-normal">(required only when sending)</span></label>
+                                <input id="eoiProposalSubject" name="subject" type="text" class="form-control @error('subject') is-invalid @enderror" maxlength="180" value="{{ old('subject', 'Invitation to submit proposal — '.$procurementReference) }}">
                                 @error('subject')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
                             <div class="mb-3">
@@ -403,7 +406,8 @@
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-success"><i class="feather-send me-1" aria-hidden="true"></i> Send to Qualified Applicants</button>
+                            <button type="submit" name="delivery_mode" value="initiate_only" class="btn btn-outline-primary" data-confirm="Initiate this proposal round and enable administrator uploads without sending any email or portal notification?" data-sending-label="Initiating round..." @disabled(($proposalPreview['total'] ?? 0) < 1)><i class="feather-play-circle me-1" aria-hidden="true"></i> Initiate without sending notification</button>
+                            <button type="submit" name="delivery_mode" value="notify" class="btn btn-success" data-confirm="Publish this proposal round and send a private email and portal invitation to every eligible Qualified Applicant?" data-sending-label="Sending invitations..." @disabled(($proposalPreview['eligible'] ?? 0) < 1)><i class="feather-send me-1" aria-hidden="true"></i> Send to Qualified Applicants</button>
                         </div>
                     </form>
                 </div>
@@ -3593,21 +3597,32 @@
                         return;
                     }
 
-                    if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) {
+                    const submitButton = event.submitter instanceof HTMLButtonElement
+                        ? event.submitter
+                        : form.querySelector('button[type="submit"]');
+                    const confirmation = submitButton?.dataset.confirm || form.dataset.confirm;
+
+                    if (confirmation && !window.confirm(confirmation)) {
                         event.preventDefault();
                         return;
                     }
 
                     form.dataset.submitting = 'true';
-                    const submitButton = form.querySelector('button[type="submit"]');
+                    form.querySelectorAll('button[type="submit"]').forEach((button) => {
+                        if (button !== submitButton) {
+                            button.disabled = true;
+                        }
+                    });
+
                     if (submitButton) {
-                        submitButton.disabled = true;
-                        submitButton.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>${form.dataset.sendingLabel || 'Sending...'}`;
+                        submitButton.setAttribute('aria-disabled', 'true');
+                        submitButton.style.pointerEvents = 'none';
+                        submitButton.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>${submitButton.dataset.sendingLabel || form.dataset.sendingLabel || 'Working...'}`;
                     }
                 });
             });
 
-            @if (request()->boolean('compose_proposal') || $errors->has('proposal_invitation') || $errors->has('subject') || $errors->has('message') || $errors->has('deadline_at') || $errors->has('rules') || $errors->has('rules.*') || $errors->has('templates') || $errors->has('templates.*'))
+            @if (request()->boolean('compose_proposal') || $errors->has('proposal_invitation') || $errors->has('delivery_mode') || $errors->has('subject') || $errors->has('message') || $errors->has('deadline_at') || $errors->has('rules') || $errors->has('rules.*') || $errors->has('templates') || $errors->has('templates.*'))
                 const proposalModalElement = document.getElementById('eoiProposalInvitationModal');
                 if (proposalModalElement && window.bootstrap?.Modal) {
                     window.bootstrap.Modal.getOrCreateInstance(proposalModalElement).show();

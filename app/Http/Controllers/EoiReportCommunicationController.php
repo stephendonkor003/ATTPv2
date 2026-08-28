@@ -10,11 +10,13 @@ use App\Models\EoiReportProposalDocument;
 use App\Models\EoiTechnicalProposalCandidate;
 use App\Models\EoiTechnicalProposalRound;
 use App\Models\Procurement;
+use App\Models\ProcurementAuditLog;
 use App\Services\EoiQualificationService;
 use App\Services\EoiReportCommunicationService;
 use App\Services\EoiTechnicalProposalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -25,6 +27,12 @@ use Throwable;
 class EoiReportCommunicationController extends Controller
 {
     use ScopesAssignedPortfolios;
+
+    private const DELIVERY_MODE_NOTIFY = 'notify';
+
+    private const DELIVERY_MODE_INITIATE_ONLY = 'initiate_only';
+
+    private const AUDIT_INITIATED_WITHOUT_NOTIFICATION = 'technical_proposal_initiated_without_notification';
 
     public function sendEvaluationRecords(
         Request $request,
@@ -68,8 +76,13 @@ class EoiReportCommunicationController extends Controller
     ): RedirectResponse {
         $this->assertProcurementScope($request, $procurement);
 
+        $request->merge([
+            'delivery_mode' => $request->input('delivery_mode', self::DELIVERY_MODE_NOTIFY),
+        ]);
+
         $validated = $request->validate([
-            'subject' => ['required', 'string', 'max:180'],
+            'delivery_mode' => ['required', 'in:'.self::DELIVERY_MODE_NOTIFY.','.self::DELIVERY_MODE_INITIATE_ONLY],
+            'subject' => ['nullable', 'required_if:delivery_mode,'.self::DELIVERY_MODE_NOTIFY, 'string', 'max:180'],
             'message' => ['required', 'string', 'min:5', 'max:5000'],
             'proposal_title' => ['nullable', 'string', 'max:180'],
             'opens_at' => ['nullable', 'date'],
@@ -95,14 +108,16 @@ class EoiReportCommunicationController extends Controller
 
         $templates = array_values(array_filter($request->file('templates', [])));
         $report = $this->report($procurement, $qualificationService);
+        $qualifiedRows = $communicationService->qualifiedRows($report);
+        $initiateOnly = $validated['delivery_mode'] === self::DELIVERY_MODE_INITIATE_ONLY;
 
-        if ($communicationService->qualifiedRows($report)->isEmpty()) {
+        if ($qualifiedRows->isEmpty()) {
             throw ValidationException::withMessages([
                 'message' => 'There are no panel-complete Qualified Applicants to invite.',
             ]);
         }
 
-        if ($resumed = $communicationService->resumePendingProposalInvitation($procurement)) {
+        if (! $initiateOnly && ($resumed = $communicationService->resumePendingProposalInvitation($procurement))) {
             return back()->with('success', $this->deliveryMessage(
                 'The unfinished proposal invitation was resumed',
                 $resumed
@@ -134,37 +149,65 @@ class EoiReportCommunicationController extends Controller
         ];
 
         $failureReference = Str::upper(Str::random(10));
-        $stage = 'creating the proposal round';
+        $stage = $initiateOnly
+            ? 'creating the technical proposal round'
+            : 'creating the proposal round';
         $round = null;
+        $roundWasReused = false;
 
         try {
-            $round = $technicalProposalService->createDraft([
-                'procurement_id' => $procurement->getKey(),
-                'title' => $validated['proposal_title']
-                    ?? 'Technical Proposal Submission — '.($procurement->reference_no ?: $procurement->title),
-                'instructions' => $validated['message'],
-                'opens_at' => $validated['opens_at'] ?? null,
-                'deadline_at' => $validated['deadline_at'] ?? now()->addDays(14),
-                'timezone' => $validated['timezone'] ?? config('app.timezone', 'UTC'),
-                'late_policy' => $validated['late_policy'] ?? EoiTechnicalProposalRound::LATE_ALLOW_FLAGGED,
-                'portal_requirement' => $validated['portal_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_REQUIRED,
-                'email_requirement' => $validated['email_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_ALLOWED,
-                'physical_requirement' => $validated['physical_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_NOT_ALLOWED,
-            ], $rules, $templates, $request->user());
+            $round = $this->reusableUnnotifiedRound($procurement);
+            $roundWasReused = $round !== null;
+
+            if (! $round) {
+                $round = $technicalProposalService->createDraft([
+                    'procurement_id' => $procurement->getKey(),
+                    'reuse_unnotified_round' => true,
+                    'title' => $validated['proposal_title']
+                        ?? 'Technical Proposal Submission — '.($procurement->reference_no ?: $procurement->title),
+                    'instructions' => $validated['message'],
+                    'opens_at' => $validated['opens_at'] ?? null,
+                    'deadline_at' => $validated['deadline_at'] ?? now()->addDays(14),
+                    'timezone' => $validated['timezone'] ?? config('app.timezone', 'UTC'),
+                    'late_policy' => $validated['late_policy'] ?? EoiTechnicalProposalRound::LATE_ALLOW_FLAGGED,
+                    'portal_requirement' => $validated['portal_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_REQUIRED,
+                    'email_requirement' => $validated['email_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_ALLOWED,
+                    'physical_requirement' => $validated['physical_requirement'] ?? EoiTechnicalProposalRound::REQUIREMENT_NOT_ALLOWED,
+                ], $rules, $templates, $request->user());
+            }
 
             $stage = 'enrolling qualified applicants';
             $round = $technicalProposalService->publish(
                 $round,
-                $communicationService->qualifiedRows($report),
+                $qualifiedRows,
                 $request->user()
             );
+
+            if ($initiateOnly) {
+                $stage = 'recording the no-notification workflow decision';
+                $this->recordInitiationWithoutNotification($request, $procurement, $round);
+
+                return redirect()->to(
+                    route('reports.evaluations.eoi.procurement', $procurement).'#technicalProposalWorkspace'
+                )->with(
+                    'success',
+                    sprintf(
+                        ($roundWasReused
+                            ? 'Existing technical proposal round %d was reused for %d qualified applicant(s); its published configuration was not replaced.'
+                            : 'Technical proposal round %d initiated for %d qualified applicant(s).')
+                        .' No email or portal notification was sent. Admin proposal upload is now available.',
+                        $round->round_number,
+                        $round->candidates->count()
+                    )
+                );
+            }
 
             $stage = 'preparing applicant notifications';
             $result = $communicationService->sendProposalInvitation(
                 $procurement,
                 $report,
                 $request->user(),
-                $validated['subject'],
+                (string) $validated['subject'],
                 $validated['message'],
                 [],
                 $round
@@ -182,12 +225,17 @@ class EoiReportCommunicationController extends Controller
             ]);
 
             throw ValidationException::withMessages([
-                'proposal_invitation' => "The invitation could not be prepared while {$stage}. Please check the proposal history before retrying, or give support reference {$failureReference} to the administrator.",
+                'proposal_invitation' => ($initiateOnly
+                    ? "The technical proposal round could not be initiated while {$stage}."
+                    : "The invitation could not be prepared while {$stage}.")
+                    ." Please check the proposal history before retrying, or give support reference {$failureReference} to the administrator.",
             ]);
         }
 
         return back()->with(($result['failed'] + $result['skipped']) > 0 ? 'warning' : 'success', $this->deliveryMessage(
-            'Proposal invitations processed',
+            $roundWasReused
+                ? 'Proposal invitations processed using existing technical proposal round '.$round->round_number
+                : 'Proposal invitations processed',
             $result
         ));
     }
@@ -292,6 +340,65 @@ class EoiReportCommunicationController extends Controller
             403,
             'This evaluation report is not assigned to your portfolio.'
         );
+    }
+
+    private function reusableUnnotifiedRound(Procurement $procurement): ?EoiTechnicalProposalRound
+    {
+        return EoiTechnicalProposalRound::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->whereIn('status', [
+                EoiTechnicalProposalRound::STATUS_DRAFT,
+                EoiTechnicalProposalRound::STATUS_PUBLISHED,
+            ])
+            ->whereDoesntHave('communications', fn ($query) => $query
+                ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION))
+            ->orderByDesc('round_number')
+            ->first();
+    }
+
+    private function recordInitiationWithoutNotification(
+        Request $request,
+        Procurement $procurement,
+        EoiTechnicalProposalRound $round
+    ): void {
+        $metadata = [
+            'round_id' => $round->getKey(),
+            'round_number' => $round->round_number,
+            'candidate_count' => $round->candidates->count(),
+            'rule_count' => $round->rules->count(),
+            'template_count' => $round->templates->count(),
+            'notification_sent' => false,
+        ];
+
+        DB::transaction(function () use ($request, $procurement, $round, $metadata): void {
+            Procurement::query()
+                ->withTrashed()
+                ->lockForUpdate()
+                ->findOrFail($procurement->getKey());
+
+            $audit = ProcurementAuditLog::query()
+                ->where('procurement_id', $procurement->getKey())
+                ->where('action', self::AUDIT_INITIATED_WITHOUT_NOTIFICATION)
+                ->get(['id', 'metadata'])
+                ->first(fn (ProcurementAuditLog $entry): bool => (string) data_get($entry->metadata, 'round_id') === (string) $round->getKey());
+
+            if ($audit) {
+                $audit->forceFill([
+                    'user_id' => $request->user()?->getKey(),
+                    'metadata' => $metadata,
+                ])->save();
+
+                return;
+            }
+
+            ProcurementAuditLog::create([
+                'user_id' => $request->user()?->getKey(),
+                'action' => self::AUDIT_INITIATED_WITHOUT_NOTIFICATION,
+                'procurement_id' => $procurement->getKey(),
+                'metadata' => $metadata,
+                'created_at' => now(),
+            ]);
+        }, 3);
     }
 
     private function deliveryMessage(string $prefix, array $result): string

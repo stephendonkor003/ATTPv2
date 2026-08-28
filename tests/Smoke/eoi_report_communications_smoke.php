@@ -67,6 +67,18 @@ class EoiReportCommunicationsSmoke
                 ->assertSee('name="templates[]"', false)
                 ->assertSee('multiple', false);
             $reportHtml = $reportResponse->getContent();
+            $this->assertTrue(
+                str_contains($reportHtml, 'Initiate without sending notification'),
+                'The proposal composer does not expose the internal initiation action.'
+            );
+            $this->assertTrue(
+                str_contains($reportHtml, 'No email or portal notification'),
+                'The internal initiation action does not explain that applicants will not be notified.'
+            );
+            $this->assertTrue(
+                str_contains($reportHtml, 'value="initiate_only"'),
+                'The internal initiation action does not submit its explicit delivery mode.'
+            );
             $reportStart = strpos($reportHtml, 'id="eoiReportTitle"');
             $reportEnd = $reportStart === false ? false : strpos($reportHtml, '</main>', $reportStart);
             $proposalModalStart = strpos($reportHtml, 'id="eoiProposalInvitationModal"');
@@ -93,6 +105,11 @@ class EoiReportCommunicationsSmoke
             $this->assertSame(200, $panelBeforeRoundForViewer->status(), 'The Step 5 journey did not render for the report viewer.');
             $this->assertTrue(! str_contains($panelBeforeRoundForViewer->getContent(), 'Set rules &amp; notify applicants'), 'A report-only viewer could see the Step 5 rule action.');
             $this->assertTrue(! str_contains($panelBeforeRoundForViewer->getContent(), 'Upload for an applicant'), 'A report-only viewer could see the Step 5 upload action.');
+            $this->actingAs($viewer)
+                ->withSession($this->otpSession($viewer))
+                ->get(route('reports.evaluations.eoi.procurement', $procurement))
+                ->assertOk()
+                ->assertDontSee('Initiate without sending notification');
 
             $viewerResponse = $this->actingAs($viewer)
                 ->postWithCsrf(route('reports.evaluations.eoi.communications.evaluation-records', $procurement));
@@ -136,8 +153,205 @@ class EoiReportCommunicationsSmoke
                 );
             }
 
+            // Keep the internal-initiation path isolated from the ordinary
+            // notification batch below. It must publish the proposal round
+            // and enroll the shortlist without creating any delivery state.
+            [$internalProcurement, , $internalQualifiedVendor, $internalNotQualifiedVendor] = $this->fixture($administrator);
+            $internalQualifiedApplicant = FormSubmission::query()
+                ->where('procurement_id', $internalProcurement->id)
+                ->where('submitted_by', $internalQualifiedVendor->id)
+                ->firstOrFail();
+            $internalNotQualifiedApplicant = FormSubmission::query()
+                ->where('procurement_id', $internalProcurement->id)
+                ->where('submitted_by', $internalNotQualifiedVendor->id)
+                ->firstOrFail();
+            $qualifiedStatusBeforeInitiation = $internalQualifiedApplicant->status;
+            $notQualifiedStatusBeforeInitiation = $internalNotQualifiedApplicant->status;
+
+            $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.communications.proposal-invitation', $internalProcurement), [
+                    'delivery_mode' => 'unsupported_mode',
+                    'subject' => 'This invalid mode must not create a round',
+                    'message' => 'The request should be rejected before any proposal workflow state is created.',
+                    'deadline_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                ])
+                ->assertRedirect()
+                ->assertSessionHasErrors('delivery_mode');
+            $this->assertSame(
+                0,
+                EoiTechnicalProposalRound::query()->where('procurement_id', $internalProcurement->id)->count(),
+                'An invalid delivery mode created a technical-proposal round.'
+            );
+
+            $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.communications.proposal-invitation', $internalProcurement), [
+                    'delivery_mode' => 'initiate_only',
+                    'message' => 'Create the auditable proposal workspace for administrator capture without contacting applicants.',
+                    'proposal_title' => 'Internally initiated technical proposal round',
+                    'deadline_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                    'portal_requirement' => 'not_allowed',
+                    'email_requirement' => 'allowed',
+                    'physical_requirement' => 'required',
+                    'rules' => [
+                        [
+                            'title' => 'Physical submission must be registered',
+                            'description' => 'The administrator must register the physical proposal and its original receipt time.',
+                            'category' => 'channel',
+                            'is_mandatory' => 1,
+                            'is_disqualifying' => 1,
+                        ],
+                    ],
+                    'templates' => [
+                        UploadedFile::fake()->create('internal-proposal-template.pdf', 20, 'application/pdf'),
+                    ],
+                ])
+                ->assertRedirect()
+                ->assertSessionHas('success');
+
+            Mail::assertNotSent(QualifiedProposalInvitationMail::class);
+            $this->assertTrue(
+                ! EoiReportCommunication::query()
+                    ->where('procurement_id', $internalProcurement->id)
+                    ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION)
+                    ->exists(),
+                'Internal initiation created a proposal communication or recipient batch.'
+            );
+
+            $internalRound = EoiTechnicalProposalRound::query()
+                ->where('procurement_id', $internalProcurement->id)
+                ->with(['rules', 'templates', 'candidates'])
+                ->sole();
+            $this->assertSame(EoiTechnicalProposalRound::STATUS_PUBLISHED, $internalRound->status, 'The internally initiated round was not published.');
+            $this->assertTrue($internalRound->published_at !== null, 'The internally initiated round has no publication timestamp.');
+            $this->assertSame(1, $internalRound->rules->count(), 'Internal initiation did not retain the configured proposal rule.');
+            $this->assertSame(1, $internalRound->templates->count(), 'Internal initiation did not retain the uploaded proposal template.');
+            $this->assertSame(1, $internalRound->candidates->count(), 'Internal initiation did not enroll exactly the Qualified Applicant.');
+            $internalCandidate = $internalRound->candidates->firstOrFail();
+            $this->assertSame(
+                (string) $internalQualifiedApplicant->id,
+                (string) $internalCandidate->form_submission_id,
+                'Internal initiation enrolled the wrong applicant.'
+            );
+            $this->assertTrue(
+                (string) $internalCandidate->form_submission_id !== (string) $internalNotQualifiedApplicant->id,
+                'Internal initiation enrolled a Not Qualified applicant.'
+            );
+            $this->assertSame(
+                $qualifiedStatusBeforeInitiation,
+                $internalQualifiedApplicant->fresh()->status,
+                'Internal initiation falsely marked the Qualified Applicant as notified.'
+            );
+            $this->assertSame(
+                $notQualifiedStatusBeforeInitiation,
+                $internalNotQualifiedApplicant->fresh()->status,
+                'Internal initiation altered the Not Qualified Applicant lifecycle.'
+            );
+            $this->assertSame(
+                1,
+                ProcurementAuditLog::query()
+                    ->where('procurement_id', $internalProcurement->id)
+                    ->where('action', 'technical_proposal_initiated_without_notification')
+                    ->count(),
+                'Internal initiation was not recorded once in the procurement audit trail.'
+            );
+
+            $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.communications.proposal-invitation', $internalProcurement), [
+                    'delivery_mode' => 'initiate_only',
+                    'message' => 'A retry must reuse the active internal proposal round without contacting applicants.',
+                ])
+                ->assertRedirect()
+                ->assertSessionHas('success');
+            $this->assertSame(
+                1,
+                EoiTechnicalProposalRound::query()->where('procurement_id', $internalProcurement->id)->count(),
+                'Retrying internal initiation created a duplicate technical-proposal round.'
+            );
+            $this->assertSame(
+                1,
+                ProcurementAuditLog::query()
+                    ->where('procurement_id', $internalProcurement->id)
+                    ->where('action', 'technical_proposal_initiated_without_notification')
+                    ->count(),
+                'Retrying internal initiation duplicated the workflow audit record.'
+            );
+            $this->assertTrue(
+                ! EoiReportCommunication::query()
+                    ->where('procurement_id', $internalProcurement->id)
+                    ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION)
+                    ->exists(),
+                'Retrying internal initiation created a proposal communication.'
+            );
+
+            $this->actingAs($administrator)
+                ->get(route('eval.panel.procurement', $internalProcurement))
+                ->assertOk()
+                ->assertSee('Technical proposal round initiated without notification')
+                ->assertSee('Upload for an applicant');
+
+            $this->actingAs($administrator)
+                ->get(route('reports.evaluations.eoi.procurement', $internalProcurement))
+                ->assertOk()
+                ->assertSee('Internally initiated technical proposal round')
+                ->assertSee('Upload on applicant')
+                ->assertSee('Capture proposal revision');
+
+            $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.technical-proposals.capture', [
+                    $internalProcurement,
+                    $internalRound,
+                    $internalCandidate,
+                ]), [
+                    'received_via' => 'physical',
+                    'received_at' => now()->subMinute()->format('Y-m-d H:i:s'),
+                    'capture_note' => 'Received physically and registered by the administrator without sending an applicant notification.',
+                    'documents' => [
+                        UploadedFile::fake()->create('internally-captured-proposal.pdf', 20, 'application/pdf'),
+                    ],
+                ])
+                ->assertRedirect()
+                ->assertSessionHas('success');
+            $this->assertSame(
+                FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
+                $internalQualifiedApplicant->fresh()->status,
+                'Admin capture did not advance the internally initiated applicant lifecycle.'
+            );
+            Mail::assertNotSent(QualifiedProposalInvitationMail::class);
+
+            $this->actingAs($administrator)
+                ->postWithCsrf(route('reports.evaluations.eoi.communications.proposal-invitation', $internalProcurement), [
+                    'delivery_mode' => 'notify',
+                    'subject' => 'Late decision to notify the internally initiated shortlist',
+                    'message' => 'Notify the enrolled applicant without creating a replacement round or losing the captured proposal state.',
+                ])
+                ->assertRedirect()
+                ->assertSessionHas('success');
+            Mail::assertSent(QualifiedProposalInvitationMail::class, 1);
+            $this->assertSame(
+                1,
+                EoiTechnicalProposalRound::query()->where('procurement_id', $internalProcurement->id)->count(),
+                'Notifying an internally initiated shortlist created a replacement proposal round.'
+            );
+            $internalNotification = EoiReportCommunication::query()
+                ->where('procurement_id', $internalProcurement->id)
+                ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION)
+                ->sole();
+            $this->assertSame(
+                (string) $internalRound->id,
+                (string) $internalNotification->technical_proposal_round_id,
+                'The later notification was not attached to the internally initiated round.'
+            );
+            $this->assertSame(
+                FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
+                $internalQualifiedApplicant->fresh()->status,
+                'A later notification moved the applicant lifecycle backward after proposal capture.'
+            );
+
+            Mail::fake();
+
             $this->actingAs($administrator)
                 ->postWithCsrf(route('reports.evaluations.eoi.communications.proposal-invitation', $procurement), [
+                    'delivery_mode' => 'notify',
                     'subject' => 'Qualified Applicant proposal stage',
                     'message' => 'Please complete the attached templates and submit your proposal through the protected vendor portal.',
                     'deadline_at' => now()->addDay()->format('Y-m-d H:i:s'),

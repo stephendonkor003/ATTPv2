@@ -10,7 +10,9 @@ use App\Models\Evaluation;
 use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
+use App\Models\ProcurementAuditLog;
 use App\Services\EoiQualificationService;
+use App\Services\EoiReportCommunicationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Collection;
@@ -23,7 +25,8 @@ class PanelEvaluationController extends Controller
     use ScopesAssignedPortfolios;
 
     public function __construct(
-        private readonly EoiQualificationService $eoiQualificationService
+        private readonly EoiQualificationService $eoiQualificationService,
+        private readonly EoiReportCommunicationService $eoiReportCommunicationService
     ) {}
 
     /**
@@ -59,13 +62,21 @@ class PanelEvaluationController extends Controller
         $card = $this->procurementCard($procurement);
 
         $eoiStats = null;
+        $qualifiedApplicantIds = collect();
 
         if ($card['methods']->contains('type', Evaluation::TYPE_EOI)) {
-            $eoiStats = $this->eoiQualificationService
-                ->buildProcurementReport($procurement)['stats'];
+            $eoiReport = $this->eoiQualificationService->buildProcurementReport($procurement);
+            $eoiStats = $eoiReport['stats'];
+            $qualifiedApplicantIds = $this->eoiReportCommunicationService
+                ->qualifiedRows($eoiReport)
+                ->pluck('applicant.id')
+                ->filter()
+                ->map(fn ($id): string => (string) $id)
+                ->unique()
+                ->values();
         }
 
-        $communicationSummary = $this->communicationSummary($procurement, $card);
+        $communicationSummary = $this->communicationSummary($procurement, $card, $qualifiedApplicantIds);
         $journeySteps = $this->journeySteps(
             $procurement,
             $card,
@@ -337,13 +348,19 @@ class PanelEvaluationController extends Controller
             ->values();
     }
 
-    private function communicationSummary(Procurement $procurement, array $card): array
-    {
+    private function communicationSummary(
+        Procurement $procurement,
+        array $card,
+        Collection $qualifiedApplicantIds
+    ): array {
         if (! $card['methods']->contains('type', Evaluation::TYPE_EOI)) {
             return [
                 'has_proposal_round' => false,
                 'evaluation_record_batches' => 0,
                 'proposal_invitation_batches' => 0,
+                'initiated_without_notification' => false,
+                'current_qualified_applicants' => 0,
+                'qualified_shortlist_enrolled' => true,
                 'proposal_candidates' => 0,
                 'notified_qualified' => 0,
                 'offline_candidates' => 0,
@@ -376,6 +393,14 @@ class PanelEvaluationController extends Controller
         $roundInvitations = $latestRound
             ? $proposalInvitations->where('technical_proposal_round_id', $latestRound->getKey())
             : $proposalInvitations;
+        $initiatedWithoutNotification = $latestRound !== null
+            && $roundInvitations->isEmpty()
+            && ProcurementAuditLog::query()
+                ->where('procurement_id', $procurement->getKey())
+                ->where('action', 'technical_proposal_initiated_without_notification')
+                ->get(['metadata'])
+                ->contains(fn (ProcurementAuditLog $audit): bool => (string) data_get($audit->metadata, 'round_id') === (string) $latestRound->getKey()
+                );
         $roundRecipients = $roundInvitations->flatMap->recipients;
         $sentRecipients = $roundRecipients
             ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SENT);
@@ -386,6 +411,21 @@ class PanelEvaluationController extends Controller
         $legacyRespondents = $sentRecipients
             ->filter(fn (EoiReportCommunicationRecipient $recipient): bool => $recipient->proposal_submitted_at !== null || $recipient->proposalDocuments->isNotEmpty());
         $proposalCandidates = $latestRound?->candidates ?? collect();
+        $proposalCandidateIds = $proposalCandidates
+            ->pluck('form_submission_id')
+            ->filter()
+            ->map(fn ($id): string => (string) $id)
+            ->unique();
+        $enrolledApplicantIds = $latestRound
+            ? $proposalCandidateIds
+            : $roundRecipients
+                ->pluck('form_submission_id')
+                ->filter()
+                ->map(fn ($id): string => (string) $id)
+                ->unique();
+        $qualifiedShortlistEnrolled = $qualifiedApplicantIds
+            ->diff($enrolledApplicantIds)
+            ->isEmpty();
         $respondents = $latestRound
             ? $proposalCandidates->filter(fn ($candidate): bool => $candidate->submissions->isNotEmpty())
             : $legacyRespondents;
@@ -398,6 +438,10 @@ class PanelEvaluationController extends Controller
         $latestAt = $communications->max('sent_at');
         $latestSubmissionAt = $latestRound?->candidates->max('last_submitted_at');
 
+        if ($latestRound?->published_at && (! $latestAt || $latestRound->published_at->greaterThan($latestAt))) {
+            $latestAt = $latestRound->published_at;
+        }
+
         if ($latestSubmissionAt && (! $latestAt || $latestSubmissionAt->greaterThan($latestAt))) {
             $latestAt = $latestSubmissionAt;
         }
@@ -407,13 +451,17 @@ class PanelEvaluationController extends Controller
             'evaluation_record_batches' => $communications
                 ->where('type', EoiReportCommunication::TYPE_EVALUATION_RECORDS)->count(),
             'proposal_invitation_batches' => $roundInvitations->count(),
+            'initiated_without_notification' => $initiatedWithoutNotification,
+            'current_qualified_applicants' => $qualifiedApplicantIds->count(),
+            'qualified_shortlist_enrolled' => $qualifiedShortlistEnrolled,
             'proposal_candidates' => $latestRound
                 ? $proposalCandidates->count()
                 : $roundRecipients->pluck('form_submission_id')->filter()->unique()->count(),
             'notified_qualified' => $sentRecipients
                 ->pluck('form_submission_id')->filter()->unique()->count(),
-            'offline_candidates' => $skippedRecipients
-                ->pluck('form_submission_id')->filter()->unique()->count(),
+            'offline_candidates' => $initiatedWithoutNotification
+                ? $proposalCandidates->count()
+                : $skippedRecipients->pluck('form_submission_id')->filter()->unique()->count(),
             'failed_candidates' => $failedRecipients
                 ->pluck('form_submission_id')->filter()->unique()->count(),
             'proposal_respondents' => $latestRound
@@ -477,15 +525,22 @@ class PanelEvaluationController extends Controller
             $offline = (int) $communicationSummary['offline_candidates'];
             $failed = (int) $communicationSummary['failed_candidates'];
             $responded = (int) $communicationSummary['proposal_respondents'];
+            $initiatedWithoutNotification = (bool) $communicationSummary['initiated_without_notification'];
+            $qualifiedForProposal = (int) $communicationSummary['current_qualified_applicants'];
+            $qualifiedShortlistEnrolled = (bool) $communicationSummary['qualified_shortlist_enrolled'];
             $proposalCandidates = $communicationSummary['has_proposal_round']
                 ? (int) $communicationSummary['proposal_candidates']
                 : $qualified;
             $notificationComplete = $eoiPanelComplete
-                && ($proposalCandidates === 0 || (
-                    $communicationSummary['proposal_invitation_batches'] > 0
-                    && $failed === 0
-                    && ($notified + $offline) >= $proposalCandidates
-                ));
+                && ($qualifiedForProposal === 0
+                    || ($qualifiedShortlistEnrolled && $proposalCandidates > 0 && (
+                        $initiatedWithoutNotification
+                        || (
+                            $communicationSummary['proposal_invitation_batches'] > 0
+                            && $failed === 0
+                            && ($notified + $offline) >= $qualifiedForProposal
+                        )
+                    )));
             $proposalIntakeComplete = $notificationComplete
                 && ($proposalCandidates === 0 || $responded >= $proposalCandidates);
             $proposalReportUrl = route('reports.evaluations.eoi.procurement', $procurement);
@@ -523,9 +578,11 @@ class PanelEvaluationController extends Controller
                     ],
                 ];
             $proposalAdminNote = $communicationSummary['has_proposal_round']
-                ? 'Published rules remain read-only for audit integrity. Select an enrolled applicant in the proposal workspace to capture one or several documents on their behalf.'
+                ? ($initiatedWithoutNotification
+                    ? 'This round was initiated without email or portal notification. Select an enrolled applicant in the proposal workspace to capture one or several documents on their behalf.'
+                    : 'Published rules remain read-only for audit integrity. Select an enrolled applicant in the proposal workspace to capture one or several documents on their behalf.')
                 : ($eoiPanelComplete && $qualified > 0
-                    ? 'Define the rules, submission channels, deadline and templates before sending the invitation. Applicant upload becomes available after the round is published.'
+                    ? 'Define the rules, submission channels, deadline and templates, then choose whether to notify applicants or initiate the stage for administrator-managed upload only.'
                     : 'Rule setup becomes available when the EOI panel has a final Qualified Applicant.');
 
             $steps->push(
@@ -552,9 +609,13 @@ class PanelEvaluationController extends Controller
                     'label' => 'Qualified applicants notified or enrolled',
                     'detail' => $proposalCandidates === 0 && $eoiPanelComplete
                         ? 'No qualified applicant requires a technical proposal invitation.'
-                        : number_format($notified).' emailed; '.number_format($offline).' offline applicant(s) enrolled for admin capture; '.number_format($failed).' delivery failure(s).',
-                    'meta' => number_format($communicationSummary['proposal_invitation_batches']).' invitation batch(es) for '.number_format($proposalCandidates).' applicant(s)',
-                    'icon' => 'feather-mail',
+                        : ($initiatedWithoutNotification
+                            ? number_format($proposalCandidates).' qualified applicant(s) enrolled for administrator-managed proposal intake. No email or portal notification was sent.'
+                            : number_format($notified).' emailed; '.number_format($offline).' offline applicant(s) enrolled for admin capture; '.number_format($failed).' delivery failure(s).'),
+                    'meta' => $initiatedWithoutNotification
+                        ? 'Technical proposal round initiated without notification'
+                        : number_format($communicationSummary['proposal_invitation_batches']).' invitation batch(es) for '.number_format($proposalCandidates).' applicant(s)',
+                    'icon' => $initiatedWithoutNotification ? 'feather-user-plus' : 'feather-mail',
                     'complete' => $notificationComplete,
                     'actions' => $proposalAdminActions,
                     'action_note' => $proposalAdminNote,
@@ -563,7 +624,7 @@ class PanelEvaluationController extends Controller
                     'key' => 'technical_proposals',
                     'label' => 'Technical proposals received',
                     'detail' => number_format($responded).' of '.number_format($proposalCandidates).' enrolled applicant(s) have submitted '.number_format($communicationSummary['proposal_documents']).' document(s).',
-                    'meta' => $proposalCandidates > 0 ? number_format($responded).' / '.number_format($proposalCandidates).' responses' : 'Awaiting invitations',
+                    'meta' => $proposalCandidates > 0 ? number_format($responded).' / '.number_format($proposalCandidates).' responses' : 'Awaiting proposal intake',
                     'icon' => 'feather-upload-cloud',
                     'complete' => $proposalIntakeComplete,
                 ]

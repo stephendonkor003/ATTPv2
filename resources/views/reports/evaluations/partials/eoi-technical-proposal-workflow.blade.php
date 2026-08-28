@@ -46,7 +46,7 @@
                 <div><span><i class="feather-clock"></i></span><small>Deadline</small><strong>{{ $proposalRound->deadline_at ? $proposalRound->deadline_at->timezone($roundTimezone)->format('d M Y, H:i').' '.$roundTimezone : 'No deadline' }}</strong></div>
                 <div><span><i class="feather-list"></i></span><small>Rules</small><strong>{{ number_format($proposalRound->rules->count()) }}</strong></div>
                 <div><span><i class="feather-file-text"></i></span><small>Templates</small><strong>{{ number_format($proposalRound->templates->count()) }}</strong></div>
-                <div><span><i class="feather-users"></i></span><small>Invited</small><strong>{{ number_format($roundCandidates->count()) }}</strong></div>
+                <div><span><i class="feather-users"></i></span><small>Enrolled</small><strong>{{ number_format($roundCandidates->count()) }}</strong></div>
                 <div><span><i class="feather-inbox"></i></span><small>Responded</small><strong>{{ number_format($submittedCandidates->count()) }}</strong></div>
             </div>
 
@@ -113,7 +113,7 @@
                             <span class="tp-candidate__avatar">{{ str($candidateName)->substr(0, 1)->upper() }}</span>
                             <span class="tp-candidate__identity"><strong>{{ $candidateName }}</strong><small>{{ $candidate->applicant?->procurement_submission_code ?: 'No submission code' }} &middot; {{ $candidate->eoi_outcome_label }}</small></span>
                             <span class="tp-candidate__receipt"><b>{{ $candidate->submissions->count() }} revision(s)</b><small>{{ $candidate->last_submitted_at ? 'Last received '.$candidate->last_submitted_at->format('d M Y, H:i') : 'No proposal received' }}</small></span>
-                            <span class="badge bg-{{ $candidateTone($candidate->status) }}">{{ str($candidate->status)->headline() }}</span>
+                            <span class="badge bg-{{ $candidateTone($candidate->status) }}">{{ $candidate->status === 'invited' ? 'Awaiting proposal' : str($candidate->status)->headline() }}</span>
                             <i class="feather-chevron-down tp-candidate__chevron"></i>
                         </summary>
                         <div class="tp-candidate__body">

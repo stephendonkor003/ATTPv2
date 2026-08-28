@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\EoiReportCommunication;
 use App\Models\EoiTechnicalProposalCandidate;
 use App\Models\EoiTechnicalProposalDocument;
 use App\Models\EoiTechnicalProposalRound;
@@ -160,6 +161,23 @@ class EoiTechnicalProposalService
                     ->lockForUpdate()
                     ->findOrFail($procurementId);
 
+                if ((bool) ($config['reuse_unnotified_round'] ?? false)) {
+                    $reusableRound = EoiTechnicalProposalRound::query()
+                        ->where('procurement_id', $procurement->getKey())
+                        ->whereIn('status', [
+                            EoiTechnicalProposalRound::STATUS_DRAFT,
+                            EoiTechnicalProposalRound::STATUS_PUBLISHED,
+                        ])
+                        ->whereDoesntHave('communications', fn ($query) => $query
+                            ->where('type', EoiReportCommunication::TYPE_PROPOSAL_INVITATION))
+                        ->orderByDesc('round_number')
+                        ->first();
+
+                    if ($reusableRound) {
+                        return $reusableRound;
+                    }
+                }
+
                 $requestedRoundNumber = $config['round_number'] ?? null;
 
                 if ($requestedRoundNumber !== null
@@ -257,7 +275,7 @@ class EoiTechnicalProposalService
             throw $exception;
         }
 
-        return $round->fresh(['procurement', 'rules', 'templates']);
+        return $round;
     }
 
     /**
@@ -322,7 +340,7 @@ class EoiTechnicalProposalService
                     ]
                 );
             }
-        });
+        }, 3);
 
         return $round->fresh([
             'procurement',

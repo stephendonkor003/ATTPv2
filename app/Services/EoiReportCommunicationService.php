@@ -324,6 +324,13 @@ class EoiReportCommunicationService
             if ($recipient->form_submission_id) {
                 FormSubmission::query()
                     ->whereKey($recipient->form_submission_id)
+                    ->whereNotIn('status', [
+                        FormSubmission::STATUS_WITHDRAWN,
+                        FormSubmission::STATUS_EOI_NOT_QUALIFIED,
+                        FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
+                        FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
+                        FormSubmission::STATUS_TECHNICAL_EVALUATION,
+                    ])
                     ->update(['status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_INVITED]);
             }
         } catch (Throwable $exception) {
