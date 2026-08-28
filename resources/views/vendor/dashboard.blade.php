@@ -48,6 +48,34 @@
         </div>
     @endif
 
+    @if ($evaluationNotices->isNotEmpty())
+        <div class="card vendor-card mb-4" style="border-left:4px solid #006b3f;">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <div>
+                        <div class="vendor-eyebrow">Procurement updates</div>
+                        <h5 class="mb-0">Evaluation notices &amp; proposal invitations</h5>
+                    </div>
+                    <a href="{{ route('vendor.eoi-communications.index') }}" class="btn btn-vendor btn-sm">View all notices</a>
+                </div>
+                <div class="row g-2">
+                    @foreach ($evaluationNotices as $notice)
+                        <div class="col-xl-4">
+                            <a href="{{ route('vendor.eoi-communications.show', $notice) }}" class="d-flex align-items-start gap-2 p-3 rounded border text-decoration-none text-dark h-100" style="background:#f8fbf9;">
+                                <span class="vendor-metric-icon"><i class="{{ $notice->communication?->type === 'proposal_invitation' ? 'feather-upload-cloud' : 'feather-award' }}"></i></span>
+                                <span class="min-w-0">
+                                    <strong class="d-block text-truncate">{{ $notice->communication?->subject }}</strong>
+                                    <small class="text-muted d-block text-truncate">{{ $notice->communication?->procurement?->reference_no ?: 'EOI procurement' }}</small>
+                                    <small class="text-success fw-semibold">{{ $notice->outcome_label }}{{ $notice->read_at ? '' : ' · New' }}</small>
+                                </span>
+                            </a>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
+
     <div class="row g-3 mb-4">
         <div class="col-xl-3 col-md-6">
             <div class="card vendor-card h-100">

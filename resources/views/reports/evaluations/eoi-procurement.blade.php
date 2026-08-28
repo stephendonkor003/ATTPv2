@@ -4,6 +4,7 @@
 
 @section('content')
     @php
+        $errors = $errors ?? new \Illuminate\Support\ViewErrorBag();
         $procurement = $report['procurement'];
         $stats = $report['stats'];
         $applicants = $report['applicants'];
@@ -31,6 +32,21 @@
         $determinationPercent = $stats['total_applicants'] > 0
             ? (int) round(($determinedApplicants / $stats['total_applicants']) * 100)
             : 0;
+        $communications = $communications ?? collect();
+        $communicationPreview = $communicationPreview ?? [
+            'evaluation_records' => [
+                'total' => $determinedApplicants,
+                'eligible' => $determinedApplicants,
+                'unsendable' => 0,
+                'recipients' => collect(),
+            ],
+            'proposal_invitation' => [
+                'total' => $qualifiedApplicants->count(),
+                'eligible' => $qualifiedApplicants->count(),
+                'unsendable' => 0,
+                'recipients' => collect(),
+            ],
+        ];
     @endphp
 
     <main class="nxl-container eoi-report" aria-labelledby="eoiReportTitle">
@@ -71,6 +87,219 @@
                 </button>
             </div>
         </header>
+
+        @if (session('success'))
+            <div class="alert alert-success eoi-communication-alert" role="status">
+                <i class="feather-check-circle" aria-hidden="true"></i>
+                <span>{{ session('success') }}</span>
+            </div>
+        @endif
+
+        @if (session('warning'))
+            <div class="alert alert-warning eoi-communication-alert" role="status">
+                <i class="feather-alert-triangle" aria-hidden="true"></i>
+                <span>{{ session('warning') }}</span>
+            </div>
+        @endif
+
+        @if ($errors->any())
+            <div class="alert alert-danger eoi-communication-alert" role="alert">
+                <i class="feather-alert-circle" aria-hidden="true"></i>
+                <div>
+                    <strong>The communication was not sent.</strong>
+                    <ul class="mb-0 mt-1">
+                        @foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach
+                    </ul>
+                </div>
+            </div>
+        @endif
+
+        <section class="eoi-communications" aria-labelledby="eoiCommunicationsTitle">
+            <header class="eoi-communications__header">
+                <div>
+                    <span class="eoi-eyebrow">Applicant communications</span>
+                    <h5 id="eoiCommunicationsTitle">Release outcomes &amp; request proposals</h5>
+                    <p>Messages are personalized, sent one applicant at a time, and recorded here. Disabled, blacklisted, invalid, and imported placeholder contacts are skipped.</p>
+                </div>
+                <span class="eoi-private-badge"><i class="feather-lock" aria-hidden="true"></i> Private delivery</span>
+            </header>
+
+            <div class="eoi-communication-grid">
+                @php
+                    $recordPreview = data_get($communicationPreview, 'evaluation_records', []);
+                    $proposalPreview = data_get($communicationPreview, 'proposal_invitation', []);
+                @endphp
+                <article class="eoi-communication-card eoi-communication-card--records">
+                    <span class="eoi-communication-card__icon"><i class="feather-file-text" aria-hidden="true"></i></span>
+                    <div class="eoi-communication-card__body">
+                        <span class="eoi-communication-step">1 &middot; Finalized applicants</span>
+                        <h6>Send evaluation records</h6>
+                        <p>Attach each applicant's own consolidated PDF. Applicant identity remains visible; every evaluator identity is masked as <strong>XXX-XXXX-XXXX</strong>.</p>
+                        <div class="eoi-recipient-counts">
+                            <span><b>{{ number_format($recordPreview['eligible'] ?? 0) }}</b> ready</span>
+                            <span><b>{{ number_format($recordPreview['total'] ?? 0) }}</b> final outcomes</span>
+                            @if (($recordPreview['unsendable'] ?? 0) > 0)<span class="is-warning"><b>{{ number_format($recordPreview['unsendable']) }}</b> unsendable</span>@endif
+                        </div>
+                        @if (($recordPreview['unsendable'] ?? 0) > 0)
+                            <details class="eoi-unsendable">
+                                <summary>Review unsendable contacts</summary>
+                                <ul>
+                                    @foreach (collect($recordPreview['recipients'] ?? [])->where('eligible', false) as $contact)
+                                        <li><strong>{{ $contact['name'] }}</strong> &mdash; {{ $contact['reason'] }}</li>
+                                    @endforeach
+                                </ul>
+                            </details>
+                        @endif
+                    </div>
+                    @can('evaluations.manage')
+                        <form method="POST" action="{{ route('reports.evaluations.eoi.communications.evaluation-records', $procurement) }}" class="eoi-communication-card__action" data-eoi-send-form data-sending-label="Generating &amp; sending..." data-confirm="Send individualized evaluation-record PDFs to all eligible finalized applicants?">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-success" @disabled(($recordPreview['eligible'] ?? 0) < 1)>
+                                <i class="feather-send me-1" aria-hidden="true"></i>
+                                Send {{ number_format($recordPreview['eligible'] ?? 0) }} record(s)
+                            </button>
+                        </form>
+                    @else
+                        <div class="eoi-communication-card__readonly"><i class="feather-eye" aria-hidden="true"></i> Manage permission required to send</div>
+                    @endcan
+                </article>
+
+                <article class="eoi-communication-card eoi-communication-card--proposal">
+                    <span class="eoi-communication-card__icon"><i class="feather-upload-cloud" aria-hidden="true"></i></span>
+                    <div class="eoi-communication-card__body">
+                        <span class="eoi-communication-step">2 &middot; Qualified Applicants only</span>
+                        <h6>Invite proposal submissions</h6>
+                        <p>Write a tailored message, attach up to 10 PDF, Word, or Excel templates, and invite qualified applicants into their protected vendor-portal workspace.</p>
+                        <div class="eoi-recipient-counts">
+                            <span><b>{{ number_format($proposalPreview['eligible'] ?? 0) }}</b> ready</span>
+                            <span><b>{{ number_format($proposalPreview['total'] ?? 0) }}</b> qualified</span>
+                            @if (($proposalPreview['unsendable'] ?? 0) > 0)<span class="is-warning"><b>{{ number_format($proposalPreview['unsendable']) }}</b> unsendable</span>@endif
+                        </div>
+                        @if (($proposalPreview['unsendable'] ?? 0) > 0)
+                            <details class="eoi-unsendable">
+                                <summary>Review unsendable contacts</summary>
+                                <ul>
+                                    @foreach (collect($proposalPreview['recipients'] ?? [])->where('eligible', false) as $contact)
+                                        <li><strong>{{ $contact['name'] }}</strong> &mdash; {{ $contact['reason'] }}</li>
+                                    @endforeach
+                                </ul>
+                            </details>
+                        @endif
+                    </div>
+                    @can('evaluations.manage')
+                        <button type="button" class="btn btn-success eoi-communication-card__action" data-bs-toggle="modal" data-bs-target="#eoiProposalInvitationModal" @disabled(($proposalPreview['eligible'] ?? 0) < 1)>
+                            <i class="feather-mail me-1" aria-hidden="true"></i>
+                            Compose invitation
+                        </button>
+                    @else
+                        <div class="eoi-communication-card__readonly"><i class="feather-eye" aria-hidden="true"></i> Manage permission required to send</div>
+                    @endcan
+                </article>
+            </div>
+
+            @if ($communications->isNotEmpty())
+                <div class="eoi-communication-history">
+                    <div class="eoi-communication-history__heading">
+                        <h6><i class="feather-clock" aria-hidden="true"></i> Recent delivery history</h6>
+                        <span>Latest {{ $communications->count() }} batch(es)</span>
+                    </div>
+                    <div class="eoi-communication-history__list">
+                        @foreach ($communications as $communication)
+                            <article>
+                                <span class="eoi-history-icon"><i class="{{ $communication->type === 'evaluation_records' ? 'feather-file-text' : 'feather-mail' }}" aria-hidden="true"></i></span>
+                                <div>
+                                    <strong>{{ $communication->subject }}</strong>
+                                    <small>{{ $communication->type === 'evaluation_records' ? 'Evaluation records' : 'Proposal invitation' }} &middot; {{ $communication->creator?->name ?: 'System user' }} &middot; {{ $communication->created_at->format('d M Y, H:i') }}</small>
+                                    @can('evaluations.manage')
+                                    @if ($communication->attachments->isNotEmpty())
+                                        <span class="eoi-history-files">
+                                            @foreach ($communication->attachments as $attachment)
+                                                <a href="{{ route('reports.evaluations.eoi.communications.attachments.download', [$procurement, $communication, $attachment]) }}"><i class="feather-paperclip" aria-hidden="true"></i> {{ $attachment->original_filename }}</a>
+                                            @endforeach
+                                        </span>
+                                    @endif
+                                    @endcan
+                                    @can('evaluations.manage')
+                                        @php
+                                            $proposalRecipients = $communication->type === 'proposal_invitation'
+                                                ? $communication->recipients->whereNotNull('proposal_submitted_at')
+                                                : collect();
+                                        @endphp
+                                        @if ($proposalRecipients->isNotEmpty())
+                                            <details class="eoi-history-proposals">
+                                                <summary><i class="feather-inbox" aria-hidden="true"></i> {{ $proposalRecipients->count() }} proposal response(s)</summary>
+                                                <div>
+                                                    @foreach ($proposalRecipients as $proposalRecipient)
+                                                        <section>
+                                                            <strong>{{ $proposalRecipient->recipient_name }}</strong>
+                                                            <small>Submitted {{ $proposalRecipient->proposal_submitted_at->format('d M Y, H:i') }}</small>
+                                                            @if ($proposalRecipient->proposal_message)<p>{{ $proposalRecipient->proposal_message }}</p>@endif
+                                                            <span>
+                                                                @foreach ($proposalRecipient->proposalDocuments as $document)
+                                                                    <a href="{{ route('reports.evaluations.eoi.communications.proposal-documents.download', [$procurement, $communication, $proposalRecipient, $document]) }}"><i class="feather-download" aria-hidden="true"></i> {{ $document->original_filename }}</a>
+                                                                @endforeach
+                                                            </span>
+                                                        </section>
+                                                    @endforeach
+                                                </div>
+                                            </details>
+                                        @endif
+                                    @endcan
+                                </div>
+                                <div class="eoi-history-stats">
+                                    <span class="is-sent">{{ $communication->sent_recipients_count }} sent</span>
+                                    @if ($communication->skipped_recipients_count)<span class="is-skipped">{{ $communication->skipped_recipients_count }} skipped</span>@endif
+                                    @if ($communication->failed_recipients_count)<span class="is-failed">{{ $communication->failed_recipients_count }} failed</span>@endif
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </section>
+
+        @can('evaluations.manage')
+            <div class="modal fade" id="eoiProposalInvitationModal" tabindex="-1" aria-labelledby="eoiProposalInvitationTitle" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <form class="modal-content eoi-proposal-modal" method="POST" enctype="multipart/form-data" action="{{ route('reports.evaluations.eoi.communications.proposal-invitation', $procurement) }}" data-eoi-send-form data-sending-label="Sending invitations...">
+                        @csrf
+                        <div class="modal-header">
+                            <div>
+                                <span class="eoi-eyebrow">Qualified Applicants &middot; {{ number_format($proposalPreview['eligible'] ?? 0) }} recipient(s)</span>
+                                <h5 class="modal-title" id="eoiProposalInvitationTitle">Compose proposal invitation</h5>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="eoi-modal-note"><i class="feather-shield" aria-hidden="true"></i><span>Each applicant receives a separate email and a private portal invitation. No recipient list is exposed.</span></div>
+                            <div class="mb-3">
+                                <label for="eoiProposalSubject" class="form-label">Email subject</label>
+                                <input id="eoiProposalSubject" name="subject" type="text" class="form-control @error('subject') is-invalid @enderror" maxlength="180" required value="{{ old('subject', 'Invitation to submit proposal — '.$procurementReference) }}">
+                                @error('subject')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="mb-3">
+                                <label for="eoiProposalMessage" class="form-label">Message to Qualified Applicants</label>
+                                <textarea id="eoiProposalMessage" name="message" class="form-control @error('message') is-invalid @enderror" rows="8" maxlength="5000" required placeholder="Explain the next stage, proposal expectations, and any submission instructions.">{{ old('message', "Congratulations. Your Expression of Interest has qualified for the next stage. Please review the attached templates and submit your completed proposal securely through the ATTP vendor portal.") }}</textarea>
+                                <div class="form-text">Formatting is kept as plain text in the email for security. Line breaks will be preserved.</div>
+                                @error('message')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            <div>
+                                <label for="eoiProposalTemplates" class="form-label">Proposal templates <span class="text-muted fw-normal">(optional)</span></label>
+                                <input id="eoiProposalTemplates" name="templates[]" type="file" class="form-control @error('templates') is-invalid @enderror @error('templates.*') is-invalid @enderror" accept=".pdf,.doc,.docx,.xls,.xlsx" multiple>
+                                <div class="form-text">PDF, DOC, DOCX, XLS, or XLSX. Up to 10 files, 10 MB each, 18 MB combined for reliable email delivery.</div>
+                                @error('templates')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                @error('templates.*')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                <div class="eoi-file-selection" id="eoiTemplateSelection" aria-live="polite">No templates selected.</div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success"><i class="feather-send me-1" aria-hidden="true"></i> Send to Qualified Applicants</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        @endcan
 
         <section class="eoi-qualified-shortlist" id="eoiDecisionSummary" aria-labelledby="eoiDecisionSummaryTitle">
             <header class="eoi-qualified-shortlist__header">
@@ -828,6 +1057,131 @@
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
+        }
+
+        .eoi-communication-alert {
+            align-items: flex-start;
+            display: flex;
+            gap: 10px;
+            margin: 14px 0 0;
+        }
+
+        .eoi-communication-alert > i { font-size: 18px; margin-top: 1px; }
+
+        .eoi-communications {
+            background: #fff;
+            border: 1px solid var(--eoi-line);
+            border-radius: 16px;
+            box-shadow: 0 12px 30px rgba(16, 24, 40, .06);
+            margin-top: 16px;
+            overflow: hidden;
+        }
+
+        .eoi-communications__header {
+            align-items: flex-start;
+            background: linear-gradient(135deg, #f7fbf9 0%, #fff 70%);
+            border-bottom: 1px solid var(--eoi-line);
+            display: flex;
+            gap: 20px;
+            justify-content: space-between;
+            padding: 20px 22px;
+        }
+
+        .eoi-communications__header h5 { font-size: 19px; margin: 3px 0 4px; }
+        .eoi-communications__header p { color: var(--eoi-muted); margin: 0; max-width: 820px; }
+
+        .eoi-private-badge {
+            align-items: center;
+            background: #ecfdf3;
+            border: 1px solid #bbf7d0;
+            border-radius: 999px;
+            color: #087443;
+            display: inline-flex;
+            flex: 0 0 auto;
+            font-size: 11px;
+            font-weight: 800;
+            gap: 6px;
+            padding: 7px 10px;
+            text-transform: uppercase;
+        }
+
+        .eoi-communication-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 18px 22px; }
+
+        .eoi-communication-card {
+            align-items: flex-start;
+            background: #fff;
+            border: 1px solid var(--eoi-line);
+            border-radius: 13px;
+            display: grid;
+            gap: 13px;
+            grid-template-columns: auto minmax(0, 1fr);
+            padding: 17px;
+        }
+
+        .eoi-communication-card--records { border-top: 3px solid #2563eb; }
+        .eoi-communication-card--proposal { border-top: 3px solid #15803d; }
+        .eoi-communication-card__icon { align-items: center; background: #eef4ff; border-radius: 11px; color: #2563eb; display: inline-flex; font-size: 20px; height: 42px; justify-content: center; width: 42px; }
+        .eoi-communication-card--proposal .eoi-communication-card__icon { background: #ecfdf3; color: #15803d; }
+        .eoi-communication-step { color: var(--eoi-muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+        .eoi-communication-card h6 { font-size: 16px; margin: 3px 0 5px; }
+        .eoi-communication-card p { color: var(--eoi-muted); font-size: 12px; margin: 0; }
+        .eoi-communication-card__action, form.eoi-communication-card__action { grid-column: 2; justify-self: start; margin: 1px 0 0; }
+        .eoi-communication-card__readonly { color: var(--eoi-muted); font-size: 11px; grid-column: 2; }
+
+        .eoi-recipient-counts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+        .eoi-recipient-counts span { background: var(--eoi-soft); border-radius: 999px; color: var(--eoi-slate); font-size: 10px; padding: 5px 8px; }
+        .eoi-recipient-counts span b { color: var(--eoi-ink); font-size: 12px; }
+        .eoi-recipient-counts .is-warning { background: var(--eoi-amber-soft); color: var(--eoi-amber); }
+
+        .eoi-unsendable { margin-top: 9px; }
+        .eoi-unsendable summary { color: var(--eoi-amber); cursor: pointer; font-size: 11px; font-weight: 700; }
+        .eoi-unsendable ul { color: var(--eoi-muted); font-size: 10px; margin: 7px 0 0; padding-left: 18px; }
+
+        .eoi-communication-history { border-top: 1px solid var(--eoi-line); padding: 16px 22px 20px; }
+        .eoi-communication-history__heading { align-items: center; display: flex; justify-content: space-between; margin-bottom: 9px; }
+        .eoi-communication-history__heading h6 { margin: 0; }
+        .eoi-communication-history__heading span { color: var(--eoi-muted); font-size: 10px; }
+        .eoi-communication-history__list { border: 1px solid var(--eoi-line); border-radius: 10px; overflow: hidden; }
+        .eoi-communication-history__list article { align-items: center; border-bottom: 1px solid var(--eoi-line); display: grid; gap: 10px; grid-template-columns: auto minmax(0, 1fr) auto; padding: 11px 13px; }
+        .eoi-communication-history__list article:last-child { border-bottom: 0; }
+        .eoi-history-icon { align-items: center; background: var(--eoi-soft); border-radius: 8px; color: var(--eoi-teal); display: inline-flex; height: 32px; justify-content: center; width: 32px; }
+        .eoi-communication-history__list strong { display: block; font-size: 11px; }
+        .eoi-communication-history__list small { color: var(--eoi-muted); display: block; font-size: 9px; }
+        .eoi-history-files { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+        .eoi-history-files a { background: #f2f7f4; border-radius: 5px; color: #087443; font-size: 9px; padding: 3px 6px; text-decoration: none; }
+        .eoi-history-proposals { margin-top: 6px; }
+        .eoi-history-proposals > summary { color: #087443; cursor: pointer; font-size: 9px; font-weight: 800; }
+        .eoi-history-proposals > div { background: #f8fbf9; border: 1px solid #dce8e1; border-radius: 7px; margin-top: 5px; max-height: 220px; overflow: auto; padding: 7px; }
+        .eoi-history-proposals section { border-bottom: 1px solid #e3ebe6; padding: 6px 2px; }
+        .eoi-history-proposals section:last-child { border-bottom: 0; }
+        .eoi-history-proposals section p { color: var(--eoi-muted); font-size: 9px; margin: 3px 0; white-space: pre-line; }
+        .eoi-history-proposals section span { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+        .eoi-history-proposals section a { background: #eaf5ef; border-radius: 5px; color: #087443; font-size: 9px; padding: 3px 6px; text-decoration: none; }
+        .eoi-history-stats { align-items: flex-end; display: flex; flex-direction: column; gap: 3px; }
+        .eoi-history-stats span { border-radius: 999px; font-size: 9px; font-weight: 800; padding: 3px 7px; }
+        .eoi-history-stats .is-sent { background: #ecfdf3; color: #15803d; }
+        .eoi-history-stats .is-skipped { background: #fffbeb; color: #b45309; }
+        .eoi-history-stats .is-failed { background: #fff1f0; color: #b42318; }
+
+        .eoi-proposal-modal { border: 0; border-radius: 15px; overflow: hidden; }
+        .eoi-proposal-modal .modal-header { align-items: flex-start; background: #f7fbf9; border-bottom-color: var(--eoi-line); padding: 19px 22px; }
+        .eoi-proposal-modal .modal-title { margin-top: 2px; }
+        .eoi-proposal-modal .modal-body { padding: 22px; }
+        .eoi-proposal-modal .modal-footer { background: #fafcfb; border-top-color: var(--eoi-line); padding: 14px 22px; }
+        .eoi-modal-note { align-items: flex-start; background: #eef7f2; border: 1px solid #cde4d7; border-radius: 9px; color: #315744; display: flex; font-size: 11px; gap: 8px; margin-bottom: 17px; padding: 10px 12px; }
+        .eoi-file-selection { background: var(--eoi-soft); border-radius: 7px; color: var(--eoi-muted); font-size: 10px; margin-top: 7px; padding: 7px 9px; }
+
+        @media (max-width: 991.98px) {
+            .eoi-communication-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 575.98px) {
+            .eoi-communications__header { flex-direction: column; }
+            .eoi-communication-grid, .eoi-communication-history { padding-left: 12px; padding-right: 12px; }
+            .eoi-communication-card { grid-template-columns: 1fr; }
+            .eoi-communication-card__action, form.eoi-communication-card__action, .eoi-communication-card__readonly { grid-column: 1; }
+            .eoi-communication-history__list article { align-items: flex-start; grid-template-columns: auto minmax(0, 1fr); }
+            .eoi-history-stats { align-items: flex-start; flex-direction: row; grid-column: 2; }
         }
 
         .eoi-eyebrow {
@@ -2966,6 +3320,12 @@
                 display: none !important;
             }
 
+            .eoi-communications,
+            .eoi-communication-alert,
+            .modal {
+                display: none !important;
+            }
+
             .content-wrapper .content {
                 min-height: auto !important;
                 padding: 0 !important;
@@ -3025,6 +3385,49 @@
 @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            const templateInput = document.getElementById('eoiProposalTemplates');
+            const templateSelection = document.getElementById('eoiTemplateSelection');
+
+            templateInput?.addEventListener('change', function () {
+                const files = Array.from(templateInput.files || []);
+                const totalBytes = files.reduce((total, file) => total + file.size, 0);
+                const totalMegabytes = (totalBytes / (1024 * 1024)).toFixed(1);
+
+                if (templateSelection) {
+                    templateSelection.textContent = files.length
+                        ? `${files.length} file(s) selected · ${totalMegabytes} MB combined`
+                        : 'No templates selected.';
+                }
+            });
+
+            document.querySelectorAll('[data-eoi-send-form]').forEach((form) => {
+                form.addEventListener('submit', function (event) {
+                    if (form.dataset.submitting === 'true') {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    form.dataset.submitting = 'true';
+                    const submitButton = form.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>${form.dataset.sendingLabel || 'Sending...'}`;
+                    }
+                });
+            });
+
+            @if ($errors->has('subject') || $errors->has('message') || $errors->has('templates') || $errors->has('templates.*'))
+                const proposalModalElement = document.getElementById('eoiProposalInvitationModal');
+                if (proposalModalElement && window.bootstrap?.Modal) {
+                    window.bootstrap.Modal.getOrCreateInstance(proposalModalElement).show();
+                }
+            @endif
+
             const searchInput = document.getElementById('eoiApplicantSearch');
             const outcomeFilter = document.getElementById('eoiOutcomeFilter');
             const panelFilter = document.getElementById('eoiPanelFilter');

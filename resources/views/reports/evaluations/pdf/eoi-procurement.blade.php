@@ -6,7 +6,7 @@
     <style>
         @page {
             size: A4 landscape;
-            margin: 82px 26px 50px;
+            margin: 76px 24px 46px;
         }
 
         * {
@@ -16,8 +16,8 @@
         body {
             color: #1f2937;
             font-family: DejaVu Sans, Arial, sans-serif;
-            font-size: 8.4px;
-            line-height: 1.38;
+            font-size: 8px;
+            line-height: 1.34;
             margin: 0;
         }
 
@@ -33,22 +33,22 @@
             background: #0b2138;
             border-bottom: 4px solid #16a34a;
             color: #ffffff;
-            height: 66px;
+            height: 60px;
             left: 0;
-            padding: 11px 26px 9px;
+            padding: 9px 24px 8px;
             position: fixed;
             right: 0;
-            top: -82px;
+            top: -76px;
         }
 
         .pdf-footer {
             border-top: 2px solid #16a34a;
-            bottom: -39px;
+            bottom: -35px;
             color: #475569;
             font-size: 7.6px;
             height: 29px;
             left: 0;
-            padding: 7px 26px 0;
+            padding: 7px 24px 0;
             position: fixed;
             right: 0;
         }
@@ -139,13 +139,13 @@
             background: #f8fafc;
             border: 1px solid #cbd5e1;
             border-left: 5px solid #16a34a;
-            margin-bottom: 9px;
-            padding: 10px 12px;
+            margin-bottom: 7px;
+            padding: 8px 10px;
         }
 
         .report-intro h2 {
             color: #0b2138;
-            font-size: 15px;
+            font-size: 13px;
             line-height: 1.2;
             margin-bottom: 3px;
         }
@@ -155,12 +155,12 @@
         }
 
         .meta-table {
-            margin-bottom: 9px;
+            margin-bottom: 7px;
         }
 
         .meta-table td {
             border: 1px solid #dbe3eb;
-            padding: 6px 8px;
+            padding: 5px 7px;
             vertical-align: top;
             width: 25%;
         }
@@ -188,8 +188,8 @@
         .rule-box {
             background: #eff6ff;
             border: 1px solid #93c5fd;
-            margin-bottom: 10px;
-            padding: 8px 10px;
+            margin-bottom: 8px;
+            padding: 6px 8px;
         }
 
         .rule-box strong {
@@ -206,15 +206,15 @@
         }
 
         .kpi-table {
-            margin-bottom: 11px;
+            margin-bottom: 8px;
         }
 
         .kpi-table td {
             border: 1px solid #dbe3eb;
-            padding: 6px 5px;
+            padding: 5px 4px;
             text-align: center;
             vertical-align: top;
-            width: 12.5%;
+            width: 20%;
         }
 
         .kpi-table td:nth-child(even) {
@@ -224,7 +224,7 @@
         .kpi-number {
             color: #0b2138;
             display: block;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             line-height: 1.05;
             margin-bottom: 3px;
@@ -238,160 +238,73 @@
             text-transform: uppercase;
         }
 
-        .qualified-banner {
-            background: #14532d;
-            border-left: 5px solid #4ade80;
-            color: #ffffff;
-            margin: 11px 0 0;
-            padding: 8px 10px;
-            page-break-after: avoid;
+        .decision-summary-title {
+            color: #0b2138;
+            font-size: 10.5px;
+            margin: 9px 0 5px;
         }
 
-        .qualified-banner table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-
-        .qualified-banner td {
-            border: 0;
-            padding: 0;
-            vertical-align: middle;
-        }
-
-        .qualified-banner h3 {
-            color: #ffffff;
-            font-size: 11.5px;
-            line-height: 1.15;
-            margin-bottom: 2px;
-        }
-
-        .qualified-banner p {
-            color: #dcfce7;
-            font-size: 7.4px;
-        }
-
-        .qualified-total {
-            color: #ffffff;
-            font-size: 19px;
-            font-weight: 700;
-            text-align: right;
-            width: 105px;
-        }
-
-        .qualified-total span {
-            display: block;
-            font-size: 6.4px;
-            letter-spacing: .05em;
-            margin-top: 2px;
-            text-transform: uppercase;
-        }
-
-        .qualified-table {
-            border-collapse: collapse;
-            margin-bottom: 11px;
+        .decision-card-table {
+            border-collapse: separate;
+            border-spacing: 5px 0;
+            margin: 0 0 8px;
             table-layout: fixed;
             width: 100%;
         }
 
-        .qualified-table th,
-        .qualified-table td {
-            border: 1px solid #bbd8c4;
-            padding: 4px 5px;
+        .decision-card-table td {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-top: 3px solid #64748b;
+            padding: 7px 8px;
             vertical-align: top;
+            width: 33.333%;
         }
 
-        .qualified-table th {
-            background: #dcfce7;
-            color: #14532d;
-            font-size: 6.8px;
-            letter-spacing: .03em;
-            text-align: left;
-            text-transform: uppercase;
-        }
-
-        .qualified-table tbody tr:nth-child(even) td {
+        .decision-card-table td.decision-card-qualified {
             background: #f0fdf4;
+            border-color: #86efac;
+            border-top-color: #16a34a;
         }
 
-        .qualified-empty {
-            background: #f0fdf4;
-            border: 1px solid #86efac;
-            border-top: 0;
-            color: #166534;
-            margin-bottom: 11px;
-            padding: 10px 12px;
-            text-align: center;
-        }
-
-        .qualified-empty strong {
-            display: block;
-            font-size: 9px;
-            margin-bottom: 2px;
-        }
-
-        .not-qualified-banner {
-            background: #7f1d1d;
-            border-left-color: #f87171;
-        }
-
-        .not-qualified-banner p {
-            color: #fee2e2;
-        }
-
-        .not-qualified-table th {
-            background: #fee2e2;
-            color: #7f1d1d;
-        }
-
-        .not-qualified-table th,
-        .not-qualified-table td {
-            border-color: #fecaca;
-        }
-
-        .not-qualified-table tbody tr:nth-child(even) td {
-            background: #fff7f7;
-        }
-
-        .not-qualified-empty {
+        .decision-card-table td.decision-card-stopped {
             background: #fff7f7;
             border-color: #fca5a5;
-            color: #991b1b;
+            border-top-color: #dc2626;
         }
 
-        .pending-banner {
-            background: #78350f;
-            border-left-color: #fbbf24;
-        }
-
-        .pending-banner p {
-            color: #fef3c7;
-        }
-
-        .pending-table th {
-            background: #fef3c7;
-            color: #78350f;
-        }
-
-        .pending-table th,
-        .pending-table td {
-            border-color: #fde68a;
-        }
-
-        .pending-table tbody tr:nth-child(even) td {
-            background: #fffbeb;
-        }
-
-        .pending-empty {
+        .decision-card-table td.decision-card-pending {
             background: #fffbeb;
             border-color: #fcd34d;
-            color: #92400e;
+            border-top-color: #d97706;
+        }
+
+        .decision-card-count {
+            color: #0b2138;
+            float: right;
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1;
+            margin-left: 8px;
+        }
+
+        .decision-card-table h3 {
+            color: #0b2138;
+            font-size: 8.5px;
+            line-height: 1.25;
+            margin-bottom: 3px;
+        }
+
+        .decision-card-table p {
+            color: #64748b;
+            font-size: 7px;
         }
 
         .section-heading {
             border-bottom: 2px solid #0b2138;
             color: #0b2138;
             font-size: 11px;
-            margin: 10px 0 6px;
+            margin: 8px 0 5px;
             padding-bottom: 4px;
         }
 
@@ -399,6 +312,10 @@
         td {
             overflow-wrap: break-word;
             word-wrap: break-word;
+        }
+
+        .register-table {
+            margin-bottom: 8px;
         }
 
         .register-table th,
@@ -424,6 +341,61 @@
             letter-spacing: .03em;
             text-align: left;
             text-transform: uppercase;
+        }
+
+        .register-table th {
+            line-height: 1.18;
+            vertical-align: middle;
+        }
+
+        .register-table td {
+            line-height: 1.3;
+            vertical-align: middle;
+        }
+
+        .register-table th:nth-child(6),
+        .register-table td:nth-child(6) {
+            border-left: 2px solid #94a3b8;
+        }
+
+        .register-table th:nth-child(7),
+        .register-table td:nth-child(7) {
+            border-left: 2px solid #cbd5e1;
+        }
+
+        .register-subline {
+            color: #64748b;
+            display: block;
+            font-size: 6.8px;
+            line-height: 1.25;
+            margin-top: 3px;
+        }
+
+        .decision-counts {
+            white-space: nowrap;
+        }
+
+        .decision-counts span {
+            display: inline-block;
+            font-size: 6.8px;
+            font-weight: 700;
+            margin-right: 3px;
+            padding: 1px 3px;
+        }
+
+        .decision-count-q {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .decision-count-aq {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .decision-count-nq {
+            background: #fee2e2;
+            color: #991b1b;
         }
 
         .register-table tbody tr:nth-child(even) td,
@@ -671,35 +643,72 @@
         $applicants = collect($report['applicants'] ?? []);
         $qualifiedApplicants = $applicants
             ->filter(fn (array $row): bool => ($row['can_advance'] ?? false) === true
-                && ($row['panel_complete'] ?? false) === true)
+                && ($row['panel_complete'] ?? false) === true
+                && in_array(data_get($row, 'outcome.code'), ['fully_qualified', 'average_qualified'], true))
             ->values();
         $finalNotQualifiedApplicants = $applicants
             ->filter(fn (array $row): bool => ($row['panel_complete'] ?? false) === true
                 && data_get($row, 'outcome.code') === 'not_qualified')
             ->values();
-        $awaitingPanelApplicants = $applicants
+        $panelInProgressApplicants = $applicants
             ->filter(fn (array $row): bool => ($row['panel_complete'] ?? false) !== true)
             ->values();
-        $finalDecisionCount = $qualifiedApplicants->count() + $finalNotQualifiedApplicants->count();
         $stats = $report['stats'] ?? [];
         $generatedAt = $report['generated_at'] ?? now();
-        // DomPDF keeps the complete document tree in memory. Keep the official
-        // outcome register exhaustive, while bounding the evidence appendix on
-        // exceptionally large procurements so the download remains reliable.
+        // The decision register remains exhaustive. Bound only the evidence
+        // appendix so large procurements still generate reliably in DomPDF.
         $detailApplicantLimit = 25;
-        $detailApplicants = $applicants
-            ->sortBy(function (array $row): int {
-                return match ($row['outcome']['code'] ?? 'pending') {
-                    'not_qualified' => 0,
-                    'pending' => 1,
-                    'average_qualified' => 2,
-                    'fully_qualified' => 3,
-                    default => 4,
-                };
-            })
-            ->take($detailApplicantLimit)
-            ->values();
+        $detailApplicants = $applicants->take($detailApplicantLimit)->values();
         $appendixIsTruncated = $detailApplicants->count() < $applicants->count();
+        $decisionView = function (array $applicantRow): array {
+            $panelComplete = (bool) ($applicantRow['panel_complete'] ?? false);
+            $outcomeCode = data_get($applicantRow, 'outcome.code', 'pending');
+
+            if (! $panelComplete) {
+                return [
+                    'group' => 'pending',
+                    'label' => 'Awaiting Panel',
+                    'tone' => 'pending',
+                    'workflow' => 'Awaiting EOI panel',
+                    'workflow_note' => 'No final workflow decision until every assigned task is complete.',
+                    'signal' => $outcomeCode === 'not_qualified'
+                        ? 'Current signal: NQ recorded; panel incomplete.'
+                        : 'Current signal: panel evaluation in progress.',
+                ];
+            }
+
+            if (($applicantRow['can_advance'] ?? false) === true
+                && in_array($outcomeCode, ['fully_qualified', 'average_qualified'], true)) {
+                return [
+                    'group' => 'qualified',
+                    'label' => data_get($applicantRow, 'outcome.label', 'Qualified'),
+                    'tone' => data_get($applicantRow, 'outcome.tone', 'success'),
+                    'workflow' => 'Technical Evaluation',
+                    'workflow_note' => 'Approved to advance.',
+                    'signal' => null,
+                ];
+            }
+
+            if ($outcomeCode === 'not_qualified') {
+                return [
+                    'group' => 'not-qualified',
+                    'label' => 'Not Qualified',
+                    'tone' => 'danger',
+                    'workflow' => 'Does not advance',
+                    'workflow_note' => 'Final panel decision; progression is stopped.',
+                    'signal' => null,
+                ];
+            }
+
+            return [
+                'group' => 'pending',
+                'label' => 'Decision Pending',
+                'tone' => 'pending',
+                'workflow' => 'Awaiting EOI decision',
+                'workflow_note' => 'No final workflow decision has been recorded.',
+                'signal' => null,
+            ];
+        };
         $outcomeClass = function (array $outcome): string {
             return match ($outcome['tone'] ?? 'pending') {
                 'success' => 'badge-success',
@@ -708,18 +717,12 @@
                 default => 'badge-pending',
             };
         };
-        $routeClass = function (array $applicantRow): string {
-            if (! ($applicantRow['panel_complete'] ?? false)) {
-                return 'route-pending';
-            }
-
-            if ($applicantRow['can_advance'] ?? false) {
-                return 'route-advance';
-            }
-
-            return ($applicantRow['outcome']['code'] ?? null) === 'not_qualified'
-                ? 'route-stop'
-                : 'route-pending';
+        $routeClass = function (array $applicantRow) use ($decisionView): string {
+            return match ($decisionView($applicantRow)['group']) {
+                'qualified' => 'route-advance',
+                'not-qualified' => 'route-stop',
+                default => 'route-pending',
+            };
         };
     @endphp
 
@@ -780,229 +783,72 @@
 
     <div class="rule-box">
         <strong class="rule-title">Mandatory EOI qualification rule</strong>
-        <strong>One &quot;Not Qualified&quot; decision is an automatic disqualifier.</strong>
-        An applicant advances to <strong>Technical Evaluation</strong> only when every assigned panel task is complete,
-        at least one valid criterion decision exists, and no evaluator has recorded &quot;Not Qualified&quot;. Applicants with only
-        &quot;Qualified&quot; decisions are Fully Qualified; applicants with at least one &quot;Average Qualified&quot; decision and no
-        &quot;Not Qualified&quot; decision are Average Qualified. Incomplete panels remain pending.
+        <strong>Only the currently assigned panel is counted.</strong> Every assigned task must be complete before the workflow
+        decision is final. A completed panel with any &quot;Not Qualified&quot; decision does not advance; otherwise a valid Fully
+        Qualified or Average Qualified outcome advances to <strong>Technical Evaluation</strong>. Incomplete panels remain
+        Awaiting Panel, including where an early NQ signal has been recorded.
     </div>
 
     <table class="kpi-table">
         <tr>
             <td><span class="kpi-number">{{ $stats['total_applicants'] ?? 0 }}</span><span class="kpi-label">Applicants</span></td>
             <td><span class="kpi-number">{{ $qualifiedApplicants->count() }}</span><span class="kpi-label">Qualified / advance</span></td>
-            <td><span class="kpi-number">{{ $qualifiedApplicants->where('outcome.code', 'fully_qualified')->count() }}</span><span class="kpi-label">Fully qualified</span></td>
-            <td><span class="kpi-number">{{ $qualifiedApplicants->where('outcome.code', 'average_qualified')->count() }}</span><span class="kpi-label">Average qualified</span></td>
             <td><span class="kpi-number">{{ $finalNotQualifiedApplicants->count() }}</span><span class="kpi-label">Final not qualified</span></td>
-            <td><span class="kpi-number">{{ $awaitingPanelApplicants->count() }}</span><span class="kpi-label">Awaiting panel</span></td>
-            <td><span class="kpi-number">{{ $finalDecisionCount }}</span><span class="kpi-label">Final decisions</span></td>
+            <td><span class="kpi-number">{{ $panelInProgressApplicants->count() }}</span><span class="kpi-label">Awaiting panel</span></td>
             <td><span class="kpi-number">{{ $stats['panel_members'] ?? 0 }}</span><span class="kpi-label">Panel members</span></td>
         </tr>
     </table>
 
-    <div class="qualified-banner" data-summary-outcome="qualified">
-        <table>
-            <tr>
-                <td>
-                    <h3>Qualified Applicants &mdash; Advancing to Technical Evaluation</h3>
-                    <p>Official advancement shortlist: completed panel, valid EOI decisions, and no Not Qualified decision.</p>
-                </td>
-                <td class="qualified-total">
-                    {{ $qualifiedApplicants->count() }}
-                    <span>Approved to advance</span>
-                </td>
-            </tr>
-        </table>
-    </div>
-
-    @if ($qualifiedApplicants->isNotEmpty())
-        <table class="qualified-table">
-            <thead>
-                <tr>
-                    <th style="width: 4%;">#</th>
-                    <th style="width: 13%;">Submission</th>
-                    <th style="width: 25%;">Applicant</th>
-                    <th style="width: 14%;">Qualification outcome</th>
-                    <th style="width: 12%;">EOI counts</th>
-                    <th style="width: 17%;">Panel completion</th>
-                    <th style="width: 15%;">Next stage</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($qualifiedApplicants as $index => $applicantRow)
-                    @php
-                        $applicant = $applicantRow['applicant'];
-                    @endphp
-                    <tr data-summary-outcome="qualified">
-                        <td class="number-cell">{{ $index + 1 }}</td>
-                        <td><span class="strong">{{ $applicant->procurement_submission_code ?? 'N/A' }}</span></td>
-                        <td>
-                            <span class="strong">{{ $applicant->display_name }}</span>
-                            @if ($applicant->submitter?->email)
-                                <br><span class="muted small">{{ $applicant->submitter->email }}</span>
-                            @endif
-                        </td>
-                        <td><span class="badge {{ $outcomeClass($applicantRow['outcome']) }}">{{ $applicantRow['outcome']['label'] }}</span></td>
-                        <td>
-                            <span class="strong">Q {{ $applicantRow['counts']['qualified'] }}</span>
-                            &nbsp;&middot;&nbsp; AQ {{ $applicantRow['counts']['average_qualified'] }}
-                        </td>
-                        <td>
-                            <span class="strong">{{ $applicantRow['completed_tasks'] }}/{{ $applicantRow['expected_tasks'] }} tasks</span>
-                            <br><span class="muted small">{{ $applicantRow['completed_evaluators'] }}/{{ $applicantRow['expected_evaluators'] }} evaluator(s) &middot; {{ $applicantRow['completion_percent'] }}%</span>
-                        </td>
-                        <td class="route-advance">
-                            {{ $applicantRow['next_stage'] }}
-                            <br><span class="small">Approved to advance</span>
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    @else
-        <div class="qualified-empty">
-            <strong>No applicants are currently approved to advance.</strong>
-            Fully Qualified and Average Qualified applicants will appear here after all assigned panel tasks are complete.
-        </div>
-    @endif
-
-    <div class="qualified-banner not-qualified-banner" data-summary-outcome="not-qualified">
-        <table>
-            <tr>
-                <td>
-                    <h3>Not Qualified Applicants &mdash; Do Not Advance</h3>
-                    <p>Final non-advancement list: every assigned panel task is complete and at least one Not Qualified decision was recorded.</p>
-                </td>
-                <td class="qualified-total">
-                    {{ $finalNotQualifiedApplicants->count() }}
-                    <span>Final not qualified</span>
-                </td>
-            </tr>
-        </table>
-    </div>
-
-    @if ($finalNotQualifiedApplicants->isNotEmpty())
-        <table class="qualified-table not-qualified-table">
-            <thead>
-                <tr>
-                    <th style="width: 4%;">#</th>
-                    <th style="width: 14%;">Submission</th>
-                    <th style="width: 27%;">Applicant</th>
-                    <th style="width: 15%;">Final outcome</th>
-                    <th style="width: 12%;">NQ decisions</th>
-                    <th style="width: 16%;">Panel completion</th>
-                    <th style="width: 12%;">Routing</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($finalNotQualifiedApplicants as $index => $applicantRow)
-                    @php
-                        $applicant = $applicantRow['applicant'];
-                    @endphp
-                    <tr data-summary-outcome="not-qualified">
-                        <td class="number-cell">{{ $index + 1 }}</td>
-                        <td><span class="strong">{{ $applicant->procurement_submission_code ?? 'N/A' }}</span></td>
-                        <td>
-                            <span class="strong">{{ $applicant->display_name }}</span>
-                            @if ($applicant->submitter?->email)
-                                <br><span class="muted small">{{ $applicant->submitter->email }}</span>
-                            @endif
-                        </td>
-                        <td><span class="badge badge-danger">Not Qualified</span></td>
-                        <td class="number-cell route-stop">{{ $applicantRow['counts']['not_qualified'] }}</td>
-                        <td>
-                            <span class="strong">{{ $applicantRow['completed_tasks'] }}/{{ $applicantRow['expected_tasks'] }} tasks</span>
-                            <br><span class="muted small">{{ $applicantRow['completion_percent'] }}% complete</span>
-                        </td>
-                        <td class="route-stop">Does not advance</td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    @else
-        <div class="qualified-empty not-qualified-empty">
-            <strong>No final Not Qualified decisions.</strong>
-            Incomplete applicants remain in Awaiting Panel until every assigned task is complete.
-        </div>
-    @endif
-
-    <div class="qualified-banner pending-banner" data-summary-outcome="pending">
-        <table>
-            <tr>
-                <td>
-                    <h3>Awaiting Panel Completion</h3>
-                    <p>These applicants do not have a final workflow decision until all remaining assigned panel tasks are complete.</p>
-                </td>
-                <td class="qualified-total">
-                    {{ $awaitingPanelApplicants->count() }}
-                    <span>Pending completion</span>
-                </td>
-            </tr>
-        </table>
-    </div>
-
-    @if ($awaitingPanelApplicants->isNotEmpty())
-        <table class="qualified-table pending-table">
-            <thead>
-                <tr>
-                    <th style="width: 4%;">#</th>
-                    <th style="width: 15%;">Submission</th>
-                    <th style="width: 28%;">Applicant</th>
-                    <th style="width: 17%;">Current signal</th>
-                    <th style="width: 18%;">Panel completion</th>
-                    <th style="width: 18%;">Routing</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($awaitingPanelApplicants as $index => $applicantRow)
-                    @php
-                        $applicant = $applicantRow['applicant'];
-                        $pendingHasVeto = data_get($applicantRow, 'outcome.code') === 'not_qualified';
-                    @endphp
-                    <tr data-summary-outcome="pending">
-                        <td class="number-cell">{{ $index + 1 }}</td>
-                        <td><span class="strong">{{ $applicant->procurement_submission_code ?? 'N/A' }}</span></td>
-                        <td><span class="strong">{{ $applicant->display_name }}</span></td>
-                        <td>
-                            <span class="badge badge-pending">
-                                {{ $pendingHasVeto ? 'NQ recorded / incomplete' : 'Awaiting Panel' }}
-                            </span>
-                        </td>
-                        <td>
-                            <span class="strong">{{ $applicantRow['completed_tasks'] }}/{{ $applicantRow['expected_tasks'] }} tasks</span>
-                            <br><span class="muted small">{{ $applicantRow['completion_percent'] }}% complete</span>
-                        </td>
-                        <td class="route-pending">Held until panel completion</td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    @else
-        <div class="qualified-empty pending-empty">
-            <strong>No applicants are awaiting panel completion.</strong>
-            Every reportable applicant currently has a final panel outcome.
-        </div>
-    @endif
+    <h3 class="decision-summary-title">Panel Decision Summary</h3>
+    <table class="decision-card-table" aria-label="Panel decision summary">
+        <tr>
+            <td class="decision-card-qualified" data-summary-outcome="qualified">
+                <span class="decision-card-count">{{ $qualifiedApplicants->count() }}</span>
+                <h3>Qualified Applicants &mdash; Advancing to Technical Evaluation</h3>
+                <p>Panel complete. These applicants are approved to advance.</p>
+            </td>
+            <td class="decision-card-stopped" data-summary-outcome="not-qualified">
+                <span class="decision-card-count">{{ $finalNotQualifiedApplicants->count() }}</span>
+                <h3>Not Qualified Applicants &mdash; Do Not Advance</h3>
+                <p>Panel complete. These final decisions stop progression.</p>
+            </td>
+            <td class="decision-card-pending" data-summary-outcome="pending">
+                <span class="decision-card-count">{{ $panelInProgressApplicants->count() }}</span>
+                <h3>Awaiting Panel Completion</h3>
+                <p>No final outcome or workflow routing until every assigned task is complete.</p>
+            </td>
+        </tr>
+    </table>
 
     <h3 class="section-heading">Applicant Outcome Register</h3>
     <table class="register-table">
+        <colgroup>
+            <col style="width: 3%;">
+            <col style="width: 12%;">
+            <col style="width: 22%;">
+            <col style="width: 15%;">
+            <col style="width: 13%;">
+            <col style="width: 15%;">
+            <col style="width: 20%;">
+        </colgroup>
         <thead>
             <tr>
-                <th style="width: 3%;">#</th>
-                <th style="width: 13%;">Submission</th>
-                <th style="width: 22%;">Applicant</th>
-                <th style="width: 13%;">Panel completion</th>
-                <th style="width: 14%;">Category decisions</th>
-                <th style="width: 13%;">Final outcome</th>
-                <th style="width: 22%;">Workflow decision</th>
+                <th>#</th>
+                <th>Submission</th>
+                <th>Applicant</th>
+                <th>Panel completion</th>
+                <th>Decision counts</th>
+                <th>Final outcome</th>
+                <th>Workflow decision</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($applicants as $index => $applicantRow)
                 @php
                     $applicant = $applicantRow['applicant'];
+                    $finalDecision = $decisionView($applicantRow);
                 @endphp
-                <tr>
+                <tr data-summary-outcome="{{ $finalDecision['group'] }}">
                     <td class="number-cell">{{ $index + 1 }}</td>
                     <td>
                         <span class="strong">{{ $applicant->procurement_submission_code ?? 'N/A' }}</span>
@@ -1015,25 +861,28 @@
                     </td>
                     <td>
                         <span class="strong">{{ $applicantRow['completed_tasks'] }}/{{ $applicantRow['expected_tasks'] }} tasks</span>
-                        <br><span class="muted small">{{ $applicantRow['completed_evaluators'] }}/{{ $applicantRow['expected_evaluators'] }} evaluator(s) &middot; {{ $applicantRow['completion_percent'] }}%</span>
+                        <span class="register-subline">
+                            {{ $applicantRow['completed_evaluators'] }}/{{ $applicantRow['expected_evaluators'] }} evaluator(s)
+                            &middot; {{ $applicantRow['completion_percent'] }}%
+                            &middot; {{ $applicantRow['panel_complete'] ? 'Complete' : 'In progress' }}
+                        </span>
                     </td>
                     <td>
-                        <span class="strong">Q {{ $applicantRow['counts']['qualified'] }}</span>
-                        &nbsp;&middot;&nbsp; AQ {{ $applicantRow['counts']['average_qualified'] }}
-                        &nbsp;&middot;&nbsp; <span class="{{ $applicantRow['counts']['not_qualified'] > 0 ? 'route-stop' : '' }}">NQ {{ $applicantRow['counts']['not_qualified'] }}</span>
+                        <span class="decision-counts">
+                            <span class="decision-count-q">Q {{ $applicantRow['counts']['qualified'] }}</span>
+                            <span class="decision-count-aq">AQ {{ $applicantRow['counts']['average_qualified'] }}</span>
+                            <span class="decision-count-nq">NQ {{ $applicantRow['counts']['not_qualified'] }}</span>
+                        </span>
                     </td>
                     <td>
-                        <span class="badge {{ $outcomeClass($applicantRow['outcome']) }}">{{ $applicantRow['outcome']['label'] }}</span>
+                        <span class="badge {{ $outcomeClass(['tone' => $finalDecision['tone']]) }}">{{ $finalDecision['label'] }}</span>
+                        @if ($finalDecision['signal'])
+                            <span class="register-subline">{{ $finalDecision['signal'] }}</span>
+                        @endif
                     </td>
                     <td class="{{ $routeClass($applicantRow) }}">
-                        {{ $applicantRow['next_stage'] }}
-                        @if ($applicantRow['can_advance'])
-                            <br><span class="small">Eligible to advance</span>
-                        @elseif (($applicantRow['outcome']['code'] ?? null) === 'not_qualified')
-                            <br><span class="small">Blocked by the automatic disqualification rule</span>
-                        @else
-                            <br><span class="small">No final routing until the panel completes</span>
-                        @endif
+                        <span class="strong {{ $routeClass($applicantRow) }}">{{ $finalDecision['workflow'] }}</span>
+                        <span class="register-subline">{{ $finalDecision['workflow_note'] }}</span>
                     </td>
                 </tr>
             @empty
@@ -1046,16 +895,16 @@
 
     @if ($appendixIsTruncated)
         <div class="empty-state">
-            The applicant outcome register above includes all {{ $applicants->count() }} applicants.
-            To keep this PDF reliable, the evidence appendix below shows the {{ $detailApplicants->count() }} highest-priority
-            records (Not Qualified and pending records first). The secure online report contains every evaluator decision and comment.
+            The register above includes all {{ $applicants->count() }} applicants. The evidence appendix contains the first
+            {{ $detailApplicants->count() }} records; the web report remains the complete interactive evidence record.
         </div>
     @endif
 
     @foreach ($detailApplicants as $index => $applicantRow)
         @php
             $applicant = $applicantRow['applicant'];
-            $outcomeTone = $applicantRow['outcome']['tone'] ?? 'pending';
+            $finalDecision = $decisionView($applicantRow);
+            $outcomeTone = $finalDecision['tone'];
         @endphp
 
         <div class="applicant-detail">
@@ -1072,7 +921,7 @@
                             </p>
                         </td>
                         <td class="banner-outcome">
-                            <span class="badge {{ $outcomeClass($applicantRow['outcome']) }}">{{ $applicantRow['outcome']['label'] }}</span>
+                            <span class="badge {{ $outcomeClass(['tone' => $finalDecision['tone']]) }}">{{ $finalDecision['label'] }}</span>
                         </td>
                     </tr>
                 </table>
@@ -1097,16 +946,19 @@
                         <span class="value">Q {{ $applicantRow['counts']['qualified'] }} &middot; AQ {{ $applicantRow['counts']['average_qualified'] }} &middot; NQ {{ $applicantRow['counts']['not_qualified'] }}</span>
                     </td>
                     <td>
-                        <span class="label">Next stage</span>
-                        <span class="value {{ $routeClass($applicantRow) }}">{{ $applicantRow['next_stage'] }}</span>
+                        <span class="label">Workflow decision</span>
+                        <span class="value {{ $routeClass($applicantRow) }}">{{ $finalDecision['workflow'] }}</span>
                     </td>
                 </tr>
             </table>
 
             <div class="outcome-note {{ in_array($outcomeTone, ['success', 'warning', 'danger'], true) ? $outcomeTone : '' }}">
-                <strong>Consolidated determination:</strong> {{ $applicantRow['outcome']['description'] }}
-                @if (! $applicantRow['panel_complete'])
-                    <strong> Panel completion: {{ $applicantRow['completion_percent'] }}%.</strong>
+                @if ($applicantRow['panel_complete'])
+                    <strong>Final panel determination:</strong> {{ $applicantRow['outcome']['description'] }}
+                    <strong> Workflow: {{ $finalDecision['workflow'] }}.</strong>
+                @else
+                    <strong>Current panel signal:</strong> {{ $applicantRow['outcome']['description'] }}
+                    <strong> Final outcome and workflow remain pending at {{ $applicantRow['completion_percent'] }}% completion.</strong>
                 @endif
             </div>
 
@@ -1134,17 +986,16 @@
                 <div class="evaluation-block">
                     <h3 class="evaluation-heading">
                         Evaluation {{ $evaluationIndex + 1 }}: {{ $evaluation->name }}
-                        &nbsp;&middot;&nbsp; {{ $members->count() }} panel task(s)
+                        &nbsp;&middot;&nbsp; {{ $members->count() }} active panel task(s)
                     </h3>
 
-                    <h4 class="subheading">Panel member completion and category counts</h4>
+                    <h4 class="subheading">Active panel completion and decision counts</h4>
                     <table class="panel-table">
                         <thead>
                             <tr>
-                                <th style="width: 24%;">Panel member</th>
-                                <th style="width: 11%;">Assignment</th>
-                                <th style="width: 15%;">Completion</th>
-                                <th style="width: 17%;">Submitted at</th>
+                                <th style="width: 29%;">Panel member</th>
+                                <th style="width: 18%;">Completion</th>
+                                <th style="width: 20%;">Submitted at</th>
                                 <th style="width: 11%;">Qualified</th>
                                 <th style="width: 11%;">Average</th>
                                 <th style="width: 11%;">Not Qualified</th>
@@ -1159,7 +1010,6 @@
                                             <br><span class="muted small">{{ $member['email'] }}</span>
                                         @endif
                                     </td>
-                                    <td>{{ $member['assigned'] ? 'Assigned' : 'Submission record' }}</td>
                                     <td>
                                         @if ($member['task_complete'])
                                             <span class="badge badge-success">Complete</span>
@@ -1176,7 +1026,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="number-cell muted">No panel member records are available for this evaluation.</td>
+                                    <td colspan="6" class="number-cell muted">No active panel member records are available for this evaluation.</td>
                                 </tr>
                             @endforelse
                         </tbody>

@@ -427,6 +427,9 @@
             <a href="{{ route('vendor.submissions') }}" class="vendor-nav-link {{ request()->routeIs('vendor.submissions', 'vendor.applications.*') ? 'active' : '' }}">
                 <i class="feather-file-text"></i> My Submissions
             </a>
+            <a href="{{ route('vendor.eoi-communications.index') }}" class="vendor-nav-link {{ request()->routeIs('vendor.eoi-communications.*') ? 'active' : '' }}">
+                <i class="feather-mail"></i> Evaluation Notices
+            </a>
             @if ($vendorUser?->can('evaluations.evaluate'))
                 <a href="{{ route('my.eval.index') }}" class="vendor-nav-link {{ request()->routeIs('my.eval.*', 'eval.assign.start', 'eval.assign.view') ? 'active' : '' }}">
                     <i class="feather-check-square"></i> My Evaluations

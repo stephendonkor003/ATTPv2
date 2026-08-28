@@ -7,9 +7,12 @@ use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Models\Evaluation;
 use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
+use App\Models\EoiReportCommunication;
+use App\Models\EoiReportCommunicationRecipient;
 use App\Models\Procurement;
 use App\Models\ProcurementPlan;
 use App\Services\EoiQualificationService;
+use App\Services\EoiReportCommunicationService;
 use App\Support\PdfBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
@@ -636,7 +639,8 @@ class EvaluationReportController extends Controller
 
     public function eoiProcurement(
         Procurement $procurement,
-        EoiQualificationService $qualificationService
+        EoiQualificationService $qualificationService,
+        EoiReportCommunicationService $communicationService
     ) {
         $this->assertEvaluationProcurementScope($procurement);
         $report = $qualificationService->buildProcurementReport($procurement);
@@ -647,7 +651,34 @@ class EvaluationReportController extends Controller
             'An Expression of Interest evaluation was not found for this procurement.'
         );
 
-        return view('reports.evaluations.eoi-procurement', compact('report'));
+        $communications = EoiReportCommunication::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->with([
+                'creator:id,name',
+                'attachments:id,communication_id,original_filename,mime_type,file_size',
+                'recipients' => fn ($query) => $query
+                    ->orderBy('recipient_name')
+                    ->with('proposalDocuments:id,recipient_id,original_filename,mime_type,file_size,created_at'),
+            ])
+            ->withCount([
+                'recipients',
+                'recipients as sent_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SENT),
+                'recipients as skipped_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SKIPPED),
+                'recipients as failed_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_FAILED),
+            ])
+            ->latest()
+            ->limit(8)
+            ->get();
+        $communicationPreview = $communicationService->recipientPreview($report);
+
+        return view('reports.evaluations.eoi-procurement', compact(
+            'report',
+            'communications',
+            'communicationPreview'
+        ));
     }
 
     public function eoiProcurementPdf(

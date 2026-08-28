@@ -140,6 +140,7 @@ use App\Http\Controllers\{
     MasterDashboard,
     GovernanceStructureController,
     EvaluationAssignmentController,
+    EoiReportCommunicationController,
 };
 
 use App\Http\Controllers\Vendor\{
@@ -156,6 +157,7 @@ use App\Http\Controllers\Vendor\{
     VendorReportController,
     VendorKnowledgeController,
     VendorThinkTankController,
+    EoiCommunicationController,
 };
 
 /*
@@ -3300,6 +3302,18 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
         Route::get('/eoi/{procurement}/pdf', [EvaluationReportController::class, 'eoiProcurementPdf'])->withTrashed()->name('eoi.procurement.pdf');
         Route::get('/eoi/{procurement}/excel', [EvaluationReportController::class, 'eoiProcurementExcel'])->withTrashed()->name('eoi.procurement.excel');
         Route::get('/eoi/{procurement}/csv', [EvaluationReportController::class, 'eoiProcurementCsv'])->withTrashed()->name('eoi.procurement.csv');
+        Route::post('/eoi/{procurement}/communications/evaluation-records', [EoiReportCommunicationController::class, 'sendEvaluationRecords'])
+            ->middleware('permission:evaluations.manage')
+            ->name('eoi.communications.evaluation-records');
+        Route::post('/eoi/{procurement}/communications/proposal-invitation', [EoiReportCommunicationController::class, 'sendProposalInvitation'])
+            ->middleware('permission:evaluations.manage')
+            ->name('eoi.communications.proposal-invitation');
+        Route::get('/eoi/{procurement}/communications/{communication}/attachments/{attachment}', [EoiReportCommunicationController::class, 'downloadAttachment'])
+            ->middleware('permission:evaluations.manage')
+            ->name('eoi.communications.attachments.download');
+        Route::get('/eoi/{procurement}/communications/{communication}/recipients/{recipient}/proposal-documents/{document}', [EoiReportCommunicationController::class, 'downloadProposalDocument'])
+            ->middleware('permission:evaluations.manage')
+            ->name('eoi.communications.proposal-documents.download');
         Route::get('/submission/{submission}', [EvaluationReportController::class, 'submission'])->name('submission');
         Route::get('/submission/{submission}/pdf', [EvaluationReportController::class, 'submissionPdf'])->name('submission.pdf');
         Route::get('/submission/{submission}/anonymised-pdf', [EvaluationReportController::class, 'submissionAnonymisedPdf'])->name('submission.anonymised-pdf');
@@ -3552,6 +3566,18 @@ Route::middleware(['auth'])
             ->name('clarifications');
         Route::get('/submissions', [VendorPortalController::class, 'submissions'])
             ->name('submissions');
+        Route::get('/evaluation-notices', [EoiCommunicationController::class, 'index'])
+            ->name('eoi-communications.index');
+        Route::get('/evaluation-notices/{recipient}', [EoiCommunicationController::class, 'show'])
+            ->name('eoi-communications.show');
+        Route::get('/evaluation-notices/{recipient}/evaluation-record', [EoiCommunicationController::class, 'downloadEvaluationRecord'])
+            ->name('eoi-communications.record.download');
+        Route::get('/evaluation-notices/{recipient}/templates/{attachment}', [EoiCommunicationController::class, 'downloadTemplate'])
+            ->name('eoi-communications.templates.download');
+        Route::post('/evaluation-notices/{recipient}/proposal', [EoiCommunicationController::class, 'submitProposal'])
+            ->name('eoi-communications.proposal.submit');
+        Route::get('/evaluation-notices/{recipient}/proposal-documents/{document}', [EoiCommunicationController::class, 'downloadProposalDocument'])
+            ->name('eoi-communications.proposal-documents.download');
         Route::get('/purchase-orders', [VendorPurchaseOrderController::class, 'index'])
             ->name('purchase-orders.index');
         Route::get('/purchase-orders/{purchaseOrder}/pdf', [VendorPurchaseOrderController::class, 'pdf'])

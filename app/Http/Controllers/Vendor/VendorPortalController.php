@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
-use App\Models\DynamicForm;
 use App\Models\ConsortiumThinkTank;
+use App\Models\DynamicForm;
+use App\Models\EoiReportCommunicationRecipient;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
 use App\Models\Procurement;
@@ -151,6 +152,12 @@ class VendorPortalController extends Controller
         ];
 
         $recentActivity = $this->recentActivity($submissions, $purchaseOrders, $reports, $documents, $paidDisbursements);
+        $evaluationNotices = EoiReportCommunicationRecipient::query()
+            ->where('user_id', $user->getKey())
+            ->with(['communication.procurement' => fn ($query) => $query->withTrashed()])
+            ->latest()
+            ->limit(3)
+            ->get();
         $thinkTankMember = ConsortiumThinkTank::with('consortium')
             ->where(function ($query) use ($user) {
                 $query->where('vendor_user_id', $user->id)
@@ -178,6 +185,7 @@ class VendorPortalController extends Controller
             'cashflowChart' => $cashflowChart,
             'activityChart' => $activityChart,
             'recentActivity' => $recentActivity,
+            'evaluationNotices' => $evaluationNotices,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
             'thinkTankMember' => $thinkTankMember,
