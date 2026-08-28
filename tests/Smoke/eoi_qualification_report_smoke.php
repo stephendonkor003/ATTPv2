@@ -228,22 +228,74 @@ try {
         $pdfHtml
     ) === 1;
 
-    if (! str_contains($pdfHtml, 'Qualified Applicants &mdash; Advancing to Technical Evaluation')
-        || ! str_contains($pdfHtml, 'Not Qualified Applicants &mdash; Do Not Advance')
-        || ! str_contains($pdfHtml, 'Awaiting Panel Completion')
-        || ! str_contains($pdfHtml, 'Final not qualified')
-        || ! $pdfQualifiedRow
-        || ! $pdfNotQualifiedRow) {
-        throw new RuntimeException('The EOI PDF is missing one or more decision-summary lists or KPIs.');
+    $pdfChecks = [
+        'qualified summary' => str_contains($pdfHtml, 'Qualified Applicants &mdash; Advancing to Technical Evaluation'),
+        'not-qualified summary' => str_contains($pdfHtml, 'Not Qualified Applicants &mdash; Do Not Advance'),
+        'awaiting summary' => str_contains($pdfHtml, 'Awaiting Panel Completion'),
+        'final not-qualified label' => str_contains($pdfHtml, 'Final not qualified'),
+        'active-panel rule' => str_contains($pdfHtml, 'Only the currently assigned panel is counted'),
+        'compact layout revision' => str_contains($pdfHtml, 'data-layout-revision="compact-v2"'),
+        'qualified applicant row' => $pdfQualifiedRow,
+        'not-qualified applicant row' => $pdfNotQualifiedRow,
+    ];
+    $missingPdfChecks = collect($pdfChecks)->filter(fn (bool $passed): bool => ! $passed)->keys();
+
+    if ($missingPdfChecks->isNotEmpty()) {
+        throw new RuntimeException('The EOI PDF is missing: '.$missingPdfChecks->implode(', ').'.');
     }
 
-    $pdf = Pdf::loadView(
+    foreach (['applicant-detail', 'Automatic disqualification evidence', 'Active panel completion and decision counts'] as $expandedAppendixMarker) {
+        if (str_contains($pdfHtml, $expandedAppendixMarker)) {
+            throw new RuntimeException('The consolidated EOI PDF still expands the web-only applicant evidence appendix: '.$expandedAppendixMarker);
+        }
+    }
+
+    $pdfDocument = Pdf::loadView(
         'reports.evaluations.pdf.eoi-procurement',
         $pdfData
-    )->setPaper('a4', 'landscape')->output();
+    )->setPaper('a4', 'landscape');
+    $pdfDocument->render();
+    $pdfPageCount = $pdfDocument->getDomPDF()->getCanvas()->get_page_count();
+    $pdf = $pdfDocument->output();
 
     if (! str_starts_with($pdf, '%PDF')) {
         throw new RuntimeException('The EOI qualification download did not render a valid PDF.');
+    }
+
+    $maximumExpectedPages = max(2, 1 + (int) ceil($report['applicants']->count() / 18));
+
+    if ($pdfPageCount > $maximumExpectedPages) {
+        throw new RuntimeException(
+            "The {$report['applicants']->count()}-applicant EOI register unexpectedly produced {$pdfPageCount} PDF pages."
+        );
+    }
+
+    $largeReport = $report;
+    $sourceRows = $report['applicants']->values();
+    $largeReport['applicants'] = collect(range(1, 20))
+        ->map(fn (int $position): array => $sourceRows[($position - 1) % $sourceRows->count()]);
+    $largeReport['stats']['total_applicants'] = 20;
+    $largePdfDocument = Pdf::loadView(
+        'reports.evaluations.pdf.eoi-procurement',
+        array_merge(['report' => $largeReport], PdfBranding::viewData())
+    )->setPaper('a4', 'landscape');
+    $largePdfDocument->render();
+    $largePdfPageCount = $largePdfDocument->getDomPDF()->getCanvas()->get_page_count();
+
+    if ($largePdfPageCount > 4) {
+        throw new RuntimeException("The compact 20-applicant EOI register expanded to {$largePdfPageCount} pages.");
+    }
+
+    $downloadResponse = $app->make(EvaluationReportController::class)
+        ->eoiProcurementPdf($procurement, $qualificationService);
+    $cacheControl = (string) $downloadResponse->headers->get('cache-control');
+    $contentDisposition = (string) $downloadResponse->headers->get('content-disposition');
+
+    if (! str_starts_with((string) $downloadResponse->getContent(), '%PDF')
+        || ! str_contains($cacheControl, 'no-store')
+        || $downloadResponse->headers->get('x-eoi-pdf-layout') !== 'compact-v2'
+        || preg_match('/eoi-qualification-.+-\d{8}-\d{6}\.pdf/i', $contentDisposition) !== 1) {
+        throw new RuntimeException('The EOI PDF response is not a fresh, versioned, non-cacheable compact download.');
     }
 
     echo "EOI_QUALIFICATION_REPORT_SMOKE_OK\n";

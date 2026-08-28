@@ -14,6 +14,7 @@ use App\Models\ProcurementPlan;
 use App\Services\EoiQualificationService;
 use App\Services\EoiReportCommunicationService;
 use App\Support\PdfBranding;
+use App\Support\PdfPageNumbering;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -593,7 +594,14 @@ class EvaluationReportController extends Controller
         if ($method === Evaluation::TYPE_EOI) {
             $this->assertProcurementUsesMethod($procurement, $method);
 
-            return redirect()->route('reports.evaluations.eoi.procurement.pdf', $procurement);
+            return redirect()
+                ->route('reports.evaluations.eoi.procurement.pdf', [
+                    'procurement' => $procurement,
+                    'fresh' => now()->getTimestampMs(),
+                ])
+                ->header('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0')
+                ->header('Pragma', 'no-cache')
+                ->header('Expires', '0');
         }
 
         $report = $this->buildMethodProcurementReport($method, $procurement);
@@ -700,8 +708,17 @@ class EvaluationReportController extends Controller
         )->setPaper('a4', 'landscape');
 
         $name = Str::slug($procurement->reference_no ?: $procurement->title ?: $procurement->getKey());
+        $generatedAt = $report['generated_at'] ?? now();
+        $filename = 'eoi-qualification-'.$name.'-'.$generatedAt->format('Ymd-His').'.pdf';
+        $response = PdfPageNumbering::stamp($pdf)->download($filename);
 
-        return $pdf->download('eoi-qualification-'.$name.'.pdf');
+        $response->headers->set('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('Expires', '0');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('X-EOI-PDF-Layout', 'compact-v2');
+
+        return $response;
     }
 
     public function eoiProcurementExcel(

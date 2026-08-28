@@ -77,7 +77,7 @@
                     <i class="feather-file-text me-1" aria-hidden="true"></i>
                     CSV
                 </a>
-                <a href="{{ route('reports.evaluations.eoi.procurement.pdf', $procurement) }}" class="btn btn-success btn-sm">
+                <a href="{{ route('reports.evaluations.eoi.procurement.pdf', ['procurement' => $procurement, 'fresh' => ($report['generated_at'] ?? now())->getTimestampMs()]) }}" class="btn btn-success btn-sm">
                     <i class="feather-download me-1" aria-hidden="true"></i>
                     PDF
                 </a>
