@@ -4,10 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class EvaluationSubmission extends BaseModel
 {
     use HasFactory;
+
+    public const WORKFLOW_DRAFT = 'draft';
+
+    public const WORKFLOW_SUBMITTED = 'submitted';
+
+    public const WORKFLOW_REWORK_REQUESTED = 'rework_requested';
 
     /**
      * Explicit table name (safety)
@@ -30,6 +38,8 @@ class EvaluationSubmission extends BaseModel
         'video_path',
         'video_duration',
         'submitted_at',
+        'workflow_status',
+        'revision_number',
     ];
 
     /**
@@ -38,6 +48,7 @@ class EvaluationSubmission extends BaseModel
     protected $casts = [
         'submitted_at' => 'datetime',
         'overall_score' => 'float',
+        'revision_number' => 'integer',
     ];
 
     /* =====================================================
@@ -92,6 +103,32 @@ class EvaluationSubmission extends BaseModel
     public function technicalProposalSubmission(): BelongsTo
     {
         return $this->belongsTo(EoiTechnicalProposalSubmission::class, 'technical_proposal_submission_id');
+    }
+
+    public function reworkRequests(): HasMany
+    {
+        return $this->hasMany(ReworkRequest::class, 'evaluation_submission_id')
+            ->orderByDesc('cycle');
+    }
+
+    public function latestReworkRequest(): HasOne
+    {
+        return $this->hasOne(ReworkRequest::class, 'evaluation_submission_id')
+            ->orderByDesc('cycle');
+    }
+
+    public function openReworkRequest(): HasOne
+    {
+        return $this->hasOne(ReworkRequest::class, 'evaluation_submission_id')
+            ->where('status', ReworkRequest::STATUS_PENDING)
+            ->orderByDesc('cycle');
+    }
+
+    public function latestCompletedReworkRequest(): HasOne
+    {
+        return $this->hasOne(ReworkRequest::class, 'evaluation_submission_id')
+            ->where('status', ReworkRequest::STATUS_COMPLETED)
+            ->orderByDesc('cycle');
     }
 
     /**
@@ -151,6 +188,12 @@ class EvaluationSubmission extends BaseModel
     public function isSubmitted(): bool
     {
         return $this->submitted_at !== null;
+    }
+
+    public function isReworkRequested(): bool
+    {
+        return ! $this->isSubmitted()
+            && $this->workflow_status === self::WORKFLOW_REWORK_REQUESTED;
     }
 
     public function isTechnicalProposalEvaluation(): bool

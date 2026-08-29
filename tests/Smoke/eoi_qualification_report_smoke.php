@@ -37,7 +37,17 @@ try {
         ->where('type', Evaluation::TYPE_EOI)
         ->whereDoesntHave('assignments')
         ->with('sections.criteria')
-        ->firstOrFail();
+        ->first();
+
+    if (! $evaluation) {
+        $evaluation = Evaluation::create([
+            'name' => 'EOI qualification smoke '.str()->upper(str()->random(6)),
+            'description' => 'Transactional EOI qualification report fixture.',
+            'status' => 'open',
+            'type' => Evaluation::TYPE_EOI,
+            'created_by' => $administrator->getKey(),
+        ])->load('sections.criteria');
+    }
 
     if ($evaluation->sections->flatMap->criteria->isEmpty()) {
         $section = $evaluation->sections->first() ?? EvaluationSection::create([
@@ -197,6 +207,21 @@ try {
         }
     }
 
+    $expectedRankedCount = $report['qualified_ranking']->count();
+
+    if (substr_count($html, 'data-qualified-rank="') !== $expectedRankedCount
+        || ! str_contains($html, 'bi bi-trophy-fill')
+        || ! str_contains($html, 'ranked first to last')
+        || ! str_contains($html, 'data-qualified-progression="proceeding"')) {
+        throw new RuntimeException('The EOI web report did not render every qualified applicant with a trophy rank and progression decision.');
+    }
+
+    foreach (range(1, $expectedRankedCount) as $rank) {
+        if (! str_contains($html, 'data-qualified-rank="'.$rank.'"')) {
+            throw new RuntimeException("The EOI web shortlist is missing qualification rank {$rank}.");
+        }
+    }
+
     if (! str_contains($html, 'data-qualified-applicant="'.$applicants[0]->id.'"')
         || str_contains($html, 'data-qualified-applicant="'.$applicants[1]->id.'"')) {
         throw new RuntimeException('The EOI shortlist did not isolate the applicants approved for Technical Evaluation.');
@@ -219,35 +244,24 @@ try {
     $pdfData = array_merge(compact('report'), PdfBranding::viewData());
     $pdfHtml = view('reports.evaluations.pdf.eoi-procurement', $pdfData)->render();
 
-    $pdfQualifiedRow = preg_match(
-        '/<tr data-summary-outcome="qualified">.*?'.preg_quote(e($applicants[0]->display_name), '/').'.*?<\/tr>/s',
-        $pdfHtml
-    ) === 1;
-    $pdfNotQualifiedRow = preg_match(
-        '/<tr data-summary-outcome="not-qualified">.*?'.preg_quote(e($applicants[1]->display_name), '/').'.*?<\/tr>/s',
-        $pdfHtml
-    ) === 1;
-
     $pdfChecks = [
-        'qualified summary' => str_contains($pdfHtml, 'Qualified Applicants &mdash; Advancing to Technical Evaluation'),
-        'not-qualified summary' => str_contains($pdfHtml, 'Not Qualified Applicants &mdash; Do Not Advance'),
-        'awaiting summary' => str_contains($pdfHtml, 'Awaiting Panel Completion'),
-        'final not-qualified label' => str_contains($pdfHtml, 'Final not qualified'),
-        'active-panel rule' => str_contains($pdfHtml, 'Only the currently assigned panel is counted'),
-        'compact layout revision' => str_contains($pdfHtml, 'data-layout-revision="compact-v2"'),
-        'qualified applicant row' => $pdfQualifiedRow,
-        'not-qualified applicant row' => $pdfNotQualifiedRow,
+        'qualified applicant ranking' => str_contains($pdfHtml, 'Qualified Applicant Ranking'),
+        'current shortlist decision' => str_contains($pdfHtml, 'Current shortlist decision'),
+        'final workflow decision' => str_contains($pdfHtml, 'Final outcome workflow decision'),
+        'active-panel rule' => str_contains($pdfHtml, 'Only currently assigned panel tasks are counted'),
+        'detailed layout revision' => str_contains($pdfHtml, 'data-layout-revision="detailed-v3"'),
+        'qualified applicant' => str_contains($pdfHtml, e($applicants[0]->display_name)),
+        'not-qualified applicant' => str_contains($pdfHtml, e($applicants[1]->display_name)),
+        'qualified progression' => str_contains($pdfHtml, 'data-qualified-progression="proceeding"'),
+        'evaluation evidence appendix' => str_contains($pdfHtml, 'Applicant Evaluation Evidence Appendix'),
+        'criterion evidence' => str_contains($pdfHtml, 'Transactional EOI smoke evidence.'),
+        'technical workflow snapshot' => str_contains($pdfHtml, 'Technical Proposal Workflow Snapshot'),
+        'communication snapshot' => str_contains($pdfHtml, 'Communication Delivery Snapshot'),
     ];
     $missingPdfChecks = collect($pdfChecks)->filter(fn (bool $passed): bool => ! $passed)->keys();
 
     if ($missingPdfChecks->isNotEmpty()) {
         throw new RuntimeException('The EOI PDF is missing: '.$missingPdfChecks->implode(', ').'.');
-    }
-
-    foreach (['applicant-detail', 'Automatic disqualification evidence', 'Active panel completion and decision counts'] as $expandedAppendixMarker) {
-        if (str_contains($pdfHtml, $expandedAppendixMarker)) {
-            throw new RuntimeException('The consolidated EOI PDF still expands the web-only applicant evidence appendix: '.$expandedAppendixMarker);
-        }
     }
 
     $pdfDocument = Pdf::loadView(
@@ -262,40 +276,70 @@ try {
         throw new RuntimeException('The EOI qualification download did not render a valid PDF.');
     }
 
-    $maximumExpectedPages = max(2, 1 + (int) ceil($report['applicants']->count() / 18));
-
-    if ($pdfPageCount > $maximumExpectedPages) {
-        throw new RuntimeException(
-            "The {$report['applicants']->count()}-applicant EOI register unexpectedly produced {$pdfPageCount} PDF pages."
-        );
+    if ($pdfPageCount < 2) {
+        throw new RuntimeException('The detailed EOI PDF did not produce a complete paged report.');
     }
 
-    $largeReport = $report;
-    $sourceRows = $report['applicants']->values();
-    $largeReport['applicants'] = collect(range(1, 20))
-        ->map(fn (int $position): array => $sourceRows[($position - 1) % $sourceRows->count()]);
-    $largeReport['stats']['total_applicants'] = 20;
-    $largePdfDocument = Pdf::loadView(
-        'reports.evaluations.pdf.eoi-procurement',
-        array_merge(['report' => $largeReport], PdfBranding::viewData())
-    )->setPaper('a4', 'landscape');
-    $largePdfDocument->render();
-    $largePdfPageCount = $largePdfDocument->getDomPDF()->getCanvas()->get_page_count();
+    $exportController = $app->make(EvaluationReportController::class);
+    $csvRowsMethod = new ReflectionMethod(EvaluationReportController::class, 'eoiCsvRows');
+    [$csvHeadings, $csvRows] = $csvRowsMethod->invoke($exportController, $report, collect(), collect());
+    $workbookRowsMethod = new ReflectionMethod(EvaluationReportController::class, 'eoiWorkbookRows');
+    $workbookRows = $workbookRowsMethod->invoke($exportController, $report, collect(), collect());
 
-    if ($largePdfPageCount > 4) {
-        throw new RuntimeException("The compact 20-applicant EOI register expanded to {$largePdfPageCount} pages.");
+    foreach (['Qualified rank', 'Shortlist progression', 'Current workflow decision', 'Criterion decision totals'] as $heading) {
+        if (! in_array($heading, $csvHeadings, true)) {
+            throw new RuntimeException("The EOI CSV export is missing the {$heading} column.");
+        }
     }
 
-    $downloadResponse = $app->make(EvaluationReportController::class)
+    if (collect($csvRows)->doesntContain(fn (array $row): bool => in_array('Applicant outcome', $row, true))
+        || ! array_key_exists('Qualified Ranking', $workbookRows)
+        || ! array_key_exists('Applicant Register', $workbookRows)
+        || ! array_key_exists('Evidence & Workflow', $workbookRows)
+        || ! array_key_exists('Proposal Rounds', $workbookRows)
+        || ! array_key_exists('Communications', $workbookRows)) {
+        throw new RuntimeException('The EOI spreadsheet exports do not include the full report registers.');
+    }
+
+    // Dompdf retains a sizable in-memory document after rendering. Release the
+    // direct-render assertion before exercising the real controller download.
+    unset($pdfDocument, $pdf, $pdfHtml, $pdfData, $csvRows, $workbookRows, $report, $html);
+    gc_collect_cycles();
+
+    $downloadResponse = $exportController
         ->eoiProcurementPdf($procurement, $qualificationService);
     $cacheControl = (string) $downloadResponse->headers->get('cache-control');
     $contentDisposition = (string) $downloadResponse->headers->get('content-disposition');
 
     if (! str_starts_with((string) $downloadResponse->getContent(), '%PDF')
         || ! str_contains($cacheControl, 'no-store')
-        || $downloadResponse->headers->get('x-eoi-pdf-layout') !== 'compact-v2'
+        || $downloadResponse->headers->get('x-eoi-pdf-layout') !== 'detailed-v3'
         || preg_match('/eoi-qualification-.+-\d{8}-\d{6}\.pdf/i', $contentDisposition) !== 1) {
-        throw new RuntimeException('The EOI PDF response is not a fresh, versioned, non-cacheable compact download.');
+        throw new RuntimeException('The EOI PDF response is not a fresh, versioned, non-cacheable detailed download.');
+    }
+
+    unset($downloadResponse);
+    gc_collect_cycles();
+
+    $excelResponse = $exportController->eoiProcurementExcel($procurement, $qualificationService);
+    $excelContentType = (string) $excelResponse->headers->get('content-type');
+    $excelCacheControl = (string) $excelResponse->headers->get('cache-control');
+
+    if (! str_contains($excelContentType, 'spreadsheetml.sheet')
+        || ! str_contains($excelCacheControl, 'no-store')) {
+        throw new RuntimeException('The EOI Excel export is not a fresh workbook download.');
+    }
+
+    $csvResponse = $exportController->eoiProcurementCsv($procurement, $qualificationService);
+    ob_start();
+    $csvResponse->sendContent();
+    $csvContent = (string) ob_get_clean();
+
+    if (! str_contains((string) $csvResponse->headers->get('cache-control'), 'no-store')
+        || ! str_contains($csvContent, 'Shortlist progression')
+        || ! str_contains($csvContent, 'Current workflow decision')
+        || ! str_contains($csvContent, 'Applicant outcome')) {
+        throw new RuntimeException('The EOI CSV export is missing fresh comprehensive report data.');
     }
 
     echo "EOI_QUALIFICATION_REPORT_SMOKE_OK\n";

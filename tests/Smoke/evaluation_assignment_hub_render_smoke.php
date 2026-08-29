@@ -49,4 +49,30 @@ if (! str_contains($html, 'Evaluator Assignments')) {
     throw new RuntimeException('The assignment workspace heading did not render.');
 }
 
+$endowmentFundProcurement = $procurements->first(
+    fn ($procurement): bool => (string) $procurement->reference_no === 'ET-AUC- 494958-CS-QCBS'
+);
+
+if ($endowmentFundProcurement) {
+    $technicalCandidates = collect(
+        data_get($view->getData()['assignmentContexts'], (string) $endowmentFundProcurement->getKey().'.technical_candidates', [])
+    );
+    $qualifiedNames = $technicalCandidates
+        ->map(fn (array $item): string => (string) data_get($item, 'applicant.display_name'))
+        ->sort()
+        ->values()
+        ->all();
+    $expectedQualifiedNames = ['BwB', 'Impact Africa Consulting', 'KPMG', 'LNO'];
+
+    if ($qualifiedNames !== $expectedQualifiedNames) {
+        throw new RuntimeException(
+            'The Endowment Fund technical assignment worklist must contain only BwB, Impact Africa Consulting, KPMG, and LNO.'
+        );
+    }
+
+    if (! str_contains($html, '4 applicants now proceed to technical evaluation')) {
+        throw new RuntimeException('The Endowment Fund technical assignment worklist did not render its ready-to-evaluate status.');
+    }
+}
+
 echo 'EVALUATION_ASSIGNMENT_HUB_RENDER_OK '.strlen($html)." bytes\n";

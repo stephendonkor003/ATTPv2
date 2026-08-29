@@ -10,7 +10,10 @@ use App\Models\ProcurementContractNegotiation;
 use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPlan;
 use App\Models\ProcurementPurchaseOrder;
+use App\Services\EvaluationReworkGuard;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ProcurementInvoiceController extends Controller
 {
@@ -174,40 +177,66 @@ class ProcurementInvoiceController extends Controller
         }
 
         $procurement = Procurement::find($invoice->procurement_id);
-        if (!$procurement) {
+        if (! $procurement) {
             return back()->with('error', 'Procurement record not found.');
         }
 
-        $negotiation = ProcurementContractNegotiation::where('procurement_id', $procurement->id)
-            ->where('status', 'agreed')
-            ->orderByDesc('agreed_at')
-            ->first();
+        $purchaseOrder = DB::transaction(function () use ($procurement, $invoice): ProcurementPurchaseOrder {
+            $lockedProcurement = app(EvaluationReworkGuard::class)
+                ->lockForDownstreamTransition($procurement);
+            $lockedInvoice = ProcurementInvoice::query()
+                ->whereKey($invoice->getKey())
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $purchaseOrder = ProcurementPurchaseOrder::create([
-            'procurement_id' => $procurement->id,
-            'negotiation_id' => $negotiation?->id,
-            'invoice_id' => $invoice->id,
-            'vendor_id' => $invoice->vendor_id,
-            'sub_activity_id' => $invoice->sub_activity_id,
-            'governance_node_id' => $invoice->governance_node_id,
-            'reference_no' => ProcurementPurchaseOrder::generateReference(),
-            'amount' => $invoice->amount,
-            'currency' => $invoice->currency,
-            'status' => 'draft',
-            'created_by' => auth()->id(),
-            'issued_at' => now(),
-        ]);
+            if ($lockedInvoice->resolvedPurchaseOrder()) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'A purchase order already exists for this invoice.',
+                ]);
+            }
 
-        ProcurementAuditLog::create([
-            'user_id' => auth()->id(),
-            'action' => 'Generated purchase order from invoice',
-            'procurement_id' => $procurement->id,
-            'metadata' => [
-                'invoice_id' => $invoice->id,
-                'purchase_order_id' => $purchaseOrder->id,
-            ],
-            'created_at' => now(),
-        ]);
+            if ($lockedInvoice->status !== 'approved') {
+                throw ValidationException::withMessages([
+                    'invoice' => 'Only an approved invoice can generate a purchase order.',
+                ]);
+            }
+
+            $negotiation = ProcurementContractNegotiation::query()
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->where('status', 'agreed')
+                ->orderByDesc('agreed_at')
+                ->lockForUpdate()
+                ->first();
+
+            $purchaseOrder = ProcurementPurchaseOrder::create([
+                'procurement_id' => $lockedProcurement->getKey(),
+                'negotiation_id' => $negotiation?->id,
+                'invoice_id' => $lockedInvoice->id,
+                'vendor_id' => $lockedInvoice->vendor_id,
+                'sub_activity_id' => $lockedInvoice->sub_activity_id,
+                'governance_node_id' => $lockedInvoice->governance_node_id,
+                'reference_no' => ProcurementPurchaseOrder::generateReference(),
+                'amount' => $lockedInvoice->amount,
+                'currency' => $lockedInvoice->currency,
+                'status' => 'draft',
+                'created_by' => auth()->id(),
+                'issued_at' => now(),
+            ]);
+
+            ProcurementAuditLog::create([
+                'user_id' => auth()->id(),
+                'action' => 'Generated purchase order from invoice',
+                'procurement_id' => $lockedProcurement->getKey(),
+                'metadata' => [
+                    'invoice_id' => $lockedInvoice->id,
+                    'purchase_order_id' => $purchaseOrder->id,
+                ],
+                'created_at' => now(),
+            ]);
+
+            return $purchaseOrder;
+        }, 3);
 
         return redirect()
             ->route('procurement.purchase-orders.show', $purchaseOrder)
@@ -217,7 +246,7 @@ class ProcurementInvoiceController extends Controller
     private function resolveBudget(Procurement $procurement): array
     {
         $plan = null;
-        if (!empty($procurement->reference_no)) {
+        if (! empty($procurement->reference_no)) {
             $plan = ProcurementPlan::where('procurement_code', $procurement->reference_no)->first();
         }
 
@@ -248,7 +277,7 @@ class ProcurementInvoiceController extends Controller
             return;
         }
 
-        if (!$invoice->governance_node_id || !in_array($invoice->governance_node_id, $scopedNodeIds, true)) {
+        if (! $invoice->governance_node_id || ! in_array($invoice->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this invoice.');
         }
     }

@@ -9,9 +9,12 @@ use App\Models\FormSubmission;
 use App\Models\Procurement;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class EoiQualificationService
 {
+    public const QUALIFIED_SHORTLIST_LIMIT = 8;
+
     public const OUTCOME_FULLY_QUALIFIED = 'fully_qualified';
 
     public const OUTCOME_AVERAGE_QUALIFIED = 'average_qualified';
@@ -71,12 +74,49 @@ class EoiQualificationService
             })
             ->values();
 
+        $qualifiedRanking = $this->rankQualifiedApplicants($applicantRows);
+        $rankedQualifiedApplicants = $qualifiedRanking->keyBy(
+            fn (array $row): string => (string) data_get($row, 'applicant.id')
+        );
+
+        // The panel outcome and the shortlist progression are deliberately kept
+        // separate. A published proposal round can retain an historical candidate
+        // record even where that applicant now sits below the current top-eight
+        // shortlist. Exports must therefore communicate the current progression
+        // decision without mutating the underlying applicant workflow/history.
+        $applicantRows = $applicantRows
+            ->map(function (array $row) use ($rankedQualifiedApplicants): array {
+                $rankedRow = $rankedQualifiedApplicants->get(
+                    (string) data_get($row, 'applicant.id')
+                );
+
+                return [
+                    ...$row,
+                    ...$this->applicantProgression($row, $rankedRow),
+                ];
+            })
+            ->values();
+
+        $qualifiedRanking = $applicantRows
+            ->filter(fn (array $row): bool => filled($row['qualification_rank'] ?? null))
+            ->sortBy('qualification_rank')
+            ->values();
+        $qualifiedShortlist = $qualifiedRanking
+            ->take(self::QUALIFIED_SHORTLIST_LIMIT)
+            ->values();
+        $qualifiedOutsideShortlist = $qualifiedRanking
+            ->where('within_qualified_shortlist', false)
+            ->values();
+
         $panelMemberIds = $assignments->pluck('user_id')->filter()->unique();
 
         return [
             'procurement' => $procurement,
             'evaluations' => $evaluations,
             'applicants' => $applicantRows,
+            'qualified_ranking' => $qualifiedRanking,
+            'qualified_shortlist' => $qualifiedShortlist,
+            'qualified_outside_shortlist' => $qualifiedOutsideShortlist,
             'generated_at' => now(),
             'stats' => [
                 'total_applicants' => $applicantRows->count(),
@@ -98,8 +138,172 @@ class EoiQualificationService
                     ->count(),
                 'panel_incomplete' => $applicantRows->where('panel_complete', false)->count(),
                 'advance' => $applicantRows->where('can_advance', true)->count(),
+                'qualified_shortlist' => $qualifiedShortlist->count(),
+                'qualified_below_shortlist' => $qualifiedOutsideShortlist->count(),
+                'shortlist_proceeding' => $qualifiedShortlist->count(),
+                'shortlist_not_proceeding' => $qualifiedOutsideShortlist->count(),
                 'panel_members' => $panelMemberIds->count(),
                 'submitted_evaluations' => $applicantRows->sum('completed_tasks'),
+            ],
+        ];
+    }
+
+    /**
+     * Order panel-complete qualified applicants without inventing a numeric EOI score.
+     *
+     * Fully Qualified precedes Average Qualified. Within the same outcome, the
+     * greater share and count of Qualified decisions comes first. Exact
+     * categorical ties use applicant name and submission code so a strict
+     * shortlist position remains stable and auditable.
+     */
+    public function rankQualifiedApplicants(iterable $applicantRows): Collection
+    {
+        $outcomeOrder = [
+            self::OUTCOME_FULLY_QUALIFIED => 0,
+            self::OUTCOME_AVERAGE_QUALIFIED => 1,
+        ];
+
+        return collect($applicantRows)
+            ->filter(fn (array $row): bool => (bool) ($row['can_advance'] ?? false)
+                && (bool) ($row['panel_complete'] ?? false)
+                && array_key_exists((string) data_get($row, 'outcome.code'), $outcomeOrder))
+            ->sort(function (array $left, array $right) use ($outcomeOrder): int {
+                $leftOutcome = (string) data_get($left, 'outcome.code');
+                $rightOutcome = (string) data_get($right, 'outcome.code');
+                $outcomeComparison = ($outcomeOrder[$leftOutcome] ?? 9)
+                    <=> ($outcomeOrder[$rightOutcome] ?? 9);
+
+                if ($outcomeComparison !== 0) {
+                    return $outcomeComparison;
+                }
+
+                $leftQualified = max(0, (int) data_get($left, 'counts.qualified', 0));
+                $rightQualified = max(0, (int) data_get($right, 'counts.qualified', 0));
+                $leftTotal = max(1, (int) ($left['total_decisions'] ?? 0));
+                $rightTotal = max(1, (int) ($right['total_decisions'] ?? 0));
+                $shareComparison = ($rightQualified * $leftTotal)
+                    <=> ($leftQualified * $rightTotal);
+
+                if ($shareComparison !== 0) {
+                    return $shareComparison;
+                }
+
+                $qualifiedCountComparison = $rightQualified <=> $leftQualified;
+
+                if ($qualifiedCountComparison !== 0) {
+                    return $qualifiedCountComparison;
+                }
+
+                $averageComparison = max(0, (int) data_get($left, 'counts.average_qualified', 0))
+                    <=> max(0, (int) data_get($right, 'counts.average_qualified', 0));
+
+                if ($averageComparison !== 0) {
+                    return $averageComparison;
+                }
+
+                $nameComparison = strnatcasecmp(
+                    (string) data_get($left, 'applicant.display_name', ''),
+                    (string) data_get($right, 'applicant.display_name', '')
+                );
+
+                if ($nameComparison !== 0) {
+                    return $nameComparison;
+                }
+
+                $codeComparison = strnatcasecmp(
+                    (string) data_get($left, 'applicant.procurement_submission_code', ''),
+                    (string) data_get($right, 'applicant.procurement_submission_code', '')
+                );
+
+                if ($codeComparison !== 0) {
+                    return $codeComparison;
+                }
+
+                return strcmp(
+                    (string) data_get($left, 'applicant.id', ''),
+                    (string) data_get($right, 'applicant.id', '')
+                );
+            })
+            ->values()
+            ->map(fn (array $row, int $index): array => [
+                ...$row,
+                'qualification_rank' => $index + 1,
+                'within_qualified_shortlist' => $index < self::QUALIFIED_SHORTLIST_LIMIT,
+                'qualified_shortlist_status' => $index < self::QUALIFIED_SHORTLIST_LIMIT
+                    ? 'proceeding'
+                    : 'not_proceeding',
+            ]);
+    }
+
+    /**
+     * Add the current shortlist decision used consistently by the web report and
+     * every internal report download. It is presentation data, not a workflow
+     * state transition, so historical proposal-round candidates remain intact.
+     *
+     * @param  array<string, mixed>  $applicantRow
+     * @param  array<string, mixed>|null  $rankedRow
+     * @return array<string, mixed>
+     */
+    private function applicantProgression(array $applicantRow, ?array $rankedRow): array
+    {
+        $rank = $rankedRow['qualification_rank'] ?? null;
+        $withinShortlist = (bool) ($rankedRow['within_qualified_shortlist'] ?? false);
+
+        if ($rank !== null) {
+            return [
+                'qualification_rank' => (int) $rank,
+                'within_qualified_shortlist' => $withinShortlist,
+                'qualified_shortlist_status' => $withinShortlist ? 'proceeding' : 'not_proceeding',
+                'progression' => [
+                    'code' => $withinShortlist ? 'proceeding' : 'not_proceeding',
+                    'label' => $withinShortlist ? 'Proceeding' : 'Not proceeding',
+                    'workflow' => $withinShortlist
+                        ? 'Proceeding to Technical Evaluation'
+                        : 'Not proceeding — outside current top-'.self::QUALIFIED_SHORTLIST_LIMIT.' shortlist',
+                    'note' => $withinShortlist
+                        ? 'Ranked within the current top-'.self::QUALIFIED_SHORTLIST_LIMIT.' qualified applicants.'
+                        : 'Panel-qualified, but ranked below the current top-'.self::QUALIFIED_SHORTLIST_LIMIT.' shortlist positions.',
+                ],
+            ];
+        }
+
+        if (! (bool) ($applicantRow['panel_complete'] ?? false)) {
+            return [
+                'qualification_rank' => null,
+                'within_qualified_shortlist' => false,
+                'qualified_shortlist_status' => null,
+                'progression' => [
+                    'code' => 'awaiting_panel',
+                    'label' => 'Awaiting panel completion',
+                    'workflow' => 'No final routing',
+                    'note' => 'Every active panel task must be complete before a shortlist decision is released.',
+                ],
+            ];
+        }
+
+        if (data_get($applicantRow, 'outcome.code') === self::OUTCOME_NOT_QUALIFIED) {
+            return [
+                'qualification_rank' => null,
+                'within_qualified_shortlist' => false,
+                'qualified_shortlist_status' => null,
+                'progression' => [
+                    'code' => 'does_not_advance',
+                    'label' => 'Does not advance',
+                    'workflow' => 'Does not advance',
+                    'note' => 'A final Not Qualified panel decision stops progression.',
+                ],
+            ];
+        }
+
+        return [
+            'qualification_rank' => null,
+            'within_qualified_shortlist' => false,
+            'qualified_shortlist_status' => null,
+            'progression' => [
+                'code' => 'awaiting_decision',
+                'label' => 'Awaiting final decision',
+                'workflow' => 'No final routing',
+                'note' => 'A valid final panel decision is required before progression can be confirmed.',
             ],
         ];
     }
@@ -111,19 +315,46 @@ class EoiQualificationService
      */
     public function synchronizeApplicantStage(FormSubmission $applicant): ?string
     {
-        $applicant->loadMissing('procurement');
+        $procurementId = $applicant->procurement_id
+            ?: $applicant->procurement?->getKey();
 
-        if (! $applicant->procurement) {
+        if (! $procurementId) {
             return null;
         }
 
-        $assignments = $this->assignmentQuery($applicant->procurement)
+        return DB::transaction(function () use ($applicant, $procurementId): ?string {
+            $procurement = Procurement::query()
+                ->withTrashed()
+                ->whereKey($procurementId)
+                ->lockForUpdate()
+                ->first();
+            $lockedApplicant = FormSubmission::query()
+                ->whereKey($applicant->getKey())
+                ->where('procurement_id', $procurementId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $procurement || ! $lockedApplicant) {
+                return null;
+            }
+
+            $lockedApplicant->setRelation('procurement', $procurement);
+
+            return $this->synchronizeLockedApplicantStage($lockedApplicant, $procurement);
+        }, 3);
+    }
+
+    private function synchronizeLockedApplicantStage(
+        FormSubmission $applicant,
+        Procurement $procurement
+    ): ?string {
+        $assignments = $this->assignmentQuery($procurement)
             ->where(function (Builder $query) use ($applicant): void {
                 $query->whereNull('form_submission_id')
                     ->orWhere('form_submission_id', $applicant->getKey());
             })
             ->get();
-        $submissionRecords = $this->submissionQuery($applicant->procurement)
+        $submissionRecords = $this->submissionQuery($procurement)
             ->where('form_submission_id', $applicant->getKey())
             ->get();
 
@@ -153,6 +384,8 @@ class EoiQualificationService
             'prescreen_passed',
             FormSubmission::STATUS_EOI_EVALUATION,
             FormSubmission::STATUS_EOI_NOT_QUALIFIED,
+            FormSubmission::STATUS_TECHNICAL_PROPOSAL_INVITED,
+            FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
             FormSubmission::STATUS_TECHNICAL_EVALUATION,
         ];
 

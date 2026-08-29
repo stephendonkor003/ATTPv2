@@ -16,6 +16,20 @@
                 && (bool) ($row['panel_complete'] ?? false)
                 && in_array(data_get($row, 'outcome.code'), ['fully_qualified', 'average_qualified'], true))
             ->values();
+        $rankedQualifiedApplicants = collect($report['qualified_ranking'] ?? $qualifiedApplicants)
+            ->values()
+            ->map(fn (array $row, int $index): array => [
+                ...$row,
+                'qualification_rank' => (int) ($row['qualification_rank'] ?? ($index + 1)),
+            ]);
+        $qualifiedShortlist = collect(
+            $report['qualified_shortlist']
+                ?? $rankedQualifiedApplicants->take(\App\Services\EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT)
+        )->values();
+        $qualifiedOutsideShortlist = collect(
+            $report['qualified_outside_shortlist']
+                ?? $rankedQualifiedApplicants->slice(\App\Services\EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT)
+        )->values();
         $panelInProgressApplicants = $applicants
             ->filter(fn (array $row): bool => ! (bool) ($row['panel_complete'] ?? false))
             ->values();
@@ -441,52 +455,109 @@
                     data-summary-outcome="qualified"
                 >
                     <header class="eoi-decision-group__header">
-                        <span class="eoi-decision-group__icon" aria-hidden="true"><i class="feather-check-circle"></i></span>
+                        <span class="eoi-decision-group__icon" aria-hidden="true"><i class="bi bi-trophy-fill"></i></span>
                         <div>
                             <h6 id="qualifiedApplicantsTitle">Qualified Applicants</h6>
-                            <p>Panel complete &middot; advances to Technical Evaluation</p>
+                            <p>Panel complete &middot; ranked first to last &middot; all ranked applicants displayed</p>
                         </div>
-                        <strong aria-label="{{ $qualifiedApplicants->count() }} qualified applicants">{{ number_format($qualifiedApplicants->count()) }}</strong>
+                        <strong aria-label="{{ $rankedQualifiedApplicants->count() }} ranked qualified applicants">
+                            <span>{{ number_format($rankedQualifiedApplicants->count()) }}</span>
+                            <small>ranked</small>
+                        </strong>
                     </header>
 
-                    @if ($qualifiedApplicants->isNotEmpty())
-                        <ul class="eoi-decision-list" role="list">
-                            @foreach ($qualifiedApplicants as $qualifiedRow)
+                    @if ($rankedQualifiedApplicants->isNotEmpty())
+                        <div class="eoi-qualified-ranking-rule" role="note">
+                            <span class="eoi-qualified-ranking-rule__icon" aria-hidden="true"><i class="bi bi-trophy-fill"></i></span>
+                            <div>
+                                <strong>All qualified applicants ranked with a clear progression decision</strong>
+                                <p>Ranks 1&ndash;{{ \App\Services\EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT }} are proceeding. Rank {{ \App\Services\EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT + 1 }} onward remains visible in this ranked display as not proceeding. Fully Qualified comes first, followed by the highest share of Qualified panel decisions; exact ties use applicant name. Published proposal-round candidate records remain unchanged.</p>
+                            </div>
+                            <span class="eoi-qualified-ranking-summary" aria-label="Qualification progression totals">
+                                <b class="is-proceeding"><i class="feather-arrow-up-right" aria-hidden="true"></i>{{ number_format($qualifiedShortlist->count()) }} proceeding</b>
+                                @if ($qualifiedOutsideShortlist->isNotEmpty())
+                                    <b class="is-not-proceeding"><i class="feather-x-circle" aria-hidden="true"></i>{{ number_format($qualifiedOutsideShortlist->count()) }} not proceeding</b>
+                                @endif
+                            </span>
+                        </div>
+
+                        <ol class="eoi-qualified-grid" aria-label="All ranked qualified applicants; first eight proceeding">
+                            @foreach ($rankedQualifiedApplicants as $qualifiedRow)
                                 @php
                                     $qualifiedApplicant = $qualifiedRow['applicant'];
                                     $qualifiedOutcome = $qualifiedRow['outcome'];
+                                    $qualifiedRank = (int) ($qualifiedRow['qualification_rank'] ?? $loop->iteration);
+                                    $qualifiedProgression = $qualifiedRow['qualified_shortlist_status']
+                                        ?? ((bool) ($qualifiedRow['within_qualified_shortlist']
+                                            ?? ($qualifiedRank <= \App\Services\EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT))
+                                            ? 'proceeding'
+                                            : 'not_proceeding');
+                                    $qualifiedIsProceeding = $qualifiedProgression === 'proceeding';
+                                    $qualifiedProgressionClass = str_replace('_', '-', $qualifiedProgression);
+                                    $qualifiedOrdinal = match ($qualifiedRank) {
+                                        1 => '1st',
+                                        2 => '2nd',
+                                        3 => '3rd',
+                                        default => $qualifiedRank.'th',
+                                    };
                                 @endphp
                                 <li
-                                    class="eoi-decision-person"
+                                    class="eoi-qualified-card eoi-qualified-card--{{ $qualifiedOutcome['code'] }} eoi-qualified-card--rank-{{ $qualifiedRank }} eoi-qualified-card--{{ $qualifiedProgressionClass }}"
                                     data-summary-outcome="qualified"
                                     data-summary-applicant="{{ $qualifiedApplicant->id }}"
                                     data-qualified-applicant="{{ $qualifiedApplicant->id }}"
+                                    data-qualified-rank="{{ $qualifiedRank }}"
+                                    data-qualified-progression="{{ $qualifiedProgressionClass }}"
                                 >
-                                    <span class="eoi-decision-avatar" aria-hidden="true">
-                                        {{ Illuminate\Support\Str::upper(Illuminate\Support\Str::substr($qualifiedApplicant->display_name, 0, 1)) }}
-                                    </span>
-                                    <span class="eoi-decision-identity">
-                                        <strong>{{ $qualifiedApplicant->display_name }}</strong>
-                                        <small>{{ $qualifiedApplicant->procurement_submission_code ?: 'No submission code' }}</small>
-                                    </span>
-                                    <span class="eoi-decision-result">
-                                        <span class="eoi-outcome eoi-outcome--{{ $qualifiedOutcome['code'] }}">
-                                            <i class="{{ $qualifiedOutcome['code'] === 'fully_qualified' ? 'feather-check-circle' : 'feather-minus-circle' }}" aria-hidden="true"></i>
-                                            {{ $qualifiedOutcome['label'] }}
+                                    <div class="eoi-qualified-card__top">
+                                        <span class="eoi-qualified-sequence">Ranked position <strong>{{ $qualifiedOrdinal }}</strong></span>
+                                        <span class="eoi-qualified-card__rank-status">
+                                            <span class="eoi-qualified-progression eoi-qualified-progression--{{ $qualifiedProgressionClass }}">
+                                                <i class="{{ $qualifiedIsProceeding ? 'feather-arrow-up-right' : 'feather-x-circle' }}" aria-hidden="true"></i>
+                                                {{ $qualifiedIsProceeding ? 'Proceeding' : 'Not proceeding' }}
+                                            </span>
+                                            <span class="eoi-qualified-trophy" role="img" aria-label="Ranked {{ $qualifiedOrdinal }}">
+                                                <i class="bi bi-trophy-fill" aria-hidden="true"></i>
+                                                <b>{{ $qualifiedRank }}</b>
+                                            </span>
                                         </span>
-                                        <small>{{ $qualifiedRow['completed_tasks'] }}/{{ $qualifiedRow['expected_tasks'] }} panel tasks</small>
-                                    </span>
-                                    <a
-                                        class="eoi-decision-evidence"
-                                        href="#eoi-applicant-{{ $qualifiedApplicant->id }}"
-                                        data-eoi-open-applicant="{{ $qualifiedApplicant->id }}"
-                                        aria-label="View panel evidence for {{ $qualifiedApplicant->display_name }}"
-                                    >
-                                        Evidence <i class="feather-arrow-right" aria-hidden="true"></i>
-                                    </a>
+                                    </div>
+
+                                    <div class="eoi-qualified-card__identity">
+                                        <span class="eoi-qualified-avatar" aria-hidden="true">
+                                            {{ Illuminate\Support\Str::upper(Illuminate\Support\Str::substr($qualifiedApplicant->display_name, 0, 1)) }}
+                                        </span>
+                                        <div>
+                                            <h6>{{ $qualifiedApplicant->display_name }}</h6>
+                                            <p>{{ $qualifiedApplicant->procurement_submission_code ?: 'No submission code' }}</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="eoi-qualified-card__metrics" aria-label="Qualification evidence counts">
+                                        <span><small>Qualified</small><strong>{{ number_format($qualifiedRow['counts']['qualified'] ?? 0) }} Q</strong></span>
+                                        <span><small>Average</small><strong>{{ number_format($qualifiedRow['counts']['average_qualified'] ?? 0) }} AQ</strong></span>
+                                        <span><small>Panel tasks</small><strong>{{ $qualifiedRow['completed_tasks'] }}/{{ $qualifiedRow['expected_tasks'] }}</strong></span>
+                                    </div>
+
+                                    <div class="eoi-qualified-card__route">
+                                        <span><i class="feather-check-circle" aria-hidden="true"></i> Final panel outcome</span>
+                                        <strong>
+                                            <span class="eoi-outcome eoi-outcome--{{ $qualifiedOutcome['code'] }}">
+                                                <i class="{{ $qualifiedOutcome['code'] === 'fully_qualified' ? 'feather-check-circle' : 'feather-minus-circle' }}" aria-hidden="true"></i>
+                                                {{ $qualifiedOutcome['label'] }}
+                                            </span>
+                                        </strong>
+                                        <a
+                                            href="#eoi-applicant-{{ $qualifiedApplicant->id }}"
+                                            data-eoi-open-applicant="{{ $qualifiedApplicant->id }}"
+                                            aria-label="View panel evidence for {{ $qualifiedApplicant->display_name }}"
+                                        >
+                                            Evidence <i class="feather-arrow-right" aria-hidden="true"></i>
+                                        </a>
+                                    </div>
                                 </li>
                             @endforeach
-                        </ul>
+                        </ol>
                     @else
                         <div class="eoi-decision-empty">
                             <i class="feather-clock" aria-hidden="true"></i>
@@ -763,6 +834,11 @@
                             'not_qualified' => 'feather-x-circle',
                             default => 'feather-clock',
                         };
+                        $progression = $row['progression'] ?? [
+                            'label' => $row['can_advance'] ? 'Proceeding' : 'Not proceeding',
+                            'workflow' => $row['next_stage'],
+                            'note' => '',
+                        ];
                     @endphp
 
                     <details
@@ -829,7 +905,7 @@
                                     {{ $outcome['label'] }}
                                 </span>
                                 <small>
-                                    Next stage: <strong>{{ $row['next_stage'] }}</strong>
+                                    Current workflow: <strong>{{ $progression['workflow'] }}</strong>
                                 </small>
                             </span>
 
@@ -845,8 +921,8 @@
                                 </span>
                                 <div>
                                     <span class="eoi-eyebrow">{{ $row['panel_complete'] ? 'Panel determination' : 'Current panel signal' }}</span>
-                                    <h6>{{ $outcome['label'] }} &mdash; {{ $row['next_stage'] }}</h6>
-                                    <p>{{ $outcome['description'] }}</p>
+                                    <h6>{{ $outcome['label'] }} &mdash; {{ $progression['workflow'] }}</h6>
+                                    <p>{{ $outcome['description'] }} @if ($progression['note']) {{ $progression['note'] }} @endif</p>
                                 </div>
                                 <div class="eoi-determination-meta">
                                     <span>{{ $row['total_decisions'] }} decision(s)</span>
@@ -876,8 +952,8 @@
                                     <strong>{{ $row['panel_complete'] ? 'Complete' : 'In progress' }}</strong>
                                 </div>
                                 <div>
-                                    <span>Progression</span>
-                                    <strong>{{ $row['can_advance'] ? 'Approved' : 'Not approved' }}</strong>
+                                    <span>Current shortlist</span>
+                                    <strong>{{ $progression['label'] }}</strong>
                                 </div>
                             </div>
 
@@ -1440,15 +1516,17 @@
             background: #fbfefc;
             display: grid;
             gap: 14px;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            max-height: 610px;
-            overflow: auto;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+            list-style: none;
+            margin: 0;
             padding: 18px;
         }
 
         .eoi-qualified-card {
             --qualified-accent: #15803d;
             --qualified-soft: #f0fdf4;
+            --qualified-rank: #15803d;
+            --qualified-rank-soft: #ecfdf3;
             background: #fff;
             border: 1px solid #d9e8df;
             border-top: 4px solid var(--qualified-accent);
@@ -1458,6 +1536,8 @@
             flex-direction: column;
             min-width: 0;
             overflow: hidden;
+            break-inside: avoid;
+            page-break-inside: avoid;
         }
 
         .eoi-qualified-card--average_qualified {
@@ -1465,18 +1545,112 @@
             --qualified-soft: #fffbeb;
         }
 
+        .eoi-qualified-card--rank-1 {
+            --qualified-rank: #a16207;
+            --qualified-rank-soft: #fff7d6;
+            border-top-color: #d8a00d;
+            box-shadow: 0 12px 26px rgba(161, 98, 7, .12);
+        }
+
+        .eoi-qualified-card--rank-2 {
+            --qualified-rank: #5f6b76;
+            --qualified-rank-soft: #eef1f4;
+            border-top-color: #98a2ad;
+        }
+
+        .eoi-qualified-card--rank-3 {
+            --qualified-rank: #9a4f27;
+            --qualified-rank-soft: #fff0e6;
+            border-top-color: #b96b3f;
+        }
+
+        .eoi-qualified-card--not-proceeding {
+            --qualified-accent: #64748b;
+            --qualified-soft: #f1f5f9;
+            --qualified-rank: #64748b;
+            --qualified-rank-soft: #f1f5f9;
+            background: #fbfcfd;
+            border-color: #d8dee8;
+            border-top-color: #64748b;
+        }
+
         .eoi-qualified-card__top {
             align-items: center;
+            background: linear-gradient(120deg, var(--qualified-rank-soft), #fff 72%);
+            border-bottom: 1px solid #edf1f4;
             display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
             justify-content: space-between;
-            padding: 11px 14px 5px;
+            padding: 9px 12px;
         }
 
         .eoi-qualified-sequence {
-            color: #98a2b3;
+            color: #7c8998;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .eoi-qualified-sequence strong {
+            color: var(--qualified-rank);
+            font-size: 12px;
+            margin-left: 4px;
+        }
+
+        .eoi-qualified-card__rank-status {
+            align-items: center;
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-left: auto;
+        }
+
+        .eoi-qualified-progression {
+            align-items: center;
+            border: 1px solid;
+            border-radius: 999px;
+            display: inline-flex;
+            font-size: 8.5px;
+            font-weight: 850;
+            gap: 4px;
+            min-height: 27px;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
+
+        .eoi-qualified-progression--proceeding {
+            background: #ecfdf3;
+            border-color: #a7e0bd;
+            color: #087443;
+        }
+
+        .eoi-qualified-progression--not-proceeding {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            color: #475569;
+        }
+
+        .eoi-qualified-trophy {
+            align-items: center;
+            background: var(--qualified-rank-soft);
+            border: 1px solid #c8decf;
+            border-color: color-mix(in srgb, var(--qualified-rank) 28%, white);
+            border-radius: 999px;
+            color: var(--qualified-rank);
+            display: inline-flex;
+            font-size: 12px;
+            gap: 5px;
+            justify-content: center;
+            min-height: 29px;
+            min-width: 48px;
+            padding: 4px 8px;
+        }
+
+        .eoi-qualified-trophy b {
             font-size: 10px;
             font-weight: 900;
-            letter-spacing: .12em;
         }
 
         .eoi-qualified-card__identity {
@@ -1503,6 +1677,10 @@
 
         .eoi-qualified-card--average_qualified .eoi-qualified-avatar {
             border-color: #fde68a;
+        }
+
+        .eoi-qualified-card--not-proceeding .eoi-qualified-avatar {
+            border-color: #cbd5e1;
         }
 
         .eoi-qualified-card__identity > div {
@@ -1546,7 +1724,7 @@
         .eoi-qualified-card__metrics small {
             color: #7c899b;
             display: block;
-            font-size: 8px;
+            font-size: 9px;
             font-weight: 800;
             letter-spacing: .045em;
             text-transform: uppercase;
@@ -1582,6 +1760,12 @@
             color: var(--qualified-accent);
             font-size: 11px;
             grid-column: 1;
+        }
+
+        .eoi-qualified-card__route > strong .eoi-outcome {
+            display: inline-flex;
+            font-size: 8px;
+            margin-top: 3px;
         }
 
         .eoi-qualified-card__route > a {
@@ -1658,6 +1842,72 @@
             color: #92400e;
         }
 
+        .eoi-qualified-ranking-rule {
+            align-items: center;
+            background: linear-gradient(110deg, #fffbea, #f0fdf4 72%);
+            border-bottom: 1px solid #dce9df;
+            display: grid;
+            gap: 11px;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            padding: 11px 15px;
+        }
+
+        .eoi-qualified-ranking-rule__icon {
+            align-items: center;
+            background: #fff3bf;
+            border: 1px solid #f0d77a;
+            border-radius: 10px;
+            color: #9a6700;
+            display: inline-flex;
+            font-size: 17px;
+            height: 38px;
+            justify-content: center;
+            width: 38px;
+        }
+
+        .eoi-qualified-ranking-rule strong {
+            color: #254432;
+            display: block;
+            font-size: 11px;
+            font-weight: 850;
+        }
+
+        .eoi-qualified-ranking-rule p {
+            color: #667085;
+            font-size: 9.5px;
+            line-height: 1.5;
+            margin: 2px 0 0;
+        }
+
+        .eoi-qualified-ranking-summary {
+            align-items: flex-end;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .eoi-qualified-ranking-summary b {
+            align-items: center;
+            background: #fff;
+            border: 1px solid;
+            border-radius: 999px;
+            display: inline-flex;
+            font-size: 9px;
+            gap: 4px;
+            padding: 6px 9px;
+            white-space: nowrap;
+        }
+
+        .eoi-qualified-ranking-summary .is-proceeding {
+            border-color: #a7e0bd;
+            color: #087443;
+        }
+
+        .eoi-qualified-ranking-summary .is-not-proceeding {
+            border-color: #cbd5e1;
+            color: #475569;
+        }
+
         .eoi-decision-summary-grid {
             background: #f8fafc;
             display: grid;
@@ -1678,6 +1928,10 @@
             overflow: hidden;
         }
 
+        .eoi-decision-group--qualified {
+            grid-column: 1 / -1;
+        }
+
         .eoi-decision-group--stopped {
             --decision-accent: #b42318;
             --decision-border: #fecaca;
@@ -1688,7 +1942,6 @@
             --decision-accent: #b45309;
             --decision-border: #fde68a;
             --decision-soft: #fffbeb;
-            grid-column: 1 / -1;
         }
 
         .eoi-decision-group__header {
@@ -1739,6 +1992,14 @@
             justify-content: center;
             min-width: 30px;
             padding: 0 8px;
+        }
+
+        .eoi-decision-group__header > strong small {
+            font-size: 8px;
+            font-weight: 700;
+            margin-left: 3px;
+            opacity: .8;
+            white-space: nowrap;
         }
 
         .eoi-decision-list {
@@ -3240,6 +3501,17 @@
                 justify-self: start;
             }
 
+            .eoi-qualified-ranking-rule {
+                align-items: start;
+                grid-template-columns: auto minmax(0, 1fr);
+            }
+
+            .eoi-qualified-ranking-summary {
+                grid-column: 2;
+                align-items: flex-start;
+                justify-self: start;
+            }
+
             .eoi-decision-summary-grid {
                 grid-template-columns: 1fr;
                 padding: 12px;
@@ -3458,7 +3730,8 @@
             .eoi-list-status,
             .eoi-summary-chevron,
             .eoi-qualified-card__route > a,
-            .eoi-decision-evidence {
+            .eoi-decision-evidence,
+            .tp-workspace {
                 display: none !important;
             }
 

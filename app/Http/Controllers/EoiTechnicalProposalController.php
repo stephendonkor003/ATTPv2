@@ -16,6 +16,7 @@ use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\ProcurementAuditLog;
 use App\Services\EoiTechnicalProposalService;
+use App\Services\EvaluationReworkGuard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +32,8 @@ class EoiTechnicalProposalController extends Controller
         Procurement $procurement,
         EoiTechnicalProposalRound $round,
         EoiTechnicalProposalCandidate $candidate,
-        EoiTechnicalProposalService $service
+        EoiTechnicalProposalService $service,
+        EvaluationReworkGuard $reworkGuard
     ): RedirectResponse {
         $this->assertNestedScope($request, $procurement, $round, $candidate);
 
@@ -48,23 +50,41 @@ class EoiTechnicalProposalController extends Controller
             'documents.max' => 'You may capture up to 20 files in one revision.',
         ]);
 
-        $proposalSubmission = $service->createSubmission(
+        $proposalSubmission = DB::transaction(function () use (
             $candidate,
-            array_values(array_filter($request->file('documents', []))),
-            $request->user(),
-            EoiTechnicalProposalSubmission::SOURCE_ADMIN_CAPTURE,
-            $validated['received_via'],
-            $validated['received_at'],
-            [
-                'cover_note' => $validated['cover_note'] ?? null,
-                'capture_note' => $validated['capture_note'],
-            ]
-        );
+            $procurement,
+            $request,
+            $reworkGuard,
+            $service,
+            $validated
+        ): EoiTechnicalProposalSubmission {
+            $lockedProcurement = Procurement::query()
+                ->whereKey($procurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedApplicant = FormSubmission::query()
+                ->whereKey($candidate->form_submission_id)
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $reworkGuard->assertTechnicalProposalCanContinue($lockedApplicant);
+
+            return $service->createSubmission(
+                $candidate,
+                array_values(array_filter($request->file('documents', []))),
+                $request->user(),
+                EoiTechnicalProposalSubmission::SOURCE_ADMIN_CAPTURE,
+                $validated['received_via'],
+                $validated['received_at'],
+                [
+                    'cover_note' => $validated['cover_note'] ?? null,
+                    'capture_note' => $validated['capture_note'],
+                ]
+            );
+
+        }, 3);
 
         $this->syncLegacyCommunication($round, $candidate, $proposalSubmission, $request);
-        $candidate->applicant?->forceFill([
-            'status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
-        ])->save();
         $this->audit($request, $procurement, 'technical_proposal_captured', [
             'round_id' => $round->getKey(),
             'candidate_id' => $candidate->getKey(),
@@ -84,7 +104,8 @@ class EoiTechnicalProposalController extends Controller
         Procurement $procurement,
         EoiTechnicalProposalRound $round,
         EoiTechnicalProposalCandidate $candidate,
-        EoiTechnicalProposalService $service
+        EoiTechnicalProposalService $service,
+        EvaluationReworkGuard $reworkGuard
     ): RedirectResponse {
         $this->assertNestedScope($request, $procurement, $round, $candidate);
         $candidate->loadMissing('latestSubmission');
@@ -104,11 +125,23 @@ class EoiTechnicalProposalController extends Controller
             $candidate,
             $procurement,
             $request,
+            $reworkGuard,
             $round,
             $rules,
             $service,
             $validated
         ): void {
+            $lockedProcurement = Procurement::query()
+                ->whereKey($procurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedApplicant = FormSubmission::query()
+                ->whereKey($candidate->form_submission_id)
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $reworkGuard->assertTechnicalProposalCanContinue($lockedApplicant);
+
             foreach ($validated['findings'] as $ruleId => $findingData) {
                 $service->applyRuleFinding(
                     $candidate,
@@ -127,8 +160,8 @@ class EoiTechnicalProposalController extends Controller
                 EoiTechnicalProposalCandidate::STATUS_DISQUALIFIED => FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
                 default => FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
             };
-            $candidate->applicant?->forceFill(['status' => $applicantStatus])->save();
-            $this->audit($request, $procurement, 'technical_proposal_reviewed', [
+            $lockedApplicant->forceFill(['status' => $applicantStatus])->save();
+            $this->audit($request, $lockedProcurement, 'technical_proposal_reviewed', [
                 'round_id' => $round->getKey(),
                 'candidate_id' => $candidate->getKey(),
                 'form_submission_id' => $candidate->form_submission_id,

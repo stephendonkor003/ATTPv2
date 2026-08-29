@@ -284,6 +284,33 @@ it('keeps incomplete findings under review and qualifies only when all mandatory
         ->toBe(EoiTechnicalProposalCandidate::STATUS_UNDER_REVIEW);
 });
 
+it('does not qualify a checklist-complete proposal with a prohibited electronic receipt', function () {
+    $service = new EoiTechnicalProposalService;
+    $firstRule = technicalProposalRuleFixture();
+    $secondRule = technicalProposalRuleFixture();
+    $round = technicalProposalRoundFixture([
+        'portal_requirement' => EoiTechnicalProposalRound::REQUIREMENT_NOT_ALLOWED,
+        'email_requirement' => EoiTechnicalProposalRound::REQUIREMENT_NOT_ALLOWED,
+        'physical_requirement' => EoiTechnicalProposalRound::REQUIREMENT_REQUIRED,
+    ], [$firstRule, $secondRule]);
+    $physical = technicalProposalSubmissionFixture(1, EoiTechnicalProposalSubmission::CHANNEL_PHYSICAL);
+    $electronic = technicalProposalSubmissionFixture(2, EoiTechnicalProposalSubmission::CHANNEL_EMAIL);
+    $firstResolved = technicalProposalRuleApplicationFixture(
+        $firstRule,
+        EoiTechnicalProposalRuleApplication::FINDING_COMPLIANT
+    );
+    $secondResolved = technicalProposalRuleApplicationFixture(
+        $secondRule,
+        EoiTechnicalProposalRuleApplication::FINDING_COMPLIANT
+    );
+
+    expect($service->deriveCandidateStatus(technicalProposalCandidateFixture(
+        $round,
+        [$physical, $electronic],
+        [$firstResolved, $secondResolved]
+    )))->toBe(EoiTechnicalProposalCandidate::STATUS_UNDER_REVIEW);
+});
+
 it('allows an optional-only checklist to resolve after its recorded findings and channels pass', function () {
     $service = new EoiTechnicalProposalService;
     $optionalRule = technicalProposalRuleFixture(false);

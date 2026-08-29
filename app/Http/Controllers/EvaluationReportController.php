@@ -732,9 +732,11 @@ class EvaluationReportController extends Controller
             'An Expression of Interest evaluation was not found for this procurement.'
         );
 
+        $supportingData = $this->eoiPdfSupportingData($procurement);
+
         $pdf = Pdf::loadView(
             'reports.evaluations.pdf.eoi-procurement',
-            array_merge(['report' => $report], PdfBranding::viewData())
+            array_merge(['report' => $report], $supportingData, PdfBranding::viewData())
         )->setPaper('a4', 'landscape');
 
         $name = Str::slug($procurement->reference_no ?: $procurement->title ?: $procurement->getKey());
@@ -746,7 +748,7 @@ class EvaluationReportController extends Controller
         $response->headers->set('Pragma', 'no-cache');
         $response->headers->set('Expires', '0');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
-        $response->headers->set('X-EOI-PDF-Layout', 'compact-v2');
+        $response->headers->set('X-EOI-PDF-Layout', 'detailed-v3');
 
         return $response;
     }
@@ -764,10 +766,23 @@ class EvaluationReportController extends Controller
             'An Expression of Interest evaluation was not found for this procurement.'
         );
 
-        return $this->downloadWorkbook(
-            new EvaluationProcurementWorkbookExport($this->eoiWorkbookRows($report)),
+        $supportingData = $this->eoiExportSupportingData($procurement);
+
+        $response = $this->downloadWorkbook(
+            new EvaluationProcurementWorkbookExport($this->eoiWorkbookRows(
+                $report,
+                $supportingData['technicalProposalRounds'],
+                $supportingData['communications']
+            )),
             $this->methodReportFilename(Evaluation::TYPE_EOI, $procurement).'.xlsx'
         );
+
+        $response->headers->set('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('Expires', '0');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+
+        return $response;
     }
 
     public function eoiProcurementCsv(
@@ -783,13 +798,25 @@ class EvaluationReportController extends Controller
             'An Expression of Interest evaluation was not found for this procurement.'
         );
 
-        [$headings, $rows] = $this->eoiCsvRows($report);
+        $supportingData = $this->eoiExportSupportingData($procurement);
+        [$headings, $rows] = $this->eoiCsvRows(
+            $report,
+            $supportingData['technicalProposalRounds'],
+            $supportingData['communications']
+        );
 
-        return $this->streamCsv(
+        $response = $this->streamCsv(
             $this->methodReportFilename(Evaluation::TYPE_EOI, $procurement).'.csv',
             $headings,
             $rows
         );
+
+        $response->headers->set('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+        $response->headers->set('Expires', '0');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+
+        return $response;
     }
 
     private function downloadSubmissionReport(EvaluationSubmission $submission, bool $anonymised = false)
@@ -1631,124 +1658,659 @@ class EvaluationReportController extends Controller
         return [$headings, $rows];
     }
 
-    private function eoiWorkbookRows(array $report): array
-    {
+    private function eoiWorkbookRows(
+        array $report,
+        ?Collection $technicalProposalRounds = null,
+        ?Collection $communications = null
+    ): array {
         $stats = $report['stats'];
+        $technicalProposalRounds ??= collect();
+        $communications ??= collect();
         $overview = [
             ['Report field', 'Value'],
             ['Procurement', $this->safeSpreadsheetValue($report['procurement']->title)],
             ['Reference', $this->safeSpreadsheetValue($report['procurement']->reference_no ?: 'N/A')],
             ['Evaluation method', 'Expression of Interest'],
             ['Total applicants', $stats['total_applicants']],
+            ['Panel-qualified applicants', $stats['advance']],
+            ['Current shortlist proceeding', $stats['shortlist_proceeding'] ?? $stats['qualified_shortlist'] ?? 0],
+            ['Panel-qualified, not proceeding', $stats['shortlist_not_proceeding'] ?? $stats['qualified_below_shortlist'] ?? 0],
             ['Fully qualified', $stats['fully_qualified']],
             ['Average qualified', $stats['average_qualified']],
             ['Not qualified (final)', $stats['final_not_qualified'] ?? $stats['not_qualified']],
             ['Panel incomplete', $stats['panel_incomplete'] ?? $stats['pending']],
-            ['Advancing', $stats['advance']],
             ['Panel members', $stats['panel_members']],
             ['Submitted evaluations', $stats['submitted_evaluations']],
+            ['Current shortlist rule', 'Ranks 1-'.EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT.' proceed; ranks '.(EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT + 1).' onward remain visible as not proceeding.'],
             ['Generated at', $report['generated_at']->format('Y-m-d H:i:s')],
         ];
-        $outcomes = [[
+        $decisionSummary = [
+            ['Decision group', 'Applicants', 'Current workflow meaning'],
+            ['Proceeding (current top '.EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT.')', $stats['shortlist_proceeding'] ?? $stats['qualified_shortlist'] ?? 0, 'Panel-qualified and within the current shortlist.'],
+            ['Not proceeding (below current top '.EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT.')', $stats['shortlist_not_proceeding'] ?? $stats['qualified_below_shortlist'] ?? 0, 'Panel-qualified, but outside the current shortlist.'],
+            ['Not qualified', $stats['final_not_qualified'] ?? $stats['not_qualified'], 'Final panel decision stops progression.'],
+            ['Awaiting panel', $stats['panel_incomplete'] ?? $stats['pending'], 'No final routing until every active panel task is complete.'],
+        ];
+        $ranking = [[
+            'Rank',
+            'Shortlist progression',
             'Submission code',
             'Applicant',
-            'Outcome',
-            'Panel status',
+            'Final EOI outcome',
+            'Q',
+            'AQ',
+            'NQ',
             'Panel tasks',
-            'Qualified',
-            'Average qualified',
-            'Not qualified',
-            'Can advance',
-            'Next stage',
+            'Current workflow decision',
+            'Workflow note',
         ]];
 
-        foreach ($report['applicants'] as $row) {
-            $outcomes[] = [
-                $this->safeSpreadsheetValue($row['applicant']->procurement_submission_code ?: 'N/A'),
-                $this->safeSpreadsheetValue($row['applicant']->display_name),
-                $row['outcome']['label'],
-                $row['panel_complete'] ? 'Complete' : 'In progress',
-                $row['completed_tasks'].' / '.$row['expected_tasks'],
-                $row['counts']['qualified'],
-                $row['counts']['average_qualified'],
-                $row['counts']['not_qualified'],
-                $row['can_advance'] ? 'Yes' : 'No',
-                $row['next_stage'],
-            ];
+        foreach (collect($report['qualified_ranking'] ?? []) as $row) {
+            $ranking[] = $this->safeSpreadsheetRow([
+                $row['qualification_rank'] ?? '',
+                data_get($row, 'progression.label', $row['within_qualified_shortlist'] ?? false ? 'Proceeding' : 'Not proceeding'),
+                $row['applicant']->procurement_submission_code ?: 'N/A',
+                $row['applicant']->display_name,
+                data_get($row, 'outcome.label', ''),
+                data_get($row, 'counts.qualified', 0),
+                data_get($row, 'counts.average_qualified', 0),
+                data_get($row, 'counts.not_qualified', 0),
+                ($row['completed_tasks'] ?? 0).' / '.($row['expected_tasks'] ?? 0),
+                data_get($row, 'progression.workflow', $row['next_stage'] ?? ''),
+                data_get($row, 'progression.note', ''),
+            ]);
         }
 
-        [$decisionHeadings, $decisionRows] = $this->eoiCsvRows($report);
+        $applicantRegister = [[
+            'Register position',
+            'Qualified rank',
+            'Shortlist progression',
+            'Submission code',
+            'Applicant',
+            'Final EOI outcome',
+            'Panel status',
+            'Panel tasks',
+            'Q',
+            'AQ',
+            'NQ',
+            'Panel-qualified',
+            'Current workflow decision',
+            'Workflow note',
+        ]];
+        $panelTasks = [[
+            'Qualified rank',
+            'Shortlist progression',
+            'Submission code',
+            'Applicant',
+            'Evaluation template',
+            'Evaluator',
+            'Evaluator email',
+            'Assignment source',
+            'Task status',
+            'Submitted at',
+            'Q',
+            'AQ',
+            'NQ',
+        ]];
+
+        foreach (collect($report['applicants'] ?? []) as $position => $row) {
+            $applicantRegister[] = $this->safeSpreadsheetRow([
+                $position + 1,
+                $row['qualification_rank'] ?? '',
+                data_get($row, 'progression.label', '—'),
+                $row['applicant']->procurement_submission_code ?: 'N/A',
+                $row['applicant']->display_name,
+                data_get($row, 'outcome.label', ''),
+                ($row['panel_complete'] ?? false) ? 'Complete' : 'In progress',
+                ($row['completed_tasks'] ?? 0).' / '.($row['expected_tasks'] ?? 0),
+                data_get($row, 'counts.qualified', 0),
+                data_get($row, 'counts.average_qualified', 0),
+                data_get($row, 'counts.not_qualified', 0),
+                ($row['can_advance'] ?? false) ? 'Yes' : 'No',
+                data_get($row, 'progression.workflow', $row['next_stage'] ?? ''),
+                data_get($row, 'progression.note', ''),
+            ]);
+
+            foreach (collect($row['evaluation_reports'] ?? []) as $evaluationReport) {
+                foreach (collect($evaluationReport['members'] ?? []) as $member) {
+                    $panelTasks[] = $this->safeSpreadsheetRow([
+                        $row['qualification_rank'] ?? '',
+                        data_get($row, 'progression.label', '—'),
+                        $row['applicant']->procurement_submission_code ?: 'N/A',
+                        $row['applicant']->display_name,
+                        $evaluationReport['evaluation']->name,
+                        $member['name'] ?? 'Unassigned evaluator',
+                        $member['email'] ?? '',
+                        ($member['assigned'] ?? false) ? 'Assigned panel task' : 'Imported record',
+                        $this->eoiEvaluatorTaskStatus($member),
+                        $member['submitted_at']?->format('Y-m-d H:i:s') ?? '',
+                        data_get($member, 'counts.qualified', 0),
+                        data_get($member, 'counts.average_qualified', 0),
+                        data_get($member, 'counts.not_qualified', 0),
+                    ]);
+                }
+            }
+        }
+
+        $proposalRounds = [[
+            'Round',
+            'Title',
+            'Status',
+            'Opened at',
+            'Deadline',
+            'Timezone',
+            'Late policy',
+            'Portal',
+            'Email',
+            'Physical copy',
+            'Rules',
+            'Templates',
+            'Enrolled candidates',
+            'Proposal submissions',
+        ]];
+        $proposalCandidates = [[
+            'Round',
+            'Submission code',
+            'Applicant',
+            'EOI outcome snapshot',
+            'Workflow decision snapshot',
+            'Candidate status',
+            'Invited at',
+            'Proposal revisions',
+            'Last received',
+            'Latest channel',
+            'Late receipt',
+            'Active rule findings',
+            'Disqualifying findings',
+        ]];
+        $proposalRules = [[
+            'Round',
+            'Record type',
+            'Code / file',
+            'Title',
+            'Category / extension',
+            'Mandatory',
+            'Can disqualify',
+            'Description',
+        ]];
+
+        foreach ($technicalProposalRounds as $round) {
+            $candidates = collect($round->candidates ?? []);
+            $proposalRounds[] = $this->safeSpreadsheetRow([
+                $round->round_number,
+                $round->title,
+                Str::headline((string) $round->status),
+                $round->opens_at?->timezone($round->timezone ?: config('app.timezone'))->format('Y-m-d H:i:s') ?? '',
+                $round->deadline_at?->timezone($round->timezone ?: config('app.timezone'))->format('Y-m-d H:i:s') ?? '',
+                $round->timezone,
+                Str::headline(str_replace('_', ' ', (string) $round->late_policy)),
+                Str::headline(str_replace('_', ' ', (string) $round->portal_requirement)),
+                Str::headline(str_replace('_', ' ', (string) $round->email_requirement)),
+                Str::headline(str_replace('_', ' ', (string) $round->physical_requirement)),
+                $round->rules->count(),
+                $round->templates->count(),
+                $candidates->count(),
+                $candidates->sum(fn ($candidate): int => collect($candidate->submissions ?? [])->count()),
+            ]);
+
+            foreach ($candidates as $candidate) {
+                $latestSubmission = collect($candidate->submissions ?? [])
+                    ->sortByDesc('revision_number')
+                    ->first();
+                $activeFindings = collect($candidate->ruleApplications ?? [])
+                    ->whereNull('revoked_at');
+                $proposalCandidates[] = $this->safeSpreadsheetRow([
+                    $round->round_number,
+                    $candidate->applicant?->procurement_submission_code ?: 'N/A',
+                    $candidate->applicant?->display_name ?: 'Applicant unavailable',
+                    $candidate->eoi_outcome_label,
+                    $candidate->workflow_decision,
+                    Str::headline(str_replace('_', ' ', (string) $candidate->status)),
+                    $candidate->invited_at?->format('Y-m-d H:i:s') ?? '',
+                    collect($candidate->submissions ?? [])->count(),
+                    $candidate->last_submitted_at?->format('Y-m-d H:i:s') ?? '',
+                    $latestSubmission?->received_via ? Str::headline($latestSubmission->received_via) : '',
+                    $latestSubmission?->is_late ? 'Yes' : 'No',
+                    $activeFindings->count(),
+                    $activeFindings->where('effect', 'disqualify')->count(),
+                ]);
+            }
+
+            foreach ($round->rules as $rule) {
+                $proposalRules[] = $this->safeSpreadsheetRow([
+                    $round->round_number,
+                    'Rule',
+                    $rule->code,
+                    $rule->title,
+                    Str::headline((string) $rule->category),
+                    $rule->is_mandatory ? 'Yes' : 'No',
+                    $rule->is_disqualifying ? 'Yes' : 'No',
+                    $rule->description,
+                ]);
+            }
+
+            foreach ($round->templates as $template) {
+                $proposalRules[] = $this->safeSpreadsheetRow([
+                    $round->round_number,
+                    'Template',
+                    $template->original_filename,
+                    $template->title,
+                    $template->extension,
+                    '',
+                    '',
+                    $template->description,
+                ]);
+            }
+        }
+
+        $communicationRows = [[
+            'Type',
+            'Subject',
+            'Created at',
+            'Sent at',
+            'Recipients',
+            'Sent',
+            'Queued',
+            'Skipped',
+            'Failed',
+            'Related proposal round',
+        ]];
+        foreach ($communications as $communication) {
+            $communicationRows[] = $this->safeSpreadsheetRow([
+                Str::headline(str_replace('_', ' ', (string) $communication->type)),
+                $communication->subject,
+                $communication->created_at?->format('Y-m-d H:i:s') ?? '',
+                $communication->sent_at?->format('Y-m-d H:i:s') ?? '',
+                $communication->recipients_count ?? 0,
+                $communication->sent_recipients_count ?? 0,
+                $communication->pending_recipients_count ?? 0,
+                $communication->skipped_recipients_count ?? 0,
+                $communication->failed_recipients_count ?? 0,
+                $communication->technical_proposal_round_id ?: '',
+            ]);
+        }
+
+        [$decisionHeadings, $decisionRows] = $this->eoiCsvRows(
+            $report,
+            $technicalProposalRounds,
+            $communications
+        );
 
         return [
             'Overview' => $overview,
-            'Applicant Outcomes' => $outcomes,
-            'Decision Audit' => array_merge([$decisionHeadings], $decisionRows),
+            'Decision Summary' => $decisionSummary,
+            'Qualified Ranking' => $ranking,
+            'Applicant Register' => $applicantRegister,
+            'Panel Tasks' => $panelTasks,
+            'Evidence & Workflow' => array_merge([$decisionHeadings], $decisionRows),
+            'Proposal Rounds' => $proposalRounds,
+            'Proposal Candidates' => $proposalCandidates,
+            'Proposal Rules & Files' => $proposalRules,
+            'Communications' => $communicationRows,
         ];
     }
 
-    private function eoiCsvRows(array $report): array
-    {
+    private function eoiCsvRows(
+        array $report,
+        ?Collection $technicalProposalRounds = null,
+        ?Collection $communications = null
+    ): array {
+        $technicalProposalRounds ??= collect();
+        $communications ??= collect();
         $headings = [
+            'Record type',
             'Procurement reference',
+            'Procurement title',
+            'Qualified rank',
+            'Shortlist progression',
             'Submission code',
             'Applicant',
-            'Panel outcome / signal',
-            'Panel complete',
-            'Can advance',
-            'Evaluation',
+            'Final EOI outcome',
+            'Panel completion',
+            'Panel tasks',
+            'Q decisions',
+            'AQ decisions',
+            'NQ decisions',
+            'EOI panel-qualified',
+            'Current workflow decision',
+            'Workflow note',
+            'Evaluation template',
             'Section',
             'Criterion',
+            'Criterion panel outcome',
+            'Criterion decision totals',
             'Evaluator',
-            'Decision',
-            'Comment',
+            'Evaluator task status',
+            'Evaluator submitted at',
+            'Evaluator decision',
+            'Evaluator comment',
+            'Technical proposal round',
+            'Proposal status',
+            'Proposal deadline',
+            'Proposal rule / template',
+            'Communication type',
+            'Communication subject',
+            'Delivery status',
         ];
         $rows = [];
+        $procurement = $report['procurement'];
 
-        foreach ($report['applicants'] as $applicantRow) {
-            $hasAssessment = false;
+        $append = function (array $values) use (&$rows, $procurement): void {
+            $rows[] = $this->safeSpreadsheetRow([
+                $values['record_type'] ?? '',
+                $procurement->reference_no ?: 'N/A',
+                $procurement->title,
+                $values['qualification_rank'] ?? '',
+                $values['shortlist_progression'] ?? '',
+                $values['submission_code'] ?? '',
+                $values['applicant'] ?? '',
+                $values['outcome'] ?? '',
+                $values['panel_completion'] ?? '',
+                $values['panel_tasks'] ?? '',
+                $values['qualified_count'] ?? '',
+                $values['average_qualified_count'] ?? '',
+                $values['not_qualified_count'] ?? '',
+                $values['can_advance'] ?? '',
+                $values['workflow'] ?? '',
+                $values['workflow_note'] ?? '',
+                $values['evaluation'] ?? '',
+                $values['section'] ?? '',
+                $values['criterion'] ?? '',
+                $values['criterion_outcome'] ?? '',
+                $values['criterion_totals'] ?? '',
+                $values['evaluator'] ?? '',
+                $values['evaluator_status'] ?? '',
+                $values['submitted_at'] ?? '',
+                $values['decision'] ?? '',
+                $values['comment'] ?? '',
+                $values['proposal_round'] ?? '',
+                $values['proposal_status'] ?? '',
+                $values['proposal_deadline'] ?? '',
+                $values['proposal_rule_or_template'] ?? '',
+                $values['communication_type'] ?? '',
+                $values['communication_subject'] ?? '',
+                $values['delivery_status'] ?? '',
+            ]);
+        };
 
-            foreach ($applicantRow['evaluation_reports'] as $evaluationReport) {
-                foreach ($evaluationReport['criteria'] as $criterionRow) {
-                    foreach ($criterionRow['assessments'] as $assessment) {
-                        $hasAssessment = true;
-                        $rows[] = array_map(
-                            fn ($value) => $this->safeSpreadsheetValue($value),
-                            [
-                                $report['procurement']->reference_no ?: 'N/A',
-                                $applicantRow['applicant']->procurement_submission_code ?: 'N/A',
-                                $applicantRow['applicant']->display_name,
-                                $applicantRow['outcome']['label'],
-                                $applicantRow['panel_complete'] ? 'Yes' : 'No',
-                                $applicantRow['can_advance'] ? 'Yes' : 'No',
-                                $evaluationReport['evaluation']->name,
-                                $criterionRow['section']->name,
-                                $criterionRow['criterion']->name,
-                                $assessment['evaluator_name'],
-                                $assessment['label'],
-                                $assessment['comment'],
-                            ]
-                        );
+        foreach (collect($report['applicants'] ?? []) as $applicantRow) {
+            $base = [
+                'qualification_rank' => $applicantRow['qualification_rank'] ?? '',
+                'shortlist_progression' => data_get($applicantRow, 'progression.label', '—'),
+                'submission_code' => $applicantRow['applicant']->procurement_submission_code ?: 'N/A',
+                'applicant' => $applicantRow['applicant']->display_name,
+                'outcome' => data_get($applicantRow, 'outcome.label', ''),
+                'panel_completion' => ($applicantRow['panel_complete'] ?? false) ? 'Complete' : 'In progress',
+                'panel_tasks' => ($applicantRow['completed_tasks'] ?? 0).' / '.($applicantRow['expected_tasks'] ?? 0),
+                'qualified_count' => data_get($applicantRow, 'counts.qualified', 0),
+                'average_qualified_count' => data_get($applicantRow, 'counts.average_qualified', 0),
+                'not_qualified_count' => data_get($applicantRow, 'counts.not_qualified', 0),
+                'can_advance' => ($applicantRow['can_advance'] ?? false) ? 'Yes' : 'No',
+                'workflow' => data_get($applicantRow, 'progression.workflow', $applicantRow['next_stage'] ?? ''),
+                'workflow_note' => data_get($applicantRow, 'progression.note', ''),
+            ];
+            $append([...$base, 'record_type' => 'Applicant outcome']);
+
+            foreach (collect($applicantRow['evaluation_reports'] ?? []) as $evaluationReport) {
+                foreach (collect($evaluationReport['members'] ?? []) as $member) {
+                    $append([...$base,
+                        'record_type' => 'Panel task',
+                        'evaluation' => $evaluationReport['evaluation']->name,
+                        'evaluator' => $member['name'] ?? 'Unassigned evaluator',
+                        'evaluator_status' => $this->eoiEvaluatorTaskStatus($member),
+                        'submitted_at' => $member['submitted_at']?->format('Y-m-d H:i:s') ?? '',
+                    ]);
+                }
+
+                foreach (collect($evaluationReport['criteria'] ?? []) as $criterionRow) {
+                    $members = collect($evaluationReport['members'] ?? []);
+
+                    if ($members->isEmpty()) {
+                        $append([...$base,
+                            'record_type' => 'Criterion evidence',
+                            'evaluation' => $evaluationReport['evaluation']->name,
+                            'section' => $criterionRow['section']->name,
+                            'criterion' => $criterionRow['criterion']->name,
+                            'criterion_outcome' => data_get($criterionRow, 'outcome.label', ''),
+                            'criterion_totals' => $this->eoiDecisionTotals($criterionRow['counts'] ?? []),
+                        ]);
+                    }
+
+                    foreach ($members as $member) {
+                        $assessment = collect($criterionRow['assessments'] ?? [])
+                            ->firstWhere('member_key', $member['key'] ?? null);
+                        $append([...$base,
+                            'record_type' => 'Criterion evidence',
+                            'evaluation' => $evaluationReport['evaluation']->name,
+                            'section' => $criterionRow['section']->name,
+                            'criterion' => $criterionRow['criterion']->name,
+                            'criterion_outcome' => data_get($criterionRow, 'outcome.label', ''),
+                            'criterion_totals' => $this->eoiDecisionTotals($criterionRow['counts'] ?? []),
+                            'evaluator' => $member['name'] ?? 'Unassigned evaluator',
+                            'evaluator_status' => $this->eoiEvaluatorTaskStatus($member),
+                            'submitted_at' => $member['submitted_at']?->format('Y-m-d H:i:s') ?? '',
+                            'decision' => $assessment['label'] ?? ($member['submitted'] ?? false ? 'Decision not recorded' : 'Awaiting submission'),
+                            'comment' => $assessment['comment'] ?? '',
+                        ]);
                     }
                 }
             }
+        }
 
-            if (! $hasAssessment) {
-                $rows[] = array_map(
-                    fn ($value) => $this->safeSpreadsheetValue($value),
-                    [
-                        $report['procurement']->reference_no ?: 'N/A',
-                        $applicantRow['applicant']->procurement_submission_code ?: 'N/A',
-                        $applicantRow['applicant']->display_name,
-                        $applicantRow['outcome']['label'],
-                        $applicantRow['panel_complete'] ? 'Yes' : 'No',
-                        $applicantRow['can_advance'] ? 'Yes' : 'No',
-                        '', '', '', '', '', '',
-                    ]
-                );
+        foreach ($technicalProposalRounds as $round) {
+            $roundLabel = 'Round '.($round->round_number ?: '');
+            $deadline = $round->deadline_at?->timezone($round->timezone ?: config('app.timezone'))->format('Y-m-d H:i:s') ?? '';
+            $append([
+                'record_type' => 'Technical proposal round',
+                'proposal_round' => $roundLabel,
+                'proposal_status' => Str::headline((string) $round->status),
+                'proposal_deadline' => $deadline,
+                'proposal_rule_or_template' => $round->title,
+            ]);
+
+            foreach (collect($round->candidates ?? []) as $candidate) {
+                $latestSubmission = collect($candidate->submissions ?? [])
+                    ->sortByDesc('revision_number')
+                    ->first();
+                $append([
+                    'record_type' => 'Technical proposal candidate',
+                    'submission_code' => $candidate->applicant?->procurement_submission_code ?: 'N/A',
+                    'applicant' => $candidate->applicant?->display_name ?: 'Applicant unavailable',
+                    'outcome' => $candidate->eoi_outcome_label,
+                    'workflow' => $candidate->workflow_decision,
+                    'proposal_round' => $roundLabel,
+                    'proposal_status' => Str::headline(str_replace('_', ' ', (string) $candidate->status)),
+                    'proposal_deadline' => $deadline,
+                    'proposal_rule_or_template' => collect($candidate->ruleApplications ?? [])
+                        ->whereNull('revoked_at')
+                        ->map(fn ($finding): string => ($finding->rule_title_snapshot ?: 'Rule').': '.Str::headline(str_replace('_', ' ', (string) $finding->finding)))
+                        ->implode('; '),
+                    'submitted_at' => $latestSubmission?->received_at?->format('Y-m-d H:i:s') ?? '',
+                ]);
+            }
+
+            foreach (collect($round->rules ?? []) as $rule) {
+                $append([
+                    'record_type' => 'Technical proposal rule',
+                    'proposal_round' => $roundLabel,
+                    'proposal_status' => Str::headline((string) $round->status),
+                    'proposal_deadline' => $deadline,
+                    'proposal_rule_or_template' => trim(implode(' | ', array_filter([
+                        $rule->code,
+                        $rule->title,
+                        $rule->is_mandatory ? 'Mandatory' : null,
+                        $rule->is_disqualifying ? 'Can disqualify' : null,
+                    ]))),
+                    'comment' => $rule->description,
+                ]);
+            }
+
+            foreach (collect($round->templates ?? []) as $template) {
+                $append([
+                    'record_type' => 'Technical proposal template',
+                    'proposal_round' => $roundLabel,
+                    'proposal_status' => Str::headline((string) $round->status),
+                    'proposal_deadline' => $deadline,
+                    'proposal_rule_or_template' => trim(implode(' | ', array_filter([
+                        $template->title,
+                        $template->original_filename,
+                    ]))),
+                    'comment' => $template->description,
+                ]);
             }
         }
 
+        foreach ($communications as $communication) {
+            $append([
+                'record_type' => 'Communication',
+                'communication_type' => Str::headline(str_replace('_', ' ', (string) $communication->type)),
+                'communication_subject' => $communication->subject,
+                'delivery_status' => implode(' | ', [
+                    ($communication->sent_recipients_count ?? 0).' sent',
+                    ($communication->pending_recipients_count ?? 0).' queued',
+                    ($communication->failed_recipients_count ?? 0).' failed',
+                    ($communication->skipped_recipients_count ?? 0).' skipped',
+                ]),
+                'proposal_round' => $communication->technical_proposal_round_id ?: '',
+                'submitted_at' => $communication->sent_at?->format('Y-m-d H:i:s') ?? '',
+            ]);
+        }
+
         return [$headings, $rows];
+    }
+
+    /**
+     * Lean, read-only data for the PDF. Candidate-level post-qualification
+     * details are intentionally kept in the XLSX/CSV audit instead of inflating
+     * a paged document with every upload and historical revision.
+     *
+     * @return array{communications: Collection, technicalProposalRounds: Collection}
+     */
+    private function eoiPdfSupportingData(Procurement $procurement): array
+    {
+        $communications = EoiReportCommunication::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->withCount([
+                'recipients',
+                'recipients as sent_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SENT),
+                'recipients as pending_recipients_count' => fn ($query) => $query
+                    ->whereIn('delivery_status', [
+                        EoiReportCommunicationRecipient::STATUS_PENDING,
+                        EoiReportCommunicationRecipient::STATUS_PROCESSING,
+                    ]),
+                'recipients as skipped_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SKIPPED),
+                'recipients as failed_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_FAILED),
+            ])
+            ->latest()
+            ->limit(8)
+            ->get();
+
+        $technicalProposalRounds = EoiTechnicalProposalRound::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->withCount([
+                'rules',
+                'templates',
+                'candidates',
+                'candidates as received_candidates_count' => fn ($query) => $query->has('submissions'),
+            ])
+            ->orderByDesc('round_number')
+            ->limit(5)
+            ->get();
+
+        return compact('communications', 'technicalProposalRounds');
+    }
+
+    /**
+     * Read-only workflow and communication context included in the tabular
+     * internal EOI downloads. This preserves detailed candidate history for
+     * audit formats without exposing administration forms or mutating records.
+     *
+     * @return array{communications: Collection, technicalProposalRounds: Collection}
+     */
+    private function eoiExportSupportingData(Procurement $procurement): array
+    {
+        $communications = EoiReportCommunication::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->withCount([
+                'recipients',
+                'recipients as sent_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SENT),
+                'recipients as pending_recipients_count' => fn ($query) => $query
+                    ->whereIn('delivery_status', [
+                        EoiReportCommunicationRecipient::STATUS_PENDING,
+                        EoiReportCommunicationRecipient::STATUS_PROCESSING,
+                    ]),
+                'recipients as skipped_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_SKIPPED),
+                'recipients as failed_recipients_count' => fn ($query) => $query
+                    ->where('delivery_status', EoiReportCommunicationRecipient::STATUS_FAILED),
+            ])
+            ->latest()
+            ->limit(8)
+            ->get();
+
+        $technicalProposalRounds = EoiTechnicalProposalRound::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->with([
+                'creator:id,name',
+                'publisher:id,name',
+                'rules',
+                'templates',
+                'candidates' => fn ($query) => $query
+                    ->orderBy('status')
+                    ->orderBy('invited_at')
+                    ->with([
+                        'applicant.submitter:id,name,email',
+                        'submissions:id,candidate_id,revision_number,received_via,received_at,is_late,minutes_late',
+                        'ruleApplications' => fn ($findings) => $findings
+                            ->whereNull('revoked_at')
+                            ->select([
+                                'id',
+                                'candidate_id',
+                                'rule_title_snapshot',
+                                'finding',
+                                'effect',
+                                'revoked_at',
+                            ]),
+                    ]),
+            ])
+            ->orderByDesc('round_number')
+            ->limit(5)
+            ->get();
+
+        return compact('communications', 'technicalProposalRounds');
+    }
+
+    /**
+     * @param  array<string, mixed>  $member
+     */
+    private function eoiEvaluatorTaskStatus(array $member): string
+    {
+        if (($member['task_complete'] ?? false) === true) {
+            return 'Complete';
+        }
+
+        return ($member['submitted'] ?? false) === true
+            ? 'Missing decisions'
+            : 'Awaiting submission';
+    }
+
+    /**
+     * @param  array<string, mixed>  $counts
+     */
+    private function eoiDecisionTotals(array $counts): string
+    {
+        return 'Q '.($counts['qualified'] ?? 0)
+            .' | AQ '.($counts['average_qualified'] ?? 0)
+            .' | NQ '.($counts['not_qualified'] ?? 0);
+    }
+
+    private function safeSpreadsheetRow(array $values): array
+    {
+        return array_map(fn ($value) => $this->safeSpreadsheetValue($value), $values);
     }
 
     private function safeSpreadsheetValue(mixed $value): mixed

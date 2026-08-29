@@ -59,11 +59,29 @@
                     </div>
                 @endif
 
+                @if ($openRework)
+                    <section class="rework-workspace-banner mb-4" role="note" aria-labelledby="reworkWorkspaceTitle">
+                        <span class="rework-workspace-icon"><i class="feather-refresh-cw" aria-hidden="true"></i></span>
+                        <div>
+                            <span class="rework-workspace-kicker">Revision {{ number_format((int) $openRework->source_revision_number + 1) }} requested</span>
+                            <h2 id="reworkWorkspaceTitle">This evaluation has been returned for correction</h2>
+                            <p>{{ $openRework->reason }}</p>
+                            <small>
+                                Requested by {{ $openRework->requester?->name ?: 'an administrator' }}
+                                {{ $openRework->requested_at ? 'on '.$openRework->requested_at->format('d M Y, H:i') : '' }}.
+                                Review the instructions, update the prefilled answers, and submit again.
+                            </small>
+                        </div>
+                    </section>
+                @endif
+
                 <div class="access-gate mb-4" role="status">
-                    <span class="gate-icon"><i class="feather-save" aria-hidden="true"></i></span>
+                    <span class="gate-icon"><i class="{{ $openRework ? 'feather-edit-3' : 'feather-save' }}" aria-hidden="true"></i></span>
                     <div>
-                        <strong>Your evaluation is ready</strong>
-                        <p>Enter scores now and save a draft at any time. Identity verification is only required for final submission.</p>
+                        <strong>{{ $openRework ? 'Your previous answers are ready to revise' : 'Your evaluation is ready' }}</strong>
+                        <p>{{ $openRework
+                            ? 'Correct the requested areas and save as you work. A new identity verification is required when you resubmit.'
+                            : 'Enter scores now and save a draft at any time. Identity verification is only required for final submission.' }}</p>
                     </div>
                 </div>
 
@@ -540,6 +558,13 @@
         .gate-icon { color: #9a5b05; background: #fef0c7; }
         .access-gate strong { color: #754408; font-size: .82rem; }
         .access-gate p { margin: .2rem 0 0; color: #8b6a2e; font-size: .72rem; }
+        .rework-workspace-banner { display:flex; align-items:flex-start; gap:.9rem; padding:1rem 1.05rem; color:#67400a; border:1px solid #e8c989; border-left:4px solid #b66b0b; border-radius:13px; background:linear-gradient(120deg,#fff6e4,#fffdf8); box-shadow:0 7px 20px rgba(153,91,9,.07); }
+        .rework-workspace-icon { display:grid; width:42px; height:42px; flex:0 0 42px; place-items:center; color:#9a5a0c; border-radius:11px; background:#ffebc4; }
+        .rework-workspace-banner>div { min-width:0; }
+        .rework-workspace-kicker { display:block; color:#9a5a0c; font-size:.67rem; font-weight:760; letter-spacing:.07em; text-transform:uppercase; }
+        .rework-workspace-banner h2 { margin:.15rem 0 .35rem; color:#653d08; font-size:1rem; font-weight:760; }
+        .rework-workspace-banner p { margin:0 0 .4rem; color:#67400a; font-size:.8rem; line-height:1.55; white-space:pre-line; }
+        .rework-workspace-banner small { color:#8a6837; font-size:.69rem; line-height:1.45; }
 
         .applicant-panel { overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 14px; background: #fff; box-shadow: 0 5px 16px rgba(20,34,66,.04); }
         .applicant-panel summary { display: flex; align-items: center; gap: .7rem; padding: .85rem 1rem; cursor: pointer; list-style: none; }

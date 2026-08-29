@@ -151,23 +151,39 @@
                             $technicalExcludedCount = (int) $technicalStatusCounts
                                 ->except([\App\Models\EoiTechnicalProposalCandidate::STATUS_QUALIFIED])
                                 ->sum();
+                            $applicationAssignmentLocked = (bool) data_get(
+                                $assignmentContext,
+                                'application_assignment_locked',
+                                false
+                            );
                             $assignmentCount = $procurement->evaluationAssignments->count();
                             $submissionCount = $procurement->submissions->count();
                             $isOldForm = (string) old('procurement_id', '') === (string) $procurement->id;
                             $shouldOpen = ($isOldForm && $errors->any()) || $openProcurementId === (string) $procurement->id;
                             $selectedEvaluationId = $isOldForm ? (string) old('evaluation_id', '') : '';
                             $selectedEvaluatorId = $isOldForm ? (string) old('user_id', '') : '';
-                            $defaultAssignmentType = $applicationSubmissions->isNotEmpty()
-                                ? 'procurement'
-                                : ($hasTechnicalShortlist ? 'technical_proposal_procurement' : 'procurement');
+                            $defaultAssignmentType = $applicationAssignmentLocked
+                                ? ($hasTechnicalShortlist ? 'technical_proposal_procurement' : '')
+                                : ($applicationSubmissions->isNotEmpty()
+                                    ? 'procurement'
+                                    : ($hasTechnicalShortlist ? 'technical_proposal_procurement' : 'procurement'));
                             $selectedAssignmentType = $isOldForm
                                 ? old('assignment_type', $defaultAssignmentType)
                                 : $defaultAssignmentType;
-                            if ((str_starts_with((string) $selectedAssignmentType, 'technical_proposal_') && ! $hasTechnicalShortlist)
-                                || (in_array($selectedAssignmentType, ['procurement', 'submission'], true) && $applicationSubmissions->isEmpty())) {
+                            if (($applicationAssignmentLocked
+                                    && ! str_starts_with((string) $selectedAssignmentType, 'technical_proposal_'))
+                                || (str_starts_with((string) $selectedAssignmentType, 'technical_proposal_') && ! $hasTechnicalShortlist)
+                                || (! $applicationAssignmentLocked
+                                    && in_array($selectedAssignmentType, ['procurement', 'submission'], true)
+                                    && $applicationSubmissions->isEmpty())) {
                                 $selectedAssignmentType = $defaultAssignmentType;
                             }
                             $selectedSubmissionId = $isOldForm ? (string) old('submission_id', '') : '';
+                            $assignmentActionDisabled = $selectableEvaluations->isEmpty()
+                                || $evaluators->isEmpty()
+                                || ($applicationAssignmentLocked
+                                    ? ! $hasTechnicalShortlist
+                                    : ($applicationSubmissions->isEmpty() && ! $hasTechnicalShortlist));
                             $procurementStatus = strtolower((string) ($procurement->status ?: 'unknown'));
                             $procurementStatusTone = $procurementStatusTones[$procurementStatus] ?? 'neutral';
                             $searchText = \Illuminate\Support\Str::lower(trim(
@@ -214,7 +230,13 @@
                                             <span><i class="feather-user-plus" aria-hidden="true"></i></span>
                                             <div>
                                                 <h4 id="assignment-form-title-{{ $procurement->id }}">Create an evaluator assignment</h4>
-                                                <p>Pair a reusable evaluation form with either the original applications or the qualified technical-proposal shortlist.</p>
+                                                <p>
+                                                    @if ($applicationAssignmentLocked)
+                                                        The first-stage EOI panel is complete. Assign an evaluator directly to the qualified technical-proposal shortlist.
+                                                    @else
+                                                        Pair a reusable evaluation form with either the original applications or the qualified technical-proposal shortlist.
+                                                    @endif
+                                                </p>
                                             </div>
                                         </header>
 
@@ -247,6 +269,55 @@
                                                     <small>Round {{ $technicalRound->round_number }}</small>
                                                 </div>
                                             </div>
+                                        @endif
+
+                                        @if ($hasTechnicalShortlist)
+                                            <section class="assignment-technical-worklist" aria-labelledby="technical-worklist-title-{{ $procurement->id }}">
+                                                <header class="assignment-technical-worklist-heading">
+                                                    <div>
+                                                        <span class="assignment-section-kicker">Technical evaluation worklist</span>
+                                                        <h5 id="technical-worklist-title-{{ $procurement->id }}">
+                                                            {{ number_format($qualifiedProposalCount) }} {{ \Illuminate\Support\Str::plural('applicant', $qualifiedProposalCount) }} now proceed to technical evaluation
+                                                        </h5>
+                                                        <p>Only these compliance-cleared proposals are included when you assign the whole qualified shortlist.</p>
+                                                    </div>
+                                                    <span class="assignment-technical-worklist-count">
+                                                        <i class="feather-check-circle" aria-hidden="true"></i>
+                                                        {{ number_format($qualifiedProposalCount) }} ready
+                                                    </span>
+                                                </header>
+
+                                                <div class="assignment-technical-candidate-grid">
+                                                    @foreach ($technicalCandidates as $technicalItem)
+                                                        @php
+                                                            $technicalCandidate = data_get($technicalItem, 'candidate');
+                                                            $technicalApplicant = data_get($technicalItem, 'applicant') ?: $technicalCandidate?->applicant;
+                                                            $latestProposal = data_get($technicalItem, 'latest_submission') ?: $technicalCandidate?->latestSubmission;
+                                                            $proposalDocumentCount = $latestProposal?->documents?->count() ?? 0;
+                                                            $receiptChannel = $latestProposal?->received_via
+                                                                ? \Illuminate\Support\Str::headline(str_replace('_', ' ', $latestProposal->received_via))
+                                                                : 'Compliance cleared';
+                                                        @endphp
+                                                        <article class="assignment-technical-candidate-card">
+                                                            <div class="assignment-technical-candidate-topline">
+                                                                <span class="assignment-technical-qualified-badge">
+                                                                    <i class="feather-award" aria-hidden="true"></i>Qualified
+                                                                </span>
+                                                                <span>{{ $technicalApplicant->procurement_submission_code ?: 'Applicant '.$loop->iteration }}</span>
+                                                            </div>
+                                                            <strong>{{ $technicalApplicant->display_name }}</strong>
+                                                            <small>{{ $technicalCandidate->workflow_decision ?: 'Technical Evaluation' }}</small>
+                                                            <div class="assignment-technical-candidate-meta">
+                                                                <span><i class="feather-file-text" aria-hidden="true"></i>{{ number_format($proposalDocumentCount) }} {{ \Illuminate\Support\Str::plural('document', $proposalDocumentCount) }}</span>
+                                                                @if ($latestProposal)
+                                                                    <span><i class="feather-layers" aria-hidden="true"></i>Revision {{ $latestProposal->revision_number }}</span>
+                                                                @endif
+                                                                <span><i class="feather-inbox" aria-hidden="true"></i>{{ $receiptChannel }}</span>
+                                                            </div>
+                                                        </article>
+                                                    @endforeach
+                                                </div>
+                                            </section>
                                         @endif
 
                                         <form method="POST" action="{{ route('eval.assign.store') }}" class="assignment-form-grid"
@@ -305,15 +376,21 @@
                                             <div class="assignment-field assignment-field--scope">
                                                 <label for="assignment-type-{{ $procurement->id }}">Assignment scope <span aria-hidden="true">*</span></label>
                                                 <select name="assignment_type" id="assignment-type-{{ $procurement->id }}"
-                                                    class="form-select assignment-type" required data-procurement="{{ $procurement->id }}">
-                                                    <option value="procurement" @selected($selectedAssignmentType === 'procurement')
-                                                        @disabled($applicationSubmissions->isEmpty())>
-                                                        All original applications ({{ $applicationSubmissions->count() }})
-                                                    </option>
-                                                    <option value="submission" @selected($selectedAssignmentType === 'submission')
-                                                        @disabled($applicationSubmissions->isEmpty())>
-                                                        One original application
-                                                    </option>
+                                                    class="form-select assignment-type" required data-procurement="{{ $procurement->id }}"
+                                                    @disabled($applicationAssignmentLocked && ! $hasTechnicalShortlist)>
+                                                    @if ($applicationAssignmentLocked && ! $hasTechnicalShortlist)
+                                                        <option value="">Qualified technical proposal shortlist pending</option>
+                                                    @endif
+                                                    @unless ($applicationAssignmentLocked)
+                                                        <option value="procurement" @selected($selectedAssignmentType === 'procurement')
+                                                            @disabled($applicationSubmissions->isEmpty())>
+                                                            All original applications ({{ $applicationSubmissions->count() }})
+                                                        </option>
+                                                        <option value="submission" @selected($selectedAssignmentType === 'submission')
+                                                            @disabled($applicationSubmissions->isEmpty())>
+                                                            One original application
+                                                        </option>
+                                                    @endunless
                                                     @if ($hasTechnicalShortlist)
                                                         <option value="technical_proposal_procurement"
                                                             @selected($selectedAssignmentType === 'technical_proposal_procurement')>
@@ -326,7 +403,11 @@
                                                     @endif
                                                 </select>
                                                 <small class="assignment-field-message" data-assignment-scope-help>
-                                                    Choose the original application stage or a proposal shortlist when one is ready.
+                                                    @if ($applicationAssignmentLocked)
+                                                        Original applications are locked; the qualified Round {{ $technicalRound?->round_number }} proposal shortlist is the only available evaluation stage.
+                                                    @else
+                                                        Choose the original application stage or a proposal shortlist when one is ready.
+                                                    @endif
                                                 </small>
                                             </div>
 
@@ -336,7 +417,8 @@
                                                 <select name="submission_id" id="submission-{{ $procurement->id }}" class="form-select"
                                                     @if (in_array($selectedAssignmentType, ['submission', 'technical_proposal_submission'], true)) required @endif>
                                                     <option value="" data-assignment-placeholder>Choose an application</option>
-                                                    <optgroup label="Original applications" data-assignment-target-group="application">
+                                                    @unless ($applicationAssignmentLocked)
+                                                        <optgroup label="Original applications" data-assignment-target-group="application">
                                                         @foreach ($applicationSubmissions as $submission)
                                                             <option value="{{ $submission->id }}" data-assignment-target="application"
                                                                 @selected($selectedAssignmentType === 'submission' && $selectedSubmissionId === (string) $submission->id)>
@@ -344,7 +426,8 @@
                                                                 — {{ $submission->display_name }}
                                                             </option>
                                                         @endforeach
-                                                    </optgroup>
+                                                        </optgroup>
+                                                    @endunless
                                                     @if ($hasTechnicalShortlist)
                                                         <optgroup label="Qualified technical proposals — Round {{ $technicalRound->round_number }}"
                                                             data-assignment-target-group="technical_proposal">
@@ -374,7 +457,7 @@
 
                                             <div class="assignment-form-action">
                                                 <button type="submit" class="assignment-primary-button"
-                                                    @disabled($selectableEvaluations->isEmpty() || $evaluators->isEmpty() || ($applicationSubmissions->isEmpty() && ! $hasTechnicalShortlist))>
+                                                    @disabled($assignmentActionDisabled)>
                                                     <i class="feather-user-plus" aria-hidden="true"></i>
                                                     Assign evaluator
                                                 </button>
@@ -697,6 +780,20 @@
          .assignment-shortlist-badge.is-waiting { color: #b54708; background: #ffefc7; }
          .assignment-shortlist-excluded,
          .assignment-shortlist-counts small { color: #7b8799; font-size: .57rem; font-weight: 650; }
+         .assignment-technical-worklist { margin: 0 0 .85rem; overflow: hidden; border: 1px solid #c9e8d6; border-radius: 11px; background: #fff; }
+         .assignment-technical-worklist-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; padding: .78rem .82rem; border-bottom: 1px solid #ddf1e5; background: linear-gradient(135deg, #f0fbf5 0%, #fbfffc 100%); }
+         .assignment-technical-worklist-heading h5 { margin: .12rem 0 0; color: #1d4935; font-size: .76rem; font-weight: 780; }
+         .assignment-technical-worklist-heading p { margin: .22rem 0 0; color: #5b7669; font-size: .63rem; line-height: 1.4; }
+         .assignment-technical-worklist-count { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .3rem; padding: .34rem .48rem; color: #067647; border-radius: 7px; background: #dff6e9; font-size: .61rem; font-weight: 780; white-space: nowrap; }
+         .assignment-technical-candidate-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; padding: .65rem; }
+         .assignment-technical-candidate-card { min-width: 0; padding: .62rem; border: 1px solid #e1e8e3; border-radius: 9px; background: #fff; box-shadow: 0 2px 7px rgba(12, 57, 35, .035); }
+         .assignment-technical-candidate-topline { display: flex; align-items: center; justify-content: space-between; gap: .35rem; margin-bottom: .48rem; color: #78867e; font-size: .53rem; font-weight: 730; line-height: 1.2; }
+         .assignment-technical-qualified-badge { display: inline-flex; align-items: center; gap: .2rem; padding: .19rem .3rem; color: #067647; border-radius: 5px; background: #eafaf1; font-size: .53rem; font-weight: 800; letter-spacing: .025em; text-transform: uppercase; }
+         .assignment-technical-candidate-card > strong { display: block; overflow: hidden; color: #24392e; font-size: .7rem; font-weight: 780; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+         .assignment-technical-candidate-card > small { display: -webkit-box; min-height: 2.55em; margin-top: .18rem; overflow: hidden; color: #65776c; font-size: .58rem; line-height: 1.32; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+         .assignment-technical-candidate-meta { display: flex; flex-wrap: wrap; gap: .28rem .42rem; margin-top: .52rem; padding-top: .48rem; border-top: 1px solid #edf2ee; }
+         .assignment-technical-candidate-meta span { display: inline-flex; min-width: 0; align-items: center; gap: .2rem; color: #65776c; font-size: .55rem; line-height: 1.25; }
+         .assignment-technical-candidate-meta i { flex: 0 0 auto; color: #42936b; }
          .assignment-form-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1.2fr) minmax(0, 1.05fr) minmax(0, 1fr) auto; align-items: start; gap: .7rem; }
          .assignment-field { min-width: 0; }
          .assignment-field label { display: block; margin-bottom: .3rem; color: #344054; font-size: .69rem; font-weight: 730; }
@@ -797,6 +894,7 @@
         @media (max-width: 991.98px) {
             .assignment-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .procurement-heading-metrics > span { min-width: 70px; }
+            .assignment-technical-candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .assignment-table colgroup,
             .assignment-table thead { display: none; }
             .assignment-table,
@@ -820,7 +918,8 @@
              .assignment-procurement-body { padding: .75rem; }
              .assignment-shortlist-note { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
              .assignment-shortlist-counts { grid-column: 2; align-items: flex-start; flex-direction: row; flex-wrap: wrap; text-align: left; }
-         }
+             .assignment-technical-worklist-heading { align-items: flex-start; flex-direction: column; }
+        }
 
         @media (max-width: 575.98px) {
             .assignment-summary { grid-template-columns: 1fr; }
@@ -837,6 +936,7 @@
              .assignment-shortlist-icon,
              .assignment-shortlist-counts { grid-column: auto; }
              .assignment-shortlist-copy strong { white-space: normal; }
+             .assignment-technical-candidate-grid { grid-template-columns: 1fr; }
              .assignment-table tbody tr { grid-template-columns: 1fr; }
             .assignment-table tbody td:first-child,
             .assignment-table tbody td:last-child { grid-column: auto; }

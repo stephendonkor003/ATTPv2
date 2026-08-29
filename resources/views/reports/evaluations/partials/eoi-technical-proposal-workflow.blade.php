@@ -111,7 +111,7 @@
                     <details class="tp-candidate" id="technical-proposal-candidate-{{ $candidate->id }}">
                         <summary>
                             <span class="tp-candidate__avatar">{{ str($candidateName)->substr(0, 1)->upper() }}</span>
-                            <span class="tp-candidate__identity"><strong>{{ $candidateName }}</strong><small>{{ $candidate->applicant?->procurement_submission_code ?: 'No submission code' }} &middot; {{ $candidate->eoi_outcome_label }}</small></span>
+                            <span class="tp-candidate__identity"><strong>{{ $candidateName }}</strong><small>{{ $candidate->applicant?->procurement_submission_code ?: 'No submission code' }} &middot; {{ $candidate->eoi_outcome_label }}@if ($candidate->workflow_decision) &middot; {{ $candidate->workflow_decision }}@endif</small></span>
                             <span class="tp-candidate__receipt"><b>{{ $candidate->submissions->count() }} revision(s)</b><small>{{ $candidate->last_submitted_at ? 'Last received '.$candidate->last_submitted_at->format('d M Y, H:i') : 'No proposal received' }}</small></span>
                             <span class="badge bg-{{ $candidateTone($candidate->status) }}">{{ $candidate->status === 'invited' ? 'Awaiting proposal' : str($candidate->status)->headline() }}</span>
                             <i class="feather-chevron-down tp-candidate__chevron"></i>

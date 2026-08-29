@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use App\Models\Procurement;
 use App\Services\ProcurementWorkflowService;
-use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
+use Illuminate\Validation\ValidationException;
 
 class ProcurementWorkflowController extends Controller
 {
@@ -17,6 +18,7 @@ class ProcurementWorkflowController extends Controller
     ) {
         $this->assertProcurementInScope($procurement);
         $service->approve($procurement);
+
         return back()->with('success', 'Procurement approved');
     }
 
@@ -30,6 +32,7 @@ class ProcurementWorkflowController extends Controller
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
+
         return back()->with('success', 'Procurement published');
     }
 
@@ -39,6 +42,7 @@ class ProcurementWorkflowController extends Controller
     ) {
         $this->assertProcurementInScope($procurement);
         $service->close($procurement);
+
         return back()->with('success', 'Procurement closed');
     }
 
@@ -49,9 +53,15 @@ class ProcurementWorkflowController extends Controller
         $this->assertProcurementInScope($procurement);
         try {
             $service->award($procurement);
+        } catch (ValidationException $e) {
+            return back()->with(
+                'error',
+                data_get($e->errors(), 'procurement.0', 'Complete the pending evaluation rework before awarding this procurement.')
+            );
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
+
         return back()->with('success', 'Procurement awarded and vendor notified');
     }
 }

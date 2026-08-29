@@ -8,6 +8,7 @@
             ['label' => 'Assignments', 'value' => $stats['assignments'] ?? $assignments->count(), 'help' => 'Evaluation forms assigned to you', 'icon' => 'feather-clipboard', 'tone' => 'blue'],
             ['label' => 'Application tasks', 'value' => $stats['tasks'] ?? 0, 'help' => 'Applications in your worklist', 'icon' => 'feather-file-text', 'tone' => 'violet'],
             ['label' => 'To complete', 'value' => $stats['pending'] ?? 0, 'help' => 'Not started or saved as draft', 'icon' => 'feather-clock', 'tone' => 'amber'],
+            ['label' => 'Rework required', 'value' => $stats['rework'] ?? 0, 'help' => 'Returned records to edit and resubmit', 'icon' => 'feather-refresh-cw', 'tone' => 'rose'],
             ['label' => 'Completed', 'value' => $stats['completed'] ?? 0, 'help' => 'Final evaluations submitted', 'icon' => 'feather-check-circle', 'tone' => 'green'],
         ];
     @endphp
@@ -17,7 +18,7 @@
             <div>
                 <span class="evaluation-page-eyebrow">Evaluator workspace</span>
                 <h1>My Evaluations</h1>
-                <p>Open an assigned application to start scoring, continue a saved draft, or review completed work.</p>
+                <p>Open assigned work, correct evaluations returned for rework, and submit the revised record to the panel.</p>
             </div>
             <span class="assignment-total">
                 <i class="feather-user-check" aria-hidden="true"></i>
@@ -51,11 +52,64 @@
             @endforeach
         </section>
 
+        @if ($reworkTasks->isNotEmpty())
+            <section class="rework-priority" aria-labelledby="rework-priority-title">
+                <header class="rework-priority__head">
+                    <div>
+                        <span class="rework-priority__eyebrow"><i class="feather-alert-triangle" aria-hidden="true"></i> Action required</span>
+                        <h2 id="rework-priority-title">Rework requires your attention</h2>
+                        <p>An administrator returned {{ number_format($reworkTasks->count()) }} {{ \Illuminate\Support\Str::plural('evaluation', $reworkTasks->count()) }}. Correct the requested items and submit a new revision.</p>
+                    </div>
+                    <span class="rework-priority__count">{{ number_format($reworkTasks->count()) }} pending</span>
+                </header>
+
+                <div class="rework-priority__grid">
+                    @foreach ($reworkTasks as $task)
+                        @php
+                            $reworkAssignment = $task['assignment'];
+                            $reworkApplication = $task['application'];
+                            $openRework = $task['rework'];
+                        @endphp
+                        <article class="rework-priority-card">
+                            <header>
+                                <span class="rework-priority-card__icon"><i class="feather-refresh-cw" aria-hidden="true"></i></span>
+                                <div>
+                                    <span>{{ $reworkAssignment->evaluation?->typeLabel() ?? 'Evaluation' }} &middot; Revision {{ number_format((int) $openRework->source_revision_number + 1) }}</span>
+                                    <h3>{{ $reworkAssignment->procurement?->title ?? 'Procurement evaluation' }}</h3>
+                                    <p>{{ $reworkAssignment->evaluation?->name ?? 'Evaluation form' }}</p>
+                                </div>
+                            </header>
+
+                            <div class="rework-priority-card__facts">
+                                <span><small>Application</small><strong>{{ $reworkApplication->procurement_submission_code ?: 'Submission' }}</strong></span>
+                                <span><small>Returned</small><strong>{{ $openRework->requested_at?->format('d M Y, H:i') ?? 'Recently' }}</strong></span>
+                            </div>
+
+                            <div class="rework-priority-card__instructions">
+                                <span><i class="feather-message-square" aria-hidden="true"></i></span>
+                                <div>
+                                    <strong>Administrator correction instructions</strong>
+                                    <p>{{ $openRework->reason }}</p>
+                                    <small>Requested by {{ $openRework->requester?->name ?: 'an administrator' }}. Your previous answers remain available.</small>
+                                </div>
+                            </div>
+
+                            <a href="{{ $task['edit_url'] }}" class="rework-priority-card__action">
+                                <i class="feather-edit-3" aria-hidden="true"></i>
+                                Edit and resubmit
+                                <i class="feather-arrow-right" aria-hidden="true"></i>
+                            </a>
+                        </article>
+                    @endforeach
+                </div>
+            </section>
+        @endif
+
         <section class="method-guide" aria-labelledby="method-guide-title">
             <span class="method-guide-icon"><i class="feather-info" aria-hidden="true"></i></span>
             <div class="method-guide-copy">
                 <strong id="method-guide-title">The evaluation method controls how you respond</strong>
-                <p>Each application is assessed independently. Save unfinished work as a draft; final submissions are read-only.</p>
+                <p>Each application is assessed independently. Final submissions are read-only unless an administrator returns one to you for rework.</p>
             </div>
             <div class="method-guide-options">
                 <span><b class="method-dot method-dot--services"></b><strong>Services</strong> Numeric scores</span>
@@ -163,13 +217,16 @@
                                     $submissionKey = implode(':', [$assignment->id, $application->id]);
                                     $evaluationSubmission = $evaluationSubmissions->get($submissionKey);
                                     $isCompleted = filled($evaluationSubmission?->submitted_at);
-                                    $isDraft = $evaluationSubmission && ! $isCompleted;
-                                    $taskStatus = $isCompleted ? 'Completed' : ($isDraft ? 'Draft saved' : 'Not started');
-                                    $taskTone = $isCompleted ? 'complete' : ($isDraft ? 'draft' : 'new');
+                                    $openRework = $evaluationSubmission?->openReworkRequest;
+                                    $isRework = $evaluationSubmission?->isReworkRequested()
+                                        && $openRework !== null;
+                                    $isDraft = $evaluationSubmission && ! $isCompleted && ! $isRework;
+                                    $taskStatus = $isCompleted ? 'Completed' : ($isRework ? 'Rework requested' : ($isDraft ? 'Draft saved' : 'Not started'));
+                                    $taskTone = $isCompleted ? 'complete' : ($isRework ? 'rework' : ($isDraft ? 'draft' : 'new'));
                                     $applicationDate = $application->submitted_at ?: $application->created_at;
                                 @endphp
 
-                                <article class="application-row">
+                                <article class="application-row {{ $isRework ? 'application-row--rework' : '' }}">
                                     <div class="application-cell" data-label="Application">
                                         <strong>{{ $application->procurement_submission_code ?: 'Submission' }}</strong>
                                         <small>{{ $application->form?->name ?: 'Application form' }}</small>
@@ -183,14 +240,21 @@
                                     </div>
                                     <div class="application-cell" data-label="Status">
                                         <span class="task-status task-status--{{ $taskTone }}">
-                                            <i class="{{ $isCompleted ? 'feather-check-circle' : ($isDraft ? 'feather-save' : 'feather-circle') }}" aria-hidden="true"></i>
+                                            <i class="{{ $isCompleted ? 'feather-check-circle' : ($isRework ? 'feather-refresh-cw' : ($isDraft ? 'feather-save' : 'feather-circle')) }}" aria-hidden="true"></i>
                                             {{ $taskStatus }}
                                         </span>
+                                        @if ($isRework)
+                                            <small class="rework-required-label">Action required</small>
+                                        @endif
                                     </div>
                                     <div class="application-cell application-action" data-label="Action">
                                         @if ($isCompleted)
                                             <a class="task-action task-action--view" href="{{ route('my.eval.view', [$assignment, $application]) }}">
                                                 <i class="feather-eye" aria-hidden="true"></i>View evaluation
+                                            </a>
+                                        @elseif ($isRework)
+                                            <a class="task-action task-action--rework" href="{{ route('my.eval.start', [$assignment, $application]) }}">
+                                                <i class="feather-edit-3" aria-hidden="true"></i>Revise evaluation
                                             </a>
                                         @elseif ($isDraft)
                                             <a class="task-action task-action--continue" href="{{ route('my.eval.start', [$assignment, $application]) }}">
@@ -202,6 +266,21 @@
                                             </a>
                                         @endif
                                     </div>
+
+                                    @if ($isRework)
+                                        <div class="rework-task-guidance" role="note">
+                                            <span><i class="feather-message-square" aria-hidden="true"></i></span>
+                                            <div>
+                                                <strong>Administrator correction instructions</strong>
+                                                <p>{{ $openRework->reason }}</p>
+                                                <small>
+                                                    Requested by {{ $openRework->requester?->name ?: 'an administrator' }}
+                                                    {{ $openRework->requested_at ? 'on '.$openRework->requested_at->format('d M Y, H:i') : '' }}
+                                                    · Your previous answers remain available to edit.
+                                                </small>
+                                            </div>
+                                        </div>
+                                    @endif
                                 </article>
                             @empty
                                 <div class="no-applications">
@@ -240,17 +319,45 @@
         .evaluation-page-hero p { max-width:680px; margin:.45rem 0 0; color:rgba(255,255,255,.78); font-size:.95rem; }
         .assignment-total { display:inline-flex; flex:0 0 auto; align-items:center; gap:.55rem; padding:.7rem .9rem; color:#fff; border:1px solid rgba(255,255,255,.2); border-radius:12px; background:rgba(255,255,255,.11); font-weight:700; }
 
-        .workload-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; margin-bottom:1.25rem; }
+        .workload-summary { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:1rem; margin-bottom:1.25rem; }
         .workload-card { display:flex; min-width:0; align-items:center; gap:.85rem; padding:1rem; border:1px solid var(--eval-border); border-radius:14px; background:#fff; box-shadow:0 6px 18px rgba(20,34,66,.045); }
         .workload-icon { display:grid; width:43px; height:43px; flex:0 0 43px; place-items:center; color:var(--metric-color); border-radius:12px; background:var(--metric-soft); font-size:1.05rem; }
         .workload-card--blue { --metric-color:#3157d5; --metric-soft:#eef2ff; }
         .workload-card--violet { --metric-color:#6941c6; --metric-soft:#f4f0ff; }
         .workload-card--amber { --metric-color:#b54708; --metric-soft:#fff4e5; }
+        .workload-card--rose { --metric-color:#b42318; --metric-soft:#fff0ee; }
         .workload-card--green { --metric-color:#067647; --metric-soft:#eafaf1; }
         .workload-card span,.workload-card strong,.workload-card small { display:block; }
         .workload-card>div>span { color:var(--eval-muted); font-size:.78rem; font-weight:650; }
         .workload-card strong { margin:.05rem 0; color:var(--eval-ink); font-size:1.35rem; line-height:1.2; }
         .workload-card small { overflow:hidden; color:#8a94a6; font-size:.7rem; text-overflow:ellipsis; white-space:nowrap; }
+
+        .rework-priority { margin-bottom:1.35rem; padding:1rem; border:1px solid #edc77e; border-radius:16px; background:linear-gradient(135deg,#fff9ed,#fffdf9); box-shadow:0 10px 28px rgba(142,84,9,.07); }
+        .rework-priority__head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.85rem; }
+        .rework-priority__eyebrow { display:inline-flex; align-items:center; gap:.35rem; color:#9a5a0c; font-size:.67rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+        .rework-priority__head h2 { margin:.18rem 0 0; color:#5f3808; font-size:1.05rem; font-weight:780; }
+        .rework-priority__head p { max-width:760px; margin:.25rem 0 0; color:#80571f; font-size:.76rem; line-height:1.5; }
+        .rework-priority__count { flex:0 0 auto; padding:.38rem .55rem; color:#8b4f08; border:1px solid #eccb91; border-radius:999px; background:#fff; font-size:.68rem; font-weight:780; }
+        .rework-priority__grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr)); gap:.8rem; }
+        .rework-priority-card { display:flex; min-width:0; flex-direction:column; padding:.9rem; border:1px solid #ead9bb; border-radius:13px; background:#fff; box-shadow:0 5px 14px rgba(91,58,13,.045); }
+        .rework-priority-card>header { display:grid; grid-template-columns:auto minmax(0,1fr); gap:.65rem; }
+        .rework-priority-card__icon { display:grid; width:38px; height:38px; place-items:center; color:#9a5a0c; border-radius:10px; background:#ffedc9; }
+        .rework-priority-card header span:not(.rework-priority-card__icon) { color:#9a5a0c; font-size:.63rem; font-weight:750; text-transform:uppercase; }
+        .rework-priority-card h3 { margin:.12rem 0 0; overflow:hidden; color:#344054; font-size:.84rem; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
+        .rework-priority-card header p { margin:.12rem 0 0; color:#7b8494; font-size:.68rem; }
+        .rework-priority-card__facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; margin:.75rem 0; overflow:hidden; border:1px solid #ece5da; border-radius:9px; background:#ece5da; }
+        .rework-priority-card__facts span { min-width:0; padding:.55rem .65rem; background:#fffdf9; }
+        .rework-priority-card__facts small,.rework-priority-card__facts strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .rework-priority-card__facts small { color:#9b855f; font-size:.58rem; font-weight:750; letter-spacing:.04em; text-transform:uppercase; }
+        .rework-priority-card__facts strong { margin-top:.1rem; color:#5d4a2e; font-size:.68rem; }
+        .rework-priority-card__instructions { display:flex; align-items:flex-start; gap:.55rem; padding:.65rem; color:#67400a; border-radius:9px; background:#fff8eb; }
+        .rework-priority-card__instructions>span { flex:0 0 auto; color:#a46108; }
+        .rework-priority-card__instructions strong { display:block; font-size:.68rem; }
+        .rework-priority-card__instructions p { display:-webkit-box; margin:.13rem 0 .18rem; overflow:hidden; font-size:.69rem; line-height:1.45; white-space:pre-line; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+        .rework-priority-card__instructions small { color:#8a6837; font-size:.6rem; }
+        .rework-priority-card__action { display:flex; min-height:40px; align-items:center; justify-content:center; gap:.42rem; margin-top:.75rem; padding:.5rem .7rem; color:#fff; border-radius:9px; background:#a65f08; font-size:.72rem; font-weight:760; text-decoration:none; }
+        .rework-priority-card__action i:last-child { margin-left:auto; }
+        .rework-priority-card__action:hover { color:#fff; background:#874b05; }
 
         .method-guide { display:grid; grid-template-columns:auto minmax(220px,1fr) auto; align-items:center; gap:.9rem; margin-bottom:1.7rem; padding:.95rem 1rem; border:1px solid #cfdcf9; border-radius:14px; background:#f5f8ff; }
         .method-guide-icon { display:grid; width:38px; height:38px; place-items:center; color:#3157d5; border-radius:10px; background:#e5ecff; }
@@ -297,6 +404,8 @@
         .application-row { padding:.85rem 1.1rem; border-top:1px solid #edf0f4; }
         .application-row:first-of-type { border-top:0; }
         .application-row:hover { background:#fbfcff; }
+        .application-row--rework { background:#fffdf8; box-shadow:inset 3px 0 #b66b0b; }
+        .application-row--rework:hover { background:#fff9ed; }
         .application-cell { min-width:0; }
         .application-cell strong,.application-cell small { display:block; }
         .application-cell strong { overflow:hidden; color:#344054; font-size:.76rem; text-overflow:ellipsis; white-space:nowrap; }
@@ -306,12 +415,21 @@
         .task-status--new { color:#475467; background:#f2f4f7; }
         .task-status--draft { color:#b54708; background:#fff4e5; }
         .task-status--complete { color:#067647; background:#eafaf1; }
+        .task-status--rework { color:#9a5a0c; background:#fff1d9; }
+        .rework-required-label { display:block; margin-top:.25rem; color:#a35b06; font-size:.58rem; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
         .task-action { display:inline-flex; min-height:36px; align-items:center; justify-content:center; gap:.35rem; padding:.43rem .65rem; color:#fff; border:1px solid #3157d5; border-radius:8px; background:#3157d5; font-size:.7rem; font-weight:720; text-decoration:none; white-space:nowrap; }
         .task-action:hover { color:#fff; background:#2648b8; }
         .task-action--continue { color:#3157d5; background:#fff; }
         .task-action--continue:hover { color:#2648b8; background:#eef2ff; }
         .task-action--view { color:#067647; border-color:#8bd7b2; background:#fff; }
         .task-action--view:hover { color:#05603a; background:#eafaf1; }
+        .task-action--rework { color:#fff; border-color:#b66b0b; background:#b66b0b; }
+        .task-action--rework:hover { color:#fff; background:#985706; }
+        .rework-task-guidance { display:flex; grid-column:1/-1; align-items:flex-start; gap:.7rem; margin-top:.15rem; padding:.75rem .8rem; color:#67400a; border:1px solid #efd7aa; border-radius:10px; background:#fff8eb; }
+        .rework-task-guidance>span { display:grid; width:30px; height:30px; flex:0 0 30px; place-items:center; color:#9a5a0c; border-radius:8px; background:#ffedc9; }
+        .rework-task-guidance strong { color:#7a4808; font-size:.72rem; }
+        .rework-task-guidance p { margin:.15rem 0 .2rem; color:#67400a; font-size:.72rem; line-height:1.5; white-space:pre-line; }
+        .rework-task-guidance small { color:#8a6837; font-size:.64rem; }
 
         .no-applications,.empty-worklist { display:flex; align-items:center; justify-content:center; gap:.75rem; min-height:105px; padding:1.25rem; color:var(--eval-muted); text-align:left; }
         .no-applications>span,.empty-worklist>span { display:grid; width:42px; height:42px; flex:0 0 42px; place-items:center; color:#7a8aa3; border-radius:12px; background:#f1f4f8; }
@@ -324,7 +442,7 @@
         @supports not (border-color:color-mix(in srgb,red 10%,white)) { .assignment-guidance { border-color:#e0e6ef; } }
 
         @media (max-width:1199.98px) {
-            .workload-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+            .workload-summary { grid-template-columns:repeat(3,minmax(0,1fr)); }
             .method-guide { grid-template-columns:auto 1fr; }
             .method-guide-options { grid-column:2; justify-content:flex-start; }
             .application-list-heading,.application-row { grid-template-columns:minmax(150px,1.1fr) minmax(150px,1fr) 100px 115px 125px; }
@@ -333,6 +451,7 @@
             .evaluation-page-hero { align-items:flex-start; flex-direction:column; padding:1.2rem; }
             .assignment-total { width:100%; justify-content:center; }
             .workload-summary { grid-template-columns:1fr 1fr; gap:.7rem; }
+            .rework-priority__head { flex-direction:column; }
             .workload-card { align-items:flex-start; padding:.8rem; }
             .workload-icon { width:36px; height:36px; flex-basis:36px; }
             .workload-card small { white-space:normal; }

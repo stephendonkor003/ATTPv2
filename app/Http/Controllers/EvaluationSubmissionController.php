@@ -11,9 +11,12 @@ use App\Models\Evaluation;
 use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
 use App\Models\FormSubmission;
+use App\Models\Procurement;
+use App\Models\ReworkRequest;
 use App\Models\User;
 use App\Services\EoiQualificationService;
 use App\Services\EvaluationAssignmentTargetResolver;
+use App\Services\EvaluationReworkService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -108,6 +111,7 @@ class EvaluationSubmissionController extends Controller
                         });
                     }
                 })
+                ->with('openReworkRequest.requester')
                 ->get();
 
         $evaluationSubmissions = collect();
@@ -119,6 +123,74 @@ class EvaluationSubmissionController extends Controller
                 }
             }
         }
+
+        $reworkTasks = collect();
+        foreach ($assignments as $item) {
+            foreach ($applicationsByAssignmentId->get((string) $item->getKey(), collect()) as $application) {
+                $record = $evaluationSubmissions->get($this->assignmentTaskKey($item, $application));
+                $openRework = $record?->openReworkRequest;
+
+                if (! $record
+                    || filled($record->submitted_at)
+                    || $record->workflow_status !== EvaluationSubmission::WORKFLOW_REWORK_REQUESTED
+                    || ! $openRework) {
+                    continue;
+                }
+
+                $reworkTasks->push([
+                    'assignment' => $item,
+                    'application' => $application,
+                    'submission' => $record,
+                    'rework' => $openRework,
+                    'edit_url' => route('my.eval.start', [$item, $application]),
+                ]);
+            }
+        }
+        $reworkTasks = $reworkTasks
+            ->sortByDesc(fn (array $task) => $task['rework']->requested_at?->getTimestamp() ?? 0)
+            ->values();
+
+        $applicationsByAssignmentId = $applicationsByAssignmentId->map(
+            function (Collection $applications, string $assignmentId) use (
+                $assignments,
+                $evaluationSubmissions
+            ): Collection {
+                $item = $assignments->first(
+                    fn (EvaluationAssignment $candidate): bool => (string) $candidate->getKey() === $assignmentId
+                );
+
+                if (! $item) {
+                    return $applications;
+                }
+
+                return $applications
+                    ->sortBy(function (FormSubmission $application) use ($evaluationSubmissions, $item): string {
+                        $record = $evaluationSubmissions->get($this->assignmentTaskKey($item, $application));
+                        $isRework = $record?->workflow_status === EvaluationSubmission::WORKFLOW_REWORK_REQUESTED
+                            && $record?->openReworkRequest !== null
+                            && blank($record->submitted_at);
+                        $priority = match (true) {
+                            $isRework => 0,
+                            blank($record?->submitted_at) => 1,
+                            default => 2,
+                        };
+                        $activityOrder = $isRework
+                            ? str_pad((string) (PHP_INT_MAX - ($record->openReworkRequest?->requested_at?->getTimestamp() ?? 0)), 20, '0', STR_PAD_LEFT)
+                            : '99999999999999999999';
+
+                        return $priority.'|'.$activityOrder.'|'.strtolower((string) $application->procurement_submission_code);
+                    })
+                    ->values();
+            }
+        );
+
+        $reworkAssignmentIds = $reworkTasks
+            ->pluck('assignment.id')
+            ->map(fn ($id): string => (string) $id)
+            ->flip();
+        $assignments = $assignments
+            ->sortBy(fn (EvaluationAssignment $item): int => $reworkAssignmentIds->has((string) $item->getKey()) ? 0 : 1)
+            ->values();
 
         $taskCount = $assignments->sum(function (EvaluationAssignment $item) use ($applicationsByAssignmentId): int {
             return $applicationsByAssignmentId
@@ -136,7 +208,8 @@ class EvaluationSubmissionController extends Controller
             'drafts' => $evaluationSubmissions
                 ->filter(fn (EvaluationSubmission $submission): bool => blank($submission->submitted_at))
                 ->count(),
-            'pending' => max(0, $taskCount - $completedCount),
+            'rework' => $reworkTasks->count(),
+            'pending' => max(0, $taskCount - $completedCount - $reworkTasks->count()),
         ];
 
         return view('evaluations.my', compact(
@@ -144,7 +217,8 @@ class EvaluationSubmissionController extends Controller
             'submissions',
             'evaluationSubmissions',
             'stats',
-            'applicationsByAssignmentId'
+            'applicationsByAssignmentId',
+            'reworkTasks'
         ));
     }
 
@@ -182,14 +256,20 @@ class EvaluationSubmissionController extends Controller
             return redirect()->route('my.eval.view', [$assignment, $applicant]);
         }
 
-        $submission->load(['criteriaScores', 'sectionScores']);
+        $submission->load([
+            'criteriaScores',
+            'sectionScores',
+            'openReworkRequest.requester',
+        ]);
+        $openRework = $submission->openReworkRequest;
         $proposalTarget = $this->proposalTargetForDisplay($assignment, $applicant, $submission);
 
         return view('evaluations.submit', compact(
             'assignment',
             'submission',
             'applicant',
-            'proposalTarget'
+            'proposalTarget',
+            'openRework'
         ));
     }
 
@@ -418,6 +498,8 @@ class EvaluationSubmissionController extends Controller
             $submission = $this->evaluationSubmissionForUpdate($assignment, $applicant);
 
             abort_if($submission->isSubmitted(), 403);
+            $isReworkSubmission = $submission->workflow_status
+                === EvaluationSubmission::WORKFLOW_REWORK_REQUESTED;
 
             /* ===============================
              | BUILD CRITERIA LOOKUP
@@ -547,17 +629,27 @@ class EvaluationSubmissionController extends Controller
                 ->store("evaluation_proofs/{$submission->id}");
 
             $submission->submitted_at = now();
+            $submission->workflow_status = EvaluationSubmission::WORKFLOW_SUBMITTED;
+            $submission->revision_number = max(0, (int) $submission->revision_number) + 1;
             $submission->save();
 
-            $this->synchronizeAssignmentStatus($assignment);
-        });
+            $this->synchronizeAssignmentStatus(
+                $assignment,
+                $isReworkSubmission ? (string) $submission->getKey() : null
+            );
 
-        // Run after the evaluator transaction commits. If multiple panel members
-        // finish concurrently, the last committed submission recomputes the full
-        // applicant panel and applies the final EOI gate exactly once in effect.
-        if ($evaluation->isEoi() && ! $assignment->isTechnicalProposal()) {
-            app(EoiQualificationService::class)->synchronizeApplicantStage($applicant);
-        }
+            if ($isReworkSubmission
+                && ! app(EvaluationReworkService::class)
+                    ->completeOpenRequest($submission, auth()->user())) {
+                throw ValidationException::withMessages([
+                    'rework' => 'This rework request is no longer active. Refresh your workspace before resubmitting.',
+                ]);
+            }
+
+            if ($evaluation->isEoi() && ! $assignment->isTechnicalProposal()) {
+                app(EoiQualificationService::class)->synchronizeApplicantStage($applicant);
+            }
+        }, 3);
 
         if ($submission) {
             $submission->load([
@@ -1260,6 +1352,17 @@ class EvaluationSubmissionController extends Controller
             ])]);
         }
 
+        Procurement::query()
+            ->withTrashed()
+            ->whereKey($assignment->procurement_id)
+            ->lockForUpdate()
+            ->firstOrFail();
+        FormSubmission::query()
+            ->whereKey($applicant->getKey())
+            ->where('procurement_id', $assignment->procurement_id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
         EvaluationAssignment::query()
             ->whereKey($assignment->getKey())
             ->lockForUpdate()
@@ -1329,38 +1432,53 @@ class EvaluationSubmissionController extends Controller
         $submission->recalculateTotals();
     }
 
-    private function synchronizeAssignmentStatus(EvaluationAssignment $assignment): void
-    {
+    private function synchronizeAssignmentStatus(
+        EvaluationAssignment $assignment,
+        ?string $completingReworkSubmissionId = null
+    ): void {
         $assignment->loadMissing(['evaluation', 'procurement', 'technicalProposalRound']);
 
         $submissionIds = $this->targetResolver()
             ->targetsForAssignment($assignment)
             ->pluck('id');
 
+        $coveredSubmissions = EvaluationSubmission::query()
+            ->where(function ($query) use ($assignment): void {
+                $query->where('evaluation_assignment_id', $assignment->getKey());
+
+                if (! $assignment->isTechnicalProposal()) {
+                    $query->orWhere(function ($legacy) use ($assignment): void {
+                        $legacy->whereNull('evaluation_assignment_id')
+                            ->where('evaluation_id', $assignment->evaluation_id)
+                            ->where('procurement_id', $assignment->procurement_id)
+                            ->where('evaluator_id', $assignment->user_id);
+                    });
+                }
+            })
+            ->whereIn('form_submission_id', $submissionIds);
         $completedCount = $submissionIds->isEmpty()
             ? 0
-            : EvaluationSubmission::query()
-                ->where(function ($query) use ($assignment): void {
-                    $query->where('evaluation_assignment_id', $assignment->getKey());
-
-                    if (! $assignment->isTechnicalProposal()) {
-                        $query->orWhere(function ($legacy) use ($assignment): void {
-                            $legacy->whereNull('evaluation_assignment_id')
-                                ->where('evaluation_id', $assignment->evaluation_id)
-                                ->where('procurement_id', $assignment->procurement_id)
-                                ->where('evaluator_id', $assignment->user_id);
-                        });
-                    }
-                })
-                ->whereIn('form_submission_id', $submissionIds)
+            : (clone $coveredSubmissions)
                 ->whereNotNull('submitted_at')
                 ->distinct('form_submission_id')
                 ->count('form_submission_id');
+        $remainingReworkSubmissions = (clone $coveredSubmissions)
+            ->when(
+                $completingReworkSubmissionId,
+                fn ($query) => $query->whereKeyNot($completingReworkSubmissionId)
+            );
+        $hasOpenRework = $submissionIds->isNotEmpty()
+            && $remainingReworkSubmissions
+                ->whereHas('reworkRequests', fn ($query) => $query
+                    ->where('status', ReworkRequest::STATUS_PENDING))
+                ->exists();
 
         $assignment->update([
-            'status' => $submissionIds->isNotEmpty() && $completedCount >= $submissionIds->count()
-                ? 'submitted'
-                : 'assigned',
+            'status' => match (true) {
+                $hasOpenRework => 'rework',
+                $submissionIds->isNotEmpty() && $completedCount >= $submissionIds->count() => 'submitted',
+                default => 'assigned',
+            },
         ]);
     }
 

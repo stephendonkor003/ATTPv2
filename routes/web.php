@@ -2951,6 +2951,9 @@ Route::middleware(['auth', 'not.funding.partner', 'permission:evaluations.view_a
         Route::get('/procurements/{procurement}/methods/{method}', [PanelEvaluationController::class, 'method'])
             ->where('method', 'services|goods|eoi')
             ->name('method');
+        Route::post('/procurements/{procurement}/submissions/{submission}/rework', [\App\Http\Controllers\EvaluationReworkController::class, 'store'])
+            ->middleware('permission:evaluations.manage')
+            ->name('rework');
 });
 
 

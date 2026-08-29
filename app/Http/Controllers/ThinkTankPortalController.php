@@ -19,11 +19,12 @@ use App\Models\ProcurementInvoice;
 use App\Models\ProcurementPurchaseOrder;
 use App\Models\Role;
 use App\Models\SystemAuditLog;
-use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankProcurementEvent;
+use App\Models\ThinkTankProcurementPlan;
 use App\Models\ThinkTankProcurementReview;
 use App\Models\ThinkTankResearchOutput;
 use App\Models\User;
+use App\Services\EvaluationReworkGuard;
 use App\Services\ThinkTankLogoService;
 use App\Services\ThinkTankMeAssignmentService;
 use App\Support\IpGeo;
@@ -1985,8 +1986,12 @@ class ThinkTankPortalController extends Controller
         return view('think-tank.submissions', compact('member', 'procurement'));
     }
 
-    public function reviewSubmission(Request $request, Procurement $procurement, FormSubmission $submission)
-    {
+    public function reviewSubmission(
+        Request $request,
+        Procurement $procurement,
+        FormSubmission $submission,
+        EvaluationReworkGuard $reworkGuard
+    ) {
         $member = $this->member($request);
         abort_unless($procurement->think_tank_member_id === $member->id && $submission->procurement_id === $procurement->id, 403);
 
@@ -1999,35 +2004,76 @@ class ThinkTankPortalController extends Controller
 
         $total = round(((float) $data['technical_score'] * 0.7) + ((float) $data['financial_score'] * 0.3), 2);
 
-        ThinkTankProcurementReview::updateOrCreate(
-            ['procurement_id' => $procurement->id, 'form_submission_id' => $submission->id],
-            [
-                ...$data,
-                'think_tank_member_id' => $member->id,
-                'reviewed_by' => $request->user()?->id,
-                'total_score' => $total,
-                'reviewed_at' => now(),
-            ]
-        );
+        DB::transaction(function () use (
+            $data,
+            $member,
+            $procurement,
+            $request,
+            $reworkGuard,
+            $submission,
+            $total
+        ): void {
+            $lockedProcurement = Procurement::query()
+                ->whereKey($procurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedSubmission = FormSubmission::query()
+                ->whereKey($submission->getKey())
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $submission->update(['status' => $data['recommendation']]);
+            abort_unless($lockedProcurement->think_tank_member_id === $member->id, 403);
+            $reworkGuard->assertApplicantStatusCanChange($lockedSubmission);
+
+            ThinkTankProcurementReview::updateOrCreate(
+                [
+                    'procurement_id' => $lockedProcurement->id,
+                    'form_submission_id' => $lockedSubmission->id,
+                ],
+                [
+                    ...$data,
+                    'think_tank_member_id' => $member->id,
+                    'reviewed_by' => $request->user()?->id,
+                    'total_score' => $total,
+                    'reviewed_at' => now(),
+                ]
+            );
+
+            $lockedSubmission->update(['status' => $data['recommendation']]);
+        }, 3);
 
         return back()->with('success', 'Evaluation saved.');
     }
 
-    public function selectSubmission(Request $request, Procurement $procurement, FormSubmission $submission)
-    {
+    public function selectSubmission(
+        Request $request,
+        Procurement $procurement,
+        FormSubmission $submission,
+        EvaluationReworkGuard $reworkGuard
+    ) {
         $member = $this->member($request);
         abort_unless($procurement->think_tank_member_id === $member->id && $submission->procurement_id === $procurement->id, 403);
 
-        $procurement->update([
-            'awarded_submission_id' => $submission->id,
-            'awarded_vendor_id' => $submission->submitted_by,
-            'awarded_at' => now(),
-            'status' => 'awarded',
-        ]);
+        DB::transaction(function () use ($procurement, $submission, $member, $reworkGuard): void {
+            $lockedProcurement = $reworkGuard->lockForDownstreamTransition($procurement);
+            $lockedSubmission = FormSubmission::query()
+                ->whereKey($submission->getKey())
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $submission->update(['status' => 'selected']);
+            abort_unless($lockedProcurement->think_tank_member_id === $member->id, 403);
+
+            $lockedProcurement->update([
+                'awarded_submission_id' => $lockedSubmission->id,
+                'awarded_vendor_id' => $lockedSubmission->submitted_by,
+                'awarded_at' => now(),
+                'status' => 'awarded',
+            ]);
+
+            $lockedSubmission->update(['status' => 'selected']);
+        }, 3);
 
         return back()->with('success', 'Selected vendor saved. ATTP Secretariat and funders can see this decision immediately.');
     }

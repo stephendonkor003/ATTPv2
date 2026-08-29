@@ -70,6 +70,31 @@ it('surfaces assignment feedback and restores the failed procurement form', func
         ->toContain("'open_procurement_id' => \$procurementId");
 });
 
+it('guides a prepared proposal round directly into the qualified technical worklist', function () {
+    $view = file_get_contents(
+        dirname(__DIR__, 2).'/resources/views/evaluations/assign-hub.blade.php'
+    );
+    $controller = file_get_contents(
+        dirname(__DIR__, 2).'/app/Http/Controllers/EvaluationAssignmentController.php'
+    );
+
+    expect($view)
+        ->toContain('application_assignment_locked')
+        ->toContain('assignment-technical-worklist')
+        ->toContain('Technical evaluation worklist')
+        ->toContain('now proceed to technical evaluation')
+        ->toContain('assignment-technical-candidate-card')
+        ->toContain('@unless ($applicationAssignmentLocked)')
+        ->toContain('technical_proposal_procurement')
+        ->toContain('Original applications are locked');
+
+    expect($controller)
+        ->toContain('hasPreparedTechnicalProposalRound')
+        ->toContain('The original EOI application stage is locked')
+        ->toContain('Evaluator assignment notification could not be sent')
+        ->toContain('catch (Throwable $exception)');
+});
+
 it('compiles the evaluator assignment blade template', function () {
     $source = file_get_contents(
         dirname(__DIR__, 2).'/resources/views/evaluations/assign-hub.blade.php'

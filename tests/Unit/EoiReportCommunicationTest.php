@@ -38,9 +38,14 @@ function communicationApplicant(string $email, array $userAttributes = []): Form
     return $applicant;
 }
 
-function communicationRow(FormSubmission $applicant, string $outcome, bool $complete, bool $advance): array
-{
-    return [
+function communicationRow(
+    FormSubmission $applicant,
+    string $outcome,
+    bool $complete,
+    bool $advance,
+    ?bool $withinShortlist = null
+): array {
+    $row = [
         'applicant' => $applicant,
         'panel_complete' => $complete,
         'can_advance' => $advance,
@@ -50,6 +55,12 @@ function communicationRow(FormSubmission $applicant, string $outcome, bool $comp
         ],
         'next_stage' => $advance ? 'Technical Evaluation' : 'Does not advance',
     ];
+
+    if ($withinShortlist !== null) {
+        $row['within_qualified_shortlist'] = $withinShortlist;
+    }
+
+    return $row;
 }
 
 it('uses finalized web-report rows as the only evaluation-record and proposal recipients', function () {
@@ -109,6 +120,29 @@ it('uses finalized web-report rows as the only evaluation-record and proposal re
         ])
         ->and($service->qualifiedRows($report)->pluck('applicant.submitter.email')->all())
         ->toBe(['fully@example.test', 'average@example.test']);
+});
+
+it('uses the shared top-eight progression decision for future proposal invitations', function () {
+    $service = new EoiReportCommunicationService;
+    $proceeding = communicationRow(
+        communicationApplicant('proceeding@example.test'),
+        EoiQualificationService::OUTCOME_FULLY_QUALIFIED,
+        true,
+        true,
+        true
+    );
+    $belowShortlist = communicationRow(
+        communicationApplicant('below-shortlist@example.test'),
+        EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED,
+        true,
+        true,
+        false
+    );
+
+    expect($service->qualifiedRows(['applicants' => collect([$proceeding, $belowShortlist])])
+        ->pluck('applicant.submitter.email')
+        ->all())
+        ->toBe(['proceeding@example.test']);
 });
 
 it('previews disabled blacklisted placeholder invalid and non-vendor contacts as unsendable', function () {

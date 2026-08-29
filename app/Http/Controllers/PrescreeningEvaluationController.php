@@ -2,18 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
+use App\Mail\PrescreeningCompleted;
 use App\Models\FormSubmission;
 use App\Models\PrescreeningEvaluation;
 use App\Models\PrescreeningResult;
+use App\Models\Procurement;
 use App\Models\User;
-use App\Mail\PrescreeningCompleted;
+use App\Services\EvaluationReworkGuard;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
-use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 
 class PrescreeningEvaluationController extends Controller
 {
@@ -36,6 +38,7 @@ class PrescreeningEvaluationController extends Controller
                 ->exists()
             : false;
     }
+
     /**
      * ===============================
      * LIST PRESCREENING SUBMISSIONS
@@ -81,7 +84,7 @@ class PrescreeningEvaluationController extends Controller
                     $q->whereHas('procurement.prescreeningAssignments', function ($q2) {
                         $q2->where('user_id', auth()->id());
                     })
-                    ->orWhere('assigned_prescreener_id', auth()->id());
+                        ->orWhere('assigned_prescreener_id', auth()->id());
                 })
                 ->latest()
                 ->get();
@@ -98,7 +101,7 @@ class PrescreeningEvaluationController extends Controller
     public function show(FormSubmission $submission)
     {
         $this->assertSubmissionInScope($submission);
-        if (!$this->canAccessSubmission($submission)) {
+        if (! $this->canAccessSubmission($submission)) {
             abort(403);
         }
 
@@ -112,7 +115,7 @@ class PrescreeningEvaluationController extends Controller
             ->prescreeningTemplate
             ?->load('sections.criteria', 'criteria');
 
-        abort_if(!$template, 404);
+        abort_if(! $template, 404);
 
         // Result MAY be null (pending submission)
         $result = $submission->prescreeningResult;
@@ -121,13 +124,13 @@ class PrescreeningEvaluationController extends Controller
         // - assigned to user
         // - not locked
         $canEdit = $result
-            ? !$result->is_locked && $result->evaluated_by === auth()->id()
+            ? ! $result->is_locked && $result->evaluated_by === auth()->id()
             : true;
 
         $evaluations = PrescreeningEvaluation::where(
-                'submission_id',
-                $submission->id
-            )
+            'submission_id',
+            $submission->id
+        )
             ->get()
             ->keyBy('criterion_id');
 
@@ -151,7 +154,7 @@ class PrescreeningEvaluationController extends Controller
     {
         $this->assertSubmissionInScope($submission);
 
-        if (!$this->canAccessSubmission($submission)) {
+        if (! $this->canAccessSubmission($submission)) {
             abort(403);
         }
 
@@ -186,7 +189,7 @@ class PrescreeningEvaluationController extends Controller
             'logoDataUri' => $this->logoDataUri(),
         ])->setPaper('a4', 'portrait');
 
-        return $pdf->download($prefix . trim($name . '-' . $code, '-') . '.pdf');
+        return $pdf->download($prefix.trim($name.'-'.$code, '-').'.pdf');
     }
 
     private function resolveTemplate(FormSubmission $submission)
@@ -201,7 +204,7 @@ class PrescreeningEvaluationController extends Controller
 
     private function criteriaForTemplate($template)
     {
-        if (!$template) {
+        if (! $template) {
             return collect();
         }
 
@@ -222,7 +225,7 @@ class PrescreeningEvaluationController extends Controller
             return null;
         }
 
-        return 'data:image/jpeg;base64,' . base64_encode(file_get_contents($path));
+        return 'data:image/jpeg;base64,'.base64_encode(file_get_contents($path));
     }
 
     /**
@@ -230,15 +233,18 @@ class PrescreeningEvaluationController extends Controller
      * STORE / UPDATE PRESCREENING
      * ===============================
      */
-    public function store(Request $request, FormSubmission $submission)
-    {
+    public function store(
+        Request $request,
+        FormSubmission $submission,
+        EvaluationReworkGuard $reworkGuard
+    ) {
         $this->assertSubmissionInScope($submission);
-        if (!$this->canAccessSubmission($submission)) {
+        if (! $this->canAccessSubmission($submission)) {
             abort(403);
         }
 
         $template = $submission->procurement->prescreeningTemplate;
-        abort_if(!$template, 404);
+        abort_if(! $template, 404);
 
         $template->load('sections.criteria', 'criteria');
 
@@ -249,7 +255,19 @@ class PrescreeningEvaluationController extends Controller
             abort(403, 'Evaluation is locked. Rework must be requested.');
         }
 
-        DB::transaction(function () use ($request, $submission, $template) {
+        DB::transaction(function () use ($request, $submission, $template, $reworkGuard) {
+            $lockedProcurement = Procurement::query()
+                ->withTrashed()
+                ->whereKey($submission->procurement_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedSubmission = FormSubmission::query()
+                ->whereKey($submission->getKey())
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $reworkGuard->assertApplicantStatusCanChange($lockedSubmission);
+
             $criteria = $this->criteriaForTemplate($template);
 
             $rules = [];
@@ -273,20 +291,20 @@ class PrescreeningEvaluationController extends Controller
 
                 PrescreeningEvaluation::updateOrCreate(
                     [
-                        'submission_id' => $submission->id,
-                        'criterion_id'  => $criterion->id,
+                        'submission_id' => $lockedSubmission->id,
+                        'criterion_id' => $criterion->id,
                     ],
                     [
                         'prescreening_template_id' => $template->id,
-                        'evaluator_id'             => auth()->id(),
-                        'evaluation_value'         => $request->input(
+                        'evaluator_id' => auth()->id(),
+                        'evaluation_value' => $request->input(
                             "criteria.{$criterion->id}.value"
                         ),
-                        'is_passed'                => $pass,
-                        'remarks'                  => $request->input(
+                        'is_passed' => $pass,
+                        'remarks' => $request->input(
                             "criteria.{$criterion->id}.remarks"
                         ),
-                        'evaluated_at'             => now(),
+                        'evaluated_at' => now(),
                     ]
                 );
 
@@ -296,20 +314,20 @@ class PrescreeningEvaluationController extends Controller
             $finalStatus = $failed === 0 ? 'passed' : 'failed';
 
             PrescreeningResult::updateOrCreate(
-                ['submission_id' => $submission->id],
+                ['submission_id' => $lockedSubmission->id],
                 [
                     'prescreening_template_id' => $template->id,
-                    'total_criteria'           => $criteria->count(),
-                    'passed_criteria'          => $passed,
-                    'failed_criteria'          => $failed,
-                    'final_status'             => $finalStatus,
-                    'evaluated_by'             => auth()->id(),
-                    'evaluated_at'             => now(),
-                    'is_locked'                => true,
+                    'total_criteria' => $criteria->count(),
+                    'passed_criteria' => $passed,
+                    'failed_criteria' => $failed,
+                    'final_status' => $finalStatus,
+                    'evaluated_by' => auth()->id(),
+                    'evaluated_at' => now(),
+                    'is_locked' => true,
                 ]
             );
 
-            $submission->update([
+            $lockedSubmission->update([
                 'status' => $finalStatus === 'passed'
                     ? 'prescreen_passed'
                     : 'prescreen_failed',
@@ -331,7 +349,7 @@ class PrescreeningEvaluationController extends Controller
 
         $recipients = array_values(array_unique($recipients));
 
-        if (!empty($recipients)) {
+        if (! empty($recipients)) {
             foreach ($recipients as $email) {
                 Mail::to($email)->send(new PrescreeningCompleted($submission));
             }
@@ -353,10 +371,10 @@ class PrescreeningEvaluationController extends Controller
         abort_if(Gate::denies('prescreening.request_rework'), 403);
 
         $result = $submission->prescreeningResult;
-        abort_if(!$result, 404);
+        abort_if(! $result, 404);
 
         $result->update([
-            'is_locked'           => false,
+            'is_locked' => false,
             'rework_requested_by' => auth()->id(),
             'rework_requested_at' => now(),
         ]);

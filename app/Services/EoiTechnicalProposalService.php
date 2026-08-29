@@ -289,10 +289,15 @@ class EoiTechnicalProposalService
         iterable $qualifiedRows,
         User $user
     ): EoiTechnicalProposalRound {
-        $rows = collect($qualifiedRows)->values();
-
-        DB::transaction(function () use ($round, $rows, $user): void {
+        // The parameter is the controller preview. The shortlist is rebuilt
+        // authoritatively after acquiring the procurement lock below.
+        DB::transaction(function () use ($round, $user): void {
+            $lockedProcurement = Procurement::query()
+                ->whereKey($round->procurement_id)
+                ->lockForUpdate()
+                ->firstOrFail();
             $lockedRound = EoiTechnicalProposalRound::query()
+                ->where('procurement_id', $lockedProcurement->getKey())
                 ->lockForUpdate()
                 ->findOrFail($round->getKey());
 
@@ -301,6 +306,20 @@ class EoiTechnicalProposalService
                 EoiTechnicalProposalRound::STATUS_PUBLISHED,
             ], true)) {
                 $this->fail('round', 'Only a draft or published proposal round can enroll candidates.');
+            }
+
+            $rows = app(EoiReportCommunicationService::class)
+                ->qualifiedRows(
+                    app(EoiQualificationService::class)
+                        ->buildProcurementReport($lockedProcurement)
+                )
+                ->values();
+
+            if ($rows->isEmpty()) {
+                $this->fail(
+                    'round',
+                    'The selected applicants are no longer qualified under the current completed EOI panel.'
+                );
             }
 
             if ($lockedRound->status === EoiTechnicalProposalRound::STATUS_DRAFT) {
@@ -395,15 +414,41 @@ class EoiTechnicalProposalService
                 &$storedPaths
             ): EoiTechnicalProposalSubmission {
                 $candidateRoundId = (string) $candidate->round_id;
+                $roundContext = EoiTechnicalProposalRound::query()
+                    ->select(['id', 'procurement_id'])
+                    ->findOrFail($candidateRoundId);
+                $candidateContext = EoiTechnicalProposalCandidate::query()
+                    ->select(['id', 'round_id', 'form_submission_id'])
+                    ->findOrFail($candidate->getKey());
+
+                if ((string) $candidateContext->round_id !== $candidateRoundId) {
+                    $this->fail('candidate', 'The applicant does not belong to this proposal round.');
+                }
+
+                $lockedProcurement = Procurement::query()
+                    ->whereKey($roundContext->procurement_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $lockedApplicant = FormSubmission::query()
+                    ->whereKey($candidateContext->form_submission_id)
+                    ->where('procurement_id', $lockedProcurement->getKey())
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                app(EvaluationReworkGuard::class)
+                    ->assertTechnicalProposalCanContinue($lockedApplicant);
+
                 $lockedRound = EoiTechnicalProposalRound::query()
+                    ->where('procurement_id', $lockedProcurement->getKey())
                     ->lockForUpdate()
                     ->findOrFail($candidateRoundId);
                 $lockedCandidate = EoiTechnicalProposalCandidate::query()
-                    ->with('applicant')
                     ->lockForUpdate()
                     ->findOrFail($candidate->getKey());
+                $lockedCandidate->setRelation('applicant', $lockedApplicant);
 
-                if ((string) $lockedCandidate->round_id !== (string) $lockedRound->getKey()) {
+                if ((string) $lockedCandidate->round_id !== (string) $lockedRound->getKey()
+                    || (string) $lockedCandidate->form_submission_id !== (string) $lockedApplicant->getKey()) {
                     $this->fail('candidate', 'The applicant does not belong to this proposal round.');
                 }
 
@@ -519,6 +564,9 @@ class EoiTechnicalProposalService
                 ])->save();
 
                 $this->refreshCandidateStatus($lockedCandidate, $actor);
+                $lockedApplicant->forceFill([
+                    'status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
+                ])->save();
 
                 return $proposalSubmission;
             });
@@ -825,7 +873,13 @@ class EoiTechnicalProposalService
                     ], true);
                 });
 
-            if ($allMandatoryResolved && $this->missingRequiredChannels($candidate) === []) {
+            if ($allMandatoryResolved
+                && $this->missingRequiredChannels($candidate) === []
+                // A prohibited receipt remains visible for audit but cannot
+                // become evaluator-eligible merely because every checklist
+                // item was marked compliant. The reviewer must either record
+                // a disqualifying finding or resolve the delivery issue.
+                && $this->prohibitedReceivedChannels($candidate) === []) {
                 return EoiTechnicalProposalCandidate::STATUS_QUALIFIED;
             }
 

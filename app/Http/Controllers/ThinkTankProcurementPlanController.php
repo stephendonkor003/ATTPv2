@@ -19,6 +19,7 @@ use App\Models\ThinkTankProcurementDocument;
 use App\Models\ThinkTankProcurementItem;
 use App\Models\ThinkTankProcurementPlan;
 use App\Models\User;
+use App\Services\EvaluationReworkGuard;
 use App\Services\ThinkTankProcurementWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -752,8 +753,12 @@ class ThinkTankProcurementPlanController extends Controller
         return back()->with('success', 'Procurement opportunity published. Applicants will automatically receive vendor portal access.');
     }
 
-    public function recallPublication(Request $request, ThinkTankProcurementPlan $plan, ThinkTankProcurementItem $item)
-    {
+    public function recallPublication(
+        Request $request,
+        ThinkTankProcurementPlan $plan,
+        ThinkTankProcurementItem $item,
+        EvaluationReworkGuard $reworkGuard
+    ) {
         $member = $this->memberForPlan($request, $plan);
         $this->assertItemBelongsToPlan($item, $plan, $member);
         $procurement = $item->procurement()->firstOrFail();
@@ -763,15 +768,22 @@ class ThinkTankProcurementPlanController extends Controller
             'recall_reason' => 'required|string|min:10|max:2000',
         ]);
 
-        DB::transaction(function () use ($request, $plan, $item, $procurement, $data): void {
-            $procurement->update([
+        DB::transaction(function () use ($request, $plan, $item, $procurement, $data, $reworkGuard): void {
+            $lockedProcurement = $reworkGuard->lockAndAssertNoPendingRework(
+                $procurement,
+                'Complete or resolve all pending evaluation rework before recalling this procurement publication.'
+            );
+
+            abort_unless($lockedProcurement->status === 'published', 422, 'Only a published procurement opportunity can be recalled.');
+
+            $lockedProcurement->update([
                 'status' => 'recalled',
                 'recalled_at' => now(),
                 'recalled_by' => $request->user()->id,
                 'recall_reason' => trim($data['recall_reason']),
             ]);
 
-            $procurement->submissions()
+            $lockedProcurement->submissions()
                 ->where('status', '!=', FormSubmission::STATUS_WITHDRAWN)
                 ->update([
                     'status' => FormSubmission::STATUS_REVISION_REQUESTED,
@@ -788,9 +800,9 @@ class ThinkTankProcurementPlanController extends Controller
                 'recalled',
                 trim($data['recall_reason']),
                 [
-                    'procurement_id' => $procurement->id,
-                    'application_count' => $procurement->submissions()->count(),
-                    'publication_version' => $procurement->publication_version,
+                    'procurement_id' => $lockedProcurement->id,
+                    'application_count' => $lockedProcurement->submissions()->count(),
+                    'publication_version' => $lockedProcurement->publication_version,
                 ]
             );
         });

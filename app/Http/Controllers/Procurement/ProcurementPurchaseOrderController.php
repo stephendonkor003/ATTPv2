@@ -17,6 +17,7 @@ use App\Models\Resource;
 use App\Models\ResourceCategory;
 use App\Models\SubActivity;
 use App\Models\User;
+use App\Services\EvaluationReworkGuard;
 use App\Services\VendorPurchaseOrderEvidenceResubmissionNotificationService;
 use App\Services\VendorPurchaseOrderNotificationService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -313,7 +314,7 @@ class ProcurementPurchaseOrderController extends Controller
                 'nullable',
                 Rule::exists('procurements', 'id')->whereNull('deleted_at'),
             ],
-            'deliverable_ids'   => ['nullable', 'array'],
+            'deliverable_ids' => ['nullable', 'array'],
             'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
             'line_item_resource_categories' => ['nullable', 'array'],
             'line_item_resource_categories.*' => ['nullable', 'exists:myb_resource_categories,id'],
@@ -408,7 +409,7 @@ class ProcurementPurchaseOrderController extends Controller
         $remaining = $this->remainingCommitmentAmount($commitment);
         if ((float) $data['amount'] > $remaining) {
             throw ValidationException::withMessages([
-                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of ' . number_format($remaining, 2) . '.',
+                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of '.number_format($remaining, 2).'.',
             ]);
         }
 
@@ -429,7 +430,7 @@ class ProcurementPurchaseOrderController extends Controller
             ->values();
 
         $procurement = null;
-        if (!empty($data['procurement_id'])) {
+        if (! empty($data['procurement_id'])) {
             $procurement = Procurement::findOrFail($data['procurement_id']);
             $this->assertProcurementInScope($procurement);
 
@@ -451,7 +452,7 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $vendor = null;
-        if (!empty($data['vendor_id'])) {
+        if (! empty($data['vendor_id'])) {
             $vendor = User::query()
                 ->where('user_type', 'vendor')
                 ->findOrFail($data['vendor_id']);
@@ -460,6 +461,11 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $purchaseOrder = DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseRequest, $request, $vendor) {
+            if ($procurement) {
+                $procurement = app(EvaluationReworkGuard::class)
+                    ->lockForDownstreamTransition($procurement);
+            }
+
             $this->syncPurchaseRequestLineItems($request, $purchaseRequest);
 
             $purchaseOrder = ProcurementPurchaseOrder::create([
@@ -470,7 +476,7 @@ class ProcurementPurchaseOrderController extends Controller
                 'sub_activity_id' => $commitment->allocation_level === 'sub_activity' ? $commitment->allocation_id : null,
                 'governance_node_id' => $commitment->governance_node_id,
                 'reference_no' => ProcurementPurchaseOrder::generateReference(),
-                'po_title' => $data['po_title'] ?: 'Purchase Order for ' . $purchaseRequest->reference_no,
+                'po_title' => $data['po_title'] ?: 'Purchase Order for '.$purchaseRequest->reference_no,
                 'supplier_reference' => $data['supplier_reference'] ?? null,
                 'contract_reference' => $data['contract_reference'] ?? null,
                 'buyer_contact_name' => $data['buyer_contact_name'] ?? auth()->user()?->name,
@@ -513,7 +519,7 @@ class ProcurementPurchaseOrderController extends Controller
 
         return redirect()
             ->route('procurement.purchase-orders.show', $purchaseOrder)
-            ->with('success', 'Purchase order created from approved purchase request ' . $purchaseRequest->reference_no . '.');
+            ->with('success', 'Purchase order created from approved purchase request '.$purchaseRequest->reference_no.'.');
     }
 
     public function update(Request $request, ProcurementPurchaseOrder $purchaseOrder)
@@ -527,7 +533,7 @@ class ProcurementPurchaseOrderController extends Controller
                 'nullable',
                 Rule::exists('procurements', 'id')->whereNull('deleted_at'),
             ],
-            'deliverable_ids'   => ['nullable', 'array'],
+            'deliverable_ids' => ['nullable', 'array'],
             'deliverable_ids.*' => ['exists:procurement_deliverables,id'],
             'line_item_resource_categories' => ['nullable', 'array'],
             'line_item_resource_categories.*' => ['nullable', 'exists:myb_resource_categories,id'],
@@ -621,7 +627,7 @@ class ProcurementPurchaseOrderController extends Controller
         $remaining = $this->remainingCommitmentAmount($commitment, $purchaseOrder);
         if ((float) $data['amount'] > $remaining) {
             throw ValidationException::withMessages([
-                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of ' . number_format($remaining, 2) . '.',
+                'amount' => 'The purchase order amount cannot exceed the remaining commitment balance of '.number_format($remaining, 2).'.',
             ]);
         }
 
@@ -642,7 +648,7 @@ class ProcurementPurchaseOrderController extends Controller
             ->values();
 
         $procurement = null;
-        if (!empty($data['procurement_id'])) {
+        if (! empty($data['procurement_id'])) {
             $procurement = Procurement::findOrFail($data['procurement_id']);
             $this->assertProcurementInScope($procurement);
 
@@ -664,7 +670,7 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $vendor = null;
-        if (!empty($data['vendor_id'])) {
+        if (! empty($data['vendor_id'])) {
             $vendor = User::query()
                 ->where('user_type', 'vendor')
                 ->findOrFail($data['vendor_id']);
@@ -676,16 +682,25 @@ class ProcurementPurchaseOrderController extends Controller
         $originalStatus = strtolower((string) $purchaseOrder->status);
 
         DB::transaction(function () use ($commitment, $data, $deliverableIds, $procurement, $purchaseOrder, $purchaseRequest, $request, $vendor) {
+            if ($procurement) {
+                $procurement = app(EvaluationReworkGuard::class)
+                    ->lockForDownstreamTransition($procurement);
+            }
+            $lockedPurchaseOrder = ProcurementPurchaseOrder::query()
+                ->whereKey($purchaseOrder->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $this->syncPurchaseRequestLineItems($request, $purchaseRequest);
 
-            $purchaseOrder->update([
+            $lockedPurchaseOrder->update([
                 'budget_commitment_id' => $commitment->id,
                 'purchase_request_id' => $purchaseRequest->id,
                 'procurement_id' => $procurement?->id,
                 'vendor_id' => $vendor?->id,
                 'sub_activity_id' => $commitment->allocation_level === 'sub_activity' ? $commitment->allocation_id : null,
                 'governance_node_id' => $commitment->governance_node_id,
-                'po_title' => $data['po_title'] ?: 'Purchase Order for ' . $purchaseRequest->reference_no,
+                'po_title' => $data['po_title'] ?: 'Purchase Order for '.$purchaseRequest->reference_no,
                 'supplier_reference' => $data['supplier_reference'] ?? null,
                 'contract_reference' => $data['contract_reference'] ?? null,
                 'buyer_contact_name' => $data['buyer_contact_name'] ?? auth()->user()?->name,
@@ -707,18 +722,18 @@ class ProcurementPurchaseOrderController extends Controller
                 'amount' => $data['amount'],
                 'currency' => $this->commitmentCurrency($commitment),
                 'status' => $data['status'],
-                'issued_at' => $data['issued_at'] ?? $purchaseOrder->issued_at ?? now(),
+                'issued_at' => $data['issued_at'] ?? $lockedPurchaseOrder->issued_at ?? now(),
                 'expected_delivery_date' => $data['expected_delivery_date'] ?? $purchaseRequest->delivery_date?->toDateString(),
                 'valid_until' => $data['valid_until'] ?? null,
             ]);
 
             if ($request->hasFile('supporting_document')) {
-                $this->deleteSupportingDocument($purchaseOrder);
-                $this->attachSupportingDocument($request, $purchaseOrder);
+                $this->deleteSupportingDocument($lockedPurchaseOrder);
+                $this->attachSupportingDocument($request, $lockedPurchaseOrder);
             }
 
-            $purchaseOrder->deliverables()->sync($deliverableIds->all());
-            $this->storeLineItemEvidence($request, $purchaseOrder, $purchaseRequest, true);
+            $lockedPurchaseOrder->deliverables()->sync($deliverableIds->all());
+            $this->storeLineItemEvidence($request, $lockedPurchaseOrder, $purchaseRequest, true);
         });
 
         $purchaseOrder->refresh();
@@ -740,7 +755,7 @@ class ProcurementPurchaseOrderController extends Controller
 
         $purchaseOrder->load([
             'procurement',
-            'deliverables' => fn($q) => $q->withTrashed()->with('deletedBy'),
+            'deliverables' => fn ($q) => $q->withTrashed()->with('deletedBy'),
             'vendor',
             'subActivity',
             'negotiation',
@@ -786,7 +801,7 @@ class ProcurementPurchaseOrderController extends Controller
             'purchaseOrder' => $purchaseOrder,
         ]);
 
-        return $pdf->stream('purchase-order-' . ($purchaseOrder->reference_no ?? 'draft') . '.pdf');
+        return $pdf->stream('purchase-order-'.($purchaseOrder->reference_no ?? 'draft').'.pdf');
     }
 
     public function download(ProcurementPurchaseOrder $purchaseOrder)
@@ -815,7 +830,7 @@ class ProcurementPurchaseOrderController extends Controller
             'purchaseOrder' => $purchaseOrder,
         ]);
 
-        return $pdf->download('purchase-order-' . ($purchaseOrder->reference_no ?? 'draft') . '.pdf');
+        return $pdf->download('purchase-order-'.($purchaseOrder->reference_no ?? 'draft').'.pdf');
     }
 
     public function downloadSupportingDocument(Request $request, ProcurementPurchaseOrder $purchaseOrder)
@@ -867,7 +882,7 @@ class ProcurementPurchaseOrderController extends Controller
 
         $documents = $evidence->documents ?? [];
         $file = $documents[$document] ?? null;
-        abort_unless(is_array($file) && !empty($file['path']), 404, 'Evidence document not found.');
+        abort_unless(is_array($file) && ! empty($file['path']), 404, 'Evidence document not found.');
 
         $privateDisk = Storage::disk('local');
         abort_unless($privateDisk->exists($file['path']), 404, 'Evidence document file missing on disk.');
@@ -977,7 +992,7 @@ class ProcurementPurchaseOrderController extends Controller
         }
 
         $content = $chunks
-            ->map(fn (string $chunk) => '<p>' . e($chunk) . '</p>')
+            ->map(fn (string $chunk) => '<p>'.e($chunk).'</p>')
             ->implode('');
 
         return $this->docxPreviewShell($fileName, $content);
@@ -994,7 +1009,7 @@ class ProcurementPurchaseOrderController extends Controller
         fclose($handle);
 
         if (str_starts_with($signature, "PK\x03\x04") && class_exists(\ZipArchive::class)) {
-            $zip = new \ZipArchive();
+            $zip = new \ZipArchive;
             $opened = $zip->open($path);
             if ($opened === true) {
                 $isDocx = $zip->locateName('word/document.xml') !== false;
@@ -1026,7 +1041,7 @@ class ProcurementPurchaseOrderController extends Controller
             return $this->docxPreviewShell($fileName, '<p class="empty">DOCX preview is not available because the PHP Zip extension is disabled on this server.</p>');
         }
 
-        $zip = new \ZipArchive();
+        $zip = new \ZipArchive;
         if ($zip->open($path) !== true) {
             return $this->docxPreviewShell($fileName, '<p class="empty">This Word document could not be opened for preview.</p>');
         }
@@ -1035,14 +1050,16 @@ class ProcurementPurchaseOrderController extends Controller
 
         if (! is_string($documentXml) || trim($documentXml) === '') {
             $zip->close();
+
             return $this->docxPreviewShell($fileName, '<p class="empty">This Word document has no readable preview content.</p>');
         }
 
-        $document = new \DOMDocument();
+        $document = new \DOMDocument;
         $loaded = @$document->loadXML($documentXml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
 
         if (! $loaded) {
             $zip->close();
+
             return $this->docxPreviewShell($fileName, '<p class="empty">This Word document could not be parsed for preview.</p>');
         }
 
@@ -1053,6 +1070,7 @@ class ProcurementPurchaseOrderController extends Controller
         $body = $xpath->query('//w:body')->item(0);
         if (! $body) {
             $zip->close();
+
             return $this->docxPreviewShell($fileName, '<p class="empty">This Word document has no body content to preview.</p>');
         }
 
@@ -1157,7 +1175,7 @@ HTML;
                 continue;
             }
 
-            $header = new \DOMDocument();
+            $header = new \DOMDocument;
             if (! @$header->loadXML($headerXml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) {
                 continue;
             }
@@ -1174,7 +1192,7 @@ HTML;
             }
 
             if (trim(strip_tags($headerContent)) !== '' || str_contains($headerContent, '<img')) {
-                $content .= '<div class="docx-header">' . $headerContent . '</div>';
+                $content .= '<div class="docx-header">'.$headerContent.'</div>';
             }
         }
 
@@ -1186,15 +1204,15 @@ HTML;
         $partPath = str_replace('\\', '/', $partPath);
         $directory = trim(dirname($partPath), '.');
         $baseDirectory = $directory !== '' ? $directory : '';
-        $relsPath = ($baseDirectory !== '' ? $baseDirectory . '/' : '')
-            . '_rels/' . basename($partPath) . '.rels';
+        $relsPath = ($baseDirectory !== '' ? $baseDirectory.'/' : '')
+            .'_rels/'.basename($partPath).'.rels';
 
         $relsXml = $zip->getFromName($relsPath);
         if (! is_string($relsXml) || trim($relsXml) === '') {
             return [];
         }
 
-        $document = new \DOMDocument();
+        $document = new \DOMDocument;
         if (! @$document->loadXML($relsXml, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) {
             return [];
         }
@@ -1226,7 +1244,7 @@ HTML;
             return $target;
         }
 
-        $parts = explode('/', trim(($baseDirectory !== '' ? $baseDirectory . '/' : '') . $target, '/'));
+        $parts = explode('/', trim(($baseDirectory !== '' ? $baseDirectory.'/' : '').$target, '/'));
         $normalized = [];
 
         foreach ($parts as $part) {
@@ -1236,6 +1254,7 @@ HTML;
 
             if ($part === '..') {
                 array_pop($normalized);
+
                 continue;
             }
 
@@ -1249,7 +1268,7 @@ HTML;
     {
         $html = $this->renderDocxInlineContent($paragraph, $zip, $relationships);
 
-        return '<p>' . ($html !== '' ? $html : '&nbsp;') . '</p>';
+        return '<p>'.($html !== '' ? $html : '&nbsp;').'</p>';
     }
 
     private function renderDocxTable(\DOMNode $table, ?\ZipArchive $zip = null, array $relationships = []): string
@@ -1276,13 +1295,13 @@ HTML;
                     }
                 }
 
-                $cells .= '<td>' . ($cellContent !== '' ? $cellContent : '&nbsp;') . '</td>';
+                $cells .= '<td>'.($cellContent !== '' ? $cellContent : '&nbsp;').'</td>';
             }
 
-            $rows .= '<tr>' . $cells . '</tr>';
+            $rows .= '<tr>'.$cells.'</tr>';
         }
 
-        return $rows !== '' ? '<table>' . $rows . '</table>' : '';
+        return $rows !== '' ? '<table>'.$rows.'</table>' : '';
     }
 
     private function renderDocxInlineContent(\DOMNode $node, ?\ZipArchive $zip = null, array $relationships = []): string
@@ -1352,7 +1371,7 @@ HTML;
 
         return $styles === []
             ? $html
-            : '<span style="' . e(implode(';', array_unique($styles))) . '">' . $html . '</span>';
+            : '<span style="'.e(implode(';', array_unique($styles))).'">'.$html.'</span>';
     }
 
     private function renderDocxImage(\DOMNode $node, ?\ZipArchive $zip, array $relationships): string
@@ -1384,19 +1403,19 @@ HTML;
         [$width, $height] = $this->docxImageDimensions($node);
         $style = 'max-width:100%;height:auto;';
         if ($width !== null) {
-            $style .= 'width:' . min($width, 680) . 'px;';
+            $style .= 'width:'.min($width, 680).'px;';
         }
         if ($height !== null && $height < 260) {
-            $style .= 'max-height:' . max($height, 24) . 'px;';
+            $style .= 'max-height:'.max($height, 24).'px;';
         }
 
         return '<span class="docx-image-wrap"><img class="docx-image" src="data:'
-            . e($mimeType)
-            . ';base64,'
-            . base64_encode($imageBytes)
-            . '" style="'
-            . e($style)
-            . '" alt="Embedded image"></span>';
+            .e($mimeType)
+            .';base64,'
+            .base64_encode($imageBytes)
+            .'" style="'
+            .e($style)
+            .'" alt="Embedded image"></span>';
     }
 
     private function docxImageRelationshipId(\DOMNode $node): string
@@ -1413,7 +1432,7 @@ HTML;
 
             foreach (['embed', 'id', 'link'] as $attribute) {
                 $value = $imageNode->getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', $attribute)
-                    ?: $imageNode->getAttribute('r:' . $attribute);
+                    ?: $imageNode->getAttribute('r:'.$attribute);
                 if ($value !== '') {
                     return $value;
                 }
@@ -1455,7 +1474,7 @@ HTML;
 
     private function docxCssLengthToPixels(string $style, string $property): ?int
     {
-        if (! preg_match('/(?:^|;)\s*' . preg_quote($property, '/') . '\s*:\s*([0-9.]+)(pt|px|in|cm|mm)?/i', $style, $matches)) {
+        if (! preg_match('/(?:^|;)\s*'.preg_quote($property, '/').'\s*:\s*([0-9.]+)(pt|px|in|cm|mm)?/i', $style, $matches)) {
             return null;
         }
 
@@ -1583,7 +1602,7 @@ HTML;
             return;
         }
 
-        if (!$purchaseOrder->governance_node_id || !in_array($purchaseOrder->governance_node_id, $scopedNodeIds, true)) {
+        if (! $purchaseOrder->governance_node_id || ! in_array($purchaseOrder->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this purchase order.');
         }
     }
@@ -1604,7 +1623,7 @@ HTML;
             return;
         }
 
-        if (!$commitment->governance_node_id || !in_array($commitment->governance_node_id, $scopedNodeIds, true)) {
+        if (! $commitment->governance_node_id || ! in_array($commitment->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this commitment.');
         }
     }
@@ -1625,7 +1644,7 @@ HTML;
             return;
         }
 
-        if (!$purchaseRequest->governance_node_id || !in_array($purchaseRequest->governance_node_id, $scopedNodeIds, true)) {
+        if (! $purchaseRequest->governance_node_id || ! in_array($purchaseRequest->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this purchase request.');
         }
     }
@@ -1637,7 +1656,7 @@ HTML;
             return;
         }
 
-        if (!$procurement->governance_node_id || !in_array($procurement->governance_node_id, $scopedNodeIds, true)) {
+        if (! $procurement->governance_node_id || ! in_array($procurement->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this procurement.');
         }
     }
@@ -1658,7 +1677,7 @@ HTML;
             return;
         }
 
-        if (!$category->governance_node_id || !in_array($category->governance_node_id, $scopedNodeIds, true)) {
+        if (! $category->governance_node_id || ! in_array($category->governance_node_id, $scopedNodeIds, true)) {
             abort(403, 'You do not have access to this resource category.');
         }
     }
@@ -1683,7 +1702,7 @@ HTML;
             'sub_activity' => null,
         ];
 
-        if (!$commitment->allocation_id) {
+        if (! $commitment->allocation_id) {
             return $hierarchy;
         }
 
@@ -1700,8 +1719,9 @@ HTML;
                 ->whereKey($commitment->allocation_id)
                 ->first(['id', 'name', 'project_id']);
 
-            if (!$activity) {
+            if (! $activity) {
                 $hierarchy['activity'] = 'Activity not found';
+
                 return $hierarchy;
             }
 
@@ -1718,8 +1738,9 @@ HTML;
                 ->whereKey($commitment->allocation_id)
                 ->first(['id', 'name', 'activity_id']);
 
-            if (!$subActivity) {
+            if (! $subActivity) {
                 $hierarchy['sub_activity'] = 'Sub-Activity not found';
+
                 return $hierarchy;
             }
 
@@ -1729,8 +1750,9 @@ HTML;
                 ->whereKey($subActivity->activity_id)
                 ->first(['id', 'name', 'project_id']);
 
-            if (!$activity) {
+            if (! $activity) {
                 $hierarchy['activity'] = 'Activity not found';
+
                 return $hierarchy;
             }
 
@@ -1745,7 +1767,7 @@ HTML;
 
     private function commitmentPurchaseRequestReference(BudgetCommitment $commitment): string
     {
-        if (!$commitment->purchase_request_id) {
+        if (! $commitment->purchase_request_id) {
             return 'Commitment';
         }
 
@@ -1869,7 +1891,7 @@ HTML;
             'commitments' => $commitments,
             'items' => $items,
             'search_text' => $searchText,
-            'label' => trim(($purchaseRequest->reference_no ?? 'Purchase Request') . ' | ' . $program . ' | ' . $currency . ' ' . number_format($remainingAmount, 2)),
+            'label' => trim(($purchaseRequest->reference_no ?? 'Purchase Request').' | '.$program.' | '.$currency.' '.number_format($remainingAmount, 2)),
         ];
     }
 
@@ -1954,7 +1976,7 @@ HTML;
 
         if ($quantity > $orderedQuantity) {
             throw ValidationException::withMessages([
-                "item_evidence.{$key}.delivered_quantity" => 'Delivered quantity cannot exceed the ordered quantity of ' . number_format($orderedQuantity, 2) . '.',
+                "item_evidence.{$key}.delivered_quantity" => 'Delivered quantity cannot exceed the ordered quantity of '.number_format($orderedQuantity, 2).'.',
             ]);
         }
 
@@ -2019,7 +2041,7 @@ HTML;
             $category = ResourceCategory::find($categoryId);
             $resource = Resource::find($resourceId);
 
-            if (!$category || !$resource) {
+            if (! $category || ! $resource) {
                 throw ValidationException::withMessages([
                     'line_item_resources' => 'One or more selected resource values were not found.',
                 ]);
@@ -2074,8 +2096,7 @@ HTML;
         ProcurementPurchaseOrder $purchaseOrder,
         PurchaseRequest $purchaseRequest,
         bool $preserveExistingDocuments = false
-    ): void
-    {
+    ): void {
         $evidenceInput = $request->input('item_evidence', []);
         $filesInput = $request->file('item_evidence', []);
         $unitPrices = $request->input('line_item_unit_prices', []);
@@ -2087,7 +2108,7 @@ HTML;
             : collect();
 
         foreach ($evidenceInput as $itemId => $input) {
-            if (!$items->has((string) $itemId)) {
+            if (! $items->has((string) $itemId)) {
                 throw ValidationException::withMessages([
                     'item_evidence' => 'One or more line item evidence records do not belong to the selected purchase request.',
                 ]);
@@ -2106,7 +2127,7 @@ HTML;
                 : [];
 
             foreach (($filesInput[$itemId]['documents'] ?? []) as $index => $file) {
-                if (!$file || !$file->isValid()) {
+                if (! $file || ! $file->isValid()) {
                     continue;
                 }
 
@@ -2127,9 +2148,10 @@ HTML;
                 || array_key_exists('delivered_quantity', $input)
                 || array_key_exists('delivered_amount', $input);
 
-            if (!$isMet && $deliverableDate === '' && $notes === '' && empty($documents) && ! $hasDeliveredPricing) {
+            if (! $isMet && $deliverableDate === '' && $notes === '' && empty($documents) && ! $hasDeliveredPricing) {
                 if ($existing) {
                     $existing->delete();
+
                     continue;
                 }
 
@@ -2179,6 +2201,7 @@ HTML;
 
         if (Storage::disk('local')->exists($path)) {
             Storage::disk('local')->delete($path);
+
             return;
         }
 

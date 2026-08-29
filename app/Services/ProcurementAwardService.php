@@ -7,54 +7,67 @@ use App\Models\FormSubmission;
 use App\Models\Procurement;
 use App\Models\ProcurementAuditLog;
 use App\Models\ProcurementContractNegotiation;
-use App\Notifications\VendorProcurementAwardedNotification;
 use App\Models\User;
+use App\Notifications\VendorProcurementAwardedNotification;
 use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
 class ProcurementAwardService
 {
+    public function __construct(
+        private readonly EvaluationReworkGuard $reworkGuard
+    ) {}
+
     public function award(Procurement $procurement): ProcurementContractNegotiation
     {
-        if ($procurement->status !== 'closed') {
-            throw new Exception('Only closed procurements can be awarded.');
-        }
+        [$procurement, $negotiation, $vendor] = DB::transaction(function () use ($procurement): array {
+            $lockedProcurement = $this->reworkGuard
+                ->lockForDownstreamTransition($procurement);
 
-        $negotiation = $procurement->contractNegotiations()
-            ->where('status', 'agreed')
-            ->orderByDesc('agreed_at')
-            ->first();
+            if ($lockedProcurement->status !== 'closed') {
+                throw new Exception('Only closed procurements can be awarded.');
+            }
 
-        if (!$negotiation) {
-            throw new Exception('No approved contract negotiation found for this procurement.');
-        }
+            $negotiation = $lockedProcurement->contractNegotiations()
+                ->where('status', 'agreed')
+                ->orderByDesc('agreed_at')
+                ->lockForUpdate()
+                ->first();
 
-        $vendor = $this->resolveVendor($negotiation);
-        if (!$vendor) {
-            throw new Exception('Awarded vendor record is missing.');
-        }
-        if (empty($vendor->email)) {
-            throw new Exception('Awarded vendor email is missing.');
-        }
+            if (! $negotiation) {
+                throw new Exception('No approved contract negotiation found for this procurement.');
+            }
 
-        $procurement->update([
-            'status' => 'awarded',
-            'awarded_submission_id' => $negotiation->submission_id,
-            'awarded_vendor_id' => $vendor->id,
-            'awarded_at' => now(),
-        ]);
+            $vendor = $this->resolveVendor($negotiation);
+            if (! $vendor) {
+                throw new Exception('Awarded vendor record is missing.');
+            }
+            if (empty($vendor->email)) {
+                throw new Exception('Awarded vendor email is missing.');
+            }
 
-        ProcurementAuditLog::create([
-            'user_id' => auth()->id(),
-            'action' => 'Awarded procurement',
-            'procurement_id' => $procurement->id,
-            'submission_id' => $negotiation->submission_id,
-            'metadata' => [
-                'negotiation_id' => $negotiation->id,
-                'vendor_id' => $vendor->id,
-            ],
-            'created_at' => now(),
-        ]);
+            $lockedProcurement->update([
+                'status' => 'awarded',
+                'awarded_submission_id' => $negotiation->submission_id,
+                'awarded_vendor_id' => $vendor->id,
+                'awarded_at' => now(),
+            ]);
+
+            ProcurementAuditLog::create([
+                'user_id' => auth()->id(),
+                'action' => 'Awarded procurement',
+                'procurement_id' => $lockedProcurement->id,
+                'submission_id' => $negotiation->submission_id,
+                'metadata' => [
+                    'negotiation_id' => $negotiation->id,
+                    'vendor_id' => $vendor->id,
+                ],
+                'created_at' => now(),
+            ]);
+
+            return [$lockedProcurement, $negotiation, $vendor];
+        }, 3);
 
         $mail = new VendorProcurementAwarded($procurement, $negotiation, $vendor);
 
@@ -93,6 +106,7 @@ class ProcurementAwardService
 
         if ($negotiation->submission_id) {
             $submission = FormSubmission::with('submitter')->find($negotiation->submission_id);
+
             return $submission?->submitter;
         }
 

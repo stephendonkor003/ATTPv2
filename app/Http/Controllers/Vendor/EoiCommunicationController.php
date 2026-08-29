@@ -9,7 +9,6 @@ use App\Models\EoiReportCommunicationRecipient;
 use App\Models\EoiReportProposalDocument;
 use App\Models\EoiTechnicalProposalCandidate;
 use App\Models\EoiTechnicalProposalSubmission;
-use App\Models\FormSubmission;
 use App\Services\EoiReportCommunicationService;
 use App\Services\EoiTechnicalProposalService;
 use Illuminate\Http\RedirectResponse;
@@ -179,9 +178,6 @@ class EoiCommunicationController extends Controller
             $recipient->forceFill([
                 'proposal_submitted_at' => $proposalSubmission->received_at,
                 'proposal_message' => trim((string) ($validated['proposal_message'] ?? '')) ?: null,
-            ])->save();
-            $candidate->applicant?->forceFill([
-                'status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
             ])->save();
 
             return back()->with('success', 'Your proposal revision was submitted securely and time-stamped.');

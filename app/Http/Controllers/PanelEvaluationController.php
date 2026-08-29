@@ -11,6 +11,7 @@ use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
 use App\Models\Procurement;
 use App\Models\ProcurementAuditLog;
+use App\Models\ReworkRequest;
 use App\Services\EoiQualificationService;
 use App\Services\EoiReportCommunicationService;
 use Illuminate\Database\Eloquent\Builder;
@@ -60,6 +61,7 @@ class PanelEvaluationController extends Controller
     {
         $procurement = $this->findVisibleProcurement($procurement);
         $card = $this->procurementCard($procurement);
+        $evaluationRows = $this->evaluationRows($procurement);
 
         $eoiStats = null;
         $qualifiedApplicantIds = collect();
@@ -89,7 +91,8 @@ class PanelEvaluationController extends Controller
             'card',
             'eoiStats',
             'communicationSummary',
-            'journeySteps'
+            'journeySteps',
+            'evaluationRows'
         ));
     }
 
@@ -131,11 +134,14 @@ class PanelEvaluationController extends Controller
                         'evaluation_id',
                         'procurement_id',
                         'form_submission_id',
+                        'workflow_stage',
+                        'technical_proposal_round_id',
                         'user_id',
                         'status',
                         'assigned_at',
                     ]),
                 'evaluationAssignments.evaluation:id,name,type,evaluation_phase,procurement_id',
+                'evaluationAssignments.technicalProposalRound:id,procurement_id,round_number,title,status',
                 'evaluations' => fn ($evaluations) => $evaluations
                     ->whereIn('type', $managedTypes)
                     ->select([
@@ -346,6 +352,214 @@ class PanelEvaluationController extends Controller
                 (string) $submission->form_submission_id,
             ]))
             ->values();
+    }
+
+    private function evaluationRows(Procurement $procurement): Collection
+    {
+        $currentUser = request()->user();
+        $isSystemAdministrator = $currentUser
+            && ($currentUser->isAdmin() || $currentUser->isSuperAdmin());
+        $assignments = $procurement->evaluationAssignments
+            ->filter(fn (EvaluationAssignment $assignment): bool => $assignment->evaluation !== null)
+            ->values();
+        $hasProposalRound = EoiTechnicalProposalRound::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->where('status', '!=', EoiTechnicalProposalRound::STATUS_CANCELLED)
+            ->exists();
+        $releasedEoiApplicantIds = EoiReportCommunicationRecipient::query()
+            ->whereHas('communication', fn (Builder $query) => $query
+                ->where('procurement_id', $procurement->getKey())
+                ->where('type', EoiReportCommunication::TYPE_EVALUATION_RECORDS))
+            ->where(function (Builder $query): void {
+                $query->whereNotNull('record_file_path')
+                    ->orWhereNotNull('emailed_at')
+                    ->orWhereIn('delivery_status', [
+                        EoiReportCommunicationRecipient::STATUS_PENDING,
+                        EoiReportCommunicationRecipient::STATUS_PROCESSING,
+                        EoiReportCommunicationRecipient::STATUS_SENT,
+                    ]);
+            })
+            ->pluck('form_submission_id')
+            ->filter()
+            ->map(fn ($id): string => (string) $id)
+            ->flip();
+        $hasFinalDownstreamDecision = filled($procurement->awarded_submission_id)
+            || filled($procurement->awarded_at)
+            || $procurement->contractNegotiations()->exists()
+            || $procurement->purchaseOrders()->exists();
+
+        return EvaluationSubmission::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->where(function (Builder $query): void {
+                $query->whereNotNull('submitted_at')
+                    ->orWhereHas('reworkRequests', fn (Builder $reworkQuery) => $reworkQuery
+                        ->where('status', ReworkRequest::STATUS_PENDING));
+            })
+            ->whereHas('evaluation', fn (Builder $query) => $query
+                ->whereIn('type', Evaluation::MANAGED_TYPES))
+            ->with([
+                'applicant.submitter:id,name,email',
+                'applicant.values' => fn ($values) => $values
+                    ->whereIn('field_key', ['official_name', 'consortium_name', 'think_tank_name'])
+                    ->select(['id', 'submission_id', 'field_key', 'value']),
+                'criteriaScores:id,submission_id,evaluation_criteria_id,score,decision',
+                'evaluation:id,name,type,evaluation_phase',
+                'evaluator:id,name,email',
+                'openReworkRequest.requester:id,name',
+                'latestCompletedReworkRequest' => fn ($query) => $query->select([
+                    'id',
+                    'evaluation_submission_id',
+                    'requested_by',
+                    'cycle',
+                    'requested_at',
+                    'completed_at',
+                    'source_revision_number',
+                    'completed_revision_number',
+                    'notified_at',
+                    'notification_error',
+                ]),
+                'latestCompletedReworkRequest.requester:id,name',
+            ])
+            ->withCount([
+                'reworkRequests as completed_rework_count' => fn ($query) => $query
+                    ->where('status', ReworkRequest::STATUS_COMPLETED),
+            ])
+            ->latest('updated_at')
+            ->get()
+            ->map(function (EvaluationSubmission $submission) use (
+                $assignments,
+                $hasFinalDownstreamDecision,
+                $hasProposalRound,
+                $currentUser,
+                $isSystemAdministrator,
+                $procurement,
+                $releasedEoiApplicantIds
+            ): ?array {
+                $assignment = $assignments->first(
+                    fn (EvaluationAssignment $candidate): bool => filled($submission->evaluation_assignment_id)
+                        && (string) $candidate->getKey() === (string) $submission->evaluation_assignment_id
+                );
+
+                if (! $assignment) {
+                    $assignment = $assignments->first(
+                        fn (EvaluationAssignment $candidate): bool => ! $candidate->isTechnicalProposal()
+                            && (string) $candidate->evaluation_id === (string) $submission->evaluation_id
+                            && (string) $candidate->user_id === (string) $submission->evaluator_id
+                            && (blank($candidate->form_submission_id)
+                                || (string) $candidate->form_submission_id === (string) $submission->form_submission_id)
+                    );
+                }
+
+                if (! $assignment || ! $submission->evaluation) {
+                    return null;
+                }
+
+                $openRework = $submission->openReworkRequest;
+                $status = match (true) {
+                    filled($submission->submitted_at) => 'submitted',
+                    $openRework !== null => 'rework',
+                    default => 'draft',
+                };
+                $blockingReason = null;
+                $requiresProposalRoundOverride = false;
+
+                if ($hasFinalDownstreamDecision) {
+                    $blockingReason = 'Locked because an award or contracting process has started.';
+                } elseif ($assignment->isApplicationStage()
+                    && $submission->evaluation->isEoi()
+                    && $releasedEoiApplicantIds->has((string) $submission->form_submission_id)) {
+                    $blockingReason = 'Locked because this applicant evaluation record has been released.';
+                } elseif ($assignment->isApplicationStage()
+                    && $submission->evaluation->isEoi()
+                    && $hasProposalRound) {
+                    $blockingReason = 'Locked because a technical-proposal round has been prepared.';
+                    $requiresProposalRoundOverride = true;
+                }
+
+                $canOverrideProposalRoundLock = $requiresProposalRoundOverride
+                    && $isSystemAdministrator;
+
+                $result = $submission->evaluation->usesNumericScoring()
+                    ? ($submission->overall_score !== null
+                        ? number_format((float) $submission->overall_score, 2).' points'
+                        : 'Score pending')
+                    : $this->categoricalResult($submission);
+                $technicalProposalRound = $assignment->technicalProposalRound;
+                $workflowLabel = $assignment->isTechnicalProposalStage()
+                    ? 'Technical proposal evaluation'
+                    : 'Application evaluation';
+                $workflowRoundLabel = $assignment->isTechnicalProposalStage()
+                    ? ($technicalProposalRound
+                        ? 'Round '.number_format((int) $technicalProposalRound->round_number)
+                            .(filled($technicalProposalRound->title) ? ': '.$technicalProposalRound->title : '')
+                        : 'Technical proposal round')
+                    : null;
+
+                return [
+                    'submission' => $submission,
+                    'assignment' => $assignment,
+                    'evaluation' => $submission->evaluation,
+                    'evaluator' => $submission->evaluator,
+                    'applicant' => $submission->applicant,
+                    'status' => $status,
+                    'status_label' => match ($status) {
+                        'submitted' => 'Submitted',
+                        'rework' => 'Rework requested',
+                        default => 'Draft in progress',
+                    },
+                    'result' => $result,
+                    'workflow_label' => $workflowLabel,
+                    'workflow_round_label' => $workflowRoundLabel,
+                    'workflow_context' => $workflowRoundLabel
+                        ? $workflowLabel.' - '.$workflowRoundLabel
+                        : $workflowLabel,
+                    'open_rework' => $openRework,
+                    'completed_rework_count' => (int) $submission->completed_rework_count,
+                    'latest_completed_rework' => $submission->latestCompletedReworkRequest,
+                    'blocking_reason' => $blockingReason,
+                    'requires_proposal_round_override' => $requiresProposalRoundOverride,
+                    'can_override_proposal_round_lock' => $canOverrideProposalRoundLock,
+                    'can_request_rework' => $currentUser?->can('evaluations.manage')
+                        && $status === 'submitted'
+                        && ($blockingReason === null || $canOverrideProposalRoundLock),
+                    'view_url' => $status === 'submitted'
+                        ? route('reports.evaluations.submission', $submission)
+                        : null,
+                    'rework_url' => route('eval.panel.rework', [$procurement, $submission]),
+                    'activity_at' => $submission->submitted_at
+                        ?? $openRework?->requested_at
+                        ?? $submission->updated_at,
+                ];
+            })
+            ->filter()
+            ->sortBy(fn (array $row): string => implode('|', [
+                match ($row['status']) {
+                    'rework' => '0',
+                    'submitted' => '1',
+                    default => '2',
+                },
+                str_pad((string) (PHP_INT_MAX - ($row['activity_at']?->getTimestamp() ?? 0)), 20, '0', STR_PAD_LEFT),
+            ]))
+            ->values();
+    }
+
+    private function categoricalResult(EvaluationSubmission $submission): string
+    {
+        $decisions = $submission->criteriaScores
+            ->pluck('decision')
+            ->filter(fn ($decision): bool => $decision !== null && $decision !== '')
+            ->countBy()
+            ->map(function (int $count, int|string $decision) use ($submission): string {
+                $label = $submission->evaluation?->decisionLabel($decision)
+                    ?? Str::headline((string) $decision);
+
+                return number_format($count).' '.$label;
+            })
+            ->values();
+
+        return $decisions->isEmpty()
+            ? 'Decisions pending'
+            : $decisions->implode(' · ');
     }
 
     private function communicationSummary(

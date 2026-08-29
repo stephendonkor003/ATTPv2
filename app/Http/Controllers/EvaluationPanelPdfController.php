@@ -24,7 +24,7 @@ class EvaluationPanelPdfController extends Controller
             'sectionScores.section',
             'evaluator',
             'procurement',
-            'applicant.submitter'
+            'applicant.submitter',
         ]);
 
         $pdf = Pdf::loadView(
@@ -33,26 +33,27 @@ class EvaluationPanelPdfController extends Controller
         );
 
         return $pdf->download(
-            'evaluation-' . $submission->id . '.pdf'
+            'evaluation-'.$submission->id.'.pdf'
         );
     }
 
     /* ===============================
      | BULK PDF PER PROCUREMENT
      =============================== */
-     public function bulk(Procurement $procurement)
+    public function bulk(Procurement $procurement)
     {
         $this->assertPanelProcurementAccessible($procurement);
 
         $submissions = EvaluationSubmission::with([
-                'evaluation.sections.criteria',
-                'criteriaScores.criteria',
-                'sectionScores.section',
-                'evaluator',
-                'applicant.submitter',
-            ])
+            'evaluation.sections.criteria',
+            'criteriaScores.criteria',
+            'sectionScores.section',
+            'evaluator',
+            'applicant.submitter',
+        ])
             ->where('procurement_id', $procurement->id)
             ->whereNotNull('submitted_at')
+            ->where('workflow_status', EvaluationSubmission::WORKFLOW_SUBMITTED)
             ->when($this->userHasAssignedPortfolioScope(), function ($query) {
                 $this->applyAssignedPortfolioScopeToEvaluationSubmissions($query);
             })
@@ -61,17 +62,24 @@ class EvaluationPanelPdfController extends Controller
         abort_if($submissions->isEmpty(), 404, 'No evaluations found');
 
         return Pdf::loadView(
-                'evaluations.panel.pdf.bulk',
-                compact('procurement', 'submissions')
-            )
+            'evaluations.panel.pdf.bulk',
+            compact('procurement', 'submissions')
+        )
             ->setPaper('a4', 'portrait')
             ->download(
-                'panel-evaluations-' . $procurement->id . '.pdf'
+                'panel-evaluations-'.$procurement->id.'.pdf'
             );
     }
 
     private function assertPanelSubmissionAccessible(EvaluationSubmission $submission): void
     {
+        abort_unless(
+            $submission->isSubmitted()
+                && $submission->workflow_status === EvaluationSubmission::WORKFLOW_SUBMITTED,
+            404,
+            'A completed evaluation PDF was not found.'
+        );
+
         $user = request()->user();
 
         if ($this->userHasAssignedPortfolioScope($user)) {

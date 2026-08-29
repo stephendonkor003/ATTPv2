@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
 use App\Models\Procurement;
 use App\Models\ProcurementPlan;
 use Illuminate\Http\Request;
-use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
+use Illuminate\Validation\ValidationException;
 
 class ProcurementStatusController extends Controller
 {
@@ -19,7 +20,7 @@ class ProcurementStatusController extends Controller
     public function submit(Procurement $procurement)
     {
         $this->assertProcurementInScope($procurement);
-        if (!in_array($procurement->status, ['draft', 'rejected'])) {
+        if (! in_array($procurement->status, ['draft', 'rejected'])) {
             return back()->with('error', 'Only draft or rejected procurements can be submitted.');
         }
 
@@ -73,7 +74,7 @@ class ProcurementStatusController extends Controller
         }
 
         $missingRequirements = $this->missingPublishingRequirements($procurement);
-        if (!empty($missingRequirements)) {
+        if (! empty($missingRequirements)) {
             return back()->with('error', $this->publishBlockedMessage($missingRequirements));
         }
 
@@ -120,6 +121,11 @@ class ProcurementStatusController extends Controller
         $this->assertProcurementInScope($procurement);
         try {
             $awardService->award($procurement);
+        } catch (ValidationException $e) {
+            return back()->with(
+                'error',
+                data_get($e->errors(), 'procurement.0', 'Complete the pending evaluation rework before awarding this procurement.')
+            );
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -131,11 +137,11 @@ class ProcurementStatusController extends Controller
     {
         $missing = [];
 
-        if (!$procurement->prescreeningTemplate()->exists()) {
+        if (! $procurement->prescreeningTemplate()->exists()) {
             $missing[] = 'a prescreening template';
         }
 
-        if (!$procurement->forms()->exists()) {
+        if (! $procurement->forms()->exists()) {
             $missing[] = 'at least one attached form';
         }
 
@@ -145,9 +151,9 @@ class ProcurementStatusController extends Controller
     private function publishBlockedMessage(array $missingRequirements): string
     {
         if (count($missingRequirements) === 1) {
-            return 'Cannot publish this procurement yet. Please add ' . $missingRequirements[0] . ' first.';
+            return 'Cannot publish this procurement yet. Please add '.$missingRequirements[0].' first.';
         }
 
-        return 'Cannot publish this procurement yet. Please add ' . implode(' and ', $missingRequirements) . ' first.';
+        return 'Cannot publish this procurement yet. Please add '.implode(' and ', $missingRequirements).' first.';
     }
 }

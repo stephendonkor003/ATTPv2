@@ -76,6 +76,98 @@ it('ignores null and malformed values instead of converting them into categorica
         ->toBe(EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED);
 });
 
+it('ranks qualified applicants by categorical panel strength and returns a strict first eight', function () {
+    $row = function (
+        string $name,
+        string $outcome,
+        int $qualified,
+        int $average,
+        string $code
+    ): array {
+        $applicant = (new FormSubmission)->forceFill([
+            'id' => (string) Str::uuid(),
+            'procurement_submission_code' => $code,
+        ]);
+        $applicant->setRelation('submitter', (new User)->forceFill(['name' => $name]));
+        $applicant->setRelation('values', new EloquentCollection);
+
+        return [
+            'applicant' => $applicant,
+            'panel_complete' => true,
+            'can_advance' => true,
+            'outcome' => ['code' => $outcome],
+            'counts' => [
+                'qualified' => $qualified,
+                'average_qualified' => $average,
+                'not_qualified' => 0,
+            ],
+            'total_decisions' => $qualified + $average,
+        ];
+    };
+
+    $rows = collect([
+        $row('TradeSmart', EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED, 0, 12, 'EOI-010'),
+        $row('LNO', EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED, 4, 8, 'EOI-007'),
+        $row('Genesis Analytics', EoiQualificationService::OUTCOME_FULLY_QUALIFIED, 12, 0, 'EOI-002'),
+        $row('Impact Africa Consulting', EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED, 0, 12, 'EOI-009'),
+        $row('AVAHI', EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED, 7, 5, 'EOI-005'),
+        $row('RebelGroup', EoiQualificationService::OUTCOME_FULLY_QUALIFIED, 12, 0, 'EOI-004'),
+        $row('MTI Consulting', EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED, 3, 9, 'EOI-008'),
+        $row('BwB', EoiQualificationService::OUTCOME_FULLY_QUALIFIED, 12, 0, 'EOI-001'),
+        $row('BDO', EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED, 4, 8, 'EOI-006'),
+        $row('KPMG', EoiQualificationService::OUTCOME_FULLY_QUALIFIED, 12, 0, 'EOI-003'),
+    ]);
+
+    $ranking = (new EoiQualificationService)->rankQualifiedApplicants($rows);
+
+    expect($ranking->pluck('applicant.display_name')->all())
+        ->toBe([
+            'BwB',
+            'Genesis Analytics',
+            'KPMG',
+            'RebelGroup',
+            'AVAHI',
+            'BDO',
+            'LNO',
+            'MTI Consulting',
+            'Impact Africa Consulting',
+            'TradeSmart',
+        ])
+        ->and($ranking->pluck('qualification_rank')->all())
+        ->toBe(range(1, 10))
+        ->and($ranking->take(EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT)
+            ->pluck('applicant.display_name')->all())
+        ->toBe([
+            'BwB',
+            'Genesis Analytics',
+            'KPMG',
+            'RebelGroup',
+            'AVAHI',
+            'BDO',
+            'LNO',
+            'MTI Consulting',
+        ])
+        ->and($ranking->take(EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT)
+            ->every(fn (array $row): bool => $row['within_qualified_shortlist'] === true))
+        ->toBeTrue()
+        ->and($ranking->slice(EoiQualificationService::QUALIFIED_SHORTLIST_LIMIT)
+            ->every(fn (array $row): bool => $row['within_qualified_shortlist'] === false))
+        ->toBeTrue()
+        ->and($ranking->pluck('qualified_shortlist_status')->all())
+        ->toBe([
+            'proceeding',
+            'proceeding',
+            'proceeding',
+            'proceeding',
+            'proceeding',
+            'proceeding',
+            'proceeding',
+            'proceeding',
+            'not_proceeding',
+            'not_proceeding',
+        ]);
+});
+
 it('uses only current distinct panel tasks and ignores evidence from removed assignments', function () {
     $evaluation = (new Evaluation)->forceFill([
         'id' => (string) Str::uuid(),

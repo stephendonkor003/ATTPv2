@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAssignedPortfolios;
 use App\Mail\EvaluationAssigned;
+use App\Models\EoiReportCommunication;
+use App\Models\EoiReportCommunicationRecipient;
 use App\Models\EoiTechnicalProposalCandidate;
 use App\Models\EoiTechnicalProposalRound;
 use App\Models\Evaluation;
@@ -11,6 +13,7 @@ use App\Models\EvaluationAssignment;
 use App\Models\EvaluationSubmission;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
+use App\Models\ReworkRequest;
 use App\Models\Sector;
 use App\Services\EoiQualificationService;
 use App\Services\EvaluationAssignmentTargetResolver;
@@ -19,10 +22,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class EvaluationAssignmentController extends Controller
 {
@@ -98,6 +103,9 @@ class EvaluationAssignmentController extends Controller
                     ->map(fn ($id): string => (string) $id)
                     ->all(),
                 'eligible_count' => $technicalTargets->count(),
+                'application_assignment_locked' => $procurement->technicalProposalRounds
+                    ->contains(fn (EoiTechnicalProposalRound $proposalRound): bool => $proposalRound->status
+                        !== EoiTechnicalProposalRound::STATUS_CANCELLED),
                 'status_counts' => $round
                     ? $round->candidates->countBy('status')->all()
                     : [],
@@ -196,6 +204,13 @@ class EvaluationAssignmentController extends Controller
                 ->with('error', 'No published technical-proposal round is ready for evaluator assignment.');
         }
 
+        if ($workflowStage === EvaluationAssignment::STAGE_APPLICATION
+            && $this->hasPreparedTechnicalProposalRound($procurement)) {
+            return back()
+                ->withInput()
+                ->with('error', 'The original EOI application stage is locked because the technical-proposal round has started. Assign from the qualified technical proposal shortlist instead.');
+        }
+
         if ($evaluation->status === 'close') {
             return back()
                 ->withInput()
@@ -258,6 +273,11 @@ class EvaluationAssignmentController extends Controller
                 ->whereKey($procurement->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if ($evaluation->isEoi()
+                && $workflowStage === EvaluationAssignment::STAGE_APPLICATION) {
+                $this->assertEoiApplicationPanelCanChange($procurement);
+            }
 
             if ($technicalProposalRound) {
                 $lockedRound = EoiTechnicalProposalRound::query()
@@ -354,14 +374,27 @@ class EvaluationAssignmentController extends Controller
             }
         }
 
+        $notificationWarning = null;
+
         if ($evaluator?->email) {
-            Mail::to($evaluator->email)->send(
-                new EvaluationAssigned($evaluator, $evaluation, $procurement, $submission)
-            );
+            try {
+                Mail::to($evaluator->email)->send(
+                    new EvaluationAssigned($evaluator, $evaluation, $procurement, $submission)
+                );
+            } catch (Throwable $exception) {
+                Log::warning('Evaluator assignment notification could not be sent after the assignment was saved.', [
+                    'assignment_id' => $assignment->getKey(),
+                    'evaluator_id' => $evaluator->getKey(),
+                    'procurement_id' => $procurement->getKey(),
+                    'exception' => $exception,
+                ]);
+
+                $notificationWarning = ' The assignment was saved, but the evaluator email could not be sent.';
+            }
         }
 
         return back()->with([
-            'success' => 'Evaluator assigned successfully.',
+            'success' => 'Evaluator assigned successfully.'.($notificationWarning ?: ''),
             'open_procurement_id' => $procurement->id,
         ]);
     }
@@ -378,11 +411,34 @@ class EvaluationAssignmentController extends Controller
         $procurement = $assignment->procurement;
         $submission = $assignment->submission;
 
-        $removal = DB::transaction(function () use ($assignment): array {
-            $lockedAssignment = EvaluationAssignment::query()
-                ->whereKey($assignment->getKey())
+        $removal = DB::transaction(function () use ($assignment, $isEoi): array {
+            $lockedProcurement = Procurement::query()
+                ->withTrashed()
+                ->whereKey($assignment->procurement_id)
                 ->lockForUpdate()
                 ->firstOrFail();
+            $lockedAssignment = EvaluationAssignment::query()
+                ->whereKey($assignment->getKey())
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($isEoi) {
+                $this->assertEoiApplicationPanelCanChange($lockedProcurement);
+            }
+
+            if ($lockedAssignment->status === 'rework'
+                || ReworkRequest::query()
+                    ->where('evaluation_assignment_id', $lockedAssignment->getKey())
+                    ->where('status', ReworkRequest::STATUS_PENDING)
+                    ->exists()) {
+                return [
+                    'blocked' => true,
+                    'blocked_message' => 'Cannot remove this evaluator while an evaluation is awaiting rework.',
+                    'drafts_removed' => 0,
+                    'draft_paths' => [],
+                ];
+            }
 
             $remainingCoverage = EvaluationAssignment::query()
                 ->where('evaluation_id', $lockedAssignment->evaluation_id)
@@ -414,6 +470,7 @@ class EvaluationAssignmentController extends Controller
             )) {
                 return [
                     'blocked' => true,
+                    'blocked_message' => 'Cannot remove this evaluator because a submitted evaluation would be left without an active assignment.',
                     'drafts_removed' => 0,
                     'draft_paths' => [],
                 ];
@@ -435,6 +492,7 @@ class EvaluationAssignmentController extends Controller
 
             return [
                 'blocked' => false,
+                'blocked_message' => null,
                 'drafts_removed' => $uncoveredSubmissions->count(),
                 'draft_paths' => $draftPaths,
             ];
@@ -442,7 +500,7 @@ class EvaluationAssignmentController extends Controller
 
         if ($removal['blocked']) {
             return back()->with([
-                'error' => 'Cannot remove this evaluator because a submitted evaluation would be left without an active assignment.',
+                'error' => $removal['blocked_message'],
                 'open_procurement_id' => $procurementId,
             ]);
         }
@@ -492,6 +550,39 @@ class EvaluationAssignmentController extends Controller
                     });
                 }
             });
+    }
+
+    private function assertEoiApplicationPanelCanChange(Procurement $procurement): void
+    {
+        $hasPreparedProposalRound = $this->hasPreparedTechnicalProposalRound($procurement);
+        $hasReleasedEvaluationRecord = EoiReportCommunicationRecipient::query()
+            ->whereHas('communication', fn (Builder $query) => $query
+                ->where('procurement_id', $procurement->getKey())
+                ->where('type', EoiReportCommunication::TYPE_EVALUATION_RECORDS))
+            ->where(function (Builder $query): void {
+                $query->whereNotNull('record_file_path')
+                    ->orWhereNotNull('emailed_at')
+                    ->orWhereIn('delivery_status', [
+                        EoiReportCommunicationRecipient::STATUS_PENDING,
+                        EoiReportCommunicationRecipient::STATUS_PROCESSING,
+                        EoiReportCommunicationRecipient::STATUS_SENT,
+                    ]);
+            })
+            ->exists();
+
+        if ($hasPreparedProposalRound || $hasReleasedEvaluationRecord) {
+            throw ValidationException::withMessages([
+                'evaluation_id' => 'The application-stage EOI panel is locked because applicant records were released or a technical-proposal round has started.',
+            ]);
+        }
+    }
+
+    private function hasPreparedTechnicalProposalRound(Procurement $procurement): bool
+    {
+        return EoiTechnicalProposalRound::query()
+            ->where('procurement_id', $procurement->getKey())
+            ->where('status', '!=', EoiTechnicalProposalRound::STATUS_CANCELLED)
+            ->exists();
     }
 
     private function assertProcurementManageable(Procurement $procurement): void

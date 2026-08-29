@@ -8,9 +8,11 @@ use App\Mail\QualifiedProposalInvitationMail;
 use App\Models\EoiReportCommunication;
 use App\Models\EoiReportCommunicationAttachment;
 use App\Models\EoiReportCommunicationRecipient;
+use App\Models\EoiTechnicalProposalCandidate;
 use App\Models\EoiTechnicalProposalRound;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
+use App\Models\ReworkRequest;
 use App\Models\User;
 use App\Support\PdfBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -57,6 +59,10 @@ class EoiReportCommunicationService
     {
         return $this->finalRows($report)
             ->filter(fn (array $row): bool => (bool) ($row['can_advance'] ?? false)
+                // New reports expose the shared top-eight decision. Older
+                // historical report snapshots do not have this field, so they
+                // remain readable without being silently reclassified.
+                && (bool) ($row['within_qualified_shortlist'] ?? true)
                 && ($row['applicant']->status ?? null) !== FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED
                 && in_array(
                     data_get($row, 'outcome.code'),
@@ -79,23 +85,49 @@ class EoiReportCommunicationService
 
     public function sendEvaluationRecords(Procurement $procurement, array $report, User $sender): array
     {
-        $rows = $this->finalRows($report);
+        [$communication, $report, $rows] = DB::transaction(function () use ($procurement, $sender): array {
+            $lockedProcurement = Procurement::query()
+                ->whereKey($procurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $currentReport = app(EoiQualificationService::class)
+                ->buildProcurementReport($lockedProcurement);
+            $currentRows = $this->finalRows($currentReport);
 
-        $communication = EoiReportCommunication::create([
-            'procurement_id' => $procurement->getKey(),
-            'type' => EoiReportCommunication::TYPE_EVALUATION_RECORDS,
-            'subject' => $this->cleanSubject('Your EOI evaluation outcome — '.$this->procurementLabel($procurement)),
-            'message' => 'Your completed EOI evaluation record is attached. Evaluator identities have been protected.',
-            'created_by' => $sender->getKey(),
-        ]);
+            if ($currentRows->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'evaluation_records' => 'There are no current panel-complete EOI evaluation records to release.',
+                ]);
+            }
+
+            $communication = EoiReportCommunication::create([
+                'procurement_id' => $lockedProcurement->getKey(),
+                'type' => EoiReportCommunication::TYPE_EVALUATION_RECORDS,
+                'subject' => $this->cleanSubject('Your EOI evaluation outcome — '.$this->procurementLabel($lockedProcurement)),
+                'message' => 'Your completed EOI evaluation record is attached. Evaluator identities have been protected.',
+                'created_by' => $sender->getKey(),
+            ]);
+
+            foreach ($currentRows as $row) {
+                $recipient = $this->createRecipient($communication, $row);
+                $ineligibility = $this->contactIneligibility($row['applicant'], false);
+
+                if ($ineligibility !== null) {
+                    $this->skipRecipient($recipient, $ineligibility);
+                }
+            }
+
+            return [$communication, $currentReport, $currentRows];
+        }, 3);
+
+        $recipientsByApplicant = $communication->fresh('recipients')->recipients
+            ->keyBy(fn (EoiReportCommunicationRecipient $recipient): string => (string) $recipient->form_submission_id);
 
         foreach ($rows as $row) {
-            $recipient = $this->createRecipient($communication, $row);
-            $ineligibility = $this->contactIneligibility($row['applicant'], false);
+            $recipient = $recipientsByApplicant->get((string) $row['applicant']->getKey());
 
-            if ($ineligibility !== null) {
-                $this->skipRecipient($recipient, $ineligibility);
-
+            if (! $recipient
+                || $recipient->delivery_status !== EoiReportCommunicationRecipient::STATUS_PENDING) {
                 continue;
             }
 
@@ -147,6 +179,38 @@ class EoiReportCommunicationService
         ?EoiTechnicalProposalRound $technicalProposalRound = null
     ): array {
         $rows = $this->qualifiedRows($report);
+
+        if ($technicalProposalRound) {
+            $rows = EoiTechnicalProposalCandidate::query()
+                ->where('round_id', $technicalProposalRound->getKey())
+                ->whereIn('status', [
+                    EoiTechnicalProposalCandidate::STATUS_INVITED,
+                    EoiTechnicalProposalCandidate::STATUS_SUBMITTED,
+                    EoiTechnicalProposalCandidate::STATUS_LATE,
+                    EoiTechnicalProposalCandidate::STATUS_UNDER_REVIEW,
+                ])
+                ->whereHas('applicant', fn ($query) => $query->where(function ($statusQuery): void {
+                    $statusQuery->whereNull('status')
+                        ->orWhereNotIn('status', [
+                            FormSubmission::STATUS_WITHDRAWN,
+                            FormSubmission::STATUS_EOI_NOT_QUALIFIED,
+                            FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
+                            FormSubmission::STATUS_TECHNICAL_EVALUATION,
+                        ]);
+                }))
+                ->with('applicant.submitter')
+                ->get()
+                ->map(fn (EoiTechnicalProposalCandidate $candidate): array => [
+                    'applicant' => $candidate->applicant,
+                    'outcome' => [
+                        'code' => $candidate->eoi_outcome_code,
+                        'label' => $candidate->eoi_outcome_label,
+                    ],
+                    'next_stage' => $candidate->workflow_decision,
+                ])
+                ->values();
+        }
+
         $storedPaths = [];
 
         try {
@@ -316,6 +380,45 @@ class EoiReportCommunicationService
                 'user',
             ]);
 
+            if ($recipient->communication?->technical_proposal_round_id) {
+                $candidateCanBeInvited = EoiTechnicalProposalCandidate::query()
+                    ->where('round_id', $recipient->communication->technical_proposal_round_id)
+                    ->where('form_submission_id', $recipient->form_submission_id)
+                    ->whereIn('status', [
+                        EoiTechnicalProposalCandidate::STATUS_INVITED,
+                        EoiTechnicalProposalCandidate::STATUS_SUBMITTED,
+                        EoiTechnicalProposalCandidate::STATUS_LATE,
+                        EoiTechnicalProposalCandidate::STATUS_UNDER_REVIEW,
+                    ])
+                    ->whereHas('applicant', fn ($query) => $query->where(function ($statusQuery): void {
+                        $statusQuery->whereNull('status')
+                            ->orWhereNotIn('status', [
+                                FormSubmission::STATUS_WITHDRAWN,
+                                FormSubmission::STATUS_EOI_NOT_QUALIFIED,
+                                FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
+                                FormSubmission::STATUS_TECHNICAL_EVALUATION,
+                            ]);
+                    }))
+                    ->exists();
+
+                if ($candidateCanBeInvited
+                    && ReworkRequest::query()
+                        ->where('form_submission_id', $recipient->form_submission_id)
+                        ->where('status', ReworkRequest::STATUS_PENDING)
+                        ->exists()) {
+                    $candidateCanBeInvited = false;
+                }
+
+                if (! $candidateCanBeInvited) {
+                    $this->skipRecipient(
+                        $recipient,
+                        'The applicant is no longer eligible for this proposal-round notification.'
+                    );
+
+                    return false;
+                }
+            }
+
             Mail::to($recipient->recipient_email, $recipient->recipient_name)
                 ->send(new QualifiedProposalInvitationMail($recipient));
 
@@ -324,13 +427,16 @@ class EoiReportCommunicationService
             if ($recipient->form_submission_id) {
                 FormSubmission::query()
                     ->whereKey($recipient->form_submission_id)
-                    ->whereNotIn('status', [
-                        FormSubmission::STATUS_WITHDRAWN,
-                        FormSubmission::STATUS_EOI_NOT_QUALIFIED,
-                        FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
-                        FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
-                        FormSubmission::STATUS_TECHNICAL_EVALUATION,
-                    ])
+                    ->where(function ($statusQuery): void {
+                        $statusQuery->whereNull('status')
+                            ->orWhereNotIn('status', [
+                                FormSubmission::STATUS_WITHDRAWN,
+                                FormSubmission::STATUS_EOI_NOT_QUALIFIED,
+                                FormSubmission::STATUS_TECHNICAL_PROPOSAL_SUBMITTED,
+                                FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
+                                FormSubmission::STATUS_TECHNICAL_EVALUATION,
+                            ]);
+                    })
                     ->update(['status' => FormSubmission::STATUS_TECHNICAL_PROPOSAL_INVITED]);
             }
         } catch (Throwable $exception) {
@@ -400,6 +506,23 @@ class EoiReportCommunicationService
     private function contactIneligibility(FormSubmission $applicant, bool $requiresVendorPortal): ?string
     {
         $user = $this->linkedUser($applicant);
+
+        if ($requiresVendorPortal
+            && $applicant->exists
+            && ReworkRequest::query()
+                ->where('form_submission_id', $applicant->getKey())
+                ->where('status', ReworkRequest::STATUS_PENDING)
+                ->exists()) {
+            return 'The applicant has an EOI evaluation awaiting rework. Proposal notification is paused.';
+        }
+
+        if ($requiresVendorPortal && in_array($applicant->status, [
+            FormSubmission::STATUS_EOI_NOT_QUALIFIED,
+            FormSubmission::STATUS_TECHNICAL_PROPOSAL_DISQUALIFIED,
+            FormSubmission::STATUS_WITHDRAWN,
+        ], true)) {
+            return 'The applicant does not currently have a valid EOI qualification for the proposal stage.';
+        }
 
         if (! $user) {
             return 'No applicant account is linked to this submission.';

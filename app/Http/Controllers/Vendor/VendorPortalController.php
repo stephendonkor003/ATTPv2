@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Vendor;
 
 use App\Http\Controllers\Controller;
 use App\Models\ConsortiumThinkTank;
-use App\Models\DynamicForm;
 use App\Models\EoiReportCommunicationRecipient;
 use App\Models\FormSubmission;
 use App\Models\FormSubmissionValue;
@@ -17,13 +16,14 @@ use App\Models\VendorDocument;
 use App\Models\VendorInformationRequest;
 use App\Models\VendorMessage;
 use App\Models\VendorReport;
+use App\Notifications\VendorRequestCreatedNotification;
+use App\Services\EvaluationReworkGuard;
 use App\Services\ProcurementSubmissionScreeningService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
-use App\Notifications\VendorRequestCreatedNotification;
 
 class VendorPortalController extends Controller
 {
@@ -268,7 +268,7 @@ class VendorPortalController extends Controller
         $methods = $this->paymentMethods();
 
         $data = $request->validate([
-            'payment_method_preference' => 'nullable|string|in:' . implode(',', $methods),
+            'payment_method_preference' => 'nullable|string|in:'.implode(',', $methods),
             'payment_bank_name' => 'nullable|string|max:255',
             'payment_account_name' => 'nullable|string|max:255',
             'payment_account_number' => 'nullable|string|max:255',
@@ -310,8 +310,7 @@ class VendorPortalController extends Controller
         Request $request,
         FormSubmission $submission,
         ProcurementSubmissionScreeningService $screeningService
-    )
-    {
+    ) {
         $user = $request->user();
         $this->assertVendor($user);
         $this->assertSubmissionOwnership($submission, $user->id);
@@ -453,8 +452,11 @@ class VendorPortalController extends Controller
             ->with('success', $isRecallResponse ? 'Application response submitted successfully.' : 'Application updated and resubmitted successfully.');
     }
 
-    public function withdrawApplication(Request $request, FormSubmission $submission)
-    {
+    public function withdrawApplication(
+        Request $request,
+        FormSubmission $submission,
+        EvaluationReworkGuard $reworkGuard
+    ) {
         $user = $request->user();
         $this->assertVendor($user);
         $this->assertSubmissionOwnership($submission, $user->id);
@@ -469,8 +471,32 @@ class VendorPortalController extends Controller
             'withdrawal_reason' => 'required|string|min:5|max:1000',
         ]);
 
-        DB::transaction(function () use ($submission, $data): void {
-            $submission->update([
+        DB::transaction(function () use ($submission, $data, $reworkGuard): void {
+            $lockedProcurement = Procurement::query()
+                ->withTrashed()
+                ->whereKey($submission->procurement_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedSubmission = FormSubmission::query()
+                ->whereKey($submission->getKey())
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            abort_if($lockedSubmission->isWithdrawn(), 422, 'This application has already been withdrawn.');
+            abort_unless(
+                in_array($lockedProcurement->status, ['published', 'recalled'], true),
+                403,
+                'This application can no longer be withdrawn.'
+            );
+            abort_if(
+                filled($lockedProcurement->awarded_submission_id),
+                403,
+                'An awarded procurement application cannot be withdrawn.'
+            );
+            $reworkGuard->assertApplicantStatusCanChange($lockedSubmission);
+
+            $lockedSubmission->update([
                 'status' => FormSubmission::STATUS_WITHDRAWN,
                 'withdrawn_at' => now(),
                 'withdrawal_reason' => trim($data['withdrawal_reason']),
@@ -543,7 +569,7 @@ class VendorPortalController extends Controller
 
     private function assertVendor($user): void
     {
-        if (!$user || $user->user_type !== 'vendor') {
+        if (! $user || $user->user_type !== 'vendor') {
             abort(403, 'Access denied. Vendor portal only.');
         }
 
@@ -654,8 +680,8 @@ class VendorPortalController extends Controller
         ]);
 
         return [
-            !empty($validated['date_from']) ? Carbon::parse($validated['date_from'])->startOfDay() : null,
-            !empty($validated['date_to']) ? Carbon::parse($validated['date_to'])->endOfDay() : null,
+            ! empty($validated['date_from']) ? Carbon::parse($validated['date_from'])->startOfDay() : null,
+            ! empty($validated['date_to']) ? Carbon::parse($validated['date_to'])->endOfDay() : null,
         ];
     }
 
@@ -701,7 +727,7 @@ class VendorPortalController extends Controller
             return round((float) $records->sum(function ($record) use ($month, $dateResolver, $valueResolver) {
                 $date = $dateResolver($record);
 
-                if (!$date || $date->format('Y-m') !== $month['key']) {
+                if (! $date || $date->format('Y-m') !== $month['key']) {
                     return 0;
                 }
 
@@ -744,7 +770,7 @@ class VendorPortalController extends Controller
             ->merge($paidDisbursements->map(fn (ProcurementDisbursement $payment) => [
                 'type' => 'Payment',
                 'title' => $payment->reference_no,
-                'detail' => $payment->currency . ' ' . number_format((float) $payment->amount, 2),
+                'detail' => $payment->currency.' '.number_format((float) $payment->amount, 2),
                 'date' => $payment->paid_at ?: $payment->created_at,
                 'icon' => 'feather-dollar-sign',
             ]))
@@ -774,14 +800,14 @@ class VendorPortalController extends Controller
             $procurement->autoCloseIfExpired();
         }
 
-        if (!$procurement || !$procurement->isApplicationOpen()) {
+        if (! $procurement || ! $procurement->isApplicationOpen()) {
             abort(403, 'This application is closed for updates.');
         }
     }
 
     private function assertProcurementOwnership(string $userId, ?string $procurementId): void
     {
-        if (!$procurementId) {
+        if (! $procurementId) {
             return;
         }
 
@@ -789,7 +815,7 @@ class VendorPortalController extends Controller
             ->where('procurement_id', $procurementId)
             ->exists();
 
-        if (!$owns) {
+        if (! $owns) {
             abort(403, 'You do not have access to that procurement.');
         }
     }
@@ -809,7 +835,7 @@ class VendorPortalController extends Controller
             return;
         }
 
-        if (!$request) {
+        if (! $request) {
             return;
         }
 

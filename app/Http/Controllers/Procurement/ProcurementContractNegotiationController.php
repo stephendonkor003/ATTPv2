@@ -4,16 +4,19 @@ namespace App\Http\Controllers\Procurement;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Procurement\Concerns\GovernanceScope;
+use App\Mail\VendorContractTerminated;
 use App\Models\FormSubmission;
 use App\Models\Procurement;
+use App\Models\ProcurementAuditLog;
 use App\Models\ProcurementContractDocument;
 use App\Models\ProcurementContractNegotiation;
-use App\Models\ProcurementAuditLog;
-use App\Mail\VendorContractTerminated;
 use App\Notifications\VendorContractTerminatedNotification;
+use App\Services\EvaluationReworkGuard;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class ProcurementContractNegotiationController extends Controller
 {
@@ -64,8 +67,11 @@ class ProcurementContractNegotiationController extends Controller
         return view('procurement.contract-negotiations.show', compact('procurement', 'submissions', 'negotiations'));
     }
 
-    public function store(Request $request, Procurement $procurement)
-    {
+    public function store(
+        Request $request,
+        Procurement $procurement,
+        EvaluationReworkGuard $reworkGuard
+    ) {
         $this->assertProcurementInScope($procurement);
 
         $data = $request->validate([
@@ -81,7 +87,7 @@ class ProcurementContractNegotiationController extends Controller
             ->findOrFail($data['submission_id']);
 
         $vendor = $submission->submitter;
-        if (!$vendor || $vendor->user_type !== 'vendor') {
+        if (! $vendor || $vendor->user_type !== 'vendor') {
             return back()->withErrors([
                 'submission_id' => 'The selected submission does not belong to a vendor.',
             ])->withInput();
@@ -98,15 +104,38 @@ class ProcurementContractNegotiationController extends Controller
             ])->withInput();
         }
 
-        $negotiation = ProcurementContractNegotiation::create([
-            'procurement_id' => $procurement->id,
-            'submission_id' => $submission->id,
-            'vendor_id' => $vendor->id,
-            'proposed_amount' => $data['proposed_amount'],
-            'status' => 'in_progress',
-            'notes' => $data['notes'] ?? null,
-            'created_by' => auth()->id(),
-        ]);
+        $negotiation = DB::transaction(function () use (
+            $procurement,
+            $submission,
+            $vendor,
+            $data,
+            $reworkGuard
+        ): ProcurementContractNegotiation {
+            $lockedProcurement = $reworkGuard->lockForDownstreamTransition($procurement);
+
+            $duplicate = ProcurementContractNegotiation::query()
+                ->where('procurement_id', $lockedProcurement->getKey())
+                ->where('submission_id', $submission->getKey())
+                ->whereNotIn('status', ['cancelled'])
+                ->lockForUpdate()
+                ->exists();
+
+            if ($duplicate) {
+                throw ValidationException::withMessages([
+                    'submission_id' => 'A negotiation already exists for this vendor.',
+                ]);
+            }
+
+            return ProcurementContractNegotiation::create([
+                'procurement_id' => $lockedProcurement->getKey(),
+                'submission_id' => $submission->getKey(),
+                'vendor_id' => $vendor->getKey(),
+                'proposed_amount' => $data['proposed_amount'],
+                'status' => 'in_progress',
+                'notes' => $data['notes'] ?? null,
+                'created_by' => auth()->id(),
+            ]);
+        }, 3);
 
         if ($request->hasFile('documents')) {
             $this->saveDocuments($request->file('documents', []), $negotiation);
@@ -205,7 +234,7 @@ class ProcurementContractNegotiationController extends Controller
         ]);
 
         $vendor = $negotiation->vendor ?? $negotiation->submission?->submitter;
-        if ($vendor && !empty($vendor->email)) {
+        if ($vendor && ! empty($vendor->email)) {
             $mail = new VendorContractTerminated($procurement, $vendor, $data['termination_reason']);
 
             try {
@@ -267,7 +296,7 @@ class ProcurementContractNegotiationController extends Controller
 
         $privateDisk = Storage::disk('local');
 
-        if (!$privateDisk->exists($path) && Storage::disk('public')->exists($path)) {
+        if (! $privateDisk->exists($path) && Storage::disk('public')->exists($path)) {
             $stream = Storage::disk('public')->readStream($path);
             if ($stream !== false) {
                 $privateDisk->writeStream($path, $stream);
