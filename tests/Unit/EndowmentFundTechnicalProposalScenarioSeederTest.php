@@ -28,3 +28,18 @@ it('does not reuse the former LNO scan as BwB’s technical proposal', function 
         ->toContain('primary proposal scan is still pending')
         ->toContain('pruneLegacySeedDocuments');
 });
+
+it('preserves LNO as an auditable historical RFP qualification override', function () {
+    $source = file_get_contents(
+        dirname(__DIR__, 2).'/database/seeders/EndowmentFundTechnicalProposalScenarioSeeder.php'
+    );
+
+    expect($source)
+        ->toContain('HISTORICAL_QUALIFICATION_OVERRIDES')
+        ->toContain("'LNO' => [")
+        ->toContain('EoiQualificationService::OUTCOME_FULLY_QUALIFIED')
+        ->toContain('Fully Qualified (historical RFP recipient override)')
+        ->toContain('historical_rfp_override')
+        ->toContain("'workflow_decision' => \$historicalOverride['workflow_decision']")
+        ->toContain('not panel-qualified in the current Endowment Fund EOI report');
+});

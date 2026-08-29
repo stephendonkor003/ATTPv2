@@ -73,6 +73,23 @@ final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
     private const ELECTRONICALLY_DISQUALIFIED_APPLICANT = 'AVAHI';
 
     /**
+     * The physical-delivery register is a historical source of truth. LNO is
+     * listed as an RFP recipient and accepted physical proposer even when a
+     * later recalculation of the live EOI panel no longer returns a qualifying
+     * result. The stored qualifying snapshot keeps the technical-assignment
+     * gate intact while the label and workflow decision preserve the exception.
+     *
+     * @var array<string, array{outcome_code: string, outcome_label: string, workflow_decision: string}>
+     */
+    private const HISTORICAL_QUALIFICATION_OVERRIDES = [
+        'LNO' => [
+            'outcome_code' => EoiQualificationService::OUTCOME_FULLY_QUALIFIED,
+            'outcome_label' => 'Fully Qualified (historical RFP recipient override)',
+            'workflow_decision' => 'Technical Evaluation - documented historical RFP recipient override',
+        ],
+    ];
+
+    /**
      * These proposal scans are committed with the dedicated seeder, rather
      * than being read from a developer's Downloads directory. This makes a
      * deployment deterministic after `git pull` and `git lfs pull`.
@@ -327,14 +344,45 @@ final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
             $row = $rows->get((string) $applicant->getKey());
             $outcome = data_get($row, 'outcome.code');
 
-            if (! $row || ! in_array($outcome, [
+            if (! $row) {
+                throw new RuntimeException(
+                    'The requested RFP recipient '.$name.' is missing from the current Endowment Fund EOI report.'
+                );
+            }
+
+            if (! in_array($name, self::ACCEPTED_APPLICANTS, true)) {
+                continue;
+            }
+
+            if (in_array($outcome, [
                 EoiQualificationService::OUTCOME_FULLY_QUALIFIED,
                 EoiQualificationService::OUTCOME_AVERAGE_QUALIFIED,
             ], true)) {
-                throw new RuntimeException(
-                    'The requested RFP recipient '.$name.' is not panel-qualified in the current Endowment Fund EOI report.'
-                );
+                continue;
             }
+
+            $historicalOverride = self::HISTORICAL_QUALIFICATION_OVERRIDES[$name] ?? null;
+
+            if ($historicalOverride) {
+                $rows->put((string) $applicant->getKey(), [
+                    ...$row,
+                    'outcome' => [
+                        ...(array) data_get($row, 'outcome', []),
+                        'code' => $historicalOverride['outcome_code'],
+                        'label' => $historicalOverride['outcome_label'],
+                        'tone' => 'warning',
+                    ],
+                    'can_advance' => true,
+                    'next_stage' => 'Technical Evaluation',
+                    'historical_rfp_override' => true,
+                ]);
+
+                continue;
+            }
+
+            throw new RuntimeException(
+                'The accepted RFP recipient '.$name.' is not panel-qualified in the current Endowment Fund EOI report.'
+            );
         }
 
         return $rows;
@@ -462,6 +510,12 @@ final class EndowmentFundTechnicalProposalScenarioSeeder extends Seeder
             EoiTechnicalProposalCandidate::STATUS_QUALIFIED,
             $timeline['published_at']
         );
+
+        if ($historicalOverride = self::HISTORICAL_QUALIFICATION_OVERRIDES[$name] ?? null) {
+            $candidate->forceFill([
+                'workflow_decision' => $historicalOverride['workflow_decision'],
+            ])->save();
+        }
 
         $receivedAt = $timeline['deadline_at']->subDays(2)->addMinutes($position * 11);
         $proposal = EoiTechnicalProposalSubmission::query()->updateOrCreate(
